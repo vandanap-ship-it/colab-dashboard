@@ -1,0 +1,331 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  name         String
+  passwordHash String
+  role         String    @default("SITE_ENGINEER")
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  createdProjects     Project[]        @relation("ProjectCreator")
+  progressEntries     ProgressEntry[]
+  hindrances          Hindrance[]
+  raisedConcerns      Concern[]        @relation("ConcernRaiser")
+  assignedConcerns    Concern[]        @relation("ConcernAssignee")
+  createdIssues       Issue[]          @relation("IssueCreator")
+  assignedIssues      Issue[]          @relation("IssueAssignee")
+  filledInspections   Inspection[]     @relation("InspectionFiller")
+  reviewedInspections Inspection[]     @relation("InspectionReviewer")
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  code        String?
+  status      String    @default("PLANNING")
+  startDate   DateTime?
+  endDate     DateTime?
+  reraEndDate DateTime?
+  address     String?
+  tagline     String?
+  logoUrl     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdById String
+  createdBy   User      @relation("ProjectCreator", fields: [createdById], references: [id])
+
+  wbsNodes        WBSNode[]
+  contractors     Contractor[]
+  progressEntries ProgressEntry[]
+  hindrances      Hindrance[]
+  concerns        Concern[]
+  issues          Issue[]
+  inspections     Inspection[]
+  drawings        ProjectDrawing[]
+
+  @@index([createdById])
+}
+
+model Contractor {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  category  String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  progressEntries ProgressEntry[]
+  wbsNodes        WBSNode[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+}
+
+model WBSNode {
+  id              String    @id @default(cuid())
+  projectId       String
+  parentId        String?
+  taskCode        String
+  name            String
+  level           Int
+  orderIndex      Int
+
+  baselineStart   DateTime?
+  baselineFinish  DateTime?
+  actualStart     DateTime?
+  actualFinish    DateTime?
+  projectedFinish DateTime?
+
+  percentComplete Float     @default(0)
+
+  category        String?
+  predecessorsRaw String?
+
+  totalQuantity   Float?
+  unit            String?
+  contractorId    String?
+  delayReason     String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent          WBSNode?        @relation("WBSTree", fields: [parentId], references: [id])
+  children        WBSNode[]       @relation("WBSTree")
+  contractor      Contractor?     @relation(fields: [contractorId], references: [id])
+  progressEntries ProgressEntry[]
+  hindrances      Hindrance[]
+  concerns        Concern[]
+  issues          Issue[]
+  inspections     Inspection[]
+
+  @@unique([projectId, taskCode])
+  @@index([projectId])
+  @@index([parentId])
+}
+
+model ProgressEntry {
+  id                 String   @id @default(cuid())
+  projectId          String
+  wbsNodeId          String
+  date               DateTime
+  type               String   @default("LABOUR_SUPPLY")
+
+  achievedQuantity   Float    @default(0)
+  cumulativeQuantity Float    @default(0)
+
+  contractorId       String?
+  notes              String?
+
+  createdById        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wbsNode    WBSNode          @relation(fields: [wbsNodeId], references: [id])
+  contractor Contractor?      @relation(fields: [contractorId], references: [id])
+  createdBy  User             @relation(fields: [createdById], references: [id])
+  labour     ProgressLabour[]
+  photos     ProgressPhoto[]
+
+  @@index([projectId, date])
+  @@index([wbsNodeId])
+}
+
+model ProgressLabour {
+  id              String @id @default(cuid())
+  progressEntryId String
+  category        String
+  count           Int
+
+  progressEntry ProgressEntry @relation(fields: [progressEntryId], references: [id], onDelete: Cascade)
+
+  @@index([progressEntryId])
+}
+
+model ProgressPhoto {
+  id              String   @id @default(cuid())
+  progressEntryId String
+  url             String
+  uploadedAt      DateTime @default(now())
+
+  progressEntry ProgressEntry @relation(fields: [progressEntryId], references: [id], onDelete: Cascade)
+
+  @@index([progressEntryId])
+}
+
+model Hindrance {
+  id           String    @id @default(cuid())
+  projectId    String
+  wbsNodeId    String?
+  description  String
+  startDate    DateTime
+  resolvedDate DateTime?
+  daysImpact   Int?
+  status       String    @default("OPEN")
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wbsNode   WBSNode?          @relation(fields: [wbsNodeId], references: [id])
+  createdBy User              @relation(fields: [createdById], references: [id])
+  photos    HindrancePhoto[]
+
+  @@index([projectId])
+}
+
+model HindrancePhoto {
+  id          String   @id @default(cuid())
+  hindranceId String
+  url         String
+  uploadedAt  DateTime @default(now())
+
+  hindrance Hindrance @relation(fields: [hindranceId], references: [id], onDelete: Cascade)
+
+  @@index([hindranceId])
+}
+
+model Concern {
+  id           String   @id @default(cuid())
+  projectId    String
+  wbsNodeId    String?
+  description  String
+  status       String   @default("PENDING")
+  assignedToId String?
+
+  raisedById String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  project    Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wbsNode    WBSNode?       @relation(fields: [wbsNodeId], references: [id])
+  raisedBy   User           @relation("ConcernRaiser", fields: [raisedById], references: [id])
+  assignedTo User?          @relation("ConcernAssignee", fields: [assignedToId], references: [id])
+  photos     ConcernPhoto[]
+
+  @@index([projectId])
+  @@index([assignedToId])
+}
+
+model ConcernPhoto {
+  id         String   @id @default(cuid())
+  concernId  String
+  url        String
+  uploadedAt DateTime @default(now())
+
+  concern Concern @relation(fields: [concernId], references: [id], onDelete: Cascade)
+
+  @@index([concernId])
+}
+
+model Issue {
+  id           String  @id @default(cuid())
+  projectId    String
+  wbsNodeId    String?
+  description  String
+  severity     String?
+  category     String?
+  status       String  @default("OPEN")
+
+  createdById  String
+  assignedToId String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wbsNode    WBSNode?      @relation(fields: [wbsNodeId], references: [id])
+  createdBy  User          @relation("IssueCreator", fields: [createdById], references: [id])
+  assignedTo User?         @relation("IssueAssignee", fields: [assignedToId], references: [id])
+  photos     IssuePhoto[]
+
+  @@index([projectId])
+  @@index([assignedToId])
+}
+
+model IssuePhoto {
+  id         String   @id @default(cuid())
+  issueId    String
+  url        String
+  uploadedAt DateTime @default(now())
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([issueId])
+}
+
+model Inspection {
+  id              String    @id @default(cuid())
+  projectId       String
+  wbsNodeId       String?
+  title           String
+  status          String    @default("IN_REVIEW")
+  rejectionReason String?
+
+  filledById   String
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wbsNode    WBSNode?          @relation(fields: [wbsNodeId], references: [id])
+  filledBy   User              @relation("InspectionFiller", fields: [filledById], references: [id])
+  reviewedBy User?             @relation("InspectionReviewer", fields: [reviewedById], references: [id])
+  items      InspectionItem[]
+  photos     InspectionPhoto[]
+
+  @@index([projectId])
+  @@index([wbsNodeId])
+}
+
+model InspectionItem {
+  id           String  @id @default(cuid())
+  inspectionId String
+  label        String
+  passed       Boolean
+  notes        String?
+  orderIndex   Int     @default(0)
+
+  inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId])
+}
+
+model InspectionPhoto {
+  id           String   @id @default(cuid())
+  inspectionId String
+  url          String
+  uploadedAt   DateTime @default(now())
+
+  inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId])
+}
+
+model ProjectDrawing {
+  id        String   @id @default(cuid())
+  projectId String
+  label     String
+  kind      String   @default("LAYOUT")
+  imageUrl  String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}

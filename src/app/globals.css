@@ -1,26 +1,69 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  --color-ivory: #FBF7EE;
+  --color-sandstone-50: #F7F1E3;
+  --color-sandstone-100: #EFE6D2;
+  --color-sandstone-200: #E2D5B8;
+  --color-sandstone-300: #C9B891;
+  --color-sandstone-400: #A8946A;
+  --color-ink: #2A2722;
+  --color-ink-2: #5C5448;
+  --color-ink-3: #8A8170;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  /* Brand */
+  --color-brand-50: #FFF8E5;
+  --color-brand-100: #FFEFC2;
+  --color-brand-200: #FFE49C;
+  --color-brand-300: #FFD96D;
+  --color-brand-400: #FBBF24;
+  --color-brand-500: #F59E0B;
+  --color-brand-600: #D97706;
+  --color-brand-700: #B45309;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --shadow-soft: 0 1px 2px 0 rgb(28 25 23 / 0.04), 0 1px 3px -1px rgb(28 25 23 / 0.06);
+  --shadow-card: 0 1px 3px 0 rgb(28 25 23 / 0.05), 0 4px 12px -2px rgb(28 25 23 / 0.06);
+  --shadow-elevated: 0 8px 24px -4px rgb(28 25 23 / 0.12), 0 4px 8px -2px rgb(28 25 23 / 0.06);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html, body {
+  background-color: var(--color-ivory);
+  color: var(--color-ink);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars (subtle, on ivory bg) */
+@media (min-width: 768px) {
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(28 25 23 / 0.12);
+    border-radius: 6px;
+    border: 2px solid var(--color-ivory);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(28 25 23 / 0.25); }
+}
+
+/* Focus rings — consistent, refined */
+*:focus-visible {
+  outline: 2px solid var(--color-brand-400);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+button:focus-visible, a:focus-visible {
+  outline-offset: 3px;
+}
+
+/* Print resets — used on DPR */
+@media print {
+  body { background: white !important; }
+  .print\:hidden, header.print\:hidden { display: none !important; }
 }

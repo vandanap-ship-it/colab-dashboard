@@ -39,3 +39,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma
+
+# Local SQLite db (dev only — Turso is the source of truth in prod)
+/dev.db
+/dev.db-journal
+/prisma/dev.db
+/prisma/dev.db-journal
+
+# Local upload folder (Vercel Blob is used in prod)
+/public/uploads
+
+# Claude / agent state
+/.claude
