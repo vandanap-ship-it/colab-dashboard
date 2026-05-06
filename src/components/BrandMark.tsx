@@ -32,8 +32,7 @@ export default function BrandMark({
       </span>
       {showWordmark && (
         <span className={`font-semibold tracking-tight text-stone-900 ${text}`}>
-          Colab
-          <span className="text-stone-400 font-normal ml-0.5">Dashboard</span>
+          Siddhi
         </span>
       )}
     </span>

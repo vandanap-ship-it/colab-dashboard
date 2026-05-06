@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Colab Dashboard",
-  description: "Planner dashboard and site engineer mobile app",
+  title: "Siddhi · White Lotus",
+  description: "Planner dashboard and site engineer mobile app for White Lotus projects",
 };
 
 export const viewport: Viewport = {
