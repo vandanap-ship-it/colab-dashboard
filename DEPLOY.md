@@ -1,7 +1,9 @@
-# Deploy checklist — Colab Dashboard
+# Deploy checklist — Siddhi (White Lotus)
 
 This is the runbook for deploying the app to production. Treat it as a
 sequence — don't skip steps.
+
+**Production URL:** https://siddhi-whitelotus.vercel.app
 
 ---
 
