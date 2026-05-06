@@ -73,55 +73,67 @@ export async function POST(req: Request, ctx: RouteContext<"/api/projects/[id]/i
       contractorMap.set(name, c.id);
     }
 
+    // Pre-generate IDs so we can batch insert + know parent IDs without
+    // re-querying. Avoids 384 sequential round-trips on Vercel (which times
+    // out the function long before completing the import).
+    const idFor = (() => {
+      const used = new Set<string>();
+      const generate = () => {
+        // Cuid-like 24-char id (good enough for our use; collision-free for one batch).
+        const s =
+          "c" +
+          Date.now().toString(36) +
+          Math.random().toString(36).slice(2, 10) +
+          Math.random().toString(36).slice(2, 10);
+        return s.slice(0, 24);
+      };
+      return () => {
+        let id = generate();
+        while (used.has(id)) id = generate();
+        used.add(id);
+        return id;
+      };
+    })();
+
+    const codeToId = new Map<string, string>();
+    for (const n of tree.nodes) {
+      let taskCode = n.taskCode;
+      if (codeToId.has(taskCode)) taskCode = `${taskCode}#${n.rowIndex}`;
+      n.taskCode = taskCode;
+      codeToId.set(taskCode, idFor());
+    }
+
+    const records = tree.nodes.map((n) => ({
+      id: codeToId.get(n.taskCode)!,
+      projectId,
+      taskCode: n.taskCode,
+      name: n.name,
+      level: n.level,
+      orderIndex: n.orderIndex,
+      baselineStart: n.baselineStart,
+      baselineFinish: n.baselineFinish,
+      actualStart: n.actualStart,
+      actualFinish: n.actualFinish,
+      projectedFinish: n.projectedFinish,
+      percentComplete: n.percentComplete,
+      category: n.category,
+      predecessorsRaw: n.predecessorsRaw,
+      totalQuantity: n.totalQuantity,
+      unit: n.unit,
+      contractorId: n.contractorName ? contractorMap.get(n.contractorName) ?? null : null,
+      parentId: n.parentTaskCode ? codeToId.get(n.parentTaskCode) ?? null : null,
+    }));
+
     const result = await prisma.$transaction(async (tx) => {
       if (replace) {
         await tx.wBSNode.deleteMany({ where: { projectId } });
       }
-
-      // Two-pass insert: first all nodes (without parentId), then connect parents.
-      const codeToId = new Map<string, string>();
-
-      for (const n of tree.nodes) {
-        let taskCode = n.taskCode;
-        if (codeToId.has(taskCode)) {
-          taskCode = `${taskCode}#${n.rowIndex}`;
-        }
-        const created = await tx.wBSNode.create({
-          data: {
-            projectId,
-            taskCode,
-            name: n.name,
-            level: n.level,
-            orderIndex: n.orderIndex,
-            baselineStart: n.baselineStart,
-            baselineFinish: n.baselineFinish,
-            actualStart: n.actualStart,
-            actualFinish: n.actualFinish,
-            projectedFinish: n.projectedFinish,
-            percentComplete: n.percentComplete,
-            category: n.category,
-            predecessorsRaw: n.predecessorsRaw,
-            totalQuantity: n.totalQuantity,
-            unit: n.unit,
-            contractorId: n.contractorName ? contractorMap.get(n.contractorName) ?? null : null,
-          },
-          select: { id: true },
-        });
-        codeToId.set(taskCode, created.id);
-        n.taskCode = taskCode;
+      // Batched insert in chunks (libSQL caps single statement size).
+      const CHUNK = 100;
+      for (let i = 0; i < records.length; i += CHUNK) {
+        await tx.wBSNode.createMany({ data: records.slice(i, i + CHUNK) });
       }
-
-      // Second pass: set parentId
-      for (const n of tree.nodes) {
-        if (!n.parentTaskCode) continue;
-        const parentId = codeToId.get(n.parentTaskCode);
-        if (!parentId) continue;
-        const id = codeToId.get(n.taskCode);
-        if (!id) continue;
-        await tx.wBSNode.update({ where: { id }, data: { parentId } });
-      }
-
-      return { inserted: tree.nodes.length };
+      return { inserted: records.length };
     });
 
     return NextResponse.json({
