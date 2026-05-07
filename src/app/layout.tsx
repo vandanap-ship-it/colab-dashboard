@@ -16,12 +16,23 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Siddhi · White Lotus",
   description: "Planner dashboard and site engineer mobile app for White Lotus projects",
+  applicationName: "Siddhi",
+  appleWebApp: {
+    capable: true,
+    title: "Siddhi",
+    statusBarStyle: "default",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#FBF7EE",
+  // Prevent zoom on form focus on iOS (better PWA feel)
+  maximumScale: 5,
 };
 
 export default function RootLayout({
