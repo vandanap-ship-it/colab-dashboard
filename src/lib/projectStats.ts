@@ -60,14 +60,28 @@ export async function getProjectStats(projectId: string, today = new Date()): Pr
   const plannedPercent = denom > 0 ? plannedSum / denom : 0;
   const achievedPercent = denom > 0 ? achievedSum / denom : 0;
 
-  // Total delay = max projected/actual finish - baseline finish across leaves
+  // Total delay: project-level override (projectedEndDate vs endDate) wins.
+  // Falls back to per-leaf rollup when no override is set.
+  const projectOverride = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { endDate: true, projectedEndDate: true },
+  });
   let totalDelayDays = 0;
-  for (const a of leaves) {
-    if (a.baselineFinish) {
-      const finish = a.projectedFinish ?? a.actualFinish ?? null;
-      if (finish) {
-        const d = Math.round((finish.getTime() - a.baselineFinish.getTime()) / 86400000);
-        if (d > totalDelayDays) totalDelayDays = d;
+  if (projectOverride?.endDate && projectOverride?.projectedEndDate) {
+    totalDelayDays = Math.max(
+      0,
+      Math.round(
+        (projectOverride.projectedEndDate.getTime() - projectOverride.endDate.getTime()) / 86400000,
+      ),
+    );
+  } else {
+    for (const a of leaves) {
+      if (a.baselineFinish) {
+        const finish = a.projectedFinish ?? a.actualFinish ?? null;
+        if (finish) {
+          const d = Math.round((finish.getTime() - a.baselineFinish.getTime()) / 86400000);
+          if (d > totalDelayDays) totalDelayDays = d;
+        }
       }
     }
   }

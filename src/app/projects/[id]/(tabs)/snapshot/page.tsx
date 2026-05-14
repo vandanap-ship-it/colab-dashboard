@@ -26,28 +26,32 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
       startDate: true,
       endDate: true,
       reraEndDate: true,
+      actualStartDate: true,
+      projectedEndDate: true,
     },
   });
   if (!project) notFound();
 
   const stats = await getProjectStats(id);
 
-  // Project-level projected end = max projectedFinish across leaves
+  // Projected end: project-level override wins, otherwise roll up from leaves.
   const leafFinishes = await prisma.wBSNode.findMany({
     where: { projectId: id, projectedFinish: { not: null } },
     select: { projectedFinish: true },
   });
-  const projectedEnd = leafFinishes.reduce<Date | null>((acc, n) => {
+  const projectedEndFromLeaves = leafFinishes.reduce<Date | null>((acc, n) => {
     if (!n.projectedFinish) return acc;
     return acc && acc > n.projectedFinish ? acc : n.projectedFinish;
   }, null);
+  const projectedEnd = project.projectedEndDate ?? projectedEndFromLeaves;
 
-  // Earliest actualStart across leaves
+  // Actual start: project-level override wins, otherwise earliest leaf actual.
   const leafActualStart = await prisma.wBSNode.findFirst({
     where: { projectId: id, actualStart: { not: null } },
     orderBy: { actualStart: "asc" },
     select: { actualStart: true },
   });
+  const actualStart = project.actualStartDate ?? leafActualStart?.actualStart ?? null;
 
   if (stats.totalActivities === 0) {
     return (
@@ -91,7 +95,7 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
         <TimelineBar
           plannedStart={project.startDate}
           plannedEnd={project.endDate}
-          actualStart={leafActualStart?.actualStart ?? null}
+          actualStart={actualStart}
           projectedEnd={projectedEnd}
         />
       </section>

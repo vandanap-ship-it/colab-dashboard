@@ -33,9 +33,11 @@ model Project {
   name        String
   code        String?
   status      String    @default("PLANNING")
-  startDate   DateTime?
-  endDate     DateTime?
-  reraEndDate DateTime?
+  startDate         DateTime?
+  endDate           DateTime?
+  reraEndDate       DateTime?
+  actualStartDate   DateTime?
+  projectedEndDate  DateTime?
   address     String?
   tagline     String?
   logoUrl     String?
