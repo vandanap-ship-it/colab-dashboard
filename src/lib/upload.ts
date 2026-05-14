@@ -14,9 +14,15 @@ export async function uploadPhoto(file: File, scope: string): Promise<UploadResu
   const safeScope = scope.replace(/[^a-zA-Z0-9_-]/g, "_");
   const key = `${safeScope}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}${ext}`;
 
-  if (process.env.BLOB_READ_WRITE_TOKEN) {
+  // Prefer the newer "..._READ_WRITE_TOKEN" suffix env (Vercel adds this when
+  // a second Blob store is connected) over the original BLOB_READ_WRITE_TOKEN
+  // (which may still point at the older private store).
+  const blobToken =
+    process.env.BLOB_READ_WRITE_TOKEN_READ_WRITE_TOKEN ??
+    process.env.BLOB_READ_WRITE_TOKEN;
+  if (blobToken) {
     const { put } = await import("@vercel/blob");
-    const blob = await put(key, file, { access: "public", token: process.env.BLOB_READ_WRITE_TOKEN });
+    const blob = await put(key, file, { access: "public", token: blobToken });
     return { url: blob.url, storage: "blob" };
   }
 
