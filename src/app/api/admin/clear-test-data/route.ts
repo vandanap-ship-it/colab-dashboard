@@ -86,7 +86,7 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  let body: { confirm?: string } = {};
+  let body: { confirm?: string; resetWbs?: boolean } = {};
   try { body = await req.json(); } catch {}
 
   if (body.confirm !== "CLEAR_TEST_DATA") {
@@ -96,6 +96,7 @@ export async function POST(req: Request) {
     );
   }
 
+  const resetWbs = body.resetWbs === true;
   const before = await summarise();
 
   const result = await prisma.$transaction(async (tx) => {
@@ -116,15 +117,17 @@ export async function POST(req: Request) {
     const plDel = await tx.progressLabour.deleteMany();
     const pDel = await tx.progressEntry.deleteMany();
 
-    const wbsReset = await tx.wBSNode.updateMany({
-      data: {
-        actualStart: null,
-        actualFinish: null,
-        projectedFinish: null,
-        percentComplete: 0,
-        delayReason: null,
-      },
-    });
+    const wbsReset = resetWbs
+      ? await tx.wBSNode.updateMany({
+          data: {
+            actualStart: null,
+            actualFinish: null,
+            projectedFinish: null,
+            percentComplete: 0,
+            delayReason: null,
+          },
+        })
+      : { count: 0 };
 
     return {
       deleted: {
@@ -141,7 +144,7 @@ export async function POST(req: Request) {
         progressLabour: plDel.count,
         progressPhotos: ppDel.count,
       },
-      reset: { wbsNodes: wbsReset.count },
+      reset: { wbsNodes: wbsReset.count, requested: resetWbs },
     };
   });
 
