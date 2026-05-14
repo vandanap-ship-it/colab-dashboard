@@ -16,6 +16,7 @@ export type ParsedRow = {
   totalQuantity: number | null;
   unit: string | null;
   contractorName: string | null;
+  progressEntered: boolean;
 };
 
 export type ParseResult =
@@ -38,6 +39,7 @@ const COL_ALIASES: Record<keyof ParsedRow, string[]> = {
   totalQuantity: ["total quantity", "quantity"],
   unit: ["unit", "uom"],
   contractorName: ["contractor"],
+  progressEntered: [],
 };
 
 function normalize(s: string): string {
@@ -127,6 +129,10 @@ export function parseWBSCsv(csv: string): ParseResult {
       actualFinish: parseDate(pick(r, COL_ALIASES.actualFinish)),
       projectedFinish: parseDate(pick(r, COL_ALIASES.projectedFinish)),
       percentComplete: parsePercent(pick(r, COL_ALIASES.percentComplete)),
+      progressEntered: ((): boolean => {
+        const v = pick(r, COL_ALIASES.percentComplete);
+        return v !== null && v !== undefined && String(v).trim() !== "";
+      })(),
       predecessorsRaw: ((): string | null => {
         const v = pick(r, COL_ALIASES.predecessorsRaw);
         const s = v === null || v === undefined ? "" : String(v).trim();

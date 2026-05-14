@@ -120,6 +120,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/projects/[id]/i
       predecessorsRaw: n.predecessorsRaw,
       totalQuantity: n.totalQuantity,
       unit: n.unit,
+      progressEntered: n.progressEntered,
       contractorId: n.contractorName ? contractorMap.get(n.contractorName) ?? null : null,
       parentId: n.parentTaskCode ? codeToId.get(n.parentTaskCode) ?? null : null,
     }));

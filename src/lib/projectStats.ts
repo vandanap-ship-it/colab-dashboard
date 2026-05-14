@@ -24,6 +24,7 @@ export async function getProjectStats(projectId: string, today = new Date()): Pr
       actualFinish: true,
       projectedFinish: true,
       percentComplete: true,
+      progressEntered: true,
     },
   });
 
@@ -35,10 +36,16 @@ export async function getProjectStats(projectId: string, today = new Date()): Pr
     return { totalActivities: 0, plannedPercent: 0, achievedPercent: 0, totalDelayDays: 0, hindranceCount: 0 };
   }
 
+  // Match Colab Tools' rollup: only average across leaves with a progress
+  // value entered. Unstarted activities (progressEntered=false) are skipped
+  // from both numerator and denominator.
+  const tracked = leaves.filter((l) => l.progressEntered);
+  const denom = tracked.length || leaves.length;
+
   let plannedSum = 0;
   let achievedSum = 0;
 
-  for (const a of leaves) {
+  for (const a of tracked) {
     achievedSum += a.percentComplete ?? 0;
     if (a.baselineStart && a.baselineFinish) {
       const start = a.baselineStart.getTime();
@@ -47,13 +54,11 @@ export async function getProjectStats(projectId: string, today = new Date()): Pr
       if (now <= start) plannedSum += 0;
       else if (now >= end) plannedSum += 100;
       else plannedSum += ((now - start) / (end - start)) * 100;
-    } else {
-      plannedSum += 0;
     }
   }
 
-  const plannedPercent = plannedSum / leaves.length;
-  const achievedPercent = achievedSum / leaves.length;
+  const plannedPercent = denom > 0 ? plannedSum / denom : 0;
+  const achievedPercent = denom > 0 ? achievedSum / denom : 0;
 
   // Total delay = max projected/actual finish - baseline finish across leaves
   let totalDelayDays = 0;

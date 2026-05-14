@@ -96,6 +96,7 @@ model WBSNode {
   unit            String?
   contractorId    String?
   delayReason     String?
+  progressEntered Boolean   @default(false)
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
