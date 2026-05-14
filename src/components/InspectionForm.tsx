@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import VoiceTextarea from "./VoiceTextarea";
 
 type Activity = { id: string; name: string; taskCode: string; path: string[] };
 
@@ -211,12 +212,11 @@ export default function InspectionForm({ projectId }: { projectId: string }) {
                 </button>
               </div>
               {!it.passed && (
-                <input
-                  type="text"
+                <VoiceTextarea
+                  multiline={false}
                   value={it.notes}
-                  onChange={(e) => updateItem(i, { notes: e.target.value })}
+                  onChange={(v) => updateItem(i, { notes: v })}
                   placeholder="What's wrong?"
-                  className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-xs"
                 />
               )}
             </li>

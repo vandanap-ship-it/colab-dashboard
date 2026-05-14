@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import VoiceTextarea from "./VoiceTextarea";
 
 type Activity = { id: string; name: string; taskCode: string; path: string[] };
 
@@ -124,14 +125,15 @@ export default function ReportForm({
 
       <label className="block">
         <span className="text-sm font-medium text-stone-700">Description</span>
-        <textarea
-          required
-          rows={4}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="What's going on?"
-          className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
-        />
+        <div className="mt-1">
+          <VoiceTextarea
+            required
+            rows={4}
+            value={description}
+            onChange={setDescription}
+            placeholder="What's going on?"
+          />
+        </div>
       </label>
 
       {extraFields.length > 0 && (

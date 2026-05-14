@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import VoiceTextarea from "./VoiceTextarea";
 
 type Activity = {
   id: string;
@@ -338,13 +339,14 @@ export default function NewProgressForm({
 
           <label className="block">
             <span className="text-sm font-medium text-stone-700">Notes</span>
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Optional comments"
-              className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
-            />
+            <div className="mt-1">
+              <VoiceTextarea
+                rows={3}
+                value={notes}
+                onChange={setNotes}
+                placeholder="Optional comments"
+              />
+            </div>
           </label>
         </>
       )}

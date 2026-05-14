@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import PhotoStrip from "./PhotoStrip";
+import VoiceTextarea from "./VoiceTextarea";
 
 export type ProgressEntryRow = {
   id: string;
@@ -518,12 +519,11 @@ function ProgressEntryDialog({
         </Field>
 
         <Field label="Notes">
-          <textarea
+          <VoiceTextarea
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            onChange={setNotes}
             rows={2}
             placeholder="Optional"
-            className="w-full rounded-md border border-stone-300 px-3 py-1.5 text-sm focus:outline-none focus:border-stone-900"
           />
         </Field>
 
