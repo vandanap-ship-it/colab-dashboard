@@ -27,6 +27,14 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add WBSNode.progressEntered (distinguishes unstarted from 0%).",
   },
+  {
+    key: "2026-05-14_add_project_actual_dates",
+    sql: [
+      `ALTER TABLE "Project" ADD COLUMN "actualStartDate" DATETIME`,
+      `ALTER TABLE "Project" ADD COLUMN "projectedEndDate" DATETIME`,
+    ],
+    describe: "Add Project.actualStartDate and Project.projectedEndDate overrides.",
+  },
 ];
 
 async function ensureLedger() {
