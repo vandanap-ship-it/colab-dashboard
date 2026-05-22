@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { HardHat } from "lucide-react";
+import { HardHat, ClipboardCheck } from "lucide-react";
 import QAQCList from "@/components/QAQCList";
 import MiniBarChart from "@/components/MiniBarChart";
 import { isAdmin, ROLES } from "@/lib/roles";
@@ -193,6 +194,18 @@ export default async function QAQCTabPage({ params }: { params: Promise<{ id: st
   // ------ Render ------
   return (
     <div className="space-y-6">
+      {/* Header actions */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs uppercase tracking-wider text-stone-500">Quality and inspections</p>
+        <Link
+          href={`/projects/${projectId}/inspections/new`}
+          className="inline-flex items-center gap-2 rounded-lg bg-stone-900 text-white px-3 py-1.5 text-sm hover:bg-stone-800"
+        >
+          <ClipboardCheck className="w-4 h-4" />
+          New Inspection
+        </Link>
+      </div>
+
       {/* Top KPI row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Work Inspection Request */}

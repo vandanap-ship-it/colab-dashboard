@@ -14,7 +14,13 @@ const DEFAULT_ITEMS = [
   "Site cleaned after work",
 ];
 
-export default function InspectionForm({ projectId }: { projectId: string }) {
+export default function InspectionForm({
+  projectId,
+  redirectTo,
+}: {
+  projectId: string;
+  redirectTo?: string;
+}) {
   const router = useRouter();
   const [activities, setActivities] = useState<Activity[] | null>(null);
   const [activityId, setActivityId] = useState("");
@@ -99,7 +105,7 @@ export default function InspectionForm({ projectId }: { projectId: string }) {
       setError(data?.error ?? "Failed");
       return;
     }
-    router.push(`/mobile/${projectId}`);
+    router.push(redirectTo ?? `/mobile/${projectId}`);
     router.refresh();
   }
 
