@@ -14,16 +14,22 @@ export default function TimelineBar({
   actualStart: Date | null;
   projectedEnd: Date | null;
 }) {
-  // Width is purely visual — proportions based on dates if all 4 set, else half/half.
-  let plannedWidth = 50;
-  let projectedWidth = 50;
-  if (plannedStart && plannedEnd && projectedEnd) {
-    const planned = plannedEnd.getTime() - plannedStart.getTime();
-    const projected = projectedEnd.getTime() - plannedStart.getTime();
-    const max = Math.max(planned, projected, 1);
-    plannedWidth = Math.max(15, Math.round((planned / max) * 100));
-    projectedWidth = Math.max(15, Math.round((projected / max) * 100));
+  // Planned bar shows how much of the planned calendar has passed today.
+  // Actual bar shows where we actually are between actualStart and projectedEnd.
+  // Neither shows arbitrary 50% fill any more.
+
+  const today = new Date();
+
+  function pctElapsed(start: Date | null, end: Date | null): number {
+    if (!start || !end) return 0;
+    const total = end.getTime() - start.getTime();
+    if (total <= 0) return 0;
+    const elapsed = today.getTime() - start.getTime();
+    return Math.max(0, Math.min(100, (elapsed / total) * 100));
   }
+
+  const plannedPct = pctElapsed(plannedStart, plannedEnd);
+  const actualPct = actualStart ? pctElapsed(actualStart, projectedEnd) : 0;
 
   return (
     <div className="space-y-2">
@@ -35,7 +41,7 @@ export default function TimelineBar({
         <div className="h-2 mt-1 rounded-full bg-stone-200 relative overflow-hidden">
           <div
             className="h-full bg-amber-300"
-            style={{ width: `${plannedWidth}%` }}
+            style={{ width: `${plannedPct}%` }}
           />
         </div>
       </div>
@@ -47,7 +53,7 @@ export default function TimelineBar({
         <div className="h-2 mt-1 rounded-full bg-stone-200 relative overflow-hidden">
           <div
             className="h-full bg-red-400"
-            style={{ width: `${projectedWidth}%` }}
+            style={{ width: `${actualPct}%` }}
           />
         </div>
       </div>
