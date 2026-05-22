@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 export default function BrandMark({
@@ -9,33 +10,34 @@ export default function BrandMark({
   href?: string | null;
   showWordmark?: boolean;
 }) {
-  const dim = size === "lg" ? "w-9 h-9" : "w-7 h-7";
-  const text = size === "lg" ? "text-base" : "text-sm";
+  // The wordmark SVG includes the "Siddhi." text in italic serif with the gold
+  // accent dot — so when showWordmark is true we render only the wordmark.
+  // When showWordmark is false (tight spots like mobile project header) we
+  // render the square "S." monogram.
 
-  const inner = (
-    <span className="inline-flex items-center gap-2">
-      <span
-        className={`${dim} rounded-lg bg-stone-900 flex items-center justify-center shadow-soft`}
-      >
-        <svg
-          viewBox="0 0 16 16"
-          className={size === "lg" ? "w-5 h-5" : "w-4 h-4"}
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden
-        >
-          <rect x="2" y="2" width="5" height="5" rx="1" fill="#FBBF24" />
-          <rect x="9" y="2" width="5" height="5" rx="1" fill="white" opacity="0.7" />
-          <rect x="2" y="9" width="5" height="5" rx="1" fill="white" opacity="0.5" />
-          <rect x="9" y="9" width="5" height="5" rx="1" fill="white" opacity="0.85" />
-        </svg>
-      </span>
-      {showWordmark && (
-        <span className={`font-semibold tracking-tight text-stone-900 ${text}`}>
-          Siddhi
-        </span>
-      )}
-    </span>
+  // Heights chosen so the brand still feels small and refined in the chrome,
+  // not a full-bleed banner.
+  const wordmarkH = size === "lg" ? 44 : 26;
+  const monoH = size === "lg" ? 40 : 28;
+
+  const inner = showWordmark ? (
+    <Image
+      src="/siddhi-wordmark.svg"
+      alt="Siddhi"
+      width={Math.round(wordmarkH * (483 / 252))}
+      height={wordmarkH}
+      priority
+      className="inline-block select-none"
+    />
+  ) : (
+    <Image
+      src="/siddhi-monogram.svg"
+      alt="Siddhi"
+      width={Math.round(monoH * (320 / 491))}
+      height={monoH}
+      priority
+      className="inline-block select-none"
+    />
   );
 
   if (href === null) return inner;

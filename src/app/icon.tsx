@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
-// Generic Siddhi app icon (used by Android, browsers, manifest 192/512).
-// Renders at request time from JSX so we don't need static PNG files.
+// Siddhi app icon (browser tab + Android/PWA home screen).
+// Italic serif "S" + gold accent dot, rendered to 512x512 PNG at request time.
 
 export const runtime = "edge";
 export const size = { width: 512, height: 512 };
@@ -17,55 +17,37 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#1c1917", // stone-900
-          borderRadius: 0,
+          background: "#FFFAF0", // ivory
         }}
       >
         <div
           style={{
             display: "flex",
-            flexDirection: "column",
-            gap: 32,
+            alignItems: "flex-end",
+            gap: 24,
           }}
         >
-          {/* Top row */}
-          <div style={{ display: "flex", gap: 32 }}>
-            <div
-              style={{
-                width: 160,
-                height: 160,
-                background: "#fbbf24",
-                borderRadius: 28,
-              }}
-            />
-            <div
-              style={{
-                width: 160,
-                height: 160,
-                background: "rgba(255,255,255,0.7)",
-                borderRadius: 28,
-              }}
-            />
-          </div>
-          {/* Bottom row */}
-          <div style={{ display: "flex", gap: 32 }}>
-            <div
-              style={{
-                width: 160,
-                height: 160,
-                background: "rgba(255,255,255,0.5)",
-                borderRadius: 28,
-              }}
-            />
-            <div
-              style={{
-                width: 160,
-                height: 160,
-                background: "rgba(255,255,255,0.85)",
-                borderRadius: 28,
-              }}
-            />
-          </div>
+          <span
+            style={{
+              fontFamily: "serif",
+              fontStyle: "italic",
+              fontSize: 360,
+              color: "#161926", // charcoal
+              lineHeight: 1,
+              fontWeight: 700,
+            }}
+          >
+            S
+          </span>
+          <span
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 64,
+              background: "#CA9F49", // gold
+              marginBottom: 32,
+            }}
+          />
         </div>
       </div>
     ),
