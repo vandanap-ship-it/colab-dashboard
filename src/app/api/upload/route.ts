@@ -29,14 +29,27 @@ export async function POST(req: Request) {
       if (f.size > MAX_BYTES) {
         return badRequest(`File ${f.name} exceeds 10MB`);
       }
-      if (!f.type.startsWith("image/")) {
-        return badRequest(`File ${f.name} is not an image`);
+      // Some iPhone photos come through with type "image/heic", "image/jpg",
+      // or even empty type. Accept anything that's an image-ish type or has
+      // a recognisable image extension.
+      const looksLikeImage =
+        f.type.startsWith("image/") ||
+        /\.(jpe?g|png|heic|heif|webp|gif)$/i.test(f.name);
+      if (!looksLikeImage) {
+        return badRequest(`File ${f.name} is not an image (type: ${f.type || "unknown"})`);
       }
       const result = await uploadPhoto(f, scope);
       urls.push(result.url);
     }
     return NextResponse.json({ urls });
   } catch (e) {
-    return handleApiError(e, "POST /api/upload");
+    // Surface the underlying error message so debugging from the client is
+    // possible. Don't leak stack traces.
+    const message = e instanceof Error ? e.message : "Upload failed";
+    console.error("[POST /api/upload]", e);
+    return NextResponse.json(
+      { error: `Photo upload failed: ${message}` },
+      { status: 500 },
+    );
   }
 }

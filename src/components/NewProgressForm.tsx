@@ -100,19 +100,26 @@ export default function NewProgressForm({
     setError(null);
 
     let photoUrls: string[] = [];
+    let photoWarning: string | null = null;
     if (photos.length > 0) {
       const fd = new FormData();
       fd.set("scope", `progress-${projectId}`);
       for (const p of photos) fd.append("file", p);
-      const upRes = await fetch("/api/upload", { method: "POST", body: fd });
-      if (!upRes.ok) {
-        setPending(false);
-        const data = await upRes.json().catch(() => null);
-        setError(data?.error ?? "Photo upload failed");
-        return;
+      try {
+        const upRes = await fetch("/api/upload", { method: "POST", body: fd });
+        if (upRes.ok) {
+          const upData = await upRes.json();
+          photoUrls = upData.urls;
+        } else {
+          // Don't block the entry on photo failure — save the entry without
+          // photos and surface a warning so the user can retry photo upload
+          // from the entry's edit screen later.
+          const data = await upRes.json().catch(() => null);
+          photoWarning = data?.error ?? `Photo upload failed (status ${upRes.status})`;
+        }
+      } catch (e) {
+        photoWarning = e instanceof Error ? `Photo upload failed: ${e.message}` : "Photo upload failed";
       }
-      const upData = await upRes.json();
-      photoUrls = upData.urls;
     }
 
     const res = await fetch("/api/progress", {
@@ -135,6 +142,10 @@ export default function NewProgressForm({
       const data = await res.json().catch(() => null);
       setError(data?.error ?? "Failed");
       return;
+    }
+    if (photoWarning) {
+      // Entry saved, but photos didn't. Tell the user before navigating.
+      alert(`Progress entry saved.\n\n${photoWarning}\n\nYou can re-add photos by editing the entry.`);
     }
     router.push(`/mobile/${projectId}`);
     router.refresh();
