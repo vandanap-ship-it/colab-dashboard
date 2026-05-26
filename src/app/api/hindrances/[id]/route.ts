@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
+import { recordAudit, diffSummary } from "@/lib/audit";
 import {
   badRequest,
   forbidden,
@@ -40,6 +41,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/hindrances/[id
   if (Object.keys(data).length === 0) return badRequest("Nothing to update");
 
   try {
+    const before = await prisma.hindrance.findUnique({
+      where: { id },
+      select: { id: true, projectId: true, status: true, daysImpact: true },
+    });
     const hindrance = await prisma.hindrance.update({
       where: { id },
       data,
@@ -49,6 +54,24 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/hindrances/[id
         photos: true,
       },
     });
+    if (before) {
+      const diff = diffSummary(
+        { status: before.status, daysImpact: before.daysImpact },
+        { status: hindrance.status, daysImpact: hindrance.daysImpact },
+      );
+      const isStatusChange = before.status !== hindrance.status;
+      await recordAudit({
+        projectId: hindrance.projectId,
+        userId: session.user.id,
+        action: isStatusChange ? "STATUS_CHANGE" : "UPDATE",
+        entityType: "Hindrance",
+        entityId: hindrance.id,
+        summary:
+          diff.summary ||
+          (isStatusChange ? `Hindrance → ${hindrance.status}` : "Hindrance updated"),
+        changes: diff.changes,
+      });
+    }
     return NextResponse.json({ hindrance });
   } catch (e) {
     return handleApiError(e, "PATCH /api/hindrances/:id");

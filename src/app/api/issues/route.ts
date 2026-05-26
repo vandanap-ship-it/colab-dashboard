@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { recordAudit } from "@/lib/audit";
 
 const SEVERITIES = new Set(["LOW", "MEDIUM", "HIGH"]);
 const STATUSES = new Set(["OPEN", "RESOLVED"]);
@@ -72,6 +73,15 @@ export async function POST(req: Request) {
       wbsNode: { select: { id: true, name: true, taskCode: true } },
       photos: true,
     },
+  });
+
+  await recordAudit({
+    projectId,
+    userId: session.user.id,
+    action: "CREATE",
+    entityType: "Issue",
+    entityId: issue.id,
+    summary: `Snag raised: ${desc.length > 60 ? desc.slice(0, 60) + "…" : desc}`,
   });
 
   return NextResponse.json({ issue }, { status: 201 });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin, ROLES } from "@/lib/roles";
+import { recordAudit, diffSummary } from "@/lib/audit";
 import {
   badRequest,
   forbidden,
@@ -25,7 +26,18 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
   const { id } = await ctx.params;
   const entry = await prisma.progressEntry.findUnique({
     where: { id },
-    select: { id: true, createdById: true, wbsNodeId: true },
+    select: {
+      id: true,
+      createdById: true,
+      wbsNodeId: true,
+      projectId: true,
+      date: true,
+      type: true,
+      achievedQuantity: true,
+      cumulativeQuantity: true,
+      contractorId: true,
+      notes: true,
+    },
   });
   if (!entry) return notFound();
 
@@ -132,6 +144,34 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
       return u;
     });
 
+    const diff = diffSummary(
+      {
+        date: entry.date,
+        type: entry.type,
+        achievedQuantity: entry.achievedQuantity,
+        cumulativeQuantity: entry.cumulativeQuantity,
+        contractorId: entry.contractorId,
+        notes: entry.notes,
+      },
+      {
+        date: updated.date,
+        type: updated.type,
+        achievedQuantity: updated.achievedQuantity,
+        cumulativeQuantity: updated.cumulativeQuantity,
+        contractorId: updated.contractorId,
+        notes: updated.notes,
+      },
+    );
+    await recordAudit({
+      projectId: entry.projectId,
+      userId: session.user.id,
+      action: "UPDATE",
+      entityType: "ProgressEntry",
+      entityId: entry.id,
+      summary: diff.summary || "Progress entry updated",
+      changes: diff.changes,
+    });
+
     return NextResponse.json({ entry: updated });
   } catch (e) {
     return handleApiError(e, "PATCH /api/progress/:id");
@@ -145,7 +185,7 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/progress/[id
   const { id } = await ctx.params;
   const entry = await prisma.progressEntry.findUnique({
     where: { id },
-    select: { id: true, createdById: true },
+    select: { id: true, createdById: true, projectId: true },
   });
   if (!entry) return notFound();
 
@@ -155,6 +195,14 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/progress/[id
 
   try {
     await prisma.progressEntry.delete({ where: { id } });
+    await recordAudit({
+      projectId: entry.projectId,
+      userId: session.user.id,
+      action: "DELETE",
+      entityType: "ProgressEntry",
+      entityId: entry.id,
+      summary: "Progress entry deleted",
+    });
     return NextResponse.json({ ok: true });
   } catch (e) {
     return handleApiError(e, "DELETE /api/progress/:id");

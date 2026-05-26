@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { recordAudit } from "@/lib/audit";
 
 const VALID_TYPES = new Set(["LABOUR_SUPPLY", "PRW", "MISC"]);
 
@@ -125,6 +126,15 @@ export async function POST(req: Request) {
     }
 
     return created;
+  });
+
+  await recordAudit({
+    projectId: node.projectId,
+    userId: session.user.id,
+    action: "CREATE",
+    entityType: "ProgressEntry",
+    entityId: entry.id,
+    summary: `Progress logged for activity (${achieved} achieved, cumulative ${cumulative})`,
   });
 
   return NextResponse.json({ entry }, { status: 201 });

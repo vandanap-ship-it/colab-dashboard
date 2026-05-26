@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
+import { recordAudit, diffSummary } from "@/lib/audit";
 
 function parseDateOrNull(v: unknown): Date | null | undefined {
   if (v === undefined) return undefined;
@@ -76,6 +77,32 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/projects/[id]"
       actualStartDate: true,
       projectedEndDate: true,
     },
+  });
+
+  const diff = diffSummary(
+    {
+      name: project.name,
+      code: project.code,
+      address: project.address,
+      actualStartDate: project.actualStartDate,
+      projectedEndDate: project.projectedEndDate,
+    },
+    {
+      name: updated.name,
+      code: updated.code,
+      address: updated.address,
+      actualStartDate: updated.actualStartDate,
+      projectedEndDate: updated.projectedEndDate,
+    },
+  );
+  await recordAudit({
+    projectId: id,
+    userId: session.user.id,
+    action: "UPDATE",
+    entityType: "Project",
+    entityId: id,
+    summary: diff.summary || "Project updated",
+    changes: diff.changes,
   });
 
   return NextResponse.json({ project: updated });

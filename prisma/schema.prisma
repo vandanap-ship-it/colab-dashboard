@@ -332,3 +332,24 @@ model ProjectDrawing {
 
   @@index([projectId])
 }
+
+// Records every meaningful create / update / delete across the system so that
+// "who changed this snag?" or "when did this entry get edited?" has an answer.
+// Kept lightweight: we record the action, entity, actor, and a compact change
+// summary; we don't try to mirror every field of every model.
+model AuditLog {
+  id         String   @id @default(cuid())
+  projectId  String?
+  userId     String
+  action     String   // CREATE | UPDATE | DELETE | RESTORE | STATUS_CHANGE
+  entityType String   // ProgressEntry | Issue | Hindrance | Concern | Inspection | Project | User | Contractor
+  entityId   String
+  summary    String?  // short human-readable description, e.g. "Snag closed" or "Progress %: 30 -> 45"
+  changes    String?  // optional JSON for richer diffs
+
+  createdAt  DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+}

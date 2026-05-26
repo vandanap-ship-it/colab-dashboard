@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { recordAudit } from "@/lib/audit";
 
 const STATUSES = new Set(["IN_REVIEW", "PASSED", "REJECTED"]);
 
@@ -92,6 +93,16 @@ export async function POST(req: Request) {
       items: { orderBy: { orderIndex: "asc" } },
       photos: true,
     },
+  });
+
+  const passedCount = itemsClean.filter((i) => i.passed).length;
+  await recordAudit({
+    projectId,
+    userId: session.user.id,
+    action: "CREATE",
+    entityType: "Inspection",
+    entityId: inspection.id,
+    summary: `Inspection submitted: "${t}" (${passedCount}/${itemsClean.length} passed)`,
   });
 
   return NextResponse.json({ inspection }, { status: 201 });

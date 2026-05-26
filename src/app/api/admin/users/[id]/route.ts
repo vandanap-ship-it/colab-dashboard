@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ROLES, isAdmin } from "@/lib/roles";
+import { recordAudit, diffSummary } from "@/lib/audit";
 
 const VALID_ROLES = new Set<string>(Object.values(ROLES));
 
@@ -28,11 +29,30 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
     return NextResponse.json({ error: "Cannot deactivate yourself" }, { status: 400 });
   }
 
+  const before = await prisma.user.findUnique({
+    where: { id },
+    select: { name: true, role: true, active: true },
+  });
   const user = await prisma.user.update({
     where: { id },
     data,
     select: { id: true, username: true, name: true, role: true, active: true, createdAt: true },
   });
+
+  if (before) {
+    const diff = diffSummary(
+      { name: before.name, role: before.role, active: before.active },
+      { name: user.name, role: user.role, active: user.active },
+    );
+    await recordAudit({
+      userId: session.user.id,
+      action: "UPDATE",
+      entityType: "User",
+      entityId: user.id,
+      summary: diff.summary || `User ${user.username} updated`,
+      changes: diff.changes,
+    });
+  }
 
   return NextResponse.json({ user });
 }

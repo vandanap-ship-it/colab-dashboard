@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
+import { recordAudit, diffSummary } from "@/lib/audit";
 import {
   badRequest,
   forbidden,
@@ -53,6 +54,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
   if (Object.keys(data).length === 0) return badRequest("Nothing to update");
 
   try {
+    const before = await prisma.issue.findUnique({
+      where: { id },
+      select: { id: true, projectId: true, status: true, assignedToId: true },
+    });
     const issue = await prisma.issue.update({
       where: { id },
       data,
@@ -63,6 +68,24 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
         photos: true,
       },
     });
+    if (before) {
+      const diff = diffSummary(
+        { status: before.status, assignedToId: before.assignedToId },
+        { status: issue.status, assignedToId: issue.assignedToId },
+      );
+      const isStatusChange = before.status !== issue.status;
+      await recordAudit({
+        projectId: issue.projectId,
+        userId: session.user.id,
+        action: isStatusChange ? "STATUS_CHANGE" : "UPDATE",
+        entityType: "Issue",
+        entityId: issue.id,
+        summary:
+          diff.summary ||
+          (isStatusChange ? `Snag → ${issue.status}` : "Snag updated"),
+        changes: diff.changes,
+      });
+    }
     return NextResponse.json({ issue });
   } catch (e) {
     return handleApiError(e, "PATCH /api/issues/:id");

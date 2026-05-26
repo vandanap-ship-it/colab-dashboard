@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
+import { recordAudit } from "@/lib/audit";
 import {
   badRequest,
   forbidden,
@@ -36,6 +37,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
   }
 
   try {
+    const before = await prisma.inspection.findUnique({
+      where: { id },
+      select: { id: true, projectId: true, status: true, title: true },
+    });
     const inspection = await prisma.inspection.update({
       where: { id },
       data: {
@@ -51,6 +56,18 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
         photos: true,
       },
     });
+    if (before) {
+      await recordAudit({
+        projectId: inspection.projectId,
+        userId: session.user.id,
+        action: "STATUS_CHANGE",
+        entityType: "Inspection",
+        entityId: inspection.id,
+        summary: `Inspection "${before.title}" → ${status}${
+          status === "REJECTED" && rejectionReason ? ` (${rejectionReason.slice(0, 60)})` : ""
+        }`,
+      });
+    }
     return NextResponse.json({ inspection });
   } catch (e) {
     return handleApiError(e, "PATCH /api/inspections/:id");

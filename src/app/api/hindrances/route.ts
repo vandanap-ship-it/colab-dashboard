@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { recordAudit } from "@/lib/audit";
 
 const STATUSES = new Set(["OPEN", "RESOLVED"]);
 
@@ -69,6 +70,15 @@ export async function POST(req: Request) {
       wbsNode: { select: { id: true, name: true, taskCode: true } },
       photos: true,
     },
+  });
+
+  await recordAudit({
+    projectId,
+    userId: session.user.id,
+    action: "CREATE",
+    entityType: "Hindrance",
+    entityId: hindrance.id,
+    summary: `Hindrance logged: ${desc.length > 60 ? desc.slice(0, 60) + "…" : desc}`,
   });
 
   return NextResponse.json({ hindrance }, { status: 201 });
