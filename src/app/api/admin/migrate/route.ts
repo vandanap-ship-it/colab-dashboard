@@ -35,6 +35,26 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add Project.actualStartDate and Project.projectedEndDate overrides.",
   },
+  {
+    key: "2026-05-26_add_audit_log",
+    sql: [
+      `CREATE TABLE "AuditLog" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "projectId" TEXT,
+        "userId" TEXT NOT NULL,
+        "action" TEXT NOT NULL,
+        "entityType" TEXT NOT NULL,
+        "entityId" TEXT NOT NULL,
+        "summary" TEXT,
+        "changes" TEXT,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE INDEX "AuditLog_projectId_createdAt_idx" ON "AuditLog"("projectId", "createdAt")`,
+      `CREATE INDEX "AuditLog_userId_createdAt_idx" ON "AuditLog"("userId", "createdAt")`,
+      `CREATE INDEX "AuditLog_entityType_entityId_idx" ON "AuditLog"("entityType", "entityId")`,
+    ],
+    describe: "Add AuditLog table for change tracking across the system.",
+  },
 ];
 
 async function ensureLedger() {
