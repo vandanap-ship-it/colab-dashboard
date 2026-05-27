@@ -122,30 +122,66 @@ export default function NewProgressForm({
       }
     }
 
-    const res = await fetch("/api/progress", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        wbsNodeId: activityId,
-        date,
-        type: "LABOUR_SUPPLY",
-        achievedQuantity: achieved,
-        cumulativeQuantity: cumulative,
-        contractorId: contractorId || null,
-        notes,
-        labour,
-        photoUrls,
-      }),
-    });
-    setPending(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setError(data?.error ?? "Failed");
-      return;
+    const payload = {
+      wbsNodeId: activityId,
+      date,
+      type: "LABOUR_SUPPLY",
+      achievedQuantity: achieved,
+      cumulativeQuantity: cumulative,
+      contractorId: contractorId || null,
+      notes,
+      labour,
+      photoUrls,
+    };
+
+    // Try the network first. If it succeeds, great — entry is saved and we
+    // navigate away. If it fails (offline, slow signal, server hiccup), we
+    // drop the entry into the offline queue so it isn't lost; the queue
+    // retries automatically when connectivity returns.
+    let saved = false;
+    try {
+      const res = await fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        saved = true;
+      } else if (res.status >= 400 && res.status < 500) {
+        const data = await res.json().catch(() => null);
+        setPending(false);
+        setError(data?.error ?? `Save failed (${res.status})`);
+        return;
+      } else {
+        // 5xx — queue it and let the user keep moving.
+        const { enqueue } = await import("@/lib/offlineQueue");
+        await enqueue({
+          endpoint: "/api/progress",
+          method: "POST",
+          body: payload,
+          label: `Progress for ${selected?.name ?? "activity"}`,
+        });
+      }
+    } catch {
+      // Network error → queue.
+      const { enqueue } = await import("@/lib/offlineQueue");
+      await enqueue({
+        endpoint: "/api/progress",
+        method: "POST",
+        body: payload,
+        label: `Progress for ${selected?.name ?? "activity"}`,
+      });
     }
-    if (photoWarning) {
-      // Entry saved, but photos didn't. Tell the user before navigating.
-      alert(`Progress entry saved.\n\n${photoWarning}\n\nYou can re-add photos by editing the entry.`);
+    setPending(false);
+
+    const queuedNote = saved
+      ? null
+      : "Saved on this device. It will sync the moment you're back online.";
+
+    if (photoWarning || queuedNote) {
+      alert(
+        ["Progress saved.", queuedNote, photoWarning].filter(Boolean).join("\n\n"),
+      );
     }
     router.push(`/mobile/${projectId}`);
     router.refresh();

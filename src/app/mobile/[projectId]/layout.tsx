@@ -4,6 +4,7 @@ import { canSeeMobile } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import BrandMark from "@/components/BrandMark";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import PendingSyncBadge from "@/components/PendingSyncBadge";
 
 export default async function MobileProjectLayout({
   children,
@@ -38,7 +39,12 @@ export default async function MobileProjectLayout({
           </span>
         </div>
       </header>
-      <main className="flex-1 overflow-y-auto pb-20">{children}</main>
+      <main className="flex-1 overflow-y-auto pb-20">
+        <div className="px-4 pt-2 flex justify-center">
+          <PendingSyncBadge />
+        </div>
+        {children}
+      </main>
       <div
         className="fixed bottom-0 inset-x-0 max-w-md mx-auto bg-white border-t border-stone-200"
         style={{ boxShadow: "0 -2px 8px rgba(28, 25, 23, 0.04)" }}
