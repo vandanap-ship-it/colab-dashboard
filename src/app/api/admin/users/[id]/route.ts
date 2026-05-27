@@ -14,12 +14,22 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
   const { id } = await ctx.params;
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
-  const { name, role, active } = (body ?? {}) as { name?: string; role?: string; active?: boolean };
+  const { name, role, active, designation } = (body ?? {}) as {
+    name?: string;
+    role?: string;
+    active?: boolean;
+    designation?: string | null;
+  };
 
-  const data: { name?: string; role?: string; active?: boolean } = {};
+  const data: { name?: string; role?: string; active?: boolean; designation?: string | null } = {};
   if (typeof name === "string" && name.trim().length >= 2) data.name = name.trim();
   if (typeof role === "string" && VALID_ROLES.has(role)) data.role = role;
   if (typeof active === "boolean") data.active = active;
+  if (designation !== undefined) {
+    data.designation = typeof designation === "string" && designation.trim().length > 0
+      ? designation.trim()
+      : null;
+  }
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
@@ -36,7 +46,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
   const user = await prisma.user.update({
     where: { id },
     data,
-    select: { id: true, username: true, name: true, role: true, active: true, createdAt: true },
+    select: { id: true, username: true, name: true, role: true, designation: true, active: true, createdAt: true },
   });
 
   if (before) {

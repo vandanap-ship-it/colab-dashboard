@@ -13,7 +13,7 @@ export async function GET() {
 
   const users = await prisma.user.findMany({
     orderBy: [{ active: "desc" }, { createdAt: "desc" }],
-    select: { id: true, username: true, name: true, role: true, active: true, createdAt: true },
+    select: { id: true, username: true, name: true, role: true, designation: true, active: true, createdAt: true },
   });
   return NextResponse.json({ users });
 }
@@ -26,17 +26,19 @@ export async function POST(req: Request) {
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const { username, name, role, password } = (body ?? {}) as {
+  const { username, name, role, password, designation } = (body ?? {}) as {
     username?: string;
     name?: string;
     role?: string;
     password?: string;
+    designation?: string | null;
   };
 
   const u = (username ?? "").trim().toLowerCase();
   const n = (name ?? "").trim();
   const r = role ?? "";
   const p = password ?? "";
+  const d = typeof designation === "string" ? designation.trim() : null;
 
   if (!/^[a-z0-9._-]{3,30}$/.test(u)) {
     return NextResponse.json({ error: "Username must be 3-30 lowercase letters/numbers/._-" }, { status: 400 });
@@ -50,8 +52,8 @@ export async function POST(req: Request) {
 
   const passwordHash = await bcrypt.hash(p, 10);
   const user = await prisma.user.create({
-    data: { username: u, name: n, role: r, passwordHash },
-    select: { id: true, username: true, name: true, role: true, active: true, createdAt: true },
+    data: { username: u, name: n, role: r, passwordHash, designation: d || null },
+    select: { id: true, username: true, name: true, role: true, designation: true, active: true, createdAt: true },
   });
 
   return NextResponse.json({ user }, { status: 201 });
