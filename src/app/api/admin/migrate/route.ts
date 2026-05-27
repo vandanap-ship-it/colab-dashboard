@@ -55,6 +55,17 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add AuditLog table for change tracking across the system.",
   },
+  {
+    key: "2026-05-26_add_soft_delete",
+    sql: [
+      `ALTER TABLE "ProgressEntry" ADD COLUMN "deletedAt" DATETIME`,
+      `ALTER TABLE "Issue" ADD COLUMN "deletedAt" DATETIME`,
+      `ALTER TABLE "Hindrance" ADD COLUMN "deletedAt" DATETIME`,
+      `ALTER TABLE "Concern" ADD COLUMN "deletedAt" DATETIME`,
+      `ALTER TABLE "Inspection" ADD COLUMN "deletedAt" DATETIME`,
+    ],
+    describe: "Add deletedAt to ProgressEntry / Issue / Hindrance / Concern / Inspection for soft-delete.",
+  },
 ];
 
 async function ensureLedger() {
