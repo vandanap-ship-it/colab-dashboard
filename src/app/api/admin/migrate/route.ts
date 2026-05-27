@@ -66,6 +66,13 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add deletedAt to ProgressEntry / Issue / Hindrance / Concern / Inspection for soft-delete.",
   },
+  {
+    key: "2026-05-26_add_user_designation",
+    sql: [
+      `ALTER TABLE "User" ADD COLUMN "designation" TEXT`,
+    ],
+    describe: "Add User.designation for human-readable job titles alongside the permission role.",
+  },
 ];
 
 async function ensureLedger() {
