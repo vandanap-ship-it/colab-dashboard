@@ -16,7 +16,7 @@ export async function GET(req: Request) {
 
   if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
 
-  const where: { projectId: string; wbsNodeId?: string } = { projectId };
+  const where: { projectId: string; wbsNodeId?: string; deletedAt: null } = { projectId, deletedAt: null };
   if (wbsNodeId) where.wbsNodeId = wbsNodeId;
 
   const entries = await prisma.progressEntry.findMany({

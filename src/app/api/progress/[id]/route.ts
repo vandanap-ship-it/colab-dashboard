@@ -194,14 +194,19 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/progress/[id
   }
 
   try {
-    await prisma.progressEntry.delete({ where: { id } });
+    // Soft-delete: mark deletedAt instead of removing. Admin can restore from
+    // /admin/trash. Photos and labour rows stay attached to the entry.
+    await prisma.progressEntry.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
     await recordAudit({
       projectId: entry.projectId,
       userId: session.user.id,
       action: "DELETE",
       entityType: "ProgressEntry",
       entityId: entry.id,
-      summary: "Progress entry deleted",
+      summary: "Progress entry moved to trash",
     });
     return NextResponse.json({ ok: true });
   } catch (e) {

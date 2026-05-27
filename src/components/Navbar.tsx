@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { Inbox, Smartphone, ShieldCheck, Users, History } from "lucide-react";
+import { Inbox, Smartphone, ShieldCheck, Users, History, Trash2 } from "lucide-react";
 import { canSeeMobile, isAdmin } from "@/lib/roles";
 import BrandMark from "./BrandMark";
 import SwitchProjectButton from "./SwitchProjectButton";
@@ -40,6 +40,7 @@ export default function Navbar() {
               <NavLink href="/admin/users" icon={<Users className="w-4 h-4" />} label="Users" />
               <NavLink href="/admin/contractors" icon={<ShieldCheck className="w-4 h-4" />} label="Contractors" />
               <NavLink href="/admin/audit" icon={<History className="w-4 h-4" />} label="Audit" />
+              <NavLink href="/admin/trash" icon={<Trash2 className="w-4 h-4" />} label="Trash" />
             </>
           )}
           {canSeeMobile(role) && (
