@@ -25,8 +25,12 @@ export default function HindranceSummary({ projectId, canResolve }: { projectId:
 
   const load = useCallback(async () => {
     const url = `/api/hindrances?projectId=${projectId}` + (showResolved ? "" : "&status=OPEN");
-    const res = await fetch(url, { cache: "no-store" });
-    if (res.ok) setHindrances((await res.json()).hindrances);
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      setHindrances(res.ok ? (await res.json()).hindrances ?? [] : []);
+    } catch {
+      setHindrances([]);
+    }
   }, [projectId, showResolved]);
 
   useEffect(() => { load(); }, [load]);

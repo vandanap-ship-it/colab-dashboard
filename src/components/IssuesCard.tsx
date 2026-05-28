@@ -42,8 +42,12 @@ export default function IssuesCard({
 
   const load = useCallback(async () => {
     const url = `/api/issues?projectId=${projectId}` + (showResolved ? "" : "&status=OPEN");
-    const res = await fetch(url, { cache: "no-store" });
-    if (res.ok) setIssues((await res.json()).issues);
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      setIssues(res.ok ? (await res.json()).issues ?? [] : []);
+    } catch {
+      setIssues([]);
+    }
   }, [projectId, showResolved]);
 
   useEffect(() => {

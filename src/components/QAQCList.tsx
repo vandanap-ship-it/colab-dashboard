@@ -43,11 +43,17 @@ export default function QAQCList({ projectId, canReview }: { projectId: string; 
   const [rejectionDraft, setRejectionDraft] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/inspections?projectId=${projectId}&status=${tab}`, { cache: "no-store" });
-    if (res.ok) {
-      const data = await res.json();
-      setInspections(data.inspections);
-      setCounts(data.counts);
+    try {
+      const res = await fetch(`/api/inspections?projectId=${projectId}&status=${tab}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setInspections(data.inspections ?? []);
+        setCounts(data.counts ?? { IN_REVIEW: 0, PASSED: 0, REJECTED: 0 });
+      } else {
+        setInspections([]);
+      }
+    } catch {
+      setInspections([]);
     }
   }, [projectId, tab]);
 

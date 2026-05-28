@@ -32,11 +32,17 @@ export default function ConcernRaised({ projectId, canManage }: { projectId: str
   const [counts, setCounts] = useState<Record<string, number>>({ PENDING: 0, READ: 0, RESOLVED: 0, TASK_ASSIGNED: 0 });
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/concerns?projectId=${projectId}&status=${tab}`, { cache: "no-store" });
-    if (res.ok) {
-      const data = await res.json();
-      setConcerns(data.concerns);
-      setCounts(data.counts);
+    try {
+      const res = await fetch(`/api/concerns?projectId=${projectId}&status=${tab}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setConcerns(data.concerns ?? []);
+        setCounts(data.counts ?? { PENDING: 0, READ: 0, RESOLVED: 0, TASK_ASSIGNED: 0 });
+      } else {
+        setConcerns([]);
+      }
+    } catch {
+      setConcerns([]);
     }
   }, [projectId, tab]);
 
