@@ -40,8 +40,12 @@ export default defineConfig({
       testIgnore: /mobile\.spec/,
     },
     {
+      // Pixel 7 = chromium engine with a mobile viewport + touch. We use
+      // chromium (not webkit's iPhone profile) because Playwright's headless
+      // WebKit doesn't persist session cookies on http://localhost in CI.
+      // Real iPhone Safari is unaffected; that's covered by manual device QA.
       name: "mobile",
-      use: { ...devices["iPhone 14"] },
+      use: { ...devices["Pixel 7"] },
       testMatch: /mobile\.spec/,
     },
   ],
