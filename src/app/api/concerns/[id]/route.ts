@@ -7,6 +7,7 @@ import {
   badRequest,
   forbidden,
   handleApiError,
+  notFound,
   unauthorized,
 } from "@/lib/apiErrors";
 
@@ -63,6 +64,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/concerns/[id]"
       where: { id },
       select: { id: true, projectId: true, status: true, assignedToId: true },
     });
+    if (!before) return notFound();
     const concern = await prisma.concern.update({
       where: { id },
       data,
@@ -73,7 +75,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/concerns/[id]"
         photos: true,
       },
     });
-    if (before) {
+    {
       const diff = diffSummary(
         { status: before.status, assignedToId: before.assignedToId },
         { status: concern.status, assignedToId: concern.assignedToId },

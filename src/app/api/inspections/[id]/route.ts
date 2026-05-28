@@ -7,6 +7,7 @@ import {
   badRequest,
   forbidden,
   handleApiError,
+  notFound,
   unauthorized,
 } from "@/lib/apiErrors";
 
@@ -41,6 +42,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
       where: { id },
       select: { id: true, projectId: true, status: true, title: true },
     });
+    if (!before) return notFound();
     const inspection = await prisma.inspection.update({
       where: { id },
       data: {
@@ -56,7 +58,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
         photos: true,
       },
     });
-    if (before) {
+    {
       await recordAudit({
         projectId: inspection.projectId,
         userId: session.user.id,

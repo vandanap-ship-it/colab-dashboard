@@ -7,6 +7,7 @@ import {
   badRequest,
   forbidden,
   handleApiError,
+  notFound,
   unauthorized,
 } from "@/lib/apiErrors";
 
@@ -45,6 +46,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/hindrances/[id
       where: { id },
       select: { id: true, projectId: true, status: true, daysImpact: true },
     });
+    if (!before) return notFound();
     const hindrance = await prisma.hindrance.update({
       where: { id },
       data,
@@ -54,7 +56,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/hindrances/[id
         photos: true,
       },
     });
-    if (before) {
+    {
       const diff = diffSummary(
         { status: before.status, daysImpact: before.daysImpact },
         { status: hindrance.status, daysImpact: hindrance.daysImpact },

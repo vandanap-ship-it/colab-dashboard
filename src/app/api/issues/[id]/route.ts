@@ -7,6 +7,7 @@ import {
   badRequest,
   forbidden,
   handleApiError,
+  notFound,
   unauthorized,
 } from "@/lib/apiErrors";
 
@@ -58,6 +59,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
       where: { id },
       select: { id: true, projectId: true, status: true, assignedToId: true },
     });
+    // findUnique is soft-delete filtered, so a null here means the snag is
+    // missing or trashed — don't silently mutate it.
+    if (!before) return notFound();
     const issue = await prisma.issue.update({
       where: { id },
       data,
@@ -68,7 +72,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
         photos: true,
       },
     });
-    if (before) {
+    {
       const diff = diffSummary(
         { status: before.status, assignedToId: before.assignedToId },
         { status: issue.status, assignedToId: issue.assignedToId },
