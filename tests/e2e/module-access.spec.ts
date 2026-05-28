@@ -67,16 +67,33 @@ test.describe("Module access control", () => {
       });
       expect(progRes.status()).toBe(403);
 
-      // 6. Hindrance — BLOCKED (403)
+      // 6. Hindrance create — BLOCKED (403)
       const hindRes = await page.request.post("/api/hindrances", {
         data: { projectId, description: "blocked", startDate: new Date().toISOString() },
       });
       expect(hindRes.status()).toBe(403);
 
+      // 6b. Concern create — BLOCKED (403)
+      const concRes = await page.request.post("/api/concerns", {
+        data: { projectId, description: "blocked too" },
+      });
+      expect(concRes.status()).toBe(403);
+
       // 7. Schedule — empty (no access)
       const wbsRes = await page.request.get(`/api/projects/${projectId}/wbs?leaves=true`);
       const wbsData = await wbsRes.json();
       expect(wbsData.nodes).toEqual([]);
+
+      // 8. Read access to other modules is also scoped — a QAQC contractor
+      //    must not be able to READ progress / hindrances / concerns.
+      const progList = await page.request.get(`/api/progress?projectId=${projectId}`);
+      expect((await progList.json()).entries).toEqual([]);
+
+      const hindList = await page.request.get(`/api/hindrances?projectId=${projectId}`);
+      expect((await hindList.json()).hindrances).toEqual([]);
+
+      const concList = await page.request.get(`/api/concerns?projectId=${projectId}`);
+      expect((await concList.json()).concerns).toEqual([]);
     } finally {
       // 8. Cleanup — deactivate the test user as admin
       await page.context().clearCookies();

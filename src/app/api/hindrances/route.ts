@@ -9,6 +9,9 @@ const STATUSES = new Set(["OPEN", "RESOLVED"]);
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!canAccessModule(session.user.modules, MODULES.HINDRANCE)) {
+    return NextResponse.json({ hindrances: [] });
+  }
 
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");

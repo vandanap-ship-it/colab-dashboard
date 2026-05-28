@@ -9,6 +9,10 @@ const VALID_TYPES = new Set(["LABOUR_SUPPLY", "PRW", "MISC"]);
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Read access respects module scope: a contractor without PROGRESS sees none.
+  if (!canAccessModule(session.user.modules, MODULES.PROGRESS)) {
+    return NextResponse.json({ entries: [] });
+  }
 
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");

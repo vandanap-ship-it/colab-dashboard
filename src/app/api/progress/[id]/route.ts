@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin, ROLES } from "@/lib/roles";
 import { recordAudit, diffSummary } from "@/lib/audit";
+import { canAccessModule, MODULES } from "@/lib/modules";
 import {
   badRequest,
   forbidden,
@@ -22,6 +23,7 @@ function canEditAnyEntry(role: string): boolean {
 export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]">) {
   const session = await auth();
   if (!session?.user) return unauthorized();
+  if (!canAccessModule(session.user.modules, MODULES.PROGRESS)) return forbidden();
 
   const { id } = await ctx.params;
   const entry = await prisma.progressEntry.findUnique({
@@ -181,6 +183,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
 export async function DELETE(_req: Request, ctx: RouteContext<"/api/progress/[id]">) {
   const session = await auth();
   if (!session?.user) return unauthorized();
+  if (!canAccessModule(session.user.modules, MODULES.PROGRESS)) return forbidden();
 
   const { id } = await ctx.params;
   const entry = await prisma.progressEntry.findUnique({
