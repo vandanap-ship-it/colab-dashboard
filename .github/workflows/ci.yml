@@ -36,16 +36,16 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Typecheck
-        run: npx tsc --noEmit -p tsconfig.json
-
-      - name: Unit tests
-        run: npm run test:unit
-
       - name: Set up test database
         run: |
           npx prisma db push --skip-generate
           npx tsx prisma/seed.ts
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Build (typechecks + generates route types)
+        run: npx next build
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium webkit
