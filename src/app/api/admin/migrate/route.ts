@@ -73,6 +73,15 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add User.designation for human-readable job titles alongside the permission role.",
   },
+  {
+    key: "2026-05-26_add_module_access",
+    sql: [
+      `ALTER TABLE "User" ADD COLUMN "modules" TEXT`,
+      `ALTER TABLE "Issue" ADD COLUMN "module" TEXT`,
+      `ALTER TABLE "Inspection" ADD COLUMN "module" TEXT`,
+    ],
+    describe: "Add module-level access: User.modules (scope) + Issue.module + Inspection.module (tags).",
+  },
 ];
 
 async function ensureLedger() {
