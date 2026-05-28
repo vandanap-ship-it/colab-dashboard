@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
+import { canAccessModule, MODULES } from "@/lib/modules";
 
 const STATUSES = new Set(["OPEN", "RESOLVED"]);
 
@@ -32,6 +33,9 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!canAccessModule(session.user.modules, MODULES.HINDRANCE)) {
+    return NextResponse.json({ error: "Your account doesn't have access to hindrances." }, { status: 403 });
+  }
 
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
+import { canAccessModule, primaryModuleFor, isScopedUser, MODULES } from "@/lib/modules";
 
 const SEVERITIES = new Set(["LOW", "MEDIUM", "HIGH"]);
 const STATUSES = new Set(["OPEN", "RESOLVED"]);
@@ -15,8 +16,13 @@ export async function GET(req: Request) {
   const status = searchParams.get("status");
   if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
 
-  const where: { projectId: string; status?: string } = { projectId };
+  const where: { projectId: string; status?: string; module?: string } = { projectId };
   if (status && STATUSES.has(status)) where.status = status;
+  // Scoped contractors only see snags tagged to their module.
+  if (isScopedUser(session.user.modules)) {
+    const m = primaryModuleFor(session.user.modules);
+    if (m) where.module = m;
+  }
 
   const issues = await prisma.issue.findMany({
     where,
@@ -34,6 +40,13 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Snags belong to QAQC or SAFETY — scoped users must have one of those.
+  if (
+    !canAccessModule(session.user.modules, MODULES.QAQC) &&
+    !canAccessModule(session.user.modules, MODULES.SAFETY)
+  ) {
+    return NextResponse.json({ error: "Your account doesn't have access to raise snags." }, { status: 403 });
+  }
 
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
@@ -55,6 +68,9 @@ export async function POST(req: Request) {
   const sev = severity && SEVERITIES.has(severity) ? severity : null;
   const cat = (category ?? "").trim();
   const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 6) : [];
+  // Tag the snag with the creator's module so scoped contractors only ever
+  // see their own module's snags. Full-access staff create untagged snags.
+  const moduleTag = primaryModuleFor(session.user.modules);
 
   const issue = await prisma.issue.create({
     data: {
@@ -63,6 +79,7 @@ export async function POST(req: Request) {
       description: desc,
       severity: sev,
       category: cat.length > 0 ? cat : null,
+      module: moduleTag,
       createdById: session.user.id,
       assignedToId: assignedToId || null,
       photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
+import { canAccessModule, MODULES } from "@/lib/modules";
 
 const VALID_TYPES = new Set(["LABOUR_SUPPLY", "PRW", "MISC"]);
 
@@ -40,6 +41,11 @@ type LabourInput = { category?: string; count?: number };
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Daily progress is the PROGRESS module — contractors scoped to QAQC/Safety
+  // cannot log progress.
+  if (!canAccessModule(session.user.modules, MODULES.PROGRESS)) {
+    return NextResponse.json({ error: "Your account doesn't have access to progress logging." }, { status: 403 });
+  }
 
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }

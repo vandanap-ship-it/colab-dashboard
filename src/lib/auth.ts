@@ -5,11 +5,17 @@ import { prisma } from "@/lib/prisma";
 
 declare module "next-auth" {
   interface Session {
-    user: { id: string; role: string; username: string } & DefaultSession["user"];
+    user: {
+      id: string;
+      role: string;
+      username: string;
+      modules: string | null;
+    } & DefaultSession["user"];
   }
   interface User {
     role: string;
     username: string;
+    modules: string | null;
   }
 }
 
@@ -37,7 +43,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const ok = await bcrypt.compare(password, user.passwordHash);
         if (!ok) return null;
 
-        return { id: user.id, name: user.name, username: user.username, role: user.role };
+        return {
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          role: user.role,
+          modules: user.modules ?? null,
+        };
       },
     }),
   ],
@@ -47,6 +59,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id as string;
         token.role = (user as { role: string }).role;
         token.username = (user as { username: string }).username;
+        token.modules = (user as { modules: string | null }).modules ?? null;
       }
       return token;
     },
@@ -55,6 +68,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.id as string;
         session.user.role = token.role as string;
         session.user.username = token.username as string;
+        session.user.modules = (token.modules as string | null) ?? null;
       }
       return session;
     },

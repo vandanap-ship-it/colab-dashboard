@@ -14,6 +14,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { TOOL_MODULES, canAccessTool, isScopedUser } from "@/lib/modules";
 
 export default async function MobileProjectHome({
   params,
@@ -40,34 +41,52 @@ export default async function MobileProjectHome({
       })
     : 0;
 
+  const userModules = session?.user?.modules ?? null;
+
   type Tool = {
+    key: string;
     href: string;
     label: string;
     icon: LucideIcon;
     primary?: boolean;
   };
-  const tools: Tool[] = [
+  const allTools: Tool[] = [
     {
+      key: "new-progress",
       href: `/mobile/${projectId}/progress/new`,
       label: "New Progress",
       icon: PlusCircle,
       primary: true,
     },
-    { href: `/mobile/${projectId}/site-progress`, label: "Site Progress", icon: ListChecks },
-    { href: `/mobile/${projectId}/issue/new`, label: "Snag", icon: AlertTriangle },
-    { href: `/mobile/${projectId}/hindrance/new`, label: "Hindrance", icon: CheckSquare },
-    { href: `/mobile/${projectId}/concern/new`, label: "Areas of Concern", icon: Eye },
+    { key: "site-progress", href: `/mobile/${projectId}/site-progress`, label: "Site Progress", icon: ListChecks },
+    { key: "snag", href: `/mobile/${projectId}/issue/new`, label: "Snag", icon: AlertTriangle },
+    { key: "hindrance", href: `/mobile/${projectId}/hindrance/new`, label: "Hindrance", icon: CheckSquare },
+    { key: "concern", href: `/mobile/${projectId}/concern/new`, label: "Areas of Concern", icon: Eye },
     {
+      key: "inspection",
       href: `/mobile/${projectId}/inspection/new`,
       label: "Inspection",
       icon: ClipboardList,
     },
     {
+      key: "dlr",
       href: `/projects/${projectId}/dlr`,
       label: "DLR Updates",
       icon: ClipboardCheck,
     },
   ];
+
+  // Filter tools by the user's module access. Internal staff see everything;
+  // scoped contractors see only their module's tools. Promote the first
+  // visible tool to "primary" if New Progress was filtered out.
+  const tools = allTools.filter((t) =>
+    canAccessTool(userModules, TOOL_MODULES[t.key] ?? []),
+  );
+  if (tools.length > 0 && !tools.some((t) => t.primary)) {
+    tools[0] = { ...tools[0], primary: true };
+  }
+
+  const scoped = isScopedUser(userModules);
 
   return (
     <div className="px-4 py-6 space-y-6">
@@ -124,26 +143,28 @@ export default async function MobileProjectHome({
         </div>
       </section>
 
-      <section className="rounded-xl border border-stone-200 bg-white p-5">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
-            Today
-          </h2>
-          <TrendingUp className="w-4 h-4 text-stone-300" />
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-          <div>
-            <div className="text-2xl font-semibold text-stone-900 tabular-nums">
-              {myProgressToday}
+      {!scoped && (
+        <section className="rounded-xl border border-stone-200 bg-white p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
+              Today
+            </h2>
+            <TrendingUp className="w-4 h-4 text-stone-300" />
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div className="text-2xl font-semibold text-stone-900 tabular-nums">
+                {myProgressToday}
+              </div>
+              <div className="text-xs text-stone-500 mt-0.5">Progress entries logged</div>
             </div>
-            <div className="text-xs text-stone-500 mt-0.5">Progress entries logged</div>
+            <div>
+              <div className="text-2xl font-semibold text-stone-900 tabular-nums">{wbsCount}</div>
+              <div className="text-xs text-stone-500 mt-0.5">Activities in scope</div>
+            </div>
           </div>
-          <div>
-            <div className="text-2xl font-semibold text-stone-900 tabular-nums">{wbsCount}</div>
-            <div className="text-xs text-stone-500 mt-0.5">Activities in scope</div>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
     </div>
   );
 }

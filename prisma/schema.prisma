@@ -14,6 +14,7 @@ model User {
   passwordHash String
   role         String    @default("SITE_ENGINEER")
   designation  String?
+  modules      String?   // JSON array of allowed module keys; null = full access (internal staff)
   active       Boolean   @default(true)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -249,6 +250,7 @@ model Issue {
 
   createdById  String
   assignedToId String?
+  module       String?  // QAQC | SAFETY | null (general). Scopes visibility for contractor users.
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -286,6 +288,7 @@ model Inspection {
   filledById   String
   reviewedById String?
   reviewedAt   DateTime?
+  module       String?   // QAQC | SAFETY | null (general). Scopes visibility for contractor users.
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?

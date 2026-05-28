@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
+import { canAccessModule, primaryModuleFor, isScopedUser, MODULES } from "@/lib/modules";
 
 const STATUSES = new Set(["IN_REVIEW", "PASSED", "REJECTED"]);
 
@@ -15,9 +16,14 @@ export async function GET(req: Request) {
   const filledById = searchParams.get("filledById");
   if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
 
-  const where: { projectId: string; status?: string; filledById?: string } = { projectId };
+  const where: { projectId: string; status?: string; filledById?: string; module?: string } = { projectId };
   if (status && STATUSES.has(status)) where.status = status;
   if (filledById) where.filledById = filledById;
+  // Scoped contractors only see inspections tagged to their module.
+  if (isScopedUser(session.user.modules)) {
+    const m = primaryModuleFor(session.user.modules);
+    if (m) where.module = m;
+  }
 
   const inspections = await prisma.inspection.findMany({
     where,
@@ -47,6 +53,13 @@ type ItemInput = { label?: string; passed?: boolean; notes?: string };
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Inspections belong to QAQC or SAFETY.
+  if (
+    !canAccessModule(session.user.modules, MODULES.QAQC) &&
+    !canAccessModule(session.user.modules, MODULES.SAFETY)
+  ) {
+    return NextResponse.json({ error: "Your account doesn't have access to inspections." }, { status: 403 });
+  }
 
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
@@ -76,12 +89,14 @@ export async function POST(req: Request) {
   if (itemsClean.length === 0) return NextResponse.json({ error: "At least one checklist item required" }, { status: 400 });
 
   const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 8) : [];
+  const moduleTag = primaryModuleFor(session.user.modules);
 
   const inspection = await prisma.inspection.create({
     data: {
       projectId,
       wbsNodeId: wbsNodeId || null,
       title: t,
+      module: moduleTag,
       filledById: session.user.id,
       items: { create: itemsClean },
       photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,

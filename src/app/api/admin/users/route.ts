@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ROLES, isAdmin } from "@/lib/roles";
+import { serializeModules } from "@/lib/modules";
 
 const VALID_ROLES = new Set<string>(Object.values(ROLES));
 
@@ -13,7 +14,7 @@ export async function GET() {
 
   const users = await prisma.user.findMany({
     orderBy: [{ active: "desc" }, { createdAt: "desc" }],
-    select: { id: true, username: true, name: true, role: true, designation: true, active: true, createdAt: true },
+    select: { id: true, username: true, name: true, role: true, designation: true, modules: true, active: true, createdAt: true },
   });
   return NextResponse.json({ users });
 }
@@ -26,12 +27,13 @@ export async function POST(req: Request) {
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const { username, name, role, password, designation } = (body ?? {}) as {
+  const { username, name, role, password, designation, modules } = (body ?? {}) as {
     username?: string;
     name?: string;
     role?: string;
     password?: string;
     designation?: string | null;
+    modules?: string[] | null;
   };
 
   const u = (username ?? "").trim().toLowerCase();
@@ -39,6 +41,7 @@ export async function POST(req: Request) {
   const r = role ?? "";
   const p = password ?? "";
   const d = typeof designation === "string" ? designation.trim() : null;
+  const mods = serializeModules(modules);
 
   if (!/^[a-z0-9._-]{3,30}$/.test(u)) {
     return NextResponse.json({ error: "Username must be 3-30 lowercase letters/numbers/._-" }, { status: 400 });
@@ -52,8 +55,8 @@ export async function POST(req: Request) {
 
   const passwordHash = await bcrypt.hash(p, 10);
   const user = await prisma.user.create({
-    data: { username: u, name: n, role: r, passwordHash, designation: d || null },
-    select: { id: true, username: true, name: true, role: true, designation: true, active: true, createdAt: true },
+    data: { username: u, name: n, role: r, passwordHash, designation: d || null, modules: mods },
+    select: { id: true, username: true, name: true, role: true, designation: true, modules: true, active: true, createdAt: true },
   });
 
   return NextResponse.json({ user }, { status: 201 });

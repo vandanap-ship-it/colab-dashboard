@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isScopedUser } from "@/lib/modules";
 
 export async function GET(req: Request, ctx: RouteContext<"/api/projects/[id]/wbs">) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // External contractors are scoped to their module and must not see the
+  // project schedule. Return an empty list so their forms degrade gracefully
+  // (no activity picker) rather than erroring.
+  if (isScopedUser(session.user.modules)) {
+    return NextResponse.json({ nodes: [] });
+  }
 
   const { id: projectId } = await ctx.params;
   const { searchParams } = new URL(req.url);
