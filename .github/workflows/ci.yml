@@ -40,6 +40,7 @@ jobs:
         run: |
           npx prisma db push
           npx tsx prisma/seed.ts
+          npx tsx prisma/demo-seed.ts
 
       - name: Unit tests
         run: npm run test:unit
