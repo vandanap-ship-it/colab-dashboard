@@ -74,17 +74,24 @@ export default function ReportForm({
     setError(null);
 
     let photoUrls: string[] = [];
+    let photoWarning: string | null = null;
     if (photos.length > 0) {
       const fd = new FormData();
       fd.set("scope", `${scope}-${projectId}`);
       for (const p of photos) fd.append("file", p);
-      const upRes = await fetch("/api/upload", { method: "POST", body: fd });
-      if (!upRes.ok) {
-        setPending(false);
-        setError("Photo upload failed");
-        return;
+      try {
+        const upRes = await fetch("/api/upload", { method: "POST", body: fd });
+        if (upRes.ok) {
+          photoUrls = (await upRes.json()).urls;
+        } else {
+          // Don't block the report on a photo failure — submit without photos
+          // and warn. The record itself is never lost.
+          const data = await upRes.json().catch(() => null);
+          photoWarning = data?.error ?? `Photo upload failed (status ${upRes.status})`;
+        }
+      } catch (e) {
+        photoWarning = e instanceof Error ? `Photo upload failed: ${e.message}` : "Photo upload failed";
       }
-      photoUrls = (await upRes.json()).urls;
     }
 
     const payload: Record<string, unknown> = {
@@ -99,17 +106,40 @@ export default function ReportForm({
       if (extras[k] === "" || extras[k] === undefined) delete payload[k];
     }
 
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    setPending(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setError(data?.error ?? "Failed");
-      return;
+    // Network-first; on offline / 5xx, queue locally and let it sync later.
+    let queued = false;
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        // saved
+      } else if (res.status >= 400 && res.status < 500) {
+        const data = await res.json().catch(() => null);
+        setPending(false);
+        setError(data?.error ?? `Save failed (${res.status})`);
+        return;
+      } else {
+        const { enqueue } = await import("@/lib/offlineQueue");
+        await enqueue({ endpoint, method: "POST", body: payload, label: title });
+        queued = true;
+      }
+    } catch {
+      const { enqueue } = await import("@/lib/offlineQueue");
+      await enqueue({ endpoint, method: "POST", body: payload, label: title });
+      queued = true;
     }
+    setPending(false);
+
+    const queuedNote = queued
+      ? "Saved on this device. It will sync the moment you're back online."
+      : null;
+    if (photoWarning || queuedNote) {
+      alert([`${title} saved.`, queuedNote, photoWarning].filter(Boolean).join("\n\n"));
+    }
+
     router.push(successPath);
     router.refresh();
   }

@@ -75,36 +75,65 @@ export default function InspectionForm({
     setError(null);
 
     let photoUrls: string[] = [];
+    let photoWarning: string | null = null;
     if (photos.length > 0) {
       const fd = new FormData();
       fd.set("scope", `inspection-${projectId}`);
       for (const p of photos) fd.append("file", p);
-      const upRes = await fetch("/api/upload", { method: "POST", body: fd });
-      if (!upRes.ok) {
-        setPending(false);
-        setError("Photo upload failed");
-        return;
+      try {
+        const upRes = await fetch("/api/upload", { method: "POST", body: fd });
+        if (upRes.ok) {
+          photoUrls = (await upRes.json()).urls;
+        } else {
+          const data = await upRes.json().catch(() => null);
+          photoWarning = data?.error ?? `Photo upload failed (status ${upRes.status})`;
+        }
+      } catch (e) {
+        photoWarning = e instanceof Error ? `Photo upload failed: ${e.message}` : "Photo upload failed";
       }
-      photoUrls = (await upRes.json()).urls;
     }
 
-    const res = await fetch("/api/inspections", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        projectId,
-        wbsNodeId: activityId || undefined,
-        title: title.trim(),
-        items: usable,
-        photoUrls,
-      }),
-    });
-    setPending(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setError(data?.error ?? "Failed");
-      return;
+    const payload = {
+      projectId,
+      wbsNodeId: activityId || undefined,
+      title: title.trim(),
+      items: usable,
+      photoUrls,
+    };
+
+    let queued = false;
+    try {
+      const res = await fetch("/api/inspections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        // saved
+      } else if (res.status >= 400 && res.status < 500) {
+        const data = await res.json().catch(() => null);
+        setPending(false);
+        setError(data?.error ?? `Save failed (${res.status})`);
+        return;
+      } else {
+        const { enqueue } = await import("@/lib/offlineQueue");
+        await enqueue({ endpoint: "/api/inspections", method: "POST", body: payload, label: `Inspection: ${title.trim()}` });
+        queued = true;
+      }
+    } catch {
+      const { enqueue } = await import("@/lib/offlineQueue");
+      await enqueue({ endpoint: "/api/inspections", method: "POST", body: payload, label: `Inspection: ${title.trim()}` });
+      queued = true;
     }
+    setPending(false);
+
+    const queuedNote = queued
+      ? "Saved on this device. It will sync the moment you're back online."
+      : null;
+    if (photoWarning || queuedNote) {
+      alert(["Inspection saved.", queuedNote, photoWarning].filter(Boolean).join("\n\n"));
+    }
+
     router.push(redirectTo ?? `/mobile/${projectId}`);
     router.refresh();
   }
