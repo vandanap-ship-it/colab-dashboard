@@ -18,8 +18,14 @@ export async function signIn(page: Page, role: Role): Promise<void> {
   await page.fill('input[autocomplete="username"]', role);
   await page.fill('input[autocomplete="current-password"]', "password");
   await page.click('button[type="submit"]');
-  // Wait for any post-login landing page (could be /, /mobile, etc.)
-  await page.waitForLoadState("networkidle");
+  // Login does a client push to "/", which then server-redirects by role
+  // (e.g. engineers → /mobile). Wait for the navigation to actually leave
+  // /login before continuing — networkidle alone can resolve mid-redirect on
+  // slower CI runners.
+  await page
+    .waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 20000 })
+    .catch(() => {});
+  await page.waitForLoadState("networkidle").catch(() => {});
 }
 
 export async function getProjectId(page: Page, name = "Amanvana"): Promise<string> {
