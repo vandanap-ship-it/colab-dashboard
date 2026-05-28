@@ -38,7 +38,7 @@ jobs:
 
       - name: Set up test database
         run: |
-          npx prisma db push --skip-generate
+          npx prisma db push
           npx tsx prisma/seed.ts
 
       - name: Unit tests
