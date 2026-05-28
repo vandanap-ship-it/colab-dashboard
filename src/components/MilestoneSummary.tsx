@@ -39,9 +39,23 @@ export default function MilestoneSummary({ projectId }: { projectId: string }) {
   const [timeFilter, setTimeFilter] = useState<(typeof TIME_FILTERS)[number]["key"]>("ALL");
 
   useEffect(() => {
+    let cancelled = false;
     fetch(`/api/projects/${projectId}/wbs`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => setNodes(d.nodes));
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((d) => {
+        if (!cancelled) setNodes(d.nodes ?? []);
+      })
+      .catch(() => {
+        // Leave nodes null → component shows its "Loading…" / empty fallback
+        // rather than crashing. Milestones are non-critical chrome.
+        if (!cancelled) setNodes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [projectId]);
 
   // "Phases" = top-level groupings beneath the project root. We use level 2 if available, else level 3.

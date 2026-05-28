@@ -36,12 +36,27 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
   const [activities, setActivities] = useState<Activity[] | null>(null);
   const [tab, setTab] = useState<StatusKey>("ONGOING");
   const [search, setSearch] = useState("");
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoadError(false);
     fetch(`/api/projects/${projectId}/wbs?leaves=true`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => setActivities(d.nodes));
-  }, [projectId]);
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((d) => {
+        if (!cancelled) setActivities(d.nodes ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, reloadKey]);
 
   const today = new Date();
   const filtered = useMemo(() => {
@@ -90,7 +105,18 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
         className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
       />
 
-      {activities === null ? (
+      {loadError ? (
+        <div className="rounded-xl border border-stone-200 bg-white p-5 text-center">
+          <p className="text-sm text-stone-600">Couldn&apos;t load activities.</p>
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="mt-2 text-sm font-medium text-stone-900 underline"
+          >
+            Retry
+          </button>
+        </div>
+      ) : activities === null ? (
         <p className="text-sm text-stone-500">Loading…</p>
       ) : filtered.length === 0 ? (
         <p className="text-sm text-stone-500">No activities in this status.</p>

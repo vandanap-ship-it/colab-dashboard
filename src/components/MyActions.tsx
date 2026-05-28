@@ -28,13 +28,43 @@ function fmt(d: string) {
 
 export default function MyActions({ projectId }: { projectId?: string }) {
   const [data, setData] = useState<{ concerns: Concern[]; inspectionsToReview: Inspection[] } | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoadError(false);
     const url = projectId ? `/api/my-actions?projectId=${projectId}` : "/api/my-actions";
     fetch(url, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => setData({ concerns: d.concerns, inspectionsToReview: d.inspectionsToReview }));
-  }, [projectId]);
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((d) => {
+        if (!cancelled) setData({ concerns: d.concerns ?? [], inspectionsToReview: d.inspectionsToReview ?? [] });
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, reloadKey]);
+
+  if (loadError) {
+    return (
+      <div className="rounded-xl border border-stone-200 bg-white p-6 text-center">
+        <p className="text-sm text-stone-600">Couldn&apos;t load your actions.</p>
+        <button
+          type="button"
+          onClick={() => setReloadKey((k) => k + 1)}
+          className="mt-2 text-sm font-medium text-stone-900 underline"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   if (!data) return <p className="text-sm text-stone-500">Loading…</p>;
 

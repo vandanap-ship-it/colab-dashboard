@@ -48,11 +48,24 @@ export default function ProjectHighlightsModal({
   onClose: () => void;
 }) {
   const [nodes, setNodes] = useState<Node[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     fetch(`/api/projects/${projectId}/wbs`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => setNodes(d.nodes));
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((d) => {
+        if (!cancelled) setNodes(d.nodes ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [projectId]);
 
   // Phases are the topmost level present. After CSV import, phases are at
@@ -134,7 +147,11 @@ export default function ProjectHighlightsModal({
           </button>
         </div>
 
-        {nodes === null ? (
+        {loadError ? (
+          <p className="p-6 text-sm text-stone-500">
+            Couldn&apos;t load highlights. Close and reopen to try again.
+          </p>
+        ) : nodes === null ? (
           <p className="p-6 text-sm text-stone-500">Loading…</p>
         ) : phases.length === 0 ? (
           <p className="p-6 text-sm text-stone-500">
