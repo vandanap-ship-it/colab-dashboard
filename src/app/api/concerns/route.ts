@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
+import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 
 const STATUSES = new Set(["PENDING", "READ", "RESOLVED", "TASK_ASSIGNED"]);
 
@@ -65,31 +66,41 @@ export async function POST(req: Request) {
   const desc = (description ?? "").trim();
   if (desc.length < 3) return NextResponse.json({ error: "Description too short" }, { status: 400 });
   const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 6) : [];
+  const idempotencyKey = readIdempotencyKey(body);
+  const concernInclude = {
+    raisedBy: { select: { id: true, name: true } },
+    assignedTo: { select: { id: true, name: true } },
+    wbsNode: { select: { id: true, name: true, taskCode: true } },
+    photos: true,
+  } as const;
 
-  const concern = await prisma.concern.create({
-    data: {
+  const { record: concern, duplicate } = await createIdempotent(
+    idempotencyKey,
+    () => prisma.concern.findUnique({ where: { idempotencyKey: idempotencyKey! }, include: concernInclude }),
+    () =>
+      prisma.concern.create({
+        data: {
+          projectId,
+          wbsNodeId: wbsNodeId || null,
+          description: desc,
+          raisedById: session.user.id,
+          idempotencyKey,
+          photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
+        },
+        include: concernInclude,
+      }),
+  );
+
+  if (!duplicate) {
+    await recordAudit({
       projectId,
-      wbsNodeId: wbsNodeId || null,
-      description: desc,
-      raisedById: session.user.id,
-      photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
-    },
-    include: {
-      raisedBy: { select: { id: true, name: true } },
-      assignedTo: { select: { id: true, name: true } },
-      wbsNode: { select: { id: true, name: true, taskCode: true } },
-      photos: true,
-    },
-  });
+      userId: session.user.id,
+      action: "CREATE",
+      entityType: "Concern",
+      entityId: concern.id,
+      summary: `Concern raised: ${desc.length > 60 ? desc.slice(0, 60) + "…" : desc}`,
+    });
+  }
 
-  await recordAudit({
-    projectId,
-    userId: session.user.id,
-    action: "CREATE",
-    entityType: "Concern",
-    entityId: concern.id,
-    summary: `Concern raised: ${desc.length > 60 ? desc.slice(0, 60) + "…" : desc}`,
-  });
-
-  return NextResponse.json({ concern }, { status: 201 });
+  return NextResponse.json({ concern }, { status: duplicate ? 200 : 201 });
 }

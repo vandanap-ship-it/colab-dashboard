@@ -95,6 +95,9 @@ export default function ReportForm({
     }
 
     const payload: Record<string, unknown> = {
+      // One stable key per submission, reused for the direct POST and any
+      // offline-queue replay, so a lost response doesn't create a duplicate.
+      idempotencyKey: crypto.randomUUID(),
       projectId,
       wbsNodeId: activityId || undefined,
       description: description.trim(),

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
+import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 
 const VALID_TYPES = new Set(["LABOUR_SUPPLY", "PRW", "MISC"]);
 
@@ -111,7 +112,18 @@ export async function POST(req: Request) {
 
   const photosClean = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 6) : [];
 
-  const entry = await prisma.$transaction(async (tx) => {
+  const idempotencyKey = readIdempotencyKey(body);
+  const entryInclude = {
+    labour: true,
+    photos: true,
+    contractor: { select: { id: true, name: true } },
+    createdBy: { select: { id: true, name: true } },
+  } as const;
+
+  const { record: entry, duplicate } = await createIdempotent(
+    idempotencyKey,
+    () => prisma.progressEntry.findUnique({ where: { idempotencyKey: idempotencyKey! }, include: entryInclude }),
+    () => prisma.$transaction(async (tx) => {
     const created = await tx.progressEntry.create({
       data: {
         projectId: node.projectId,
@@ -123,15 +135,11 @@ export async function POST(req: Request) {
         contractorId: contractorId ?? null,
         notes: notes?.trim() || null,
         createdById: session.user.id,
+        idempotencyKey,
         labour: labourClean.length > 0 ? { create: labourClean } : undefined,
         photos: photosClean.length > 0 ? { create: photosClean.map((url) => ({ url })) } : undefined,
       },
-      include: {
-        labour: true,
-        photos: true,
-        contractor: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, name: true } },
-      },
+      include: entryInclude,
     });
 
     // Update activity % complete from cumulative if total quantity known.
@@ -154,16 +162,21 @@ export async function POST(req: Request) {
     }
 
     return created;
-  });
+    }),
+  );
 
-  await recordAudit({
-    projectId: node.projectId,
-    userId: session.user.id,
-    action: "CREATE",
-    entityType: "ProgressEntry",
-    entityId: entry.id,
-    summary: `Progress logged for activity (${achieved} achieved, cumulative ${cumulative})`,
-  });
+  // On a replayed duplicate the entry (and its rollup + audit) already exist —
+  // just hand back the original so the client clears it from the queue.
+  if (!duplicate) {
+    await recordAudit({
+      projectId: node.projectId,
+      userId: session.user.id,
+      action: "CREATE",
+      entityType: "ProgressEntry",
+      entityId: entry.id,
+      summary: `Progress logged for activity (${achieved} achieved, cumulative ${cumulative})`,
+    });
+  }
 
-  return NextResponse.json({ entry }, { status: 201 });
+  return NextResponse.json({ entry }, { status: duplicate ? 200 : 201 });
 }

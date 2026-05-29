@@ -86,6 +86,44 @@ test.describe("Progress entry workflow", () => {
     expect(res.status()).toBe(400);
   });
 
+  test("API: replaying the same idempotencyKey does not duplicate the entry", async ({ page }) => {
+    await signIn(page, "manager");
+    const projectId = await getProjectId(page);
+    const wbsRes = await page.request.get(`/api/projects/${projectId}/wbs?leaves=true`);
+    const activity = (await wbsRes.json()).nodes?.[0];
+
+    const key = `e2e-idem-${uniqueId()}`;
+    const note = `[E2E idem] ${key}`;
+    const payload = {
+      idempotencyKey: key,
+      wbsNodeId: activity.id,
+      date: new Date().toISOString(),
+      type: "LABOUR_SUPPLY",
+      achievedQuantity: 2,
+      cumulativeQuantity: 2,
+      notes: note,
+    };
+
+    const first = await page.request.post("/api/progress", { data: payload });
+    expect(first.ok()).toBeTruthy();
+    const firstEntry = (await first.json()).entry;
+
+    // Replay the exact same submission (simulates a lost-response retry).
+    const second = await page.request.post("/api/progress", { data: payload });
+    expect(second.ok()).toBeTruthy();
+    const secondEntry = (await second.json()).entry;
+
+    // Same record handed back — not a new one.
+    expect(secondEntry.id).toBe(firstEntry.id);
+
+    // And exactly one entry with this note exists.
+    const listRes = await page.request.get(
+      `/api/progress?projectId=${projectId}&wbsNodeId=${activity.id}`,
+    );
+    const entries = (await listRes.json()).entries as Array<{ notes: string | null }>;
+    expect(entries.filter((e) => e.notes === note).length).toBe(1);
+  });
+
   test("Soft delete: progress entry goes to trash, admin can restore", async ({ page }) => {
     await signIn(page, "manager");
     const projectId = await getProjectId(page);

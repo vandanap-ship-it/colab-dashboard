@@ -145,6 +145,9 @@ export default function InspectionForm({
     }
 
     const payload = {
+      // One stable key per submission, reused for the direct POST and any
+      // offline-queue replay, so a lost response doesn't create a duplicate.
+      idempotencyKey: crypto.randomUUID(),
       projectId,
       wbsNodeId: activityId || undefined,
       title: title.trim(),

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
+import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 
 const STATUSES = new Set(["OPEN", "RESOLVED"]);
 
@@ -61,32 +62,42 @@ export async function POST(req: Request) {
 
   const impact = Number.isFinite(Number(daysImpact)) ? Math.max(0, Math.floor(Number(daysImpact))) : null;
   const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 6) : [];
+  const idempotencyKey = readIdempotencyKey(body);
+  const hindranceInclude = {
+    createdBy: { select: { id: true, name: true } },
+    wbsNode: { select: { id: true, name: true, taskCode: true } },
+    photos: true,
+  } as const;
 
-  const hindrance = await prisma.hindrance.create({
-    data: {
+  const { record: hindrance, duplicate } = await createIdempotent(
+    idempotencyKey,
+    () => prisma.hindrance.findUnique({ where: { idempotencyKey: idempotencyKey! }, include: hindranceInclude }),
+    () =>
+      prisma.hindrance.create({
+        data: {
+          projectId,
+          wbsNodeId: wbsNodeId || null,
+          description: desc,
+          startDate: start,
+          daysImpact: impact,
+          createdById: session.user.id,
+          idempotencyKey,
+          photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
+        },
+        include: hindranceInclude,
+      }),
+  );
+
+  if (!duplicate) {
+    await recordAudit({
       projectId,
-      wbsNodeId: wbsNodeId || null,
-      description: desc,
-      startDate: start,
-      daysImpact: impact,
-      createdById: session.user.id,
-      photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
-    },
-    include: {
-      createdBy: { select: { id: true, name: true } },
-      wbsNode: { select: { id: true, name: true, taskCode: true } },
-      photos: true,
-    },
-  });
+      userId: session.user.id,
+      action: "CREATE",
+      entityType: "Hindrance",
+      entityId: hindrance.id,
+      summary: `Hindrance logged: ${desc.length > 60 ? desc.slice(0, 60) + "…" : desc}`,
+    });
+  }
 
-  await recordAudit({
-    projectId,
-    userId: session.user.id,
-    action: "CREATE",
-    entityType: "Hindrance",
-    entityId: hindrance.id,
-    summary: `Hindrance logged: ${desc.length > 60 ? desc.slice(0, 60) + "…" : desc}`,
-  });
-
-  return NextResponse.json({ hindrance }, { status: 201 });
+  return NextResponse.json({ hindrance }, { status: duplicate ? 200 : 201 });
 }

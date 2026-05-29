@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, primaryModuleFor, isScopedUser, MODULES } from "@/lib/modules";
+import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 
 const STATUSES = new Set(["IN_REVIEW", "PASSED", "REJECTED"]);
 
@@ -90,35 +91,45 @@ export async function POST(req: Request) {
 
   const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 8) : [];
   const moduleTag = primaryModuleFor(session.user.modules);
+  const idempotencyKey = readIdempotencyKey(body);
+  const inspectionInclude = {
+    filledBy: { select: { id: true, name: true } },
+    reviewedBy: { select: { id: true, name: true } },
+    wbsNode: { select: { id: true, name: true, taskCode: true } },
+    items: { orderBy: { orderIndex: "asc" as const } },
+    photos: true,
+  } as const;
 
-  const inspection = await prisma.inspection.create({
-    data: {
+  const { record: inspection, duplicate } = await createIdempotent(
+    idempotencyKey,
+    () => prisma.inspection.findUnique({ where: { idempotencyKey: idempotencyKey! }, include: inspectionInclude }),
+    () =>
+      prisma.inspection.create({
+        data: {
+          projectId,
+          wbsNodeId: wbsNodeId || null,
+          title: t,
+          module: moduleTag,
+          filledById: session.user.id,
+          idempotencyKey,
+          items: { create: itemsClean },
+          photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
+        },
+        include: inspectionInclude,
+      }),
+  );
+
+  if (!duplicate) {
+    const passedCount = itemsClean.filter((i) => i.passed).length;
+    await recordAudit({
       projectId,
-      wbsNodeId: wbsNodeId || null,
-      title: t,
-      module: moduleTag,
-      filledById: session.user.id,
-      items: { create: itemsClean },
-      photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
-    },
-    include: {
-      filledBy: { select: { id: true, name: true } },
-      reviewedBy: { select: { id: true, name: true } },
-      wbsNode: { select: { id: true, name: true, taskCode: true } },
-      items: { orderBy: { orderIndex: "asc" } },
-      photos: true,
-    },
-  });
+      userId: session.user.id,
+      action: "CREATE",
+      entityType: "Inspection",
+      entityId: inspection.id,
+      summary: `Inspection submitted: "${t}" (${passedCount}/${itemsClean.length} passed)`,
+    });
+  }
 
-  const passedCount = itemsClean.filter((i) => i.passed).length;
-  await recordAudit({
-    projectId,
-    userId: session.user.id,
-    action: "CREATE",
-    entityType: "Inspection",
-    entityId: inspection.id,
-    summary: `Inspection submitted: "${t}" (${passedCount}/${itemsClean.length} passed)`,
-  });
-
-  return NextResponse.json({ inspection }, { status: 201 });
+  return NextResponse.json({ inspection }, { status: duplicate ? 200 : 201 });
 }

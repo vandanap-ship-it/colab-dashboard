@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, primaryModuleFor, isScopedUser, MODULES } from "@/lib/modules";
+import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 
 const SEVERITIES = new Set(["LOW", "MEDIUM", "HIGH"]);
 const STATUSES = new Set(["OPEN", "RESOLVED"]);
@@ -71,35 +72,45 @@ export async function POST(req: Request) {
   // Tag the snag with the creator's module so scoped contractors only ever
   // see their own module's snags. Full-access staff create untagged snags.
   const moduleTag = primaryModuleFor(session.user.modules);
+  const idempotencyKey = readIdempotencyKey(body);
+  const issueInclude = {
+    createdBy: { select: { id: true, name: true } },
+    assignedTo: { select: { id: true, name: true } },
+    wbsNode: { select: { id: true, name: true, taskCode: true } },
+    photos: true,
+  } as const;
 
-  const issue = await prisma.issue.create({
-    data: {
+  const { record: issue, duplicate } = await createIdempotent(
+    idempotencyKey,
+    () => prisma.issue.findUnique({ where: { idempotencyKey: idempotencyKey! }, include: issueInclude }),
+    () =>
+      prisma.issue.create({
+        data: {
+          projectId,
+          wbsNodeId: wbsNodeId || null,
+          description: desc,
+          severity: sev,
+          category: cat.length > 0 ? cat : null,
+          module: moduleTag,
+          createdById: session.user.id,
+          assignedToId: assignedToId || null,
+          idempotencyKey,
+          photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
+        },
+        include: issueInclude,
+      }),
+  );
+
+  if (!duplicate) {
+    await recordAudit({
       projectId,
-      wbsNodeId: wbsNodeId || null,
-      description: desc,
-      severity: sev,
-      category: cat.length > 0 ? cat : null,
-      module: moduleTag,
-      createdById: session.user.id,
-      assignedToId: assignedToId || null,
-      photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
-    },
-    include: {
-      createdBy: { select: { id: true, name: true } },
-      assignedTo: { select: { id: true, name: true } },
-      wbsNode: { select: { id: true, name: true, taskCode: true } },
-      photos: true,
-    },
-  });
+      userId: session.user.id,
+      action: "CREATE",
+      entityType: "Issue",
+      entityId: issue.id,
+      summary: `Snag raised: ${desc.length > 60 ? desc.slice(0, 60) + "…" : desc}`,
+    });
+  }
 
-  await recordAudit({
-    projectId,
-    userId: session.user.id,
-    action: "CREATE",
-    entityType: "Issue",
-    entityId: issue.id,
-    summary: `Snag raised: ${desc.length > 60 ? desc.slice(0, 60) + "…" : desc}`,
-  });
-
-  return NextResponse.json({ issue }, { status: 201 });
+  return NextResponse.json({ issue }, { status: duplicate ? 200 : 201 });
 }
