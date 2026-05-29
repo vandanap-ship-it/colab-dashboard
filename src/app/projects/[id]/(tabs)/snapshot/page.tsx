@@ -75,6 +75,10 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
             Physical Progress
           </h2>
           <PhysicalProgressGauge achieved={stats.achievedPercent} planned={stats.plannedPercent} />
+          <p className="mt-3 text-[11px] leading-snug text-stone-400">
+            Averaged across activities that have started. The Master Report averages across
+            all activities (not-yet-started counted as 0%), so its figure reads lower.
+          </p>
         </section>
         <section className="lg:col-span-2 rounded-xl border border-stone-200 bg-white p-6">
           <h2 className="text-sm font-semibold text-stone-700 uppercase tracking-wider mb-4">
