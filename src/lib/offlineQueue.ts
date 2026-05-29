@@ -36,6 +36,24 @@ export type QueuedMutation = {
 
 type QueueListener = (count: number) => void;
 
+/** What to do with a queued mutation after a flush attempt got an HTTP status. */
+export type FlushOutcome = "remove" | "retry" | "park";
+
+/**
+ * Decide a queued mutation's fate from the server's HTTP status:
+ *   - 2xx                     → "remove" (it succeeded)
+ *   - 5xx / 401 / 408 / 429   → "retry"  (will succeed once the server recovers
+ *                                or the engineer re-authenticates)
+ *   - any other 4xx           → "park"   (validation/permission error that
+ *                                won't fix itself; keep for manual review)
+ * Pure + exported so the policy is unit-testable.
+ */
+export function classifyResponse(status: number): FlushOutcome {
+  if (status >= 200 && status < 300) return "remove";
+  const retryable = status >= 500 || status === 401 || status === 408 || status === 429;
+  return retryable ? "retry" : "park";
+}
+
 const listeners = new Set<QueueListener>();
 let flushInFlight: Promise<void> | null = null;
 
@@ -165,27 +183,24 @@ export async function flush(): Promise<void> {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(item.body),
           });
-          if (res.ok) {
+          const outcome = classifyResponse(res.status);
+          if (outcome === "remove") {
             await remove(item.id);
             continue;
           }
-          // 401 (session expired) and 408/429 (transient) WILL succeed once the
-          // engineer re-authenticates or the server recovers, so keep retrying
-          // with backoff. Other 4xx (validation, permission, not-found) won't
-          // fix themselves — park them for a day so the engineer can review and
-          // manually retry/discard via the pending list.
-          const retryable =
-            res.status >= 500 || res.status === 401 || res.status === 408 || res.status === 429;
-          if (!retryable) {
+          if (outcome === "park") {
+            // Validation/permission error — won't fix itself. Park it for a day
+            // so it stops spamming retries; the engineer can review/discard via
+            // the pending list.
             const text = await res.text().catch(() => `HTTP ${res.status}`);
             await update({
               ...item,
               attempts: item.attempts + 1,
               lastError: `HTTP ${res.status}: ${text.slice(0, 200)}`,
-              // Long delay so it doesn't spam retries; user can manually retry.
               nextAttemptAt: now + 24 * 60 * 60 * 1000,
             });
           } else {
+            // Retryable (5xx / 401 / 408 / 429) — back off and try again.
             await update({
               ...item,
               attempts: item.attempts + 1,
@@ -211,8 +226,8 @@ export async function flush(): Promise<void> {
   return flushInFlight;
 }
 
-function nextDelay(attempt: number): number {
-  // 5s, 10s, 20s, 40s, 80s, 160s, 300s (max)
+/** Exponential backoff per attempt: 5s, 10s, 20s, 40s, 80s, 160s, capped at 300s. */
+export function nextDelay(attempt: number): number {
   return Math.min(300_000, 5_000 * Math.pow(2, attempt - 1));
 }
 
