@@ -74,8 +74,8 @@ export default function MilestoneSummary({ projectId }: { projectId: string }) {
     return nodes.filter((n) => !n.isLeaf && (n.level === 2 || n.level === 3));
   }, [nodes]);
 
-  const today = new Date();
   const filtered = useMemo(() => {
+    const today = new Date();
     return milestones.filter((m) => {
       if (phaseFilter !== "ALL") {
         // Match if any path segment equals the phase filter
@@ -90,7 +90,7 @@ export default function MilestoneSummary({ projectId }: { projectId: string }) {
       if (timeFilter === "M6") return days <= 180;
       return true;
     });
-  }, [milestones, phaseFilter, timeFilter, today]);
+  }, [milestones, phaseFilter, timeFilter]);
 
   return (
     <section className="rounded-xl border border-stone-200 bg-white p-6">

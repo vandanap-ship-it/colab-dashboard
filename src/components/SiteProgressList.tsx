@@ -57,23 +57,24 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
     };
   }, [projectId, reloadKey]);
 
-  const today = new Date();
   const filtered = useMemo(() => {
     if (!activities) return [];
+    const today = new Date();
     return activities.filter((a) => {
       if (statusOf(a, today) !== tab) return false;
       if (!search.trim()) return true;
       const q = search.toLowerCase();
       return a.name.toLowerCase().includes(q) || a.path.join(" / ").toLowerCase().includes(q);
     });
-  }, [activities, tab, search, today]);
+  }, [activities, tab, search]);
 
   const counts = useMemo(() => {
     if (!activities) return { UPCOMING: 0, ONGOING: 0, QUEUE: 0 };
+    const today = new Date();
     const c = { UPCOMING: 0, ONGOING: 0, QUEUE: 0 };
     for (const a of activities) c[statusOf(a, today)]++;
     return c;
-  }, [activities, today]);
+  }, [activities]);
 
   return (
     <div className="px-4 py-4 space-y-4">
