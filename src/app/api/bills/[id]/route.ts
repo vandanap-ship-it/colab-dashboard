@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
-import { canApproveBill, canPrepareBill } from "@/lib/roles";
+import { canAccessBilling, canApproveBill, canPrepareBill } from "@/lib/roles";
 import {
   allowedBillTransition,
   cleanLines,
@@ -20,14 +20,10 @@ const billInclude = {
   lineItems: { orderBy: { orderIndex: "asc" as const } },
 } as const;
 
-function canViewBills(role: string): boolean {
-  return canPrepareBill(role) || canApproveBill(role);
-}
-
 export async function GET(_req: Request, ctx: RouteContext<"/api/bills/[id]">) {
   const session = await auth();
   if (!session?.user) return unauthorized();
-  if (!canViewBills(session.user.role)) return forbidden();
+  if (!canAccessBilling(session.user.role)) return forbidden();
 
   const { id } = await ctx.params;
   const bill = await prisma.subContractorBill.findUnique({ where: { id }, include: billInclude });

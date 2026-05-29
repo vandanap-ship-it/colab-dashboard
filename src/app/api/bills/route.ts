@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
-import { canApproveBill, canPrepareBill } from "@/lib/roles";
+import { canAccessBilling, canPrepareBill } from "@/lib/roles";
 import {
   cleanLines,
   parseBillDate,
@@ -12,11 +12,6 @@ import {
 } from "@/lib/billing";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { badRequest, forbidden, unauthorized } from "@/lib/apiErrors";
-
-/** Anyone in the billing flow (preparer or approver) may view bills. */
-function canViewBills(role: string): boolean {
-  return canPrepareBill(role) || canApproveBill(role);
-}
 
 const billInclude = {
   contractor: { select: { id: true, name: true } },
@@ -29,7 +24,7 @@ export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return unauthorized();
   // Scoped contractors and site engineers don't see billing at all.
-  if (!canViewBills(session.user.role)) return NextResponse.json({ bills: [] });
+  if (!canAccessBilling(session.user.role)) return NextResponse.json({ bills: [] });
 
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");

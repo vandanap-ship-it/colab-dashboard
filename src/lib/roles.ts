@@ -69,3 +69,8 @@ export function canPrepareBill(role: string): boolean {
 export function canApproveBill(role: string): boolean {
   return role === ROLES.SITE_MANAGER || role === ROLES.ADMIN;
 }
+
+/** Anyone in the billing flow (preparer or approver) may view bills. */
+export function canAccessBilling(role: string): boolean {
+  return canPrepareBill(role) || canApproveBill(role);
+}

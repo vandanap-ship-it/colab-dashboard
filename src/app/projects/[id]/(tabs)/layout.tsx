@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Bug, ClipboardCheck, FileBarChart, GanttChartSquare, ListPlus, Upload } from "lucide-react";
+import { ArrowLeft, Bug, ClipboardCheck, FileBarChart, GanttChartSquare, ListPlus, ReceiptIndianRupee, Upload } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { canSeeDesktop, ROLES } from "@/lib/roles";
+import { canAccessBilling, canSeeDesktop, ROLES } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
 import ProjectTabs from "@/components/ProjectTabs";
@@ -109,6 +109,15 @@ export default async function ProjectLayout({
               <FileBarChart className="w-4 h-4 text-stone-400" />
               Reports
             </Link>
+            {canAccessBilling(role) && (
+              <Link
+                href={`/projects/${project.id}/bills`}
+                className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
+              >
+                <ReceiptIndianRupee className="w-4 h-4 text-stone-400" />
+                Billing
+              </Link>
+            )}
             <Link
               href={`/projects/${project.id}/import`}
               className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"

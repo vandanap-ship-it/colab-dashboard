@@ -79,4 +79,23 @@ test.describe("Sub-contractor billing", () => {
     const res = await page.request.patch(`/api/bills/${bill.id}`, { data: { status: "APPROVED" } });
     expect(res.status()).toBe(400);
   });
+
+  test("UI: planner creates a bill through the form and sees it listed", async ({ page }) => {
+    await signIn(page, "planner");
+    const projectId = await getProjectId(page);
+
+    await page.goto(`/projects/${projectId}/bills`);
+    await expect(page.getByRole("heading", { name: /Sub-Contractor Billing/i })).toBeVisible();
+
+    await page.getByRole("button", { name: /New bill/i }).click();
+    const title = `[E2E UI] Bill ${uniqueId()}`;
+    await page.getByPlaceholder("e.g. June RA Bill").fill(title);
+    // The first line defaults to "Lump sum" — its amount is the first number input.
+    await page.locator('input[type="number"]').first().fill("5000");
+    await page.getByRole("button", { name: /Create bill/i }).click();
+
+    // Back in the list, the new bill appears with its total.
+    await expect(page.getByText(title)).toBeVisible();
+    await expect(page.getByText("₹5,000").first()).toBeVisible();
+  });
 });
