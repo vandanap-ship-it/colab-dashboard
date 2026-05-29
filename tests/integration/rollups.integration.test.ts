@@ -28,6 +28,7 @@ let originalDbUrl: string | undefined;
 let prisma: typeof import("@/lib/prisma").prisma;
 let getProjectStats: typeof import("@/lib/projectStats").getProjectStats;
 let getMasterReport: typeof import("@/lib/reports").getMasterReport;
+let getLabourSupplyReport: typeof import("@/lib/reports").getLabourSupplyReport;
 
 let projectId: string;
 
@@ -46,7 +47,7 @@ beforeAll(async () => {
   process.env.DATABASE_URL = `file:${dbPath}`;
   ({ prisma } = await import("@/lib/prisma"));
   ({ getProjectStats } = await import("@/lib/projectStats"));
-  ({ getMasterReport } = await import("@/lib/reports"));
+  ({ getMasterReport, getLabourSupplyReport } = await import("@/lib/reports"));
 
   // 3. Seed a hand-computable tree:
   //      root (L0) → phase (L1) → A, B, C (L2 leaves)
@@ -168,5 +169,55 @@ describe("getProjectStats edge cases", () => {
     });
     const stats = await getProjectStats(p.id, TODAY);
     expect(stats.totalDelayDays).toBe(5);
+  });
+});
+
+describe("getLabourSupplyReport (per-contractor × category × day matrix)", () => {
+  it("builds the day grid, per-category totals, and grand totals", async () => {
+    const u = await prisma.user.create({
+      data: { username: "labour-user", name: "Labour", passwordHash: "x" },
+    });
+    const p = await prisma.project.create({ data: { name: "Labour Project", createdById: u.id } });
+    const node = await prisma.wBSNode.create({
+      data: { projectId: p.id, taskCode: "LN", name: "work", level: 0, orderIndex: 0 },
+    });
+    const c = await prisma.contractor.create({
+      data: { projectId: p.id, name: "Acme", category: "Civil" },
+    });
+
+    // Day 1 (06-10): 5 Mason + 3 Helper. Day 2 (06-11): 2 Mason.
+    await prisma.progressEntry.create({
+      data: {
+        projectId: p.id, wbsNodeId: node.id, createdById: u.id, contractorId: c.id,
+        date: D("2026-06-10"),
+        labour: { create: [{ category: "Mason", count: 5 }, { category: "Helper", count: 3 }] },
+      },
+    });
+    await prisma.progressEntry.create({
+      data: {
+        projectId: p.id, wbsNodeId: node.id, createdById: u.id, contractorId: c.id,
+        date: D("2026-06-11"),
+        labour: { create: [{ category: "Mason", count: 2 }] },
+      },
+    });
+
+    const report = await getLabourSupplyReport(p.id, "2026-06-10", "2026-06-11");
+
+    expect(report.days).toEqual(["2026-06-10", "2026-06-11"]);
+    expect(report.contractors).toHaveLength(1);
+    const acme = report.contractors[0];
+    expect(acme.contractorName).toBe("Acme");
+
+    const mason = acme.rows.find((r) => r.category === "Mason")!;
+    const helper = acme.rows.find((r) => r.category === "Helper")!;
+    expect(mason.perDay).toEqual([5, 2]);
+    expect(mason.total).toBe(7);
+    expect(helper.perDay).toEqual([3, 0]); // none on day 2
+    expect(helper.total).toBe(3);
+
+    expect(acme.totalsPerDay).toEqual([8, 2]); // 5+3, 2
+    expect(acme.grandTotal).toBe(10);
+    expect(report.grandTotalPerDay).toEqual([8, 2]);
+    expect(report.grandTotal).toBe(10);
   });
 });
