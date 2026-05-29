@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { plannedPercentFor } from "@/lib/schedule";
 
 export type ProjectStats = {
   totalActivities: number;
@@ -47,14 +48,9 @@ export async function getProjectStats(projectId: string, today = new Date()): Pr
 
   for (const a of tracked) {
     achievedSum += a.percentComplete ?? 0;
-    if (a.baselineStart && a.baselineFinish) {
-      const start = a.baselineStart.getTime();
-      const end = a.baselineFinish.getTime();
-      const now = today.getTime();
-      if (now <= start) plannedSum += 0;
-      else if (now >= end) plannedSum += 100;
-      else plannedSum += ((now - start) / (end - start)) * 100;
-    }
+    // plannedPercentFor returns 0 for activities without baselines, so adding
+    // unconditionally matches the old "only count leaves with baselines" logic.
+    plannedSum += plannedPercentFor(a.baselineStart, a.baselineFinish, today);
   }
 
   const plannedPercent = denom > 0 ? plannedSum / denom : 0;

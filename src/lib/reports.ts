@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { plannedPercentFor } from "@/lib/schedule";
 
 /**
  * Shared helpers for the report pages — date validation, range parsing, and
@@ -712,19 +713,6 @@ export async function getMasterReport(
     return Math.round((a.getTime() - b.getTime()) / 86_400_000);
   }
 
-  function plannedPercentFor(
-    n: { baselineStart: Date | null; baselineFinish: Date | null },
-    asOf = today,
-  ): number {
-    if (!n.baselineStart || !n.baselineFinish) return 0;
-    const start = n.baselineStart.getTime();
-    const end = n.baselineFinish.getTime();
-    const now = asOf.getTime();
-    if (now <= start) return 0;
-    if (now >= end) return 100;
-    return ((now - start) / (end - start)) * 100;
-  }
-
   // ---- Overall ----
   const projectStart = project?.startDate ?? null;
   const projectEnd = project?.endDate ?? null;
@@ -740,7 +728,7 @@ export async function getMasterReport(
     .filter((d): d is Date => Boolean(d))
     .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
 
-  const plannedSum = leaves.reduce((s, l) => s + plannedPercentFor(l), 0);
+  const plannedSum = leaves.reduce((s, l) => s + plannedPercentFor(l.baselineStart, l.baselineFinish, today), 0);
   const achievedSum = leaves.reduce((s, l) => s + (l.percentComplete ?? 0), 0);
   const overallPlanned = leaves.length === 0 ? 0 : plannedSum / leaves.length;
   const overallAchieved = leaves.length === 0 ? 0 : achievedSum / leaves.length;
@@ -843,7 +831,7 @@ export async function getMasterReport(
       id: l.id,
       name: l.name,
       location: locationFor(l.id),
-      plannedPercent: Math.round(plannedPercentFor(l) * 100) / 100,
+      plannedPercent: Math.round(plannedPercentFor(l.baselineStart, l.baselineFinish, today) * 100) / 100,
       actualPercent: Math.round((l.percentComplete ?? 0) * 100) / 100,
       delayReason: l.delayReason,
       plannedStart: l.baselineStart,
