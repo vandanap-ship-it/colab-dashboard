@@ -183,6 +183,44 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add SubContractorBill + SubContractorBillLine (P2P sub-contractor billing).",
   },
+  {
+    key: "2026-05-30_add_expenses",
+    sql: [
+      `CREATE TABLE "Expense" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "projectId" TEXT NOT NULL,
+        "category" TEXT NOT NULL,
+        "description" TEXT NOT NULL,
+        "amount" REAL NOT NULL,
+        "date" DATETIME NOT NULL,
+        "paidTo" TEXT,
+        "status" TEXT NOT NULL DEFAULT 'SUBMITTED',
+        "rejectionReason" TEXT,
+        "notes" TEXT,
+        "loggedById" TEXT NOT NULL,
+        "approvedById" TEXT,
+        "approvedAt" DATETIME,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL,
+        "deletedAt" DATETIME,
+        "idempotencyKey" TEXT,
+        CONSTRAINT "Expense_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT "Expense_loggedById_fkey" FOREIGN KEY ("loggedById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+        CONSTRAINT "Expense_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+      )`,
+      `CREATE UNIQUE INDEX "Expense_idempotencyKey_key" ON "Expense"("idempotencyKey")`,
+      `CREATE INDEX "Expense_projectId_idx" ON "Expense"("projectId")`,
+      `CREATE TABLE "ExpensePhoto" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "expenseId" TEXT NOT NULL,
+        "url" TEXT NOT NULL,
+        "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "ExpensePhoto_expenseId_fkey" FOREIGN KEY ("expenseId") REFERENCES "Expense" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+      )`,
+      `CREATE INDEX "ExpensePhoto_expenseId_idx" ON "ExpensePhoto"("expenseId")`,
+    ],
+    describe: "Add Expense + ExpensePhoto (P2P project expenses).",
+  },
 ];
 
 async function ensureLedger() {

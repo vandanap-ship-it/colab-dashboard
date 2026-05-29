@@ -74,3 +74,22 @@ export function canApproveBill(role: string): boolean {
 export function canAccessBilling(role: string): boolean {
   return canPrepareBill(role) || canApproveBill(role);
 }
+
+/**
+ * Project expenses: any internal team member can log one (site staff on mobile,
+ * office staff on desktop); a Planner/Manager/Admin approves. Scoped external
+ * contractors have no access. (Module scope is enforced separately for them.)
+ */
+export function canLogExpense(role: string): boolean {
+  return (
+    role === ROLES.SITE_ENGINEER ||
+    role === ROLES.SITE_MANAGER ||
+    role === ROLES.PLANNER ||
+    role === ROLES.PRODUCT_TEAM ||
+    role === ROLES.ADMIN
+  );
+}
+
+export function canApproveExpense(role: string): boolean {
+  return role === ROLES.PLANNER || role === ROLES.SITE_MANAGER || role === ROLES.ADMIN;
+}

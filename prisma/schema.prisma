@@ -30,6 +30,8 @@ model User {
   reviewedInspections Inspection[]        @relation("InspectionReviewer")
   preparedBills       SubContractorBill[] @relation("BillPreparer")
   approvedBills       SubContractorBill[] @relation("BillApprover")
+  loggedExpenses      Expense[]           @relation("ExpenseLogger")
+  approvedExpenses    Expense[]           @relation("ExpenseApprover")
 }
 
 model Project {
@@ -59,6 +61,7 @@ model Project {
   inspections        Inspection[]
   drawings           ProjectDrawing[]
   subContractorBills SubContractorBill[]
+  expenses           Expense[]
 
   @@index([createdById])
 }
@@ -467,4 +470,55 @@ model SubContractorBillLine {
   wbsNode WBSNode?          @relation(fields: [wbsNodeId], references: [id])
 
   @@index([billId])
+}
+
+// ---------------------------------------------------------------------------
+// P2P — Project expenses (Phase 2)
+//
+// A general project expense: petty cash, a staff reimbursement, or a vendor
+// purchase — all captured the same way (category + amount + optional payee).
+// Logged on mobile or desktop, then approved two-step like bills:
+//   SUBMITTED → APPROVED | REJECTED   (approver: Planner/Manager/Admin)
+//   REJECTED  → SUBMITTED             (logger reworks and resubmits)
+// Money is only TRACKED here; the app never moves funds.
+// ---------------------------------------------------------------------------
+model Expense {
+  id              String   @id @default(cuid())
+  projectId       String
+  category        String
+  description     String
+  amount          Float
+  date            DateTime
+  paidTo          String?
+  // SUBMITTED | APPROVED | REJECTED
+  status          String   @default("SUBMITTED")
+  rejectionReason String?
+  notes           String?
+
+  loggedById   String
+  approvedById String?
+  approvedAt   DateTime?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  idempotencyKey String?   @unique // de-dupes offline-queue replays
+
+  project    Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  loggedBy   User           @relation("ExpenseLogger", fields: [loggedById], references: [id])
+  approvedBy User?          @relation("ExpenseApprover", fields: [approvedById], references: [id])
+  photos     ExpensePhoto[]
+
+  @@index([projectId])
+}
+
+model ExpensePhoto {
+  id         String   @id @default(cuid())
+  expenseId  String
+  url        String
+  uploadedAt DateTime @default(now())
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId])
 }
