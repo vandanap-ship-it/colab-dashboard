@@ -20,7 +20,6 @@ type StatusKey = "UPCOMING" | "ONGOING" | "QUEUE";
 
 function statusOf(a: Activity, today: Date): StatusKey {
   const start = a.actualStart ? new Date(a.actualStart) : a.baselineStart ? new Date(a.baselineStart) : null;
-  const end = a.actualFinish ? new Date(a.actualFinish) : a.projectedFinish ? new Date(a.projectedFinish) : a.baselineFinish ? new Date(a.baselineFinish) : null;
   if (a.percentComplete >= 100 || (a.actualFinish && new Date(a.actualFinish) <= today)) return "QUEUE";
   if (start && start > today) return "UPCOMING";
   if (start && start <= today) return "ONGOING";

@@ -104,7 +104,6 @@ export default function ProjectHighlightsModal({
     const baselineStart = phase.baselineStart ?? minDate(leaves.map((l) => l.baselineStart));
     const baselineFinish = phase.baselineFinish ?? maxDate(leaves.map((l) => l.baselineFinish));
     const actualStart = phase.actualStart ?? minDate(leaves.map((l) => l.actualStart));
-    const actualFinish = phase.actualFinish ?? maxDate(leaves.map((l) => l.actualFinish));
     const projectedFinish =
       phase.projectedFinish ??
       maxDate(leaves.map((l) => l.projectedFinish ?? l.actualFinish ?? l.baselineFinish)) ??

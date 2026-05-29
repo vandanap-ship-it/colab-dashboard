@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { uploadPhoto } from "@/lib/upload";
-import { badRequest, handleApiError, unauthorized } from "@/lib/apiErrors";
+import { badRequest, unauthorized } from "@/lib/apiErrors";
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB per file
 const MAX_FILES = 12;
