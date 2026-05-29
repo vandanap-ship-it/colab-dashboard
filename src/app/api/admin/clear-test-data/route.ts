@@ -124,6 +124,10 @@ export async function POST(req: Request) {
             actualFinish: null,
             projectedFinish: null,
             percentComplete: 0,
+            // Back to truly "unstarted" so the dashboard rollup (which averages
+            // over tracked leaves only) treats reset activities as not-started
+            // rather than tracked-at-0%.
+            progressEntered: false,
             delayReason: null,
           },
         })

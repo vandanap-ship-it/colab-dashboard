@@ -104,6 +104,18 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
   if (contractorId !== undefined) data.contractorId = contractorId || null;
   if (notes !== undefined) data.notes = (notes ?? "").trim() || null;
 
+  // A contractor must belong to the entry's project — otherwise a foreign
+  // contractor would pollute this project's labour/contractor rollups.
+  if (data.contractorId) {
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: data.contractorId },
+      select: { projectId: true },
+    });
+    if (!contractor || contractor.projectId !== entry.projectId) {
+      return badRequest("Invalid contractor for this project");
+    }
+  }
+
   try {
     const updated = await prisma.$transaction(async (tx) => {
       const u = await tx.progressEntry.update({ where: { id }, data });
@@ -135,10 +147,19 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
             0,
             Math.min(100, (data.cumulativeQuantity / node.totalQuantity) * 100),
           );
-          const updates: { percentComplete: number; actualFinish?: Date | null } = {
-            percentComplete: pct,
-          };
-          if (pct >= 100 && !node.actualFinish && data.date) updates.actualFinish = data.date;
+          // Use the edited date if supplied, else the entry's existing date, so
+          // start/finish stamps land correctly even when the date isn't changed.
+          const stamp = data.date ?? entry.date;
+          const updates: {
+            percentComplete: number;
+            progressEntered: boolean;
+            actualStart?: Date;
+            actualFinish?: Date | null;
+          } = { percentComplete: pct, progressEntered: true };
+          // Mirror the POST path: stamp actualStart on first progress, and
+          // set/clear actualFinish as the activity crosses 100%.
+          if (!node.actualStart) updates.actualStart = stamp;
+          if (pct >= 100 && !node.actualFinish) updates.actualFinish = stamp;
           if (pct < 100 && node.actualFinish) updates.actualFinish = null;
           await tx.wBSNode.update({ where: { id: u.wbsNodeId }, data: updates });
         }

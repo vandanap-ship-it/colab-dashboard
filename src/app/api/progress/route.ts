@@ -83,6 +83,18 @@ export async function POST(req: Request) {
   });
   if (!node) return NextResponse.json({ error: "Activity not found" }, { status: 404 });
 
+  // A contractor must belong to the same project as the activity — otherwise a
+  // foreign contractor would pollute this project's labour/contractor rollups.
+  if (contractorId) {
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: contractorId },
+      select: { projectId: true },
+    });
+    if (!contractor || contractor.projectId !== node.projectId) {
+      return NextResponse.json({ error: "Invalid contractor for this project" }, { status: 400 });
+    }
+  }
+
   const finalType = type && VALID_TYPES.has(type) ? type : "LABOUR_SUPPLY";
   const entryDate = date ? new Date(date) : new Date();
   if (isNaN(entryDate.getTime())) {
@@ -129,7 +141,13 @@ export async function POST(req: Request) {
         where: { id: wbsNodeId },
         select: { actualStart: true, actualFinish: true },
       });
-      const updates: { percentComplete: number; actualStart?: Date; actualFinish?: Date } = { percentComplete: pct };
+      // progressEntered flips an activity from "unstarted" to "tracked" so it
+      // counts in the dashboard rollup (getProjectStats averages over tracked
+      // leaves only). Logging any progress value — even 0% — marks it entered.
+      const updates: { percentComplete: number; progressEntered: boolean; actualStart?: Date; actualFinish?: Date } = {
+        percentComplete: pct,
+        progressEntered: true,
+      };
       if (current && !current.actualStart) updates.actualStart = entryDate;
       if (pct >= 100 && current && !current.actualFinish) updates.actualFinish = entryDate;
       await tx.wBSNode.update({ where: { id: wbsNodeId }, data: updates });

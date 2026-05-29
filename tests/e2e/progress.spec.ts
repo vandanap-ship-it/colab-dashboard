@@ -30,6 +30,62 @@ test.describe("Progress entry workflow", () => {
     expect(entry.notes).toBe(note);
   });
 
+  test("API: logging progress marks the activity tracked + recomputes %", async ({ page }) => {
+    await signIn(page, "manager");
+    const projectId = await getProjectId(page);
+
+    // Need a leaf with a totalQuantity so cumulative → percentComplete fires.
+    const wbsRes = await page.request.get(`/api/projects/${projectId}/wbs?leaves=true`);
+    const nodes = (await wbsRes.json()).nodes as Array<{ id: string; totalQuantity: number | null }>;
+    const activity = nodes.find((n) => n.totalQuantity && n.totalQuantity > 0);
+    expect(activity, "seed should include a leaf with a totalQuantity").toBeTruthy();
+
+    // Cumulative === total → 100% complete.
+    const createRes = await page.request.post("/api/progress", {
+      data: {
+        wbsNodeId: activity!.id,
+        date: new Date().toISOString(),
+        type: "LABOUR_SUPPLY",
+        achievedQuantity: 1,
+        cumulativeQuantity: activity!.totalQuantity,
+        notes: `[E2E tracked test] ${uniqueId()}`,
+      },
+    });
+    expect(createRes.ok()).toBeTruthy();
+
+    // Activity must now be tracked (so it counts in the dashboard rollup), at
+    // 100%, with actualFinish stamped. progressEntered=true is the fix that
+    // stops freshly-logged activities from being dropped from project stats.
+    const detailRes = await page.request.get(`/api/projects/${projectId}/wbs/${activity!.id}`);
+    expect(detailRes.ok()).toBeTruthy();
+    const node = (await detailRes.json()).node as {
+      percentComplete: number;
+      progressEntered: boolean;
+      actualFinish: string | null;
+    };
+    expect(node.progressEntered).toBe(true);
+    expect(node.percentComplete).toBe(100);
+    expect(node.actualFinish).toBeTruthy();
+  });
+
+  test("API: progress rejects a contractor that isn't in this project", async ({ page }) => {
+    await signIn(page, "manager");
+    const projectId = await getProjectId(page);
+    const wbsRes = await page.request.get(`/api/projects/${projectId}/wbs?leaves=true`);
+    const activity = (await wbsRes.json()).nodes?.[0];
+    const res = await page.request.post("/api/progress", {
+      data: {
+        wbsNodeId: activity.id,
+        date: new Date().toISOString(),
+        type: "LABOUR_SUPPLY",
+        achievedQuantity: 1,
+        cumulativeQuantity: 1,
+        contractorId: "no-such-contractor-id",
+      },
+    });
+    expect(res.status()).toBe(400);
+  });
+
   test("Soft delete: progress entry goes to trash, admin can restore", async ({ page }) => {
     await signIn(page, "manager");
     const projectId = await getProjectId(page);
