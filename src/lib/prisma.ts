@@ -6,9 +6,9 @@ type ExtendedClient = ReturnType<typeof createClient>;
 const globalForPrisma = globalThis as unknown as { prisma?: ExtendedClient };
 
 // Models that support soft-delete via deletedAt: progressEntry, issue,
-// hindrance, concern, inspection (see the per-model query hooks below). Reads
-// against them automatically exclude soft-deleted rows unless the caller passes
-// an explicit deletedAt in `where`.
+// hindrance, concern, inspection, subContractorBill (see the per-model query
+// hooks below). Reads against them automatically exclude soft-deleted rows
+// unless the caller passes an explicit deletedAt in `where`.
 const READ_OPERATIONS = new Set([
   "findMany",
   "findFirst",
@@ -83,6 +83,11 @@ function createClient() {
         },
       },
       inspection: {
+        async $allOperations({ operation, args, query }) {
+          return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
+        },
+      },
+      subContractorBill: {
         async $allOperations({ operation, args, query }) {
           return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
         },

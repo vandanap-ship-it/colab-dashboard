@@ -55,3 +55,17 @@ export function isAdmin(role: string): boolean {
 export function canReview(role: string): boolean {
   return role === ROLES.PLANNER || role === ROLES.PRODUCT_TEAM || role === ROLES.ADMIN;
 }
+
+/**
+ * Sub-contractor billing is a two-step flow:
+ *   - Planner (or Admin) prepares, edits, and submits a bill.
+ *   - Manager (or Admin) approves, rejects, or marks it paid.
+ * Scoped external contractors have neither permission.
+ */
+export function canPrepareBill(role: string): boolean {
+  return role === ROLES.PLANNER || role === ROLES.ADMIN;
+}
+
+export function canApproveBill(role: string): boolean {
+  return role === ROLES.SITE_MANAGER || role === ROLES.ADMIN;
+}
