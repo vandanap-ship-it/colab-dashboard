@@ -12,6 +12,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
+    "schema:snapshot": "prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script > prisma/schema.sql",
+    "schema:check": "node scripts/check-schema-snapshot.mjs",
     "postinstall": "prisma generate --no-engine || true"
   },
   "dependencies": {

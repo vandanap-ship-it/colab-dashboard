@@ -39,6 +39,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Schema drift check (schema.prisma vs committed SQL snapshot)
+        run: npm run schema:check
+
       - name: Set up test database
         run: |
           npx prisma db push

@@ -1,0 +1,394 @@
+-- CreateTable
+CREATE TABLE "User" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "username" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "passwordHash" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'SITE_ENGINEER',
+    "designation" TEXT,
+    "modules" TEXT,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "Project" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "code" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'PLANNING',
+    "startDate" DATETIME,
+    "endDate" DATETIME,
+    "reraEndDate" DATETIME,
+    "actualStartDate" DATETIME,
+    "projectedEndDate" DATETIME,
+    "address" TEXT,
+    "tagline" TEXT,
+    "logoUrl" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    "createdById" TEXT NOT NULL,
+    CONSTRAINT "Project_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "Contractor" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "projectId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "category" TEXT NOT NULL,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "Contractor_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "WBSNode" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "projectId" TEXT NOT NULL,
+    "parentId" TEXT,
+    "taskCode" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "level" INTEGER NOT NULL,
+    "orderIndex" INTEGER NOT NULL,
+    "baselineStart" DATETIME,
+    "baselineFinish" DATETIME,
+    "actualStart" DATETIME,
+    "actualFinish" DATETIME,
+    "projectedFinish" DATETIME,
+    "percentComplete" REAL NOT NULL DEFAULT 0,
+    "category" TEXT,
+    "predecessorsRaw" TEXT,
+    "totalQuantity" REAL,
+    "unit" TEXT,
+    "contractorId" TEXT,
+    "delayReason" TEXT,
+    "progressEntered" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "WBSNode_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "WBSNode_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "WBSNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "WBSNode_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "ProgressEntry" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "projectId" TEXT NOT NULL,
+    "wbsNodeId" TEXT NOT NULL,
+    "date" DATETIME NOT NULL,
+    "type" TEXT NOT NULL DEFAULT 'LABOUR_SUPPLY',
+    "achievedQuantity" REAL NOT NULL DEFAULT 0,
+    "cumulativeQuantity" REAL NOT NULL DEFAULT 0,
+    "contractorId" TEXT,
+    "notes" TEXT,
+    "createdById" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    "deletedAt" DATETIME,
+    "idempotencyKey" TEXT,
+    CONSTRAINT "ProgressEntry_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "ProgressEntry_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "ProgressEntry_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "ProgressEntry_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "ProgressLabour" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "progressEntryId" TEXT NOT NULL,
+    "category" TEXT NOT NULL,
+    "count" INTEGER NOT NULL,
+    CONSTRAINT "ProgressLabour_progressEntryId_fkey" FOREIGN KEY ("progressEntryId") REFERENCES "ProgressEntry" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "ProgressPhoto" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "progressEntryId" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ProgressPhoto_progressEntryId_fkey" FOREIGN KEY ("progressEntryId") REFERENCES "ProgressEntry" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "Hindrance" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "projectId" TEXT NOT NULL,
+    "wbsNodeId" TEXT,
+    "description" TEXT NOT NULL,
+    "startDate" DATETIME NOT NULL,
+    "resolvedDate" DATETIME,
+    "daysImpact" INTEGER,
+    "status" TEXT NOT NULL DEFAULT 'OPEN',
+    "createdById" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    "deletedAt" DATETIME,
+    "idempotencyKey" TEXT,
+    CONSTRAINT "Hindrance_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "Hindrance_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "Hindrance_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "HindrancePhoto" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "hindranceId" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "HindrancePhoto_hindranceId_fkey" FOREIGN KEY ("hindranceId") REFERENCES "Hindrance" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "Concern" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "projectId" TEXT NOT NULL,
+    "wbsNodeId" TEXT,
+    "description" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "assignedToId" TEXT,
+    "raisedById" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    "deletedAt" DATETIME,
+    "idempotencyKey" TEXT,
+    CONSTRAINT "Concern_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "Concern_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "Concern_raisedById_fkey" FOREIGN KEY ("raisedById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "Concern_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "ConcernPhoto" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "concernId" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ConcernPhoto_concernId_fkey" FOREIGN KEY ("concernId") REFERENCES "Concern" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "Issue" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "projectId" TEXT NOT NULL,
+    "wbsNodeId" TEXT,
+    "description" TEXT NOT NULL,
+    "severity" TEXT,
+    "category" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'OPEN',
+    "createdById" TEXT NOT NULL,
+    "assignedToId" TEXT,
+    "module" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    "deletedAt" DATETIME,
+    "idempotencyKey" TEXT,
+    CONSTRAINT "Issue_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "Issue_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "Issue_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "Issue_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "IssuePhoto" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "issueId" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "IssuePhoto_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "Issue" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "Inspection" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "projectId" TEXT NOT NULL,
+    "wbsNodeId" TEXT,
+    "title" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'IN_REVIEW',
+    "rejectionReason" TEXT,
+    "filledById" TEXT NOT NULL,
+    "reviewedById" TEXT,
+    "reviewedAt" DATETIME,
+    "module" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    "deletedAt" DATETIME,
+    "idempotencyKey" TEXT,
+    CONSTRAINT "Inspection_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "Inspection_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "Inspection_filledById_fkey" FOREIGN KEY ("filledById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "Inspection_reviewedById_fkey" FOREIGN KEY ("reviewedById") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "InspectionItem" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "inspectionId" TEXT NOT NULL,
+    "label" TEXT NOT NULL,
+    "passed" BOOLEAN NOT NULL,
+    "notes" TEXT,
+    "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    CONSTRAINT "InspectionItem_inspectionId_fkey" FOREIGN KEY ("inspectionId") REFERENCES "Inspection" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "InspectionPhoto" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "inspectionId" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "InspectionPhoto_inspectionId_fkey" FOREIGN KEY ("inspectionId") REFERENCES "Inspection" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "ProjectDrawing" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "projectId" TEXT NOT NULL,
+    "label" TEXT NOT NULL,
+    "kind" TEXT NOT NULL DEFAULT 'LAYOUT',
+    "imageUrl" TEXT NOT NULL,
+    "isDefault" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ProjectDrawing_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "InspectionTemplate" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "activity" TEXT,
+    "module" TEXT,
+    "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "InspectionTemplateItem" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "templateId" TEXT NOT NULL,
+    "seq" INTEGER NOT NULL,
+    "section" TEXT,
+    "description" TEXT NOT NULL,
+    CONSTRAINT "InspectionTemplateItem_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "InspectionTemplate" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "AuditLog" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "projectId" TEXT,
+    "userId" TEXT NOT NULL,
+    "action" TEXT NOT NULL,
+    "entityType" TEXT NOT NULL,
+    "entityId" TEXT NOT NULL,
+    "summary" TEXT,
+    "changes" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
+
+-- CreateIndex
+CREATE INDEX "Project_createdById_idx" ON "Project"("createdById");
+
+-- CreateIndex
+CREATE INDEX "Contractor_projectId_idx" ON "Contractor"("projectId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Contractor_projectId_name_key" ON "Contractor"("projectId", "name");
+
+-- CreateIndex
+CREATE INDEX "WBSNode_projectId_idx" ON "WBSNode"("projectId");
+
+-- CreateIndex
+CREATE INDEX "WBSNode_parentId_idx" ON "WBSNode"("parentId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "WBSNode_projectId_taskCode_key" ON "WBSNode"("projectId", "taskCode");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ProgressEntry_idempotencyKey_key" ON "ProgressEntry"("idempotencyKey");
+
+-- CreateIndex
+CREATE INDEX "ProgressEntry_projectId_date_idx" ON "ProgressEntry"("projectId", "date");
+
+-- CreateIndex
+CREATE INDEX "ProgressEntry_wbsNodeId_idx" ON "ProgressEntry"("wbsNodeId");
+
+-- CreateIndex
+CREATE INDEX "ProgressLabour_progressEntryId_idx" ON "ProgressLabour"("progressEntryId");
+
+-- CreateIndex
+CREATE INDEX "ProgressPhoto_progressEntryId_idx" ON "ProgressPhoto"("progressEntryId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Hindrance_idempotencyKey_key" ON "Hindrance"("idempotencyKey");
+
+-- CreateIndex
+CREATE INDEX "Hindrance_projectId_idx" ON "Hindrance"("projectId");
+
+-- CreateIndex
+CREATE INDEX "HindrancePhoto_hindranceId_idx" ON "HindrancePhoto"("hindranceId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Concern_idempotencyKey_key" ON "Concern"("idempotencyKey");
+
+-- CreateIndex
+CREATE INDEX "Concern_projectId_idx" ON "Concern"("projectId");
+
+-- CreateIndex
+CREATE INDEX "Concern_assignedToId_idx" ON "Concern"("assignedToId");
+
+-- CreateIndex
+CREATE INDEX "ConcernPhoto_concernId_idx" ON "ConcernPhoto"("concernId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Issue_idempotencyKey_key" ON "Issue"("idempotencyKey");
+
+-- CreateIndex
+CREATE INDEX "Issue_projectId_idx" ON "Issue"("projectId");
+
+-- CreateIndex
+CREATE INDEX "Issue_assignedToId_idx" ON "Issue"("assignedToId");
+
+-- CreateIndex
+CREATE INDEX "IssuePhoto_issueId_idx" ON "IssuePhoto"("issueId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Inspection_idempotencyKey_key" ON "Inspection"("idempotencyKey");
+
+-- CreateIndex
+CREATE INDEX "Inspection_projectId_idx" ON "Inspection"("projectId");
+
+-- CreateIndex
+CREATE INDEX "Inspection_wbsNodeId_idx" ON "Inspection"("wbsNodeId");
+
+-- CreateIndex
+CREATE INDEX "InspectionItem_inspectionId_idx" ON "InspectionItem"("inspectionId");
+
+-- CreateIndex
+CREATE INDEX "InspectionPhoto_inspectionId_idx" ON "InspectionPhoto"("inspectionId");
+
+-- CreateIndex
+CREATE INDEX "ProjectDrawing_projectId_idx" ON "ProjectDrawing"("projectId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "InspectionTemplate_code_key" ON "InspectionTemplate"("code");
+
+-- CreateIndex
+CREATE INDEX "InspectionTemplateItem_templateId_idx" ON "InspectionTemplateItem"("templateId");
+
+-- CreateIndex
+CREATE INDEX "AuditLog_projectId_createdAt_idx" ON "AuditLog"("projectId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "AuditLog_userId_createdAt_idx" ON "AuditLog"("userId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "AuditLog_entityType_entityId_idx" ON "AuditLog"("entityType", "entityId");
+

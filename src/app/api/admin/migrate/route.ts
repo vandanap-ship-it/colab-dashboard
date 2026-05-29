@@ -11,6 +11,15 @@ import { isAdmin } from "@/lib/roles";
  *
  * Each migration is identified by a string key and runs raw SQL. After it
  * succeeds it's marked applied via a sentinel table so re-runs are no-ops.
+ *
+ * IMPORTANT — this is a second source of truth alongside prisma/schema.prisma.
+ * When you change the schema you MUST keep both in step:
+ *   1. edit prisma/schema.prisma
+ *   2. add a migration entry below with the equivalent raw SQL
+ *   3. run `npm run schema:snapshot` to refresh prisma/schema.sql
+ *   4. commit all three
+ * CI's `schema:check` fails if schema.prisma changes without the SQL snapshot
+ * being refreshed, which is the prompt to confirm a migration entry exists here.
  */
 
 type Migration = {
