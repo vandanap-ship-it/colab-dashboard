@@ -342,6 +342,36 @@ model ProjectDrawing {
   @@index([projectId])
 }
 
+// Reusable inspection checklist templates (the White Lotus QA/QC library).
+// A site engineer picks a template and its checkpoints pre-fill the inspection
+// form, instead of typing items by hand. Templates are global (not per-project)
+// and tagged by module so QAQC vs Safety contractors see the right set.
+model InspectionTemplate {
+  id         String   @id @default(cuid())
+  code       String   @unique // e.g. "CL-QC-01"
+  name       String           // e.g. "Marking Setting Out"
+  activity   String?          // e.g. "MARKING"
+  module     String?          // QAQC | SAFETY | null (general)
+  orderIndex Int      @default(0)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  items InspectionTemplateItem[]
+}
+
+model InspectionTemplateItem {
+  id          String  @id @default(cuid())
+  templateId  String
+  seq         Int
+  section     String? // optional grouping, e.g. "SETTING OUT" / "POST-EXECUTION CHECKS"
+  description String
+
+  template InspectionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+}
+
 // Records every meaningful create / update / delete across the system so that
 // "who changed this snag?" or "when did this entry get edited?" has an answer.
 // Kept lightweight: we record the action, entity, actor, and a compact change

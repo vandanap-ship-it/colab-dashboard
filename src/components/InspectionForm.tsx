@@ -6,6 +6,16 @@ import VoiceTextarea from "./VoiceTextarea";
 
 type Activity = { id: string; name: string; taskCode: string; path: string[] };
 
+type TemplateItem = { seq: number; section: string | null; description: string };
+type Template = {
+  id: string;
+  code: string;
+  name: string;
+  activity: string | null;
+  module: string | null;
+  items: TemplateItem[];
+};
+
 const DEFAULT_ITEMS = [
   "All work matches drawings",
   "Materials per spec",
@@ -32,12 +42,53 @@ export default function InspectionForm({
   const [photos, setPhotos] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templateId, setTemplateId] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     fetch(`/api/projects/${projectId}/wbs?leaves=true`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => setActivities(d.nodes));
+      .then((r) => (r.ok ? r.json() : { nodes: [] }))
+      .then((d) => {
+        if (!cancelled) setActivities(d.nodes ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setActivities([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [projectId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/inspection-templates", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { templates: [] }))
+      .then((d) => {
+        if (!cancelled) setTemplates(d.templates ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setTemplates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function applyTemplate(id: string) {
+    setTemplateId(id);
+    if (!id) return;
+    const tpl = templates.find((t) => t.id === id);
+    if (!tpl) return;
+    // Pre-fill the title (if blank) and load the template's checkpoints.
+    setTitle((cur) => cur.trim() || tpl.name);
+    setItems(
+      tpl.items
+        .slice()
+        .sort((a, b) => a.seq - b.seq)
+        .map((it) => ({ label: it.description, passed: true, notes: "" })),
+    );
+  }
 
   const filtered = useMemo(() => {
     if (!activities) return [];
@@ -147,6 +198,30 @@ export default function InspectionForm({
         <h1 className="text-2xl font-semibold text-stone-900">Inspection Checklist</h1>
         <p className="text-xs text-stone-500 mt-1">Submit for planner review.</p>
       </div>
+
+      {templates.length > 0 && (
+        <label className="block">
+          <span className="text-sm font-medium text-stone-700">
+            Start from a template <span className="text-stone-400">(optional)</span>
+          </span>
+          <select
+            value={templateId}
+            onChange={(e) => applyTemplate(e.target.value)}
+            className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">Blank checklist</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.code}: {t.name}
+                {t.items.length ? ` (${t.items.length} items)` : ""}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-stone-500">
+            Loads the standard checkpoints. You can still edit, add, or remove items.
+          </span>
+        </label>
+      )}
 
       <label className="block">
         <span className="text-sm font-medium text-stone-700">Title</span>

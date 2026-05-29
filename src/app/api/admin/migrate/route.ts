@@ -82,6 +82,33 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add module-level access: User.modules (scope) + Issue.module + Inspection.module (tags).",
   },
+  {
+    key: "2026-05-29_add_inspection_templates",
+    sql: [
+      `CREATE TABLE "InspectionTemplate" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "code" TEXT NOT NULL,
+        "name" TEXT NOT NULL,
+        "activity" TEXT,
+        "module" TEXT,
+        "orderIndex" INTEGER NOT NULL DEFAULT 0,
+        "active" INTEGER NOT NULL DEFAULT 1,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE UNIQUE INDEX "InspectionTemplate_code_key" ON "InspectionTemplate"("code")`,
+      `CREATE TABLE "InspectionTemplateItem" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "templateId" TEXT NOT NULL,
+        "seq" INTEGER NOT NULL,
+        "section" TEXT,
+        "description" TEXT NOT NULL,
+        CONSTRAINT "InspectionTemplateItem_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "InspectionTemplate" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+      )`,
+      `CREATE INDEX "InspectionTemplateItem_templateId_idx" ON "InspectionTemplateItem"("templateId")`,
+    ],
+    describe: "Add InspectionTemplate + InspectionTemplateItem (configurable checklist library).",
+  },
 ];
 
 async function ensureLedger() {

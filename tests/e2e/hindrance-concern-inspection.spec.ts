@@ -76,3 +76,35 @@ test.describe("Hindrance / Concern / Inspection workflows", () => {
     expect(approved.status).toBe("PASSED");
   });
 });
+
+test.describe("Inspection templates", () => {
+  test("API: admin seeds curated templates, anyone can list them", async ({ page }) => {
+    // Admin seeds the curated checklist library (idempotent).
+    await signIn(page, "admin");
+    const seedRes = await page.request.post("/api/admin/seed-inspection-templates");
+    expect(seedRes.ok()).toBeTruthy();
+    const seeded = (await seedRes.json()).seeded as string[];
+    // CL-QC-01 (Marking / Setting Out) ships with 20 verbatim checkpoints.
+    expect(seeded.some((s) => s.startsWith("CL-QC-01"))).toBeTruthy();
+
+    // A full-access user can list templates and sees the seeded one with items.
+    await page.context().clearCookies();
+    await signIn(page, "manager");
+    const listRes = await page.request.get("/api/inspection-templates");
+    expect(listRes.ok()).toBeTruthy();
+    const templates = (await listRes.json()).templates as Array<{
+      code: string;
+      name: string;
+      items: unknown[];
+    }>;
+    const marking = templates.find((t) => t.code === "CL-QC-01");
+    expect(marking).toBeTruthy();
+    expect(marking!.items.length).toBe(20);
+  });
+
+  test("API: non-admin cannot seed templates", async ({ page }) => {
+    await signIn(page, "manager");
+    const res = await page.request.post("/api/admin/seed-inspection-templates");
+    expect(res.status()).toBe(403);
+  });
+});
