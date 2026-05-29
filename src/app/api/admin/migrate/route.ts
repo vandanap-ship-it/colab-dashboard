@@ -109,6 +109,23 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add InspectionTemplate + InspectionTemplateItem (configurable checklist library).",
   },
+  {
+    key: "2026-05-29_add_idempotency_keys",
+    sql: [
+      `ALTER TABLE "ProgressEntry" ADD COLUMN "idempotencyKey" TEXT`,
+      `CREATE UNIQUE INDEX "ProgressEntry_idempotencyKey_key" ON "ProgressEntry"("idempotencyKey")`,
+      `ALTER TABLE "Inspection" ADD COLUMN "idempotencyKey" TEXT`,
+      `CREATE UNIQUE INDEX "Inspection_idempotencyKey_key" ON "Inspection"("idempotencyKey")`,
+      `ALTER TABLE "Issue" ADD COLUMN "idempotencyKey" TEXT`,
+      `CREATE UNIQUE INDEX "Issue_idempotencyKey_key" ON "Issue"("idempotencyKey")`,
+      `ALTER TABLE "Hindrance" ADD COLUMN "idempotencyKey" TEXT`,
+      `CREATE UNIQUE INDEX "Hindrance_idempotencyKey_key" ON "Hindrance"("idempotencyKey")`,
+      `ALTER TABLE "Concern" ADD COLUMN "idempotencyKey" TEXT`,
+      `CREATE UNIQUE INDEX "Concern_idempotencyKey_key" ON "Concern"("idempotencyKey")`,
+    ],
+    describe:
+      "Add nullable idempotencyKey + unique index to ProgressEntry/Inspection/Issue/Hindrance/Concern (de-dupe offline replays). SQLite allows multiple NULLs under a unique index, so existing rows are unaffected.",
+  },
 ];
 
 async function ensureLedger() {
