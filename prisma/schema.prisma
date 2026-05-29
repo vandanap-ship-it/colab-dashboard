@@ -8,54 +8,57 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  username     String    @unique
+  id           String   @id @default(cuid())
+  username     String   @unique
   name         String
   passwordHash String
-  role         String    @default("SITE_ENGINEER")
+  role         String   @default("SITE_ENGINEER")
   designation  String?
-  modules      String?   // JSON array of allowed module keys; null = full access (internal staff)
-  active       Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  modules      String? // JSON array of allowed module keys; null = full access (internal staff)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  createdProjects     Project[]        @relation("ProjectCreator")
+  createdProjects     Project[]           @relation("ProjectCreator")
   progressEntries     ProgressEntry[]
   hindrances          Hindrance[]
-  raisedConcerns      Concern[]        @relation("ConcernRaiser")
-  assignedConcerns    Concern[]        @relation("ConcernAssignee")
-  createdIssues       Issue[]          @relation("IssueCreator")
-  assignedIssues      Issue[]          @relation("IssueAssignee")
-  filledInspections   Inspection[]     @relation("InspectionFiller")
-  reviewedInspections Inspection[]     @relation("InspectionReviewer")
+  raisedConcerns      Concern[]           @relation("ConcernRaiser")
+  assignedConcerns    Concern[]           @relation("ConcernAssignee")
+  createdIssues       Issue[]             @relation("IssueCreator")
+  assignedIssues      Issue[]             @relation("IssueAssignee")
+  filledInspections   Inspection[]        @relation("InspectionFiller")
+  reviewedInspections Inspection[]        @relation("InspectionReviewer")
+  preparedBills       SubContractorBill[] @relation("BillPreparer")
+  approvedBills       SubContractorBill[] @relation("BillApprover")
 }
 
 model Project {
-  id          String    @id @default(cuid())
-  name        String
-  code        String?
-  status      String    @default("PLANNING")
-  startDate         DateTime?
-  endDate           DateTime?
-  reraEndDate       DateTime?
-  actualStartDate   DateTime?
-  projectedEndDate  DateTime?
-  address     String?
-  tagline     String?
-  logoUrl     String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  createdById String
-  createdBy   User      @relation("ProjectCreator", fields: [createdById], references: [id])
+  id               String    @id @default(cuid())
+  name             String
+  code             String?
+  status           String    @default("PLANNING")
+  startDate        DateTime?
+  endDate          DateTime?
+  reraEndDate      DateTime?
+  actualStartDate  DateTime?
+  projectedEndDate DateTime?
+  address          String?
+  tagline          String?
+  logoUrl          String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  createdById      String
+  createdBy        User      @relation("ProjectCreator", fields: [createdById], references: [id])
 
-  wbsNodes        WBSNode[]
-  contractors     Contractor[]
-  progressEntries ProgressEntry[]
-  hindrances      Hindrance[]
-  concerns        Concern[]
-  issues          Issue[]
-  inspections     Inspection[]
-  drawings        ProjectDrawing[]
+  wbsNodes           WBSNode[]
+  contractors        Contractor[]
+  progressEntries    ProgressEntry[]
+  hindrances         Hindrance[]
+  concerns           Concern[]
+  issues             Issue[]
+  inspections        Inspection[]
+  drawings           ProjectDrawing[]
+  subContractorBills SubContractorBill[]
 
   @@index([createdById])
 }
@@ -68,22 +71,23 @@ model Contractor {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   progressEntries ProgressEntry[]
   wbsNodes        WBSNode[]
+  bills           SubContractorBill[]
 
   @@unique([projectId, name])
   @@index([projectId])
 }
 
 model WBSNode {
-  id              String    @id @default(cuid())
-  projectId       String
-  parentId        String?
-  taskCode        String
-  name            String
-  level           Int
-  orderIndex      Int
+  id         String  @id @default(cuid())
+  projectId  String
+  parentId   String?
+  taskCode   String
+  name       String
+  level      Int
+  orderIndex Int
 
   baselineStart   DateTime?
   baselineFinish  DateTime?
@@ -91,7 +95,7 @@ model WBSNode {
   actualFinish    DateTime?
   projectedFinish DateTime?
 
-  percentComplete Float     @default(0)
+  percentComplete Float @default(0)
 
   category        String?
   predecessorsRaw String?
@@ -100,20 +104,21 @@ model WBSNode {
   unit            String?
   contractorId    String?
   delayReason     String?
-  progressEntered Boolean   @default(false)
+  progressEntered Boolean @default(false)
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parent          WBSNode?        @relation("WBSTree", fields: [parentId], references: [id])
-  children        WBSNode[]       @relation("WBSTree")
-  contractor      Contractor?     @relation(fields: [contractorId], references: [id])
+  project         Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent          WBSNode?                @relation("WBSTree", fields: [parentId], references: [id])
+  children        WBSNode[]               @relation("WBSTree")
+  contractor      Contractor?             @relation(fields: [contractorId], references: [id])
   progressEntries ProgressEntry[]
   hindrances      Hindrance[]
   concerns        Concern[]
   issues          Issue[]
   inspections     Inspection[]
+  billLines       SubContractorBillLine[]
 
   @@unique([projectId, taskCode])
   @@index([projectId])
@@ -121,23 +126,23 @@ model WBSNode {
 }
 
 model ProgressEntry {
-  id                 String   @id @default(cuid())
-  projectId          String
-  wbsNodeId          String
-  date               DateTime
-  type               String   @default("LABOUR_SUPPLY")
+  id        String   @id @default(cuid())
+  projectId String
+  wbsNodeId String
+  date      DateTime
+  type      String   @default("LABOUR_SUPPLY")
 
-  achievedQuantity   Float    @default(0)
-  cumulativeQuantity Float    @default(0)
+  achievedQuantity   Float @default(0)
+  cumulativeQuantity Float @default(0)
 
-  contractorId       String?
-  notes              String?
+  contractorId String?
+  notes        String?
 
-  createdById        String
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  deletedAt          DateTime?
-  idempotencyKey     String?  @unique // de-dupes offline-queue replays
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  idempotencyKey String?   @unique // de-dupes offline-queue replays
 
   project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   wbsNode    WBSNode          @relation(fields: [wbsNodeId], references: [id])
@@ -182,15 +187,15 @@ model Hindrance {
   daysImpact   Int?
   status       String    @default("OPEN")
 
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
-  idempotencyKey String? @unique // de-dupes offline-queue replays
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  idempotencyKey String?   @unique // de-dupes offline-queue replays
 
-  project   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  wbsNode   WBSNode?          @relation(fields: [wbsNodeId], references: [id])
-  createdBy User              @relation(fields: [createdById], references: [id])
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wbsNode   WBSNode?         @relation(fields: [wbsNodeId], references: [id])
+  createdBy User             @relation(fields: [createdById], references: [id])
   photos    HindrancePhoto[]
 
   @@index([projectId])
@@ -208,18 +213,18 @@ model HindrancePhoto {
 }
 
 model Concern {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   projectId    String
   wbsNodeId    String?
   description  String
-  status       String   @default("PENDING")
+  status       String  @default("PENDING")
   assignedToId String?
 
-  raisedById String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  deletedAt  DateTime?
-  idempotencyKey String? @unique // de-dupes offline-queue replays
+  raisedById     String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  idempotencyKey String?   @unique // de-dupes offline-queue replays
 
   project    Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   wbsNode    WBSNode?       @relation(fields: [wbsNodeId], references: [id])
@@ -243,27 +248,27 @@ model ConcernPhoto {
 }
 
 model Issue {
-  id           String  @id @default(cuid())
-  projectId    String
-  wbsNodeId    String?
-  description  String
-  severity     String?
-  category     String?
-  status       String  @default("OPEN")
+  id          String  @id @default(cuid())
+  projectId   String
+  wbsNodeId   String?
+  description String
+  severity    String?
+  category    String?
+  status      String  @default("OPEN")
 
   createdById  String
   assignedToId String?
-  module       String?  // QAQC | SAFETY | null (general). Scopes visibility for contractor users.
+  module       String? // QAQC | SAFETY | null (general). Scopes visibility for contractor users.
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  deletedAt    DateTime?
-  idempotencyKey String? @unique // de-dupes offline-queue replays
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  idempotencyKey String?   @unique // de-dupes offline-queue replays
 
-  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  wbsNode    WBSNode?      @relation(fields: [wbsNodeId], references: [id])
-  createdBy  User          @relation("IssueCreator", fields: [createdById], references: [id])
-  assignedTo User?         @relation("IssueAssignee", fields: [assignedToId], references: [id])
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wbsNode    WBSNode?     @relation(fields: [wbsNodeId], references: [id])
+  createdBy  User         @relation("IssueCreator", fields: [createdById], references: [id])
+  assignedTo User?        @relation("IssueAssignee", fields: [assignedToId], references: [id])
   photos     IssuePhoto[]
 
   @@index([projectId])
@@ -282,21 +287,21 @@ model IssuePhoto {
 }
 
 model Inspection {
-  id              String    @id @default(cuid())
+  id              String  @id @default(cuid())
   projectId       String
   wbsNodeId       String?
   title           String
-  status          String    @default("IN_REVIEW")
+  status          String  @default("IN_REVIEW")
   rejectionReason String?
 
-  filledById   String
-  reviewedById String?
-  reviewedAt   DateTime?
-  module       String?   // QAQC | SAFETY | null (general). Scopes visibility for contractor users.
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  deletedAt    DateTime?
-  idempotencyKey String? @unique // de-dupes offline-queue replays
+  filledById     String
+  reviewedById   String?
+  reviewedAt     DateTime?
+  module         String? // QAQC | SAFETY | null (general). Scopes visibility for contractor users.
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  idempotencyKey String?   @unique // de-dupes offline-queue replays
 
   project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   wbsNode    WBSNode?          @relation(fields: [wbsNodeId], references: [id])
@@ -354,9 +359,9 @@ model ProjectDrawing {
 model InspectionTemplate {
   id         String   @id @default(cuid())
   code       String   @unique // e.g. "CL-QC-01"
-  name       String           // e.g. "Marking Setting Out"
-  activity   String?          // e.g. "MARKING"
-  module     String?          // QAQC | SAFETY | null (general)
+  name       String // e.g. "Marking Setting Out"
+  activity   String? // e.g. "MARKING"
+  module     String? // QAQC | SAFETY | null (general)
   orderIndex Int      @default(0)
   active     Boolean  @default(true)
   createdAt  DateTime @default(now())
@@ -382,18 +387,84 @@ model InspectionTemplateItem {
 // Kept lightweight: we record the action, entity, actor, and a compact change
 // summary; we don't try to mirror every field of every model.
 model AuditLog {
-  id         String   @id @default(cuid())
+  id         String  @id @default(cuid())
   projectId  String?
   userId     String
-  action     String   // CREATE | UPDATE | DELETE | RESTORE | STATUS_CHANGE
-  entityType String   // ProgressEntry | Issue | Hindrance | Concern | Inspection | Project | User | Contractor
+  action     String // CREATE | UPDATE | DELETE | RESTORE | STATUS_CHANGE
+  entityType String // ProgressEntry | Issue | Hindrance | Concern | Inspection | Project | User | Contractor
   entityId   String
-  summary    String?  // short human-readable description, e.g. "Snag closed" or "Progress %: 30 -> 45"
-  changes    String?  // optional JSON for richer diffs
+  summary    String? // short human-readable description, e.g. "Snag closed" or "Progress %: 30 -> 45"
+  changes    String? // optional JSON for richer diffs
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([projectId, createdAt])
   @@index([userId, createdAt])
   @@index([entityType, entityId])
+}
+
+// ---------------------------------------------------------------------------
+// P2P — Sub-contractor billing (Phase 1)
+//
+// A bill is a claim from a sub-contractor for a period of work. It supports all
+// three billing bases the team uses, one per line item:
+//   ITEM_RATE  → quantity x rate (e.g. m3 of concrete)
+//   LABOUR     → headcount x rate (uses the labour data already captured)
+//   LUMP_SUM   → a fixed amount (milestone payments)
+//
+// The bill total is always derived from its line items (+ optional tax), never
+// stored, so it can't drift. Two-step approval: a planner prepares and submits,
+// a manager/admin approves (or rejects). Money is only TRACKED here — the app
+// never moves funds.
+// ---------------------------------------------------------------------------
+model SubContractorBill {
+  id              String    @id @default(cuid())
+  projectId       String
+  contractorId    String
+  title           String
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  // DRAFT | SUBMITTED | APPROVED | REJECTED | PAID
+  status          String    @default("DRAFT")
+  notes           String?
+  // Optional tax (e.g. GST). null = no tax applied; total = subtotal otherwise.
+  taxPercent      Float?
+  // Approval trail.
+  preparedById    String
+  submittedAt     DateTime?
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectionReason String?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  idempotencyKey String?   @unique // de-dupes offline-queue replays
+
+  project    Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contractor Contractor              @relation(fields: [contractorId], references: [id])
+  preparedBy User                    @relation("BillPreparer", fields: [preparedById], references: [id])
+  approvedBy User?                   @relation("BillApprover", fields: [approvedById], references: [id])
+  lineItems  SubContractorBillLine[]
+
+  @@index([projectId])
+  @@index([contractorId])
+}
+
+model SubContractorBillLine {
+  id          String  @id @default(cuid())
+  billId      String
+  type        String // ITEM_RATE | LABOUR | LUMP_SUM
+  description String
+  wbsNodeId   String? // optional link to the activity being billed
+  quantity    Float? // qty (ITEM_RATE) or headcount (LABOUR)
+  unit        String? // m3, nos, mason-days, etc.
+  rate        Float? // amount per unit
+  amount      Float   @default(0) // line total: quantity*rate, or the lump sum
+  orderIndex  Int     @default(0)
+
+  bill    SubContractorBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  wbsNode WBSNode?          @relation(fields: [wbsNodeId], references: [id])
+
+  @@index([billId])
 }

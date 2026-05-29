@@ -135,6 +135,54 @@ const MIGRATIONS: Migration[] = [
     describe:
       "Add nullable idempotencyKey + unique index to ProgressEntry/Inspection/Issue/Hindrance/Concern (de-dupe offline replays). SQLite allows multiple NULLs under a unique index, so existing rows are unaffected.",
   },
+  {
+    key: "2026-05-29_add_subcontractor_billing",
+    sql: [
+      `CREATE TABLE "SubContractorBill" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "projectId" TEXT NOT NULL,
+        "contractorId" TEXT NOT NULL,
+        "title" TEXT NOT NULL,
+        "periodStart" DATETIME,
+        "periodEnd" DATETIME,
+        "status" TEXT NOT NULL DEFAULT 'DRAFT',
+        "notes" TEXT,
+        "taxPercent" REAL,
+        "preparedById" TEXT NOT NULL,
+        "submittedAt" DATETIME,
+        "approvedById" TEXT,
+        "approvedAt" DATETIME,
+        "rejectionReason" TEXT,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL,
+        "deletedAt" DATETIME,
+        "idempotencyKey" TEXT,
+        CONSTRAINT "SubContractorBill_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT "SubContractorBill_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+        CONSTRAINT "SubContractorBill_preparedById_fkey" FOREIGN KEY ("preparedById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+        CONSTRAINT "SubContractorBill_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+      )`,
+      `CREATE UNIQUE INDEX "SubContractorBill_idempotencyKey_key" ON "SubContractorBill"("idempotencyKey")`,
+      `CREATE INDEX "SubContractorBill_projectId_idx" ON "SubContractorBill"("projectId")`,
+      `CREATE INDEX "SubContractorBill_contractorId_idx" ON "SubContractorBill"("contractorId")`,
+      `CREATE TABLE "SubContractorBillLine" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "billId" TEXT NOT NULL,
+        "type" TEXT NOT NULL,
+        "description" TEXT NOT NULL,
+        "wbsNodeId" TEXT,
+        "quantity" REAL,
+        "unit" TEXT,
+        "rate" REAL,
+        "amount" REAL NOT NULL DEFAULT 0,
+        "orderIndex" INTEGER NOT NULL DEFAULT 0,
+        CONSTRAINT "SubContractorBillLine_billId_fkey" FOREIGN KEY ("billId") REFERENCES "SubContractorBill" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT "SubContractorBillLine_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+      )`,
+      `CREATE INDEX "SubContractorBillLine_billId_idx" ON "SubContractorBillLine"("billId")`,
+    ],
+    describe: "Add SubContractorBill + SubContractorBillLine (P2P sub-contractor billing).",
+  },
 ];
 
 async function ensureLedger() {
