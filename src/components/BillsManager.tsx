@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Pencil, Send, Check, X, Banknote, RotateCcw, Download } from "lucide-react";
+import { Plus, Trash2, Pencil, Send, Check, X, Banknote, RotateCcw, Download, FileText } from "lucide-react";
 import {
   BILL_LINE_TYPES,
   billsToCsv,
@@ -360,6 +361,13 @@ export default function BillsManager({
               )}
 
               <div className="mt-3 flex flex-wrap gap-2">
+                <Link
+                  href={`/projects/${projectId}/bills/${bill.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 px-2.5 py-1 text-xs font-medium text-stone-700 hover:bg-stone-50 transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  View / print
+                </Link>
                 {canPrepare && (bill.status === "DRAFT" || bill.status === "REJECTED") && (
                   <ActionBtn onClick={() => setEditing(bill)} disabled={busyId === bill.id} icon={<Pencil className="w-3.5 h-3.5" />}>
                     Edit

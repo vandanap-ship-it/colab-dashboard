@@ -204,4 +204,24 @@ test.describe("Sub-contractor billing", () => {
     // The summary/filter toolbar renders once there's at least one bill.
     await expect(page.getByRole("button", { name: /^CSV$/i })).toBeVisible();
   });
+
+  test("UI: a bill has a printable detail page", async ({ page }) => {
+    await signIn(page, "planner");
+    const projectId = await getProjectId(page);
+    const contractorId = await aContractorId(page, projectId);
+    const createRes = await page.request.post("/api/bills", {
+      data: {
+        projectId,
+        contractorId,
+        title: `[E2E] Printable ${uniqueId()}`,
+        lines: [{ type: "LUMP_SUM", description: "Mobilisation", amount: 2500 }],
+      },
+    });
+    const bill = (await createRes.json()).bill;
+
+    await page.goto(`/projects/${projectId}/bills/${bill.id}`);
+    await expect(page.getByRole("heading", { name: /Sub-Contractor Bill/i })).toBeVisible();
+    await expect(page.getByText("Mobilisation")).toBeVisible();
+    await expect(page.getByText("₹2,500").first()).toBeVisible();
+  });
 });
