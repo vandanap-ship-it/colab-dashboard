@@ -29,6 +29,7 @@ let prisma: typeof import("@/lib/prisma").prisma;
 let getProjectStats: typeof import("@/lib/projectStats").getProjectStats;
 let getMasterReport: typeof import("@/lib/reports").getMasterReport;
 let getLabourSupplyReport: typeof import("@/lib/reports").getLabourSupplyReport;
+let getContractorWorkSummary: typeof import("@/lib/reports").getContractorWorkSummary;
 
 let projectId: string;
 
@@ -47,7 +48,7 @@ beforeAll(async () => {
   process.env.DATABASE_URL = `file:${dbPath}`;
   ({ prisma } = await import("@/lib/prisma"));
   ({ getProjectStats } = await import("@/lib/projectStats"));
-  ({ getMasterReport, getLabourSupplyReport } = await import("@/lib/reports"));
+  ({ getMasterReport, getLabourSupplyReport, getContractorWorkSummary } = await import("@/lib/reports"));
 
   // 3. Seed a hand-computable tree:
   //      root (L0) → phase (L1) → A, B, C (L2 leaves)
@@ -219,5 +220,52 @@ describe("getLabourSupplyReport (per-contractor × category × day matrix)", () 
     expect(acme.grandTotal).toBe(10);
     expect(report.grandTotalPerDay).toEqual([8, 2]);
     expect(report.grandTotal).toBe(10);
+  });
+});
+
+describe("getContractorWorkSummary (per-contractor accountability)", () => {
+  it("aggregates progress, labour, inspections and issues for a contractor", async () => {
+    const u = await prisma.user.create({
+      data: { username: "cws-user", name: "CWS", passwordHash: "x" },
+    });
+    const p = await prisma.project.create({ data: { name: "CWS Project", createdById: u.id } });
+    const acme = await prisma.contractor.create({
+      data: { projectId: p.id, name: "Acme", category: "Civil" },
+    });
+    // The node is assigned to Acme — inspections/issues attribute via the node's
+    // contractor, while progress attributes via the entry's contractorId.
+    const node = await prisma.wBSNode.create({
+      data: { projectId: p.id, taskCode: "CN", name: "work", level: 0, orderIndex: 0, contractorId: acme.id },
+    });
+
+    await prisma.progressEntry.create({
+      data: {
+        projectId: p.id, wbsNodeId: node.id, createdById: u.id, contractorId: acme.id,
+        date: D("2026-06-10"),
+        labour: { create: [{ category: "Mason", count: 5 }, { category: "Helper", count: 2 }] },
+      },
+    });
+    await prisma.inspection.create({
+      data: { projectId: p.id, wbsNodeId: node.id, filledById: u.id, title: "i1", status: "PASSED", createdAt: D("2026-06-10") },
+    });
+    await prisma.inspection.create({
+      data: { projectId: p.id, wbsNodeId: node.id, filledById: u.id, title: "i2", status: "REJECTED", createdAt: D("2026-06-11") },
+    });
+    await prisma.issue.create({
+      data: { projectId: p.id, wbsNodeId: node.id, createdById: u.id, description: "open snag", status: "OPEN", createdAt: D("2026-06-12") },
+    });
+
+    const summary = await getContractorWorkSummary(p.id, "2026-06-01", "2026-06-30");
+    expect(summary.rows).toHaveLength(1);
+    const row = summary.rows[0];
+    expect(row.contractorName).toBe("Acme");
+    expect(row.activitiesUpdated).toBe(1);
+    expect(row.progressEntries).toBe(1);
+    expect(row.totalLabour).toBe(7); // 5 + 2
+    expect(row.inspectionsTotal).toBe(2);
+    expect(row.inspectionsPassed).toBe(1);
+    expect(row.inspectionsRejected).toBe(1);
+    expect(row.issuesOpen).toBe(1);
+    expect(row.issuesResolved).toBe(0);
   });
 });
