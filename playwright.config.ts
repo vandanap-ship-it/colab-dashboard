@@ -57,5 +57,8 @@ export default defineConfig({
     timeout: 120_000,
     stdout: "pipe",
     stderr: "pipe",
+    // Re-validate sessions against the DB on every request (no throttle) so the
+    // deactivation test observes enforcement immediately rather than after 60s.
+    env: { AUTH_REVALIDATE_MS: "0" },
   },
 });

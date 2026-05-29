@@ -2,6 +2,15 @@ import NextAuth, { type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { refreshTokenFromDb } from "@/lib/authToken";
+
+// How often (ms) to re-check a session against the DB. Defaults to the lib's
+// 60s; overridable via AUTH_REVALIDATE_MS (e.g. "0" in E2E to revalidate every
+// request, or to tune the deactivation-enforcement delay in production).
+const REVALIDATE_MS =
+  process.env.AUTH_REVALIDATE_MS !== undefined
+    ? Math.max(0, parseInt(process.env.AUTH_REVALIDATE_MS, 10) || 0)
+    : undefined;
 
 declare module "next-auth" {
   interface Session {
@@ -56,12 +65,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
+        // Initial sign-in: trust the authorize() result and stamp the token.
         token.id = user.id as string;
         token.role = (user as { role: string }).role;
         token.username = (user as { username: string }).username;
         token.modules = (user as { modules: string | null }).modules ?? null;
+        token.validatedAt = Date.now();
+        return token;
       }
-      return token;
+      // Subsequent requests: re-check the DB so deactivation and role/module
+      // changes take effect promptly instead of waiting for the token to expire.
+      // Returning null drops the session (NextAuth clears the cookie).
+      return refreshTokenFromDb(
+        token,
+        (id) =>
+          prisma.user
+            .findUnique({
+              where: { id },
+              select: { active: true, role: true, username: true, modules: true },
+            })
+            .then((u) =>
+              u ? { active: u.active, role: u.role, username: u.username, modules: u.modules ?? null } : null,
+            ),
+        { now: Date.now(), intervalMs: REVALIDATE_MS },
+      );
     },
     async session({ session, token }) {
       if (token && session.user) {
