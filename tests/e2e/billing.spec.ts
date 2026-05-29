@@ -62,6 +62,110 @@ test.describe("Sub-contractor billing", () => {
     expect(res.status()).toBe(403);
   });
 
+  test("API: a bill's contractor must belong to the project", async ({ page }) => {
+    await signIn(page, "planner");
+    const projectId = await getProjectId(page);
+    const res = await page.request.post("/api/bills", {
+      data: {
+        projectId,
+        contractorId: "not-a-real-contractor",
+        title: `[E2E] Bad contractor ${uniqueId()}`,
+        lines: [{ type: "LUMP_SUM", description: "x", amount: 100 }],
+      },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test("API: editing a draft recomputes the total", async ({ page }) => {
+    await signIn(page, "planner");
+    const projectId = await getProjectId(page);
+    const contractorId = await aContractorId(page, projectId);
+
+    const createRes = await page.request.post("/api/bills", {
+      data: {
+        projectId,
+        contractorId,
+        title: `[E2E] Editable ${uniqueId()}`,
+        lines: [{ type: "LUMP_SUM", description: "Initial", amount: 1000 }],
+      },
+    });
+    const bill = (await createRes.json()).bill;
+    expect(bill.total).toBe(1000);
+
+    // Replace the lines: item-rate (5 × 200 = 1000) + lump-sum (500) = 1500.
+    const editRes = await page.request.patch(`/api/bills/${bill.id}`, {
+      data: {
+        lines: [
+          { type: "ITEM_RATE", description: "Steel", quantity: 5, rate: 200, unit: "kg" },
+          { type: "LUMP_SUM", description: "Extra", amount: 500 },
+        ],
+      },
+    });
+    expect(editRes.ok()).toBeTruthy();
+    expect((await editRes.json()).bill.total).toBe(1500);
+  });
+
+  test("API: reject with a reason, then reopen clears it", async ({ page }) => {
+    await signIn(page, "planner");
+    const projectId = await getProjectId(page);
+    const contractorId = await aContractorId(page, projectId);
+    const createRes = await page.request.post("/api/bills", {
+      data: {
+        projectId,
+        contractorId,
+        title: `[E2E] Reject ${uniqueId()}`,
+        lines: [{ type: "LUMP_SUM", description: "x", amount: 100 }],
+      },
+    });
+    const bill = (await createRes.json()).bill;
+    await page.request.patch(`/api/bills/${bill.id}`, { data: { status: "SUBMITTED" } });
+
+    // Manager rejects with a reason.
+    await page.context().clearCookies();
+    await signIn(page, "manager");
+    const rejectRes = await page.request.patch(`/api/bills/${bill.id}`, {
+      data: { status: "REJECTED", rejectionReason: "Missing measurement sheet" },
+    });
+    const rejected = (await rejectRes.json()).bill;
+    expect(rejected.status).toBe("REJECTED");
+    expect(rejected.rejectionReason).toBe("Missing measurement sheet");
+
+    // Planner reopens to DRAFT — the rejection reason is cleared.
+    await page.context().clearCookies();
+    await signIn(page, "planner");
+    const reopenRes = await page.request.patch(`/api/bills/${bill.id}`, { data: { status: "DRAFT" } });
+    const reopened = (await reopenRes.json()).bill;
+    expect(reopened.status).toBe("DRAFT");
+    expect(reopened.rejectionReason).toBeNull();
+  });
+
+  test("API: an approved bill cannot be deleted", async ({ page }) => {
+    await signIn(page, "planner");
+    const projectId = await getProjectId(page);
+    const contractorId = await aContractorId(page, projectId);
+    const createRes = await page.request.post("/api/bills", {
+      data: {
+        projectId,
+        contractorId,
+        title: `[E2E] No-delete ${uniqueId()}`,
+        lines: [{ type: "LUMP_SUM", description: "x", amount: 100 }],
+      },
+    });
+    const bill = (await createRes.json()).bill;
+    await page.request.patch(`/api/bills/${bill.id}`, { data: { status: "SUBMITTED" } });
+
+    await page.context().clearCookies();
+    await signIn(page, "manager");
+    await page.request.patch(`/api/bills/${bill.id}`, { data: { status: "APPROVED" } });
+
+    // The preparer (planner) can normally delete a draft, but not once it's
+    // approved — it's a financial record at that point.
+    await page.context().clearCookies();
+    await signIn(page, "planner");
+    const delRes = await page.request.delete(`/api/bills/${bill.id}`);
+    expect(delRes.status()).toBe(400);
+  });
+
   test("API: an illegal status jump (draft → approved) is rejected", async ({ page }) => {
     await signIn(page, "planner");
     const projectId = await getProjectId(page);
