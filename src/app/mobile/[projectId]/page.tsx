@@ -10,6 +10,7 @@ import {
   PlusCircle,
   RefreshCw,
   TrendingUp,
+  Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -67,6 +68,12 @@ export default async function MobileProjectHome({
       href: `/mobile/${projectId}/inspection/new`,
       label: "Inspection",
       icon: ClipboardList,
+    },
+    {
+      key: "expense",
+      href: `/mobile/${projectId}/expense/new`,
+      label: "Log Expense",
+      icon: Wallet,
     },
     {
       key: "dlr",

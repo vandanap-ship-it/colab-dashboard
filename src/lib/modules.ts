@@ -85,6 +85,9 @@ export const TOOL_MODULES: Record<string, ModuleKey[]> = {
   inspection: [MODULES.QAQC, MODULES.SAFETY],
   hindrance: [MODULES.HINDRANCE],
   concern: [MODULES.CONCERN],
+  // Expenses are internal-only. Gating on PROGRESS shows it to internal site
+  // staff (full access) and hides it from scoped QAQC/Safety contractors.
+  expense: [MODULES.PROGRESS],
 };
 
 /** True when the user can access a tool given the tool's owning modules. */

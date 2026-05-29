@@ -1,4 +1,4 @@
-import { test, expect, signIn } from "./fixtures";
+import { test, expect, signIn, getProjectId, uniqueId } from "./fixtures";
 
 /**
  * Mobile experience (webkit / iPhone viewport).
@@ -28,5 +28,20 @@ test.describe("Mobile experience", () => {
     await signIn(page, "manager");
     await page.goto("/mobile");
     await expect(page.locator("body")).not.toContainText(/Forbidden|Unauthorized/i);
+  });
+
+  test("engineer logs an expense from the phone", async ({ page }) => {
+    await signIn(page, "engineer");
+    const projectId = await getProjectId(page);
+
+    await page.goto(`/mobile/${projectId}/expense/new`);
+    await expect(page.getByRole("heading", { name: /Log Expense/i })).toBeVisible();
+
+    await page.locator('input[type="number"]').first().fill("1500");
+    await page.getByPlaceholder(/Sand 2 loads/i).fill(`[E2E mobile] tea & snacks ${uniqueId()}`);
+    await page.getByRole("button", { name: /^Log expense$/i }).click();
+
+    // On success the form returns to the mobile project home.
+    await expect(page).toHaveURL(new RegExp(`/mobile/${projectId}$`));
   });
 });
