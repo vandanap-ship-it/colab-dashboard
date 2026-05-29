@@ -130,3 +130,43 @@ describe("getMasterReport (weekly report rollup)", () => {
     expect(report.totalActivities).toHaveLength(3);
   });
 });
+
+describe("getProjectStats edge cases", () => {
+  it("returns all zeros for a project with no activities", async () => {
+    const u = await prisma.user.create({
+      data: { username: "empty-user", name: "Empty", passwordHash: "x" },
+    });
+    const p = await prisma.project.create({ data: { name: "Empty Project", createdById: u.id } });
+    const stats = await getProjectStats(p.id, TODAY);
+    expect(stats).toEqual({
+      totalActivities: 0,
+      plannedPercent: 0,
+      achievedPercent: 0,
+      totalDelayDays: 0,
+      hindranceCount: 0,
+    });
+  });
+
+  it("falls back to the worst per-leaf slip when there's no project-end override", async () => {
+    const u = await prisma.user.create({
+      data: { username: "delay-user", name: "Delay", passwordHash: "x" },
+    });
+    // endDate set but NO projectedEndDate → override branch is skipped.
+    const p = await prisma.project.create({
+      data: { name: "Delay Project", createdById: u.id, endDate: D("2026-06-20") },
+    });
+    const root = await prisma.wBSNode.create({
+      data: { projectId: p.id, taskCode: "DR", name: "root", level: 0, orderIndex: 0 },
+    });
+    // Leaf projected to finish 5 days past its baseline finish → per-leaf slip 5.
+    await prisma.wBSNode.create({
+      data: {
+        projectId: p.id, parentId: root.id, taskCode: "DA", name: "a", level: 1, orderIndex: 0,
+        baselineStart: D("2026-06-01"), baselineFinish: D("2026-06-10"),
+        projectedFinish: D("2026-06-15"), percentComplete: 50, progressEntered: true,
+      },
+    });
+    const stats = await getProjectStats(p.id, TODAY);
+    expect(stats.totalDelayDays).toBe(5);
+  });
+});
