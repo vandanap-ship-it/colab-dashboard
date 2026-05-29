@@ -169,9 +169,14 @@ export async function flush(): Promise<void> {
             await remove(item.id);
             continue;
           }
-          // 4xx is a permanent failure — keep the entry but stop retrying.
-          // Engineer can review via the pending list and decide.
-          if (res.status >= 400 && res.status < 500) {
+          // 401 (session expired) and 408/429 (transient) WILL succeed once the
+          // engineer re-authenticates or the server recovers, so keep retrying
+          // with backoff. Other 4xx (validation, permission, not-found) won't
+          // fix themselves — park them for a day so the engineer can review and
+          // manually retry/discard via the pending list.
+          const retryable =
+            res.status >= 500 || res.status === 401 || res.status === 408 || res.status === 429;
+          if (!retryable) {
             const text = await res.text().catch(() => `HTTP ${res.status}`);
             await update({
               ...item,
@@ -181,7 +186,6 @@ export async function flush(): Promise<void> {
               nextAttemptAt: now + 24 * 60 * 60 * 1000,
             });
           } else {
-            // 5xx or transient — retry with backoff
             await update({
               ...item,
               attempts: item.attempts + 1,
