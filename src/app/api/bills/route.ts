@@ -11,6 +11,7 @@ import {
   type BillLineInput,
 } from "@/lib/billing";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
+import { badRequest, forbidden, unauthorized } from "@/lib/apiErrors";
 
 /** Anyone in the billing flow (preparer or approver) may view bills. */
 function canViewBills(role: string): boolean {
@@ -26,14 +27,14 @@ const billInclude = {
 
 export async function GET(req: Request) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user) return unauthorized();
   // Scoped contractors and site engineers don't see billing at all.
   if (!canViewBills(session.user.role)) return NextResponse.json({ bills: [] });
 
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");
   const status = searchParams.get("status");
-  if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
+  if (!projectId) return badRequest("projectId required");
 
   const where: { projectId: string; status?: string } = { projectId };
   if (status) where.status = status;
@@ -48,16 +49,16 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user) return unauthorized();
   if (!canPrepareBill(session.user.role)) {
-    return NextResponse.json({ error: "Your account can't prepare bills." }, { status: 403 });
+    return forbidden("Your account can't prepare bills.");
   }
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return badRequest("Invalid JSON");
   }
 
   const { projectId, contractorId, title, periodStart, periodEnd, notes, taxPercent, lines } =
@@ -72,10 +73,10 @@ export async function POST(req: Request) {
       lines?: BillLineInput[];
     };
 
-  if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
-  if (!contractorId) return NextResponse.json({ error: "contractorId required" }, { status: 400 });
+  if (!projectId) return badRequest("projectId required");
+  if (!contractorId) return badRequest("contractorId required");
   const t = (title ?? "").trim();
-  if (t.length < 3) return NextResponse.json({ error: "Title too short" }, { status: 400 });
+  if (t.length < 3) return badRequest("Title too short");
 
   // The contractor must belong to this project (no cross-project bills).
   const contractor = await prisma.contractor.findUnique({
@@ -83,7 +84,7 @@ export async function POST(req: Request) {
     select: { projectId: true },
   });
   if (!contractor || contractor.projectId !== projectId) {
-    return NextResponse.json({ error: "Invalid contractor for this project" }, { status: 400 });
+    return badRequest("Invalid contractor for this project");
   }
 
   const cleaned = cleanLines(lines);
