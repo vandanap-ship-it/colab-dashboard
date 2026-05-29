@@ -94,6 +94,27 @@ test.describe("Module access control", () => {
 
       const concList = await page.request.get(`/api/concerns?projectId=${projectId}`);
       expect((await concList.json()).concerns).toEqual([]);
+
+      // 9. Single-record endpoints must also be locked down (no IDOR around
+      //    the list-level scoping). These guards run before any DB lookup,
+      //    so arbitrary IDs still return 403.
+      const nodeDetail = await page.request.get(
+        `/api/projects/${projectId}/wbs/any-node-id`,
+      );
+      expect(nodeDetail.status()).toBe(403);
+
+      const insights = await page.request.get(`/api/projects/${projectId}/insights`);
+      expect(insights.status()).toBe(403);
+
+      const hindPatch = await page.request.patch("/api/hindrances/any-id", {
+        data: { status: "OPEN" },
+      });
+      expect(hindPatch.status()).toBe(403);
+
+      const concPatch = await page.request.patch("/api/concerns/any-id", {
+        data: { status: "READ" },
+      });
+      expect(concPatch.status()).toBe(403);
     } finally {
       // 8. Cleanup — deactivate the test user as admin
       await page.context().clearCookies();

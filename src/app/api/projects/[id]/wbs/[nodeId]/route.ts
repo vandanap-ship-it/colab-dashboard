@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessModule, MODULES } from "@/lib/modules";
 
 export async function GET(_req: Request, ctx: RouteContext<"/api/projects/[id]/wbs/[nodeId]">) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Schedule/activity detail is PROGRESS-scoped — external contractors (QAQC /
+  // Safety) must not read it, matching the /wbs list endpoint's lockout.
+  if (!canAccessModule(session.user.modules, MODULES.PROGRESS)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id: projectId, nodeId } = await ctx.params;
 

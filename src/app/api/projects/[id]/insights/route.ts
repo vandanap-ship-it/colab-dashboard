@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessModule, MODULES } from "@/lib/modules";
 
 export async function GET(req: Request, ctx: RouteContext<"/api/projects/[id]/insights">) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Insights aggregate progress/schedule data (PROGRESS module) — keep them
+  // out of scoped contractors' reach, same as the schedule itself.
+  if (!canAccessModule(session.user.modules, MODULES.PROGRESS)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id: projectId } = await ctx.params;
   const { searchParams } = new URL(req.url);

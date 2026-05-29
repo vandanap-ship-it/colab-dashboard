@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
+import { canAccessModule, MODULES } from "@/lib/modules";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import {
   badRequest,
@@ -16,6 +17,9 @@ const STATUSES = new Set(["PENDING", "READ", "RESOLVED", "TASK_ASSIGNED"]);
 export async function PATCH(req: Request, ctx: RouteContext<"/api/concerns/[id]">) {
   const session = await auth();
   if (!session?.user) return unauthorized();
+  // A contractor without CONCERN access must not touch a concern by ID,
+  // including marking it read (IDOR guard).
+  if (!canAccessModule(session.user.modules, MODULES.CONCERN)) return forbidden();
 
   const { id } = await ctx.params;
   let body: unknown;
