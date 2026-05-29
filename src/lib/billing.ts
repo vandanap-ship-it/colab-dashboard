@@ -112,6 +112,54 @@ export function parseTaxPercent(v: unknown): number | null {
   return n;
 }
 
+/** Per-status count + total, plus a grand total, for the billing summary strip. */
+export function summariseBills(
+  bills: { status: string; total: number }[],
+): { byStatus: Record<string, { count: number; total: number }>; grandTotal: number } {
+  const byStatus: Record<string, { count: number; total: number }> = {};
+  let grandTotal = 0;
+  for (const b of bills) {
+    const t = isFinite(b.total) ? b.total : 0;
+    const s = byStatus[b.status] ?? { count: 0, total: 0 };
+    s.count += 1;
+    s.total = round2(s.total + t);
+    byStatus[b.status] = s;
+    grandTotal = round2(grandTotal + t);
+  }
+  return { byStatus, grandTotal };
+}
+
+export type BillCsvRow = {
+  title: string;
+  contractorName: string;
+  status: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  subtotal: number;
+  tax: number;
+  total: number;
+};
+
+/** Escape a single CSV cell (quote-wrap when it contains a comma, quote, or newline). */
+function csvCell(v: string | number | null | undefined): string {
+  const s = v === null || v === undefined ? "" : String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** Render bills as a CSV string (header + one row per bill). */
+export function billsToCsv(rows: BillCsvRow[]): string {
+  const header = ["Title", "Contractor", "Status", "Period Start", "Period End", "Subtotal", "Tax", "Total"];
+  const lines = [header.join(",")];
+  for (const r of rows) {
+    lines.push(
+      [r.title, r.contractorName, r.status, r.periodStart ?? "", r.periodEnd ?? "", r.subtotal, r.tax, r.total]
+        .map(csvCell)
+        .join(","),
+    );
+  }
+  return lines.join("\n");
+}
+
 /**
  * Whether a status change is allowed, and who may do it. The flow is:
  *   DRAFT → SUBMITTED            (preparer: Planner/Admin)

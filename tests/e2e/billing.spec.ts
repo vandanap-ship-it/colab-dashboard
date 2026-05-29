@@ -201,5 +201,7 @@ test.describe("Sub-contractor billing", () => {
     // Back in the list, the new bill appears with its total.
     await expect(page.getByText(title)).toBeVisible();
     await expect(page.getByText("₹5,000").first()).toBeVisible();
+    // The summary/filter toolbar renders once there's at least one bill.
+    await expect(page.getByRole("button", { name: /^CSV$/i })).toBeVisible();
   });
 });

@@ -4,6 +4,8 @@ import {
   cleanLines,
   computeBillTotals,
   allowedBillTransition,
+  summariseBills,
+  billsToCsv,
 } from "@/lib/billing";
 
 describe("normalizeLine", () => {
@@ -81,5 +83,56 @@ describe("allowedBillTransition", () => {
     expect(allowedBillTransition("DRAFT", "PAID")).toBeNull();
     expect(allowedBillTransition("APPROVED", "DRAFT")).toBeNull();
     expect(allowedBillTransition("PAID", "DRAFT")).toBeNull();
+  });
+});
+
+describe("summariseBills", () => {
+  it("groups count + total by status and sums a grand total", () => {
+    const s = summariseBills([
+      { status: "DRAFT", total: 100 },
+      { status: "DRAFT", total: 50 },
+      { status: "APPROVED", total: 1000.5 },
+      { status: "PAID", total: 200 },
+    ]);
+    expect(s.byStatus.DRAFT).toEqual({ count: 2, total: 150 });
+    expect(s.byStatus.APPROVED).toEqual({ count: 1, total: 1000.5 });
+    expect(s.byStatus.PAID).toEqual({ count: 1, total: 200 });
+    expect(s.grandTotal).toBe(1350.5); // 100 + 50 + 1000.5 + 200
+  });
+
+  it("returns an empty summary for no bills", () => {
+    expect(summariseBills([])).toEqual({ byStatus: {}, grandTotal: 0 });
+  });
+});
+
+describe("billsToCsv", () => {
+  const row = {
+    title: "June Bill",
+    contractorName: "Acme",
+    status: "APPROVED",
+    periodStart: "2026-06-01",
+    periodEnd: "2026-06-30",
+    subtotal: 1000,
+    tax: 180,
+    total: 1180,
+  };
+
+  it("emits a header and one row per bill", () => {
+    const csv = billsToCsv([row]);
+    const lines = csv.split("\n");
+    expect(lines[0]).toBe("Title,Contractor,Status,Period Start,Period End,Subtotal,Tax,Total");
+    expect(lines[1]).toBe("June Bill,Acme,APPROVED,2026-06-01,2026-06-30,1000,180,1180");
+  });
+
+  it("escapes commas and quotes in values", () => {
+    const csv = billsToCsv([{ ...row, title: 'Bill, "final"', contractorName: "A,B" }]);
+    const dataLine = csv.split("\n")[1];
+    expect(dataLine).toContain('"Bill, ""final"""'); // comma + escaped quotes
+    expect(dataLine).toContain('"A,B"');
+  });
+
+  it("renders empty period dates as blank cells", () => {
+    const csv = billsToCsv([{ ...row, periodStart: null, periodEnd: null }]);
+    expect(csv.split("\n")[1]).toBe("June Bill,Acme,APPROVED,,,1000,180,1180");
   });
 });

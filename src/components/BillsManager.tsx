@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Pencil, Send, Check, X, Banknote, RotateCcw } from "lucide-react";
+import { Plus, Trash2, Pencil, Send, Check, X, Banknote, RotateCcw, Download } from "lucide-react";
 import {
   BILL_LINE_TYPES,
+  billsToCsv,
   computeBillTotals,
   normalizeLine,
+  summariseBills,
   type BillLineType,
 } from "@/lib/billing";
 
@@ -94,6 +96,8 @@ export default function BillsManager({
   const [editing, setEditing] = useState<Bill | "new" | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"ALL" | Bill["status"]>("ALL");
+  const [contractorFilter, setContractorFilter] = useState<"ALL" | string>("ALL");
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +119,39 @@ export default function BillsManager({
   }, [projectId, reloadKey]);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  // Summary is over ALL bills (project overview); the filters only narrow the list.
+  const summary = useMemo(() => summariseBills(bills ?? []), [bills]);
+  const filtered = useMemo(() => {
+    if (!bills) return [];
+    return bills.filter(
+      (b) =>
+        (statusFilter === "ALL" || b.status === statusFilter) &&
+        (contractorFilter === "ALL" || b.contractor.id === contractorFilter),
+    );
+  }, [bills, statusFilter, contractorFilter]);
+
+  function downloadCsv() {
+    const csv = billsToCsv(
+      filtered.map((b) => ({
+        title: b.title,
+        contractorName: b.contractor.name,
+        status: b.status,
+        periodStart: b.periodStart ? b.periodStart.slice(0, 10) : null,
+        periodEnd: b.periodEnd ? b.periodEnd.slice(0, 10) : null,
+        subtotal: b.subtotal,
+        tax: b.tax,
+        total: b.total,
+      })),
+    );
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "sub-contractor-bills.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function changeStatus(bill: Bill, status: Bill["status"], rejectionReason?: string) {
     setBusyId(bill.id);
@@ -215,8 +252,69 @@ export default function BillsManager({
           )}
         </div>
       ) : (
-        <ul className="space-y-3">
-          {bills.map((bill) => (
+        <>
+          <div className="flex flex-wrap gap-2">
+            {(["DRAFT", "SUBMITTED", "APPROVED", "REJECTED", "PAID"] as const).map((s) => {
+              const stat = summary.byStatus[s];
+              if (!stat) return null;
+              return (
+                <div key={s} className={`rounded-lg px-3 py-2 ${STATUS_STYLE[s]}`}>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider">{s}</div>
+                  <div className="text-sm font-semibold tabular-nums">{inr(stat.total)}</div>
+                  <div className="text-[10px] opacity-70">
+                    {stat.count} bill{stat.count === 1 ? "" : "s"}
+                  </div>
+                </div>
+              );
+            })}
+            <div className="rounded-lg px-3 py-2 bg-stone-900 text-white ml-auto">
+              <div className="text-[10px] font-semibold uppercase tracking-wider">Total</div>
+              <div className="text-sm font-semibold tabular-nums">{inr(summary.grandTotal)}</div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-2">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                className="rounded-md border border-stone-300 bg-white px-2 py-1.5 text-sm"
+              >
+                <option value="ALL">All statuses</option>
+                {(["DRAFT", "SUBMITTED", "APPROVED", "REJECTED", "PAID"] as const).map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={contractorFilter}
+                onChange={(e) => setContractorFilter(e.target.value)}
+                className="rounded-md border border-stone-300 bg-white px-2 py-1.5 text-sm"
+              >
+                <option value="ALL">All contractors</option>
+                {contractors.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={downloadCsv}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50"
+            >
+              <Download className="w-4 h-4 text-stone-400" />
+              CSV
+            </button>
+          </div>
+
+          {filtered.length === 0 ? (
+            <p className="text-sm text-stone-500">No bills match the current filter.</p>
+          ) : (
+            <ul className="space-y-3">
+              {filtered.map((bill) => (
             <li key={bill.id} className="rounded-xl border border-stone-200 bg-white p-4">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="min-w-0">
@@ -299,8 +397,10 @@ export default function BillsManager({
                 )}
               </div>
             </li>
-          ))}
-        </ul>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </div>
   );
