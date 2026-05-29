@@ -63,8 +63,14 @@ export default function VoiceTextarea({
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<Recognition | null>(null);
+  // Keep the latest value in a ref so the async speech-recognition callback can
+  // append to the current text. Updated in an effect (after commit) rather than
+  // during render — the callback only fires well after render, so it always
+  // sees the latest committed value.
   const valueRef = useRef(value);
-  valueRef.current = value;
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   useEffect(() => {
     setSupported(getRecognitionCtor() !== null);

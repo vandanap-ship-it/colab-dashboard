@@ -5,18 +5,10 @@ import { PrismaLibSql } from "@prisma/adapter-libsql";
 type ExtendedClient = ReturnType<typeof createClient>;
 const globalForPrisma = globalThis as unknown as { prisma?: ExtendedClient };
 
-// Models that support soft-delete via deletedAt. Reads against these models
-// automatically exclude soft-deleted rows unless the caller explicitly opts in
-// by passing { includeDeleted: true } via where (we strip the flag before the
-// query runs).
-const SOFT_DELETE_MODELS = [
-  "progressEntry",
-  "issue",
-  "hindrance",
-  "concern",
-  "inspection",
-] as const;
-
+// Models that support soft-delete via deletedAt: progressEntry, issue,
+// hindrance, concern, inspection (see the per-model query hooks below). Reads
+// against them automatically exclude soft-deleted rows unless the caller passes
+// an explicit deletedAt in `where`.
 const READ_OPERATIONS = new Set([
   "findMany",
   "findFirst",

@@ -36,6 +36,9 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Lint
+        run: npm run lint
+
       - name: Set up test database
         run: |
           npx prisma db push
