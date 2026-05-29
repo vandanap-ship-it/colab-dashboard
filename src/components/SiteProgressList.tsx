@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { formatDayMonthYear as fmt } from "@/lib/dates";
 
 type Activity = {
   id: string;
@@ -26,10 +27,6 @@ function statusOf(a: Activity, today: Date): StatusKey {
   return "ONGOING";
 }
 
-function fmt(d: string | null) {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
-}
 
 export default function SiteProgressList({ projectId }: { projectId: string }) {
   const [activities, setActivities] = useState<Activity[] | null>(null);

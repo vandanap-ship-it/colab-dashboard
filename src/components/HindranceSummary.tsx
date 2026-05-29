@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import PhotoStrip from "./PhotoStrip";
+import { formatDayMonthYear as fmt } from "@/lib/dates";
 
 type Hindrance = {
   id: string;
@@ -14,10 +15,6 @@ type Hindrance = {
   wbsNode: { id: string; name: string; taskCode: string } | null;
   photos: { id: string; url: string }[];
 };
-
-function fmt(d: string) {
-  return new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
-}
 
 export default function HindranceSummary({ projectId, canResolve }: { projectId: string; canResolve: boolean }) {
   const [hindrances, setHindrances] = useState<Hindrance[] | null>(null);

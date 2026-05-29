@@ -5,17 +5,7 @@ import { getDprData } from "@/lib/dpr";
 import ReportShell, { ReportSection } from "@/components/ReportShell";
 import DprDatePicker from "@/components/DprDatePicker";
 import PhotoStrip from "@/components/PhotoStrip";
-
-function todayIso(): string {
-  const d = new Date();
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
-    .toISOString()
-    .slice(0, 10);
-}
-
-function isValidIsoDate(s: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(new Date(s).getTime());
-}
+import { todayIso, isValidIsoDate } from "@/lib/reports";
 
 function fmtDateLong(iso: string): string {
   return new Date(iso + "T00:00:00Z").toLocaleDateString(undefined, {

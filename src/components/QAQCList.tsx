@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import PhotoStrip from "./PhotoStrip";
+import { formatDayMonthYear as fmt } from "@/lib/dates";
 
 type Item = { id: string; label: string; passed: boolean; notes: string | null; orderIndex: number };
 
@@ -31,9 +32,6 @@ const STATUS_STYLES: Record<string, string> = {
   REJECTED: "bg-red-100 text-red-700",
 };
 
-function fmt(d: string) {
-  return new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
-}
 
 export default function QAQCList({ projectId, canReview }: { projectId: string; canReview: boolean }) {
   const [tab, setTab] = useState<(typeof STATUSES)[number]>("IN_REVIEW");

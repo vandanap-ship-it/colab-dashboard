@@ -1,7 +1,4 @@
-function fmt(d: Date | null): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
-}
+import { formatDayMonthYear as fmt } from "@/lib/dates";
 
 export default function TimelineBar({
   plannedStart,

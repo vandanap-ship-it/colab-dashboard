@@ -1,9 +1,5 @@
 import ProbabilityBadge from "./ProbabilityBadge";
-
-function fmt(d: Date | null): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
-}
+import { formatDayMonthYear as fmt } from "@/lib/dates";
 
 function diffDays(a: Date, b: Date): number {
   return Math.round((a.getTime() - b.getTime()) / 86400000);

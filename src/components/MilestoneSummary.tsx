@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatDayMonthYear as fmt } from "@/lib/dates";
 
 type Node = {
   id: string;
@@ -25,10 +26,6 @@ const TIME_FILTERS = [
   { key: "M6", label: "< 6 Months" },
 ] as const;
 
-function fmt(d: string | null) {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
-}
 function diffDays(a: Date, b: Date) {
   return Math.round((a.getTime() - b.getTime()) / 86400000);
 }

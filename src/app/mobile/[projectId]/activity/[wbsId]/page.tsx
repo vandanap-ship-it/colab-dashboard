@@ -2,11 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-function fmt(d: Date | null) {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
-}
+import { formatDayMonthYear as fmt } from "@/lib/dates";
 
 export default async function ActivityPage({
   params,

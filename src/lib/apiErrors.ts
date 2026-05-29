@@ -34,7 +34,8 @@ export function notFound(reason = "Not found") {
   return NextResponse.json({ error: reason }, { status: 404 });
 }
 
-export function isPrismaNotFound(e: unknown): boolean {
+// Internal helpers used only by handleApiError below.
+function isPrismaNotFound(e: unknown): boolean {
   return (
     typeof e === "object" &&
     e !== null &&
@@ -43,7 +44,7 @@ export function isPrismaNotFound(e: unknown): boolean {
   );
 }
 
-export function isPrismaUniqueViolation(e: unknown): boolean {
+function isPrismaUniqueViolation(e: unknown): boolean {
   return (
     typeof e === "object" &&
     e !== null &&
