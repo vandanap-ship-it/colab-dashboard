@@ -108,4 +108,24 @@ test.describe("Project expenses", () => {
     const res = await logExpense(page, projectId);
     expect(res.status()).toBe(403);
   });
+
+  test("UI: log an expense through the desktop form", async ({ page }) => {
+    await signIn(page, "planner");
+    const projectId = await getProjectId(page);
+
+    await page.goto(`/projects/${projectId}/expenses`);
+    await expect(page.getByRole("heading", { name: /Project Expenses/i })).toBeVisible();
+
+    await page.getByRole("button", { name: /^Log expense$/i }).click();
+    const desc = `[E2E UI] Sand ${uniqueId()}`;
+    await page.getByPlaceholder(/Cement bags/i).fill(desc);
+    await page.locator('input[type="number"]').first().fill("3200");
+    await page.getByRole("button", { name: /^Log expense$/i }).click();
+
+    // Back in the list: the new expense appears with its amount, and the summary
+    // toolbar (CSV) is present.
+    await expect(page.getByText(desc)).toBeVisible();
+    await expect(page.getByText("₹3,200").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /^CSV$/i })).toBeVisible();
+  });
 });
