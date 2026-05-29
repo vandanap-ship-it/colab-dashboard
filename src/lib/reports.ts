@@ -936,7 +936,7 @@ export async function getChecklistReport(
       title: i.title,
       status,
       rejectionReason: i.rejectionReason,
-      location: i.wbsNode ? locationFor(i.wbsNode.parentId ? i.id : i.id) : "—",
+      location: locationFor(i.wbsNodeId),
       contractorName: i.wbsNode?.contractor?.name ?? null,
       filledByName: i.filledBy?.name ?? null,
       reviewedByName: i.reviewedBy?.name ?? null,
@@ -946,19 +946,6 @@ export async function getChecklistReport(
       itemsPassed,
     };
   });
-
-  // Better location: rebuild from wbsNodeId (need node id, not item id)
-  const inspNodeIds = inspections.map((i) => i.wbsNodeId).filter(Boolean) as string[];
-  if (inspNodeIds.length > 0) {
-    const idMap = new Map(inspections.map((i) => [i.id, i.wbsNodeId]));
-    for (const r of rows) {
-      const nodeId = idMap.get(r.id);
-      if (nodeId) r.location = locationFor(nodeId);
-      else r.location = "—";
-    }
-  } else {
-    for (const r of rows) r.location = "—";
-  }
 
   const inReview = rows.filter((r) => r.status === "IN_REVIEW").length;
   const passed = rows.filter((r) => r.status === "PASSED").length;
