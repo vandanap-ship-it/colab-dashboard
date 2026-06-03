@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { formatDayMonthYear as fmt } from "@/lib/dates";
 
 type Node = {
@@ -19,21 +20,43 @@ type Node = {
   path: string[];
 };
 
-const TIME_FILTERS = [
-  { key: "ALL", label: "All Milestones" },
-  { key: "MONTH", label: "This Month" },
-  { key: "M3", label: "< 3 Months" },
-  { key: "M6", label: "< 6 Months" },
-] as const;
+type BucketKey = "OVERDUE" | "THIS_WEEK" | "THIS_MONTH" | "LATER";
+
+const BUCKET_META: Record<BucketKey, { label: string; dot: string; defaultOpen: boolean }> = {
+  OVERDUE: { label: "Overdue", dot: "bg-red-500", defaultOpen: true },
+  THIS_WEEK: { label: "Due this week", dot: "bg-amber-500", defaultOpen: true },
+  THIS_MONTH: { label: "Due this month", dot: "bg-emerald-500", defaultOpen: false },
+  LATER: { label: "Later", dot: "bg-stone-400", defaultOpen: false },
+};
+
+const BUCKET_ORDER: BucketKey[] = ["OVERDUE", "THIS_WEEK", "THIS_MONTH", "LATER"];
 
 function diffDays(a: Date, b: Date) {
   return Math.round((a.getTime() - b.getTime()) / 86400000);
 }
 
+/** Bucket a milestone by days until its baseline finish (today as reference). */
+function bucketFor(daysUntil: number | null, completed: boolean): BucketKey | null {
+  if (daysUntil === null || completed) return null; // completed and undated → hidden
+  if (daysUntil < 0) return "OVERDUE";
+  if (daysUntil <= 7) return "THIS_WEEK";
+  if (daysUntil <= 30) return "THIS_MONTH";
+  return "LATER";
+}
+
+type EnrichedMilestone = Node & {
+  daysUntil: number | null;
+  bucket: BucketKey | null;
+  completed: boolean;
+};
+
 export default function MilestoneSummary({ projectId }: { projectId: string }) {
   const [nodes, setNodes] = useState<Node[] | null>(null);
   const [phaseFilter, setPhaseFilter] = useState<string>("ALL");
-  const [timeFilter, setTimeFilter] = useState<(typeof TIME_FILTERS)[number]["key"]>("ALL");
+  const [search, setSearch] = useState("");
+  const [collapsed, setCollapsed] = useState<Set<BucketKey>>(
+    () => new Set(BUCKET_ORDER.filter((k) => !BUCKET_META[k].defaultOpen)),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -46,8 +69,6 @@ export default function MilestoneSummary({ projectId }: { projectId: string }) {
         if (!cancelled) setNodes(d.nodes ?? []);
       })
       .catch(() => {
-        // Leave nodes null → component shows its "Loading…" / empty fallback
-        // rather than crashing. Milestones are non-critical chrome.
         if (!cancelled) setNodes([]);
       });
     return () => {
@@ -55,133 +76,217 @@ export default function MilestoneSummary({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
-  // "Phases" = top-level groupings beneath the project root. We use level 2 if available, else level 3.
-  // The "milestones" we display = level 2 and 3 branches (groupings, not leaves).
+  /** Top-level phase chips (the labels users navigate by). */
   const phases = useMemo(() => {
     if (!nodes) return [] as string[];
     const set = new Set<string>();
-    for (const n of nodes) {
-      if (n.level === 2 || n.level === 3) set.add(n.name);
-    }
+    for (const n of nodes) if (n.level === 2 || n.level === 3) set.add(n.name);
     return Array.from(set);
   }, [nodes]);
 
-  const milestones = useMemo(() => {
+  /** All non-leaf level-2-or-3 nodes, enriched with bucket + days-until. */
+  const enriched: EnrichedMilestone[] = useMemo(() => {
     if (!nodes) return [];
-    return nodes.filter((n) => !n.isLeaf && (n.level === 2 || n.level === 3));
+    const today = new Date();
+    const out: EnrichedMilestone[] = [];
+    for (const n of nodes) {
+      if (n.isLeaf || (n.level !== 2 && n.level !== 3)) continue;
+      const due = n.baselineFinish ? new Date(n.baselineFinish) : null;
+      const daysUntil = due ? diffDays(due, today) : null;
+      const completed = n.percentComplete >= 100;
+      out.push({ ...n, daysUntil, completed, bucket: bucketFor(daysUntil, completed) });
+    }
+    return out;
   }, [nodes]);
 
-  const filtered = useMemo(() => {
-    const today = new Date();
-    return milestones.filter((m) => {
-      if (phaseFilter !== "ALL") {
-        // Match if any path segment equals the phase filter
-        if (!m.path.includes(phaseFilter)) return false;
-      }
-      if (timeFilter === "ALL") return true;
-      const due = m.baselineFinish ? new Date(m.baselineFinish) : null;
-      if (!due) return false;
-      const days = diffDays(due, today);
-      if (timeFilter === "MONTH") return days <= 30 && days >= -30;
-      if (timeFilter === "M3") return days <= 90;
-      if (timeFilter === "M6") return days <= 180;
+  /** Apply phase + search filters and group by bucket. */
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return enriched.filter((m) => {
+      if (m.bucket === null) return false;
+      if (phaseFilter !== "ALL" && !m.path.includes(phaseFilter)) return false;
+      if (q && !m.name.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [milestones, phaseFilter, timeFilter]);
+  }, [enriched, phaseFilter, search]);
+
+  const byBucket = useMemo(() => {
+    const map: Record<BucketKey, EnrichedMilestone[]> = {
+      OVERDUE: [],
+      THIS_WEEK: [],
+      THIS_MONTH: [],
+      LATER: [],
+    };
+    for (const m of visible) if (m.bucket) map[m.bucket].push(m);
+    // Sort each bucket by date ascending (most urgent first within the bucket).
+    for (const k of BUCKET_ORDER) {
+      map[k].sort((a, b) => (a.daysUntil ?? 9e9) - (b.daysUntil ?? 9e9));
+    }
+    return map;
+  }, [visible]);
+
+  function toggle(k: BucketKey) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  }
 
   return (
     <section className="rounded-xl border border-stone-200 bg-white p-6">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-stone-700 uppercase tracking-wider">Milestone Summary</h2>
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <h2 className="text-sm font-semibold text-stone-700 uppercase tracking-wider">
+          Milestone Summary
+        </h2>
+        {/* Top counter strip — what the eye should land on first. */}
+        {nodes !== null && (
+          <div className="flex items-center gap-3 text-xs">
+            <Counter dot={BUCKET_META.OVERDUE.dot} label="Overdue" count={byBucket.OVERDUE.length} />
+            <Counter dot={BUCKET_META.THIS_WEEK.dot} label="This week" count={byBucket.THIS_WEEK.length} />
+            <Counter dot={BUCKET_META.THIS_MONTH.dot} label="This month" count={byBucket.THIS_MONTH.length} />
+          </div>
+        )}
       </div>
 
-      {nodes !== null && phases.length > 0 && (
+      {nodes !== null && enriched.length > 0 && (
         <>
-          <div className="flex flex-wrap gap-2 mb-2">
-            <button
-              onClick={() => setPhaseFilter("ALL")}
-              className={`text-xs font-medium px-3 py-1.5 rounded-full ${
-                phaseFilter === "ALL" ? "bg-amber-400 text-stone-900" : "bg-stone-100 text-stone-600"
-              }`}
-            >
-              All
-            </button>
-            {phases.map((p) => (
-              <button
-                key={p}
-                onClick={() => setPhaseFilter(p)}
-                className={`text-xs font-medium px-3 py-1.5 rounded-full ${
-                  phaseFilter === p ? "bg-stone-900 text-white" : "bg-stone-100 text-stone-600"
-                }`}
-              >
-                {p}
-              </button>
-            ))}
+          <div className="relative mb-2">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search milestones…"
+              className="w-full pl-7 pr-3 py-1.5 rounded-md border border-stone-200 bg-stone-50 text-sm placeholder:text-stone-400 focus:outline-none focus:border-stone-400 focus:bg-white"
+            />
           </div>
-          <div className="flex flex-wrap gap-2 mb-3">
-            {TIME_FILTERS.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setTimeFilter(t.key)}
-                className={`text-xs font-medium px-3 py-1.5 rounded-full ${
-                  timeFilter === t.key ? "bg-stone-900 text-white" : "bg-stone-100 text-stone-600"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+
+          {phases.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              <PhaseChip active={phaseFilter === "ALL"} onClick={() => setPhaseFilter("ALL")}>
+                All
+              </PhaseChip>
+              {phases.map((p) => (
+                <PhaseChip key={p} active={phaseFilter === p} onClick={() => setPhaseFilter(p)}>
+                  {p}
+                </PhaseChip>
+              ))}
+            </div>
+          )}
         </>
       )}
 
       {nodes === null ? (
         <p className="text-sm text-stone-500">Loading…</p>
-      ) : filtered.length === 0 ? (
-        <p className="text-sm text-stone-500">No milestones in this filter.</p>
+      ) : visible.length === 0 ? (
+        <p className="text-sm text-stone-500">
+          {enriched.length === 0
+            ? "No milestones on this project yet."
+            : "Nothing matches the current search or phase."}
+        </p>
       ) : (
-        <div className="overflow-x-auto -mx-2">
-          <table className="w-full text-xs">
-            <thead className="text-stone-500 text-left">
-              <tr>
-                <th className="px-2 py-2 font-medium">Milestone</th>
-                <th className="px-2 py-2 font-medium">Planned</th>
-                <th className="px-2 py-2 font-medium">Actual</th>
-                <th className="px-2 py-2 font-medium">Projected</th>
-                <th className="px-2 py-2 font-medium text-right">Delay</th>
-                <th className="px-2 py-2 font-medium text-right">Progress</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((m) => {
-                const baseline = m.baselineFinish ? new Date(m.baselineFinish) : null;
-                const projected = m.projectedFinish ? new Date(m.projectedFinish) : (m.actualFinish ? new Date(m.actualFinish) : null);
-                const delay = baseline && projected ? diffDays(projected, baseline) : null;
-                return (
-                  <tr key={m.id} className="border-t border-stone-100">
-                    <td className="px-2 py-2">
-                      <div className="font-medium text-stone-900">{m.name}</div>
-                      <div className="text-[10px] text-stone-500">{m.path.slice(0, -1).join(" / ")}</div>
-                    </td>
-                    <td className="px-2 py-2 text-stone-600">{fmt(m.baselineFinish)}</td>
-                    <td className="px-2 py-2 text-stone-600">{fmt(m.actualFinish)}</td>
-                    <td className="px-2 py-2 text-stone-600">{fmt(m.projectedFinish)}</td>
-                    <td className="px-2 py-2 text-right">
-                      {delay == null ? "—" : (
-                        <span className={delay > 0 ? "text-red-600 font-semibold" : "text-emerald-600 font-semibold"}>
-                          {delay > 0 ? `+${delay}d` : `${delay}d`}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-2 py-2 text-right">
-                      <span className="text-stone-900 font-semibold">{Math.round(m.percentComplete)}%</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="space-y-2">
+          {BUCKET_ORDER.map((k) => {
+            const rows = byBucket[k];
+            if (rows.length === 0) return null;
+            const isCollapsed = collapsed.has(k);
+            const Chevron = isCollapsed ? ChevronRight : ChevronDown;
+            return (
+              <div key={k} className="rounded-lg border border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => toggle(k)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-stone-50 transition-colors"
+                  aria-expanded={!isCollapsed}
+                >
+                  <Chevron className="w-3.5 h-3.5 text-stone-400" />
+                  <span className={`w-2 h-2 rounded-full ${BUCKET_META[k].dot}`} aria-hidden />
+                  <span className="text-sm font-medium text-stone-800">
+                    {BUCKET_META[k].label}
+                  </span>
+                  <span className="text-xs text-stone-500">({rows.length})</span>
+                </button>
+                {!isCollapsed && (
+                  <ul className="divide-y divide-stone-100">
+                    {rows.map((m) => (
+                      <MilestoneRow key={m.id} m={m} />
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </section>
+  );
+}
+
+function Counter({ dot, label, count }: { dot: string; label: string; count: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`w-2 h-2 rounded-full ${dot}`} aria-hidden />
+      <span className="font-semibold text-stone-900 tabular-nums">{count}</span>
+      <span className="text-stone-500">{label}</span>
+    </span>
+  );
+}
+
+function PhaseChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors ${
+        active
+          ? "bg-stone-900 text-white"
+          : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function MilestoneRow({ m }: { m: EnrichedMilestone }) {
+  const pct = Math.round(m.percentComplete);
+  const days = m.daysUntil ?? 0;
+  const daysText =
+    days < 0 ? `${Math.abs(days)}d late` : days === 0 ? "today" : `in ${days}d`;
+  const daysClass =
+    m.bucket === "OVERDUE"
+      ? "text-red-600 bg-red-50"
+      : m.bucket === "THIS_WEEK"
+        ? "text-amber-700 bg-amber-50"
+        : "text-stone-600 bg-stone-100";
+
+  return (
+    <li className="px-3 py-2 flex items-baseline justify-between gap-3 flex-wrap">
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-stone-900 truncate">{m.name}</div>
+        {m.path.length > 1 && (
+          <div className="text-[10px] text-stone-400 truncate">
+            {m.path.slice(0, -1).join(" / ")}
+          </div>
+        )}
+      </div>
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-stone-500 tabular-nums">{fmt(m.baselineFinish)}</span>
+        <span className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${daysClass}`}>
+          {daysText}
+        </span>
+        <span className="text-stone-900 font-semibold tabular-nums w-9 text-right">{pct}%</span>
+      </div>
+    </li>
   );
 }
