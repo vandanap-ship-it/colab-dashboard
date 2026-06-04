@@ -1,6 +1,9 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateTable
 CREATE TABLE "User" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "username" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "passwordHash" TEXT NOT NULL,
@@ -8,170 +11,172 @@ CREATE TABLE "User" (
     "designation" TEXT,
     "modules" TEXT,
     "active" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Project" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "code" TEXT,
     "status" TEXT NOT NULL DEFAULT 'PLANNING',
-    "startDate" DATETIME,
-    "endDate" DATETIME,
-    "reraEndDate" DATETIME,
-    "actualStartDate" DATETIME,
-    "projectedEndDate" DATETIME,
+    "startDate" TIMESTAMP(3),
+    "endDate" TIMESTAMP(3),
+    "reraEndDate" TIMESTAMP(3),
+    "actualStartDate" TIMESTAMP(3),
+    "projectedEndDate" TIMESTAMP(3),
     "address" TEXT,
     "tagline" TEXT,
     "logoUrl" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     "createdById" TEXT NOT NULL,
-    CONSTRAINT "Project_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+
+    CONSTRAINT "Project_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Contractor" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "category" TEXT NOT NULL,
     "active" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "Contractor_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Contractor_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "WBSNode" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "parentId" TEXT,
     "taskCode" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "level" INTEGER NOT NULL,
     "orderIndex" INTEGER NOT NULL,
-    "baselineStart" DATETIME,
-    "baselineFinish" DATETIME,
-    "actualStart" DATETIME,
-    "actualFinish" DATETIME,
-    "projectedFinish" DATETIME,
-    "percentComplete" REAL NOT NULL DEFAULT 0,
+    "baselineStart" TIMESTAMP(3),
+    "baselineFinish" TIMESTAMP(3),
+    "actualStart" TIMESTAMP(3),
+    "actualFinish" TIMESTAMP(3),
+    "projectedFinish" TIMESTAMP(3),
+    "percentComplete" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "category" TEXT,
     "predecessorsRaw" TEXT,
-    "totalQuantity" REAL,
+    "totalQuantity" DOUBLE PRECISION,
     "unit" TEXT,
     "contractorId" TEXT,
     "delayReason" TEXT,
     "progressEntered" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "WBSNode_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "WBSNode_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "WBSNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "WBSNode_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "WBSNode_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ProgressEntry" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "wbsNodeId" TEXT NOT NULL,
-    "date" DATETIME NOT NULL,
+    "date" TIMESTAMP(3) NOT NULL,
     "type" TEXT NOT NULL DEFAULT 'LABOUR_SUPPLY',
-    "achievedQuantity" REAL NOT NULL DEFAULT 0,
-    "cumulativeQuantity" REAL NOT NULL DEFAULT 0,
+    "achievedQuantity" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "cumulativeQuantity" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "contractorId" TEXT,
     "notes" TEXT,
     "createdById" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    "deletedAt" DATETIME,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
     "idempotencyKey" TEXT,
-    CONSTRAINT "ProgressEntry_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "ProgressEntry_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "ProgressEntry_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "ProgressEntry_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+
+    CONSTRAINT "ProgressEntry_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ProgressLabour" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "progressEntryId" TEXT NOT NULL,
     "category" TEXT NOT NULL,
     "count" INTEGER NOT NULL,
-    CONSTRAINT "ProgressLabour_progressEntryId_fkey" FOREIGN KEY ("progressEntryId") REFERENCES "ProgressEntry" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+
+    CONSTRAINT "ProgressLabour_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ProgressPhoto" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "progressEntryId" TEXT NOT NULL,
     "url" TEXT NOT NULL,
-    "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "ProgressPhoto_progressEntryId_fkey" FOREIGN KEY ("progressEntryId") REFERENCES "ProgressEntry" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ProgressPhoto_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Hindrance" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "wbsNodeId" TEXT,
     "description" TEXT NOT NULL,
-    "startDate" DATETIME NOT NULL,
-    "resolvedDate" DATETIME,
+    "startDate" TIMESTAMP(3) NOT NULL,
+    "resolvedDate" TIMESTAMP(3),
     "daysImpact" INTEGER,
     "status" TEXT NOT NULL DEFAULT 'OPEN',
     "createdById" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    "deletedAt" DATETIME,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
     "idempotencyKey" TEXT,
-    CONSTRAINT "Hindrance_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "Hindrance_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "Hindrance_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+
+    CONSTRAINT "Hindrance_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "HindrancePhoto" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "hindranceId" TEXT NOT NULL,
     "url" TEXT NOT NULL,
-    "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "HindrancePhoto_hindranceId_fkey" FOREIGN KEY ("hindranceId") REFERENCES "Hindrance" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "HindrancePhoto_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Concern" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "wbsNodeId" TEXT,
     "description" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "assignedToId" TEXT,
     "raisedById" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    "deletedAt" DATETIME,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
     "idempotencyKey" TEXT,
-    CONSTRAINT "Concern_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "Concern_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "Concern_raisedById_fkey" FOREIGN KEY ("raisedById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "Concern_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+
+    CONSTRAINT "Concern_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ConcernPhoto" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "concernId" TEXT NOT NULL,
     "url" TEXT NOT NULL,
-    "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "ConcernPhoto_concernId_fkey" FOREIGN KEY ("concernId") REFERENCES "Concern" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ConcernPhoto_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Issue" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "wbsNodeId" TEXT,
     "description" TEXT NOT NULL,
@@ -181,28 +186,27 @@ CREATE TABLE "Issue" (
     "createdById" TEXT NOT NULL,
     "assignedToId" TEXT,
     "module" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    "deletedAt" DATETIME,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
     "idempotencyKey" TEXT,
-    CONSTRAINT "Issue_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "Issue_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "Issue_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "Issue_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+
+    CONSTRAINT "Issue_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "IssuePhoto" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "issueId" TEXT NOT NULL,
     "url" TEXT NOT NULL,
-    "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "IssuePhoto_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "Issue" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "IssuePhoto_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Inspection" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "wbsNodeId" TEXT,
     "title" TEXT NOT NULL,
@@ -210,76 +214,80 @@ CREATE TABLE "Inspection" (
     "rejectionReason" TEXT,
     "filledById" TEXT NOT NULL,
     "reviewedById" TEXT,
-    "reviewedAt" DATETIME,
+    "reviewedAt" TIMESTAMP(3),
     "module" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    "deletedAt" DATETIME,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
     "idempotencyKey" TEXT,
-    CONSTRAINT "Inspection_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "Inspection_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "Inspection_filledById_fkey" FOREIGN KEY ("filledById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "Inspection_reviewedById_fkey" FOREIGN KEY ("reviewedById") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+
+    CONSTRAINT "Inspection_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "InspectionItem" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "inspectionId" TEXT NOT NULL,
     "label" TEXT NOT NULL,
     "passed" BOOLEAN NOT NULL,
     "notes" TEXT,
     "orderIndex" INTEGER NOT NULL DEFAULT 0,
-    CONSTRAINT "InspectionItem_inspectionId_fkey" FOREIGN KEY ("inspectionId") REFERENCES "Inspection" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+
+    CONSTRAINT "InspectionItem_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "InspectionPhoto" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "inspectionId" TEXT NOT NULL,
     "url" TEXT NOT NULL,
-    "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "InspectionPhoto_inspectionId_fkey" FOREIGN KEY ("inspectionId") REFERENCES "Inspection" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "InspectionPhoto_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ProjectDrawing" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "label" TEXT NOT NULL,
     "kind" TEXT NOT NULL DEFAULT 'LAYOUT',
     "imageUrl" TEXT NOT NULL,
     "isDefault" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "ProjectDrawing_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ProjectDrawing_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "InspectionTemplate" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "activity" TEXT,
     "module" TEXT,
     "orderIndex" INTEGER NOT NULL DEFAULT 0,
     "active" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "InspectionTemplate_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "InspectionTemplateItem" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "templateId" TEXT NOT NULL,
     "seq" INTEGER NOT NULL,
     "section" TEXT,
     "description" TEXT NOT NULL,
-    CONSTRAINT "InspectionTemplateItem_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "InspectionTemplate" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+
+    CONSTRAINT "InspectionTemplateItem_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "AuditLog" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "projectId" TEXT,
     "userId" TEXT NOT NULL,
     "action" TEXT NOT NULL,
@@ -287,87 +295,87 @@ CREATE TABLE "AuditLog" (
     "entityId" TEXT NOT NULL,
     "summary" TEXT,
     "changes" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AuditLog_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "SubContractorBill" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "contractorId" TEXT NOT NULL,
     "title" TEXT NOT NULL,
-    "periodStart" DATETIME,
-    "periodEnd" DATETIME,
+    "periodStart" TIMESTAMP(3),
+    "periodEnd" TIMESTAMP(3),
     "status" TEXT NOT NULL DEFAULT 'DRAFT',
     "notes" TEXT,
-    "taxPercent" REAL,
+    "taxPercent" DOUBLE PRECISION,
     "preparedById" TEXT NOT NULL,
-    "submittedAt" DATETIME,
+    "submittedAt" TIMESTAMP(3),
     "approvedById" TEXT,
-    "approvedAt" DATETIME,
+    "approvedAt" TIMESTAMP(3),
     "rejectionReason" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    "deletedAt" DATETIME,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
     "idempotencyKey" TEXT,
-    CONSTRAINT "SubContractorBill_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "SubContractorBill_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "SubContractorBill_preparedById_fkey" FOREIGN KEY ("preparedById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "SubContractorBill_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+
+    CONSTRAINT "SubContractorBill_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "SubContractorBillLine" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "billId" TEXT NOT NULL,
     "type" TEXT NOT NULL,
     "description" TEXT NOT NULL,
     "wbsNodeId" TEXT,
-    "quantity" REAL,
+    "quantity" DOUBLE PRECISION,
     "unit" TEXT,
-    "rate" REAL,
-    "amount" REAL NOT NULL DEFAULT 0,
+    "rate" DOUBLE PRECISION,
+    "amount" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "orderIndex" INTEGER NOT NULL DEFAULT 0,
-    CONSTRAINT "SubContractorBillLine_billId_fkey" FOREIGN KEY ("billId") REFERENCES "SubContractorBill" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "SubContractorBillLine_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+
+    CONSTRAINT "SubContractorBillLine_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Expense" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "category" TEXT NOT NULL,
     "description" TEXT NOT NULL,
-    "amount" REAL NOT NULL,
-    "date" DATETIME NOT NULL,
+    "amount" DOUBLE PRECISION NOT NULL,
+    "date" TIMESTAMP(3) NOT NULL,
     "paidTo" TEXT,
     "status" TEXT NOT NULL DEFAULT 'SUBMITTED',
     "rejectionReason" TEXT,
     "notes" TEXT,
     "loggedById" TEXT NOT NULL,
     "approvedById" TEXT,
-    "approvedAt" DATETIME,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    "deletedAt" DATETIME,
+    "approvedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
     "idempotencyKey" TEXT,
-    CONSTRAINT "Expense_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "Expense_loggedById_fkey" FOREIGN KEY ("loggedById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "Expense_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+
+    CONSTRAINT "Expense_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ExpensePhoto" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "expenseId" TEXT NOT NULL,
     "url" TEXT NOT NULL,
-    "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "ExpensePhoto_expenseId_fkey" FOREIGN KEY ("expenseId") REFERENCES "Expense" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ExpensePhoto_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "DesignDrawing" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "drawingNumber" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -375,27 +383,26 @@ CREATE TABLE "DesignDrawing" (
     "notes" TEXT,
     "currentRevisionId" TEXT,
     "createdById" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    "deletedAt" DATETIME,
-    CONSTRAINT "DesignDrawing_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "DesignDrawing_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "DesignDrawing_currentRevisionId_fkey" FOREIGN KEY ("currentRevisionId") REFERENCES "DesignDrawingRevision" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
+
+    CONSTRAINT "DesignDrawing_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "DesignDrawingRevision" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "drawingId" TEXT NOT NULL,
     "revisionLabel" TEXT NOT NULL,
     "fileUrl" TEXT NOT NULL,
     "fileName" TEXT NOT NULL,
-    "issuedDate" DATETIME NOT NULL,
+    "issuedDate" TIMESTAMP(3) NOT NULL,
     "notes" TEXT,
     "uploadedById" TEXT NOT NULL,
-    "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "DesignDrawingRevision_drawingId_fkey" FOREIGN KEY ("drawingId") REFERENCES "DesignDrawing" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "DesignDrawingRevision_uploadedById_fkey" FOREIGN KEY ("uploadedById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "DesignDrawingRevision_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -532,4 +539,148 @@ CREATE UNIQUE INDEX "DesignDrawing_projectId_drawingNumber_key" ON "DesignDrawin
 
 -- CreateIndex
 CREATE INDEX "DesignDrawingRevision_drawingId_idx" ON "DesignDrawingRevision"("drawingId");
+
+-- AddForeignKey
+ALTER TABLE "Project" ADD CONSTRAINT "Project_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Contractor" ADD CONSTRAINT "Contractor_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WBSNode" ADD CONSTRAINT "WBSNode_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WBSNode" ADD CONSTRAINT "WBSNode_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "WBSNode"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WBSNode" ADD CONSTRAINT "WBSNode_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProgressEntry" ADD CONSTRAINT "ProgressEntry_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProgressEntry" ADD CONSTRAINT "ProgressEntry_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProgressEntry" ADD CONSTRAINT "ProgressEntry_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProgressEntry" ADD CONSTRAINT "ProgressEntry_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProgressLabour" ADD CONSTRAINT "ProgressLabour_progressEntryId_fkey" FOREIGN KEY ("progressEntryId") REFERENCES "ProgressEntry"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProgressPhoto" ADD CONSTRAINT "ProgressPhoto_progressEntryId_fkey" FOREIGN KEY ("progressEntryId") REFERENCES "ProgressEntry"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Hindrance" ADD CONSTRAINT "Hindrance_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Hindrance" ADD CONSTRAINT "Hindrance_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Hindrance" ADD CONSTRAINT "Hindrance_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "HindrancePhoto" ADD CONSTRAINT "HindrancePhoto_hindranceId_fkey" FOREIGN KEY ("hindranceId") REFERENCES "Hindrance"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Concern" ADD CONSTRAINT "Concern_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Concern" ADD CONSTRAINT "Concern_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Concern" ADD CONSTRAINT "Concern_raisedById_fkey" FOREIGN KEY ("raisedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Concern" ADD CONSTRAINT "Concern_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ConcernPhoto" ADD CONSTRAINT "ConcernPhoto_concernId_fkey" FOREIGN KEY ("concernId") REFERENCES "Concern"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Issue" ADD CONSTRAINT "Issue_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Issue" ADD CONSTRAINT "Issue_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Issue" ADD CONSTRAINT "Issue_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Issue" ADD CONSTRAINT "Issue_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "IssuePhoto" ADD CONSTRAINT "IssuePhoto_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "Issue"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Inspection" ADD CONSTRAINT "Inspection_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Inspection" ADD CONSTRAINT "Inspection_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Inspection" ADD CONSTRAINT "Inspection_filledById_fkey" FOREIGN KEY ("filledById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Inspection" ADD CONSTRAINT "Inspection_reviewedById_fkey" FOREIGN KEY ("reviewedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "InspectionItem" ADD CONSTRAINT "InspectionItem_inspectionId_fkey" FOREIGN KEY ("inspectionId") REFERENCES "Inspection"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "InspectionPhoto" ADD CONSTRAINT "InspectionPhoto_inspectionId_fkey" FOREIGN KEY ("inspectionId") REFERENCES "Inspection"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProjectDrawing" ADD CONSTRAINT "ProjectDrawing_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "InspectionTemplateItem" ADD CONSTRAINT "InspectionTemplateItem_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "InspectionTemplate"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SubContractorBill" ADD CONSTRAINT "SubContractorBill_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SubContractorBill" ADD CONSTRAINT "SubContractorBill_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SubContractorBill" ADD CONSTRAINT "SubContractorBill_preparedById_fkey" FOREIGN KEY ("preparedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SubContractorBill" ADD CONSTRAINT "SubContractorBill_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SubContractorBillLine" ADD CONSTRAINT "SubContractorBillLine_billId_fkey" FOREIGN KEY ("billId") REFERENCES "SubContractorBill"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SubContractorBillLine" ADD CONSTRAINT "SubContractorBillLine_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Expense" ADD CONSTRAINT "Expense_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Expense" ADD CONSTRAINT "Expense_loggedById_fkey" FOREIGN KEY ("loggedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Expense" ADD CONSTRAINT "Expense_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ExpensePhoto" ADD CONSTRAINT "ExpensePhoto_expenseId_fkey" FOREIGN KEY ("expenseId") REFERENCES "Expense"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DesignDrawing" ADD CONSTRAINT "DesignDrawing_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DesignDrawing" ADD CONSTRAINT "DesignDrawing_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DesignDrawing" ADD CONSTRAINT "DesignDrawing_currentRevisionId_fkey" FOREIGN KEY ("currentRevisionId") REFERENCES "DesignDrawingRevision"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DesignDrawingRevision" ADD CONSTRAINT "DesignDrawingRevision_drawingId_fkey" FOREIGN KEY ("drawingId") REFERENCES "DesignDrawing"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DesignDrawingRevision" ADD CONSTRAINT "DesignDrawingRevision_uploadedById_fkey" FOREIGN KEY ("uploadedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 

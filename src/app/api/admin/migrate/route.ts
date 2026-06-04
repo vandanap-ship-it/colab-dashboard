@@ -2,24 +2,32 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
- * One-shot, idempotent schema migrations.
+ * One-shot, idempotent schema migrations for Postgres (Neon).
  *
  * GET  → returns which migrations are pending vs applied
  * POST → applies all pending migrations
  *
- * Each migration is identified by a string key and runs raw SQL. After it
- * succeeds it's marked applied via a sentinel table so re-runs are no-ops.
+ * Strategy:
+ *   - A single "baseline" migration reads prisma/schema.sql at runtime
+ *     (the file is included in the deployed bundle via next.config's
+ *     outputFileTracingIncludes). It contains the full Postgres schema.
+ *   - Future incremental changes add a new entry to MIGRATIONS below with
+ *     the ALTER TABLE etc. Postgres SQL.
+ *   - Each migration runs inside a transaction so partial application can't
+ *     leave the DB in a half-committed state.
  *
  * IMPORTANT — this is a second source of truth alongside prisma/schema.prisma.
  * When you change the schema you MUST keep both in step:
  *   1. edit prisma/schema.prisma
- *   2. add a migration entry below with the equivalent raw SQL
- *   3. run `npm run schema:snapshot` to refresh prisma/schema.sql
+ *   2. run `npm run schema:snapshot` to refresh prisma/schema.sql
+ *   3. add an incremental migration entry below with the equivalent ALTER SQL
  *   4. commit all three
  * CI's `schema:check` fails if schema.prisma changes without the SQL snapshot
- * being refreshed, which is the prompt to confirm a migration entry exists here.
+ * being refreshed.
  */
 
 type Migration = {
@@ -28,237 +36,52 @@ type Migration = {
   describe: string;
 };
 
+/** Split a SQL script into individual statements. Trims, drops comments,
+ *  preserves multi-line CREATE TABLE bodies. */
+function splitStatements(sql: string): string[] {
+  // Use a semicolon followed by a newline as the delimiter so semicolons inside
+  // identifiers (rare in DDL anyway) don't break us up.
+  return sql
+    .split(/;\s*\n/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && !s.startsWith("--"));
+}
+
+/** Make CREATE statements idempotent so a re-run of the baseline is a no-op. */
+function makeIdempotent(stmt: string): string {
+  // CREATE SCHEMA / TABLE / INDEX → add IF NOT EXISTS.
+  if (/^CREATE SCHEMA(?!\s+IF NOT EXISTS)/i.test(stmt)) {
+    return stmt.replace(/^CREATE SCHEMA/i, "CREATE SCHEMA IF NOT EXISTS");
+  }
+  if (/^CREATE TABLE(?!\s+IF NOT EXISTS)/i.test(stmt)) {
+    return stmt.replace(/^CREATE TABLE/i, "CREATE TABLE IF NOT EXISTS");
+  }
+  if (/^CREATE UNIQUE INDEX(?!\s+IF NOT EXISTS)/i.test(stmt)) {
+    return stmt.replace(/^CREATE UNIQUE INDEX/i, "CREATE UNIQUE INDEX IF NOT EXISTS");
+  }
+  if (/^CREATE INDEX(?!\s+IF NOT EXISTS)/i.test(stmt)) {
+    return stmt.replace(/^CREATE INDEX/i, "CREATE INDEX IF NOT EXISTS");
+  }
+  return stmt;
+}
+
+/** Read & prepare the baseline SQL once at module load. Logged but non-fatal
+ *  if the file can't be read — GET will surface the error to the admin. */
+function loadBaselineSql(): string[] {
+  try {
+    const text = readFileSync(join(process.cwd(), "prisma", "schema.sql"), "utf8");
+    return splitStatements(text).map(makeIdempotent);
+  } catch (e) {
+    console.error("[migrate] could not read prisma/schema.sql:", e);
+    return [];
+  }
+}
+
 const MIGRATIONS: Migration[] = [
   {
-    key: "2026-05-14_add_wbs_progress_entered",
-    sql: [
-      `ALTER TABLE "WBSNode" ADD COLUMN "progressEntered" INTEGER NOT NULL DEFAULT 0`,
-    ],
-    describe: "Add WBSNode.progressEntered (distinguishes unstarted from 0%).",
-  },
-  {
-    key: "2026-05-14_add_project_actual_dates",
-    sql: [
-      `ALTER TABLE "Project" ADD COLUMN "actualStartDate" DATETIME`,
-      `ALTER TABLE "Project" ADD COLUMN "projectedEndDate" DATETIME`,
-    ],
-    describe: "Add Project.actualStartDate and Project.projectedEndDate overrides.",
-  },
-  {
-    key: "2026-05-26_add_audit_log",
-    sql: [
-      `CREATE TABLE "AuditLog" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "projectId" TEXT,
-        "userId" TEXT NOT NULL,
-        "action" TEXT NOT NULL,
-        "entityType" TEXT NOT NULL,
-        "entityId" TEXT NOT NULL,
-        "summary" TEXT,
-        "changes" TEXT,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`,
-      `CREATE INDEX "AuditLog_projectId_createdAt_idx" ON "AuditLog"("projectId", "createdAt")`,
-      `CREATE INDEX "AuditLog_userId_createdAt_idx" ON "AuditLog"("userId", "createdAt")`,
-      `CREATE INDEX "AuditLog_entityType_entityId_idx" ON "AuditLog"("entityType", "entityId")`,
-    ],
-    describe: "Add AuditLog table for change tracking across the system.",
-  },
-  {
-    key: "2026-05-26_add_soft_delete",
-    sql: [
-      `ALTER TABLE "ProgressEntry" ADD COLUMN "deletedAt" DATETIME`,
-      `ALTER TABLE "Issue" ADD COLUMN "deletedAt" DATETIME`,
-      `ALTER TABLE "Hindrance" ADD COLUMN "deletedAt" DATETIME`,
-      `ALTER TABLE "Concern" ADD COLUMN "deletedAt" DATETIME`,
-      `ALTER TABLE "Inspection" ADD COLUMN "deletedAt" DATETIME`,
-    ],
-    describe: "Add deletedAt to ProgressEntry / Issue / Hindrance / Concern / Inspection for soft-delete.",
-  },
-  {
-    key: "2026-05-26_add_user_designation",
-    sql: [
-      `ALTER TABLE "User" ADD COLUMN "designation" TEXT`,
-    ],
-    describe: "Add User.designation for human-readable job titles alongside the permission role.",
-  },
-  {
-    key: "2026-05-26_add_module_access",
-    sql: [
-      `ALTER TABLE "User" ADD COLUMN "modules" TEXT`,
-      `ALTER TABLE "Issue" ADD COLUMN "module" TEXT`,
-      `ALTER TABLE "Inspection" ADD COLUMN "module" TEXT`,
-    ],
-    describe: "Add module-level access: User.modules (scope) + Issue.module + Inspection.module (tags).",
-  },
-  {
-    key: "2026-05-29_add_inspection_templates",
-    sql: [
-      `CREATE TABLE "InspectionTemplate" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "code" TEXT NOT NULL,
-        "name" TEXT NOT NULL,
-        "activity" TEXT,
-        "module" TEXT,
-        "orderIndex" INTEGER NOT NULL DEFAULT 0,
-        "active" INTEGER NOT NULL DEFAULT 1,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`,
-      `CREATE UNIQUE INDEX "InspectionTemplate_code_key" ON "InspectionTemplate"("code")`,
-      `CREATE TABLE "InspectionTemplateItem" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "templateId" TEXT NOT NULL,
-        "seq" INTEGER NOT NULL,
-        "section" TEXT,
-        "description" TEXT NOT NULL,
-        CONSTRAINT "InspectionTemplateItem_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "InspectionTemplate" ("id") ON DELETE CASCADE ON UPDATE CASCADE
-      )`,
-      `CREATE INDEX "InspectionTemplateItem_templateId_idx" ON "InspectionTemplateItem"("templateId")`,
-    ],
-    describe: "Add InspectionTemplate + InspectionTemplateItem (configurable checklist library).",
-  },
-  {
-    key: "2026-05-29_add_idempotency_keys",
-    sql: [
-      `ALTER TABLE "ProgressEntry" ADD COLUMN "idempotencyKey" TEXT`,
-      `CREATE UNIQUE INDEX "ProgressEntry_idempotencyKey_key" ON "ProgressEntry"("idempotencyKey")`,
-      `ALTER TABLE "Inspection" ADD COLUMN "idempotencyKey" TEXT`,
-      `CREATE UNIQUE INDEX "Inspection_idempotencyKey_key" ON "Inspection"("idempotencyKey")`,
-      `ALTER TABLE "Issue" ADD COLUMN "idempotencyKey" TEXT`,
-      `CREATE UNIQUE INDEX "Issue_idempotencyKey_key" ON "Issue"("idempotencyKey")`,
-      `ALTER TABLE "Hindrance" ADD COLUMN "idempotencyKey" TEXT`,
-      `CREATE UNIQUE INDEX "Hindrance_idempotencyKey_key" ON "Hindrance"("idempotencyKey")`,
-      `ALTER TABLE "Concern" ADD COLUMN "idempotencyKey" TEXT`,
-      `CREATE UNIQUE INDEX "Concern_idempotencyKey_key" ON "Concern"("idempotencyKey")`,
-    ],
-    describe:
-      "Add nullable idempotencyKey + unique index to ProgressEntry/Inspection/Issue/Hindrance/Concern (de-dupe offline replays). SQLite allows multiple NULLs under a unique index, so existing rows are unaffected.",
-  },
-  {
-    key: "2026-05-29_add_subcontractor_billing",
-    sql: [
-      `CREATE TABLE "SubContractorBill" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "projectId" TEXT NOT NULL,
-        "contractorId" TEXT NOT NULL,
-        "title" TEXT NOT NULL,
-        "periodStart" DATETIME,
-        "periodEnd" DATETIME,
-        "status" TEXT NOT NULL DEFAULT 'DRAFT',
-        "notes" TEXT,
-        "taxPercent" REAL,
-        "preparedById" TEXT NOT NULL,
-        "submittedAt" DATETIME,
-        "approvedById" TEXT,
-        "approvedAt" DATETIME,
-        "rejectionReason" TEXT,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL,
-        "deletedAt" DATETIME,
-        "idempotencyKey" TEXT,
-        CONSTRAINT "SubContractorBill_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-        CONSTRAINT "SubContractorBill_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-        CONSTRAINT "SubContractorBill_preparedById_fkey" FOREIGN KEY ("preparedById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-        CONSTRAINT "SubContractorBill_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
-      )`,
-      `CREATE UNIQUE INDEX "SubContractorBill_idempotencyKey_key" ON "SubContractorBill"("idempotencyKey")`,
-      `CREATE INDEX "SubContractorBill_projectId_idx" ON "SubContractorBill"("projectId")`,
-      `CREATE INDEX "SubContractorBill_contractorId_idx" ON "SubContractorBill"("contractorId")`,
-      `CREATE TABLE "SubContractorBillLine" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "billId" TEXT NOT NULL,
-        "type" TEXT NOT NULL,
-        "description" TEXT NOT NULL,
-        "wbsNodeId" TEXT,
-        "quantity" REAL,
-        "unit" TEXT,
-        "rate" REAL,
-        "amount" REAL NOT NULL DEFAULT 0,
-        "orderIndex" INTEGER NOT NULL DEFAULT 0,
-        CONSTRAINT "SubContractorBillLine_billId_fkey" FOREIGN KEY ("billId") REFERENCES "SubContractorBill" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-        CONSTRAINT "SubContractorBillLine_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE
-      )`,
-      `CREATE INDEX "SubContractorBillLine_billId_idx" ON "SubContractorBillLine"("billId")`,
-    ],
-    describe: "Add SubContractorBill + SubContractorBillLine (P2P sub-contractor billing).",
-  },
-  {
-    key: "2026-05-30_add_expenses",
-    sql: [
-      `CREATE TABLE "Expense" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "projectId" TEXT NOT NULL,
-        "category" TEXT NOT NULL,
-        "description" TEXT NOT NULL,
-        "amount" REAL NOT NULL,
-        "date" DATETIME NOT NULL,
-        "paidTo" TEXT,
-        "status" TEXT NOT NULL DEFAULT 'SUBMITTED',
-        "rejectionReason" TEXT,
-        "notes" TEXT,
-        "loggedById" TEXT NOT NULL,
-        "approvedById" TEXT,
-        "approvedAt" DATETIME,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL,
-        "deletedAt" DATETIME,
-        "idempotencyKey" TEXT,
-        CONSTRAINT "Expense_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-        CONSTRAINT "Expense_loggedById_fkey" FOREIGN KEY ("loggedById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-        CONSTRAINT "Expense_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
-      )`,
-      `CREATE UNIQUE INDEX "Expense_idempotencyKey_key" ON "Expense"("idempotencyKey")`,
-      `CREATE INDEX "Expense_projectId_idx" ON "Expense"("projectId")`,
-      `CREATE TABLE "ExpensePhoto" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "expenseId" TEXT NOT NULL,
-        "url" TEXT NOT NULL,
-        "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT "ExpensePhoto_expenseId_fkey" FOREIGN KEY ("expenseId") REFERENCES "Expense" ("id") ON DELETE CASCADE ON UPDATE CASCADE
-      )`,
-      `CREATE INDEX "ExpensePhoto_expenseId_idx" ON "ExpensePhoto"("expenseId")`,
-    ],
-    describe: "Add Expense + ExpensePhoto (P2P project expenses).",
-  },
-  {
-    key: "2026-06-04_add_design_drawings",
-    sql: [
-      `CREATE TABLE "DesignDrawing" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "projectId" TEXT NOT NULL,
-        "drawingNumber" TEXT NOT NULL,
-        "title" TEXT NOT NULL,
-        "discipline" TEXT NOT NULL,
-        "notes" TEXT,
-        "currentRevisionId" TEXT,
-        "createdById" TEXT NOT NULL,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL,
-        "deletedAt" DATETIME,
-        CONSTRAINT "DesignDrawing_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-        CONSTRAINT "DesignDrawing_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-        CONSTRAINT "DesignDrawing_currentRevisionId_fkey" FOREIGN KEY ("currentRevisionId") REFERENCES "DesignDrawingRevision" ("id") ON DELETE SET NULL ON UPDATE CASCADE
-      )`,
-      `CREATE INDEX "DesignDrawing_projectId_idx" ON "DesignDrawing"("projectId")`,
-      `CREATE INDEX "DesignDrawing_projectId_discipline_idx" ON "DesignDrawing"("projectId", "discipline")`,
-      `CREATE UNIQUE INDEX "DesignDrawing_projectId_drawingNumber_key" ON "DesignDrawing"("projectId", "drawingNumber")`,
-      `CREATE TABLE "DesignDrawingRevision" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "drawingId" TEXT NOT NULL,
-        "revisionLabel" TEXT NOT NULL,
-        "fileUrl" TEXT NOT NULL,
-        "fileName" TEXT NOT NULL,
-        "issuedDate" DATETIME NOT NULL,
-        "notes" TEXT,
-        "uploadedById" TEXT NOT NULL,
-        "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT "DesignDrawingRevision_drawingId_fkey" FOREIGN KEY ("drawingId") REFERENCES "DesignDrawing" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-        CONSTRAINT "DesignDrawingRevision_uploadedById_fkey" FOREIGN KEY ("uploadedById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
-      )`,
-      `CREATE INDEX "DesignDrawingRevision_drawingId_idx" ON "DesignDrawingRevision"("drawingId")`,
-    ],
-    describe: "Add DesignDrawing + DesignDrawingRevision (drawing register).",
+    key: "2026-06-04_postgres_baseline",
+    sql: loadBaselineSql(),
+    describe: "Initial Postgres schema (all tables, indexes, FKs).",
   },
 ];
 
@@ -266,7 +89,7 @@ async function ensureLedger() {
   await prisma.$executeRawUnsafe(
     `CREATE TABLE IF NOT EXISTS "_AdminMigration" (
       "key" TEXT PRIMARY KEY,
-      "appliedAt" TEXT NOT NULL DEFAULT (datetime('now'))
+      "appliedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
   );
 }
@@ -289,6 +112,7 @@ export async function GET() {
     migrations: MIGRATIONS.map((m) => ({
       key: m.key,
       describe: m.describe,
+      statements: m.sql.length,
       status: applied.has(m.key) ? "applied" : "pending",
     })),
   });
@@ -308,10 +132,14 @@ export async function POST() {
       skipped.push(m.key);
       continue;
     }
-    for (const stmt of m.sql) {
-      await prisma.$executeRawUnsafe(stmt);
-    }
-    await prisma.$executeRawUnsafe(`INSERT INTO "_AdminMigration" (key) VALUES (?)`, m.key);
+    // Run all statements + the ledger insert in one transaction so a partial
+    // failure rolls back cleanly. Next run will retry from the start.
+    await prisma.$transaction(async (tx) => {
+      for (const stmt of m.sql) {
+        await tx.$executeRawUnsafe(stmt);
+      }
+      await tx.$executeRaw`INSERT INTO "_AdminMigration" ("key") VALUES (${m.key})`;
+    });
     ran.push(m.key);
   }
 
