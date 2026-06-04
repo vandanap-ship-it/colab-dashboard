@@ -115,6 +115,41 @@ test.describe("Module access control", () => {
         data: { status: "READ" },
       });
       expect(concPatch.status()).toBe(403);
+
+      // 10. Drawing Register is internal-only — both list + detail must reject
+      //     a scoped contractor (same guard the write endpoints already had).
+      const drawList = await page.request.get(`/api/drawings?projectId=${projectId}`);
+      expect(drawList.status()).toBe(403);
+      const drawDetail = await page.request.get(`/api/drawings/any-id`);
+      expect(drawDetail.status()).toBe(403);
+
+      // 11. /api/projects returns a REDUCED shape for scoped contractors —
+      //     they need the picker but must not see addresses or dates.
+      const projRes = await page.request.get("/api/projects");
+      expect(projRes.status()).toBe(200);
+      const projJson = (await projRes.json()) as {
+        projects: Array<Record<string, unknown>>;
+      };
+      expect(Array.isArray(projJson.projects)).toBe(true);
+      // The scoped shape has id/name/code/status only — no createdBy/address/dates.
+      for (const p of projJson.projects) {
+        expect(p.id).toBeTruthy();
+        expect(p.name).toBeTruthy();
+        expect(p.createdBy).toBeUndefined();
+        expect(p.address).toBeUndefined();
+        expect(p.startDate).toBeUndefined();
+        expect(p.endDate).toBeUndefined();
+      }
+
+      // 12. /api/admin/contractors GET:
+      //     - without projectId → admin only (rejects scoped user)
+      //     - with projectId → any signed-in user (mobile progress form needs this)
+      const allContractorsRes = await page.request.get("/api/admin/contractors");
+      expect(allContractorsRes.status()).toBe(403);
+      const scopedContractorsRes = await page.request.get(
+        `/api/admin/contractors?projectId=${projectId}`,
+      );
+      expect(scopedContractorsRes.status()).toBe(200);
     } finally {
       // 8. Cleanup — deactivate the test user as admin
       await page.context().clearCookies();
