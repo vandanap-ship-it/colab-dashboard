@@ -14,6 +14,8 @@
     "test:e2e:headed": "playwright test --headed",
     "schema:snapshot": "prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script > prisma/schema.sql",
     "schema:check": "node scripts/check-schema-snapshot.mjs",
+    "smoke:prod": "tsx scripts/smoke-prod.ts",
+    "migrate:turso-to-neon": "tsx scripts/migrate-turso-to-neon.ts",
     "postinstall": "prisma generate --no-engine || true"
   },
   "dependencies": {
