@@ -14,7 +14,7 @@
  */
 
 import { PrismaClient } from "../src/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_SEED !== "1") {
   console.error(
@@ -23,8 +23,9 @@ if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_SEED !== "1"
   process.exit(1);
 }
 
-const adapter = new PrismaBetterSqlite3({ url: "./dev.db" });
-const prisma = new PrismaClient({ adapter });
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error("DATABASE_URL is required (Postgres connection string)");
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
 
 // Deterministic PRNG so reruns produce stable output.
 let rngState = 0xC01AB015;
