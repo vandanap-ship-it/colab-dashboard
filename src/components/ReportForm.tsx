@@ -277,6 +277,7 @@ export default function ReportForm({
         <input
           type="file"
           accept="image/*"
+          capture="environment"
           multiple
           onChange={(e) => setPhotos(Array.from(e.target.files ?? []).slice(0, 4))}
           className="mt-1 block w-full text-sm text-stone-700 file:mr-4 file:rounded-full file:border-0 file:bg-stone-900 file:text-white file:px-4 file:py-2 file:text-sm file:font-medium"

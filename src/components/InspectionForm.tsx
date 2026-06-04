@@ -297,7 +297,8 @@ export default function InspectionForm({
                   <button
                     type="button"
                     onClick={() => removeItem(i)}
-                    className="text-stone-400 hover:text-red-500 text-sm px-2"
+                    // min-h/min-w-11 (~44px) — Apple/Google minimum tap target.
+                    className="text-stone-400 hover:text-red-500 text-sm min-h-11 min-w-11 flex items-center justify-center"
                     aria-label="Remove"
                   >
                     🗑
@@ -308,7 +309,8 @@ export default function InspectionForm({
                 <button
                   type="button"
                   onClick={() => updateItem(i, { passed: true })}
-                  className={`flex-1 text-xs font-medium rounded-full py-1.5 ${
+                  // py-3 ≈ 44px including text — comfortable thumb target with mud on the screen.
+                  className={`flex-1 text-sm font-medium rounded-full py-3 ${
                     it.passed ? "bg-emerald-500 text-white" : "bg-stone-100 text-stone-500"
                   }`}
                 >
@@ -317,7 +319,7 @@ export default function InspectionForm({
                 <button
                   type="button"
                   onClick={() => updateItem(i, { passed: false })}
-                  className={`flex-1 text-xs font-medium rounded-full py-1.5 ${
+                  className={`flex-1 text-sm font-medium rounded-full py-3 ${
                     !it.passed ? "bg-red-500 text-white" : "bg-stone-100 text-stone-500"
                   }`}
                 >
@@ -342,6 +344,7 @@ export default function InspectionForm({
         <input
           type="file"
           accept="image/*"
+          capture="environment"
           multiple
           onChange={(e) => setPhotos(Array.from(e.target.files ?? []).slice(0, 8))}
           className="mt-1 block w-full text-sm text-stone-700 file:mr-4 file:rounded-full file:border-0 file:bg-stone-900 file:text-white file:px-4 file:py-2 file:text-sm file:font-medium"
