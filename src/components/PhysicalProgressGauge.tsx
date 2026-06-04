@@ -42,15 +42,15 @@ export default function PhysicalProgressGauge({
           strokeDasharray={`${achievedDash} ${c}`}
         />
         <text x="90" y="70" textAnchor="middle" className="fill-stone-900 text-2xl font-semibold">
-          {achieved.toFixed(2)}%
+          {achieved.toFixed(1)}%
         </text>
       </svg>
       <div className="flex gap-3 text-xs mt-1">
         <div className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-blue-500" /> Planned: <span className="font-semibold">{planned.toFixed(2)}%</span>
+          <span className="h-2 w-2 rounded-full bg-blue-500" /> Planned: <span className="font-semibold">{planned.toFixed(1)}%</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-red-500" /> Achieved: <span className="font-semibold">{achieved.toFixed(2)}%</span>
+          <span className="h-2 w-2 rounded-full bg-red-500" /> Achieved: <span className="font-semibold">{achieved.toFixed(1)}%</span>
         </div>
       </div>
     </div>

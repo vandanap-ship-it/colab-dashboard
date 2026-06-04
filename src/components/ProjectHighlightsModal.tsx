@@ -205,7 +205,7 @@ export default function ProjectHighlightsModal({
                                 : "bg-red-100 text-red-700"
                             }`}
                           >
-                            {s.achieved.toFixed(2)}%
+                            {s.achieved.toFixed(1)}%
                           </span>
                         </td>
                         <td className="px-2 py-2">{fmt(s.actualStart)}</td>

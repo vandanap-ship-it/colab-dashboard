@@ -367,7 +367,7 @@ function ArcGauge({ percent }: { percent: number }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-end pb-2">
         <span className="text-lg font-semibold tracking-tight text-stone-900">
-          {p.toFixed(2)}%
+          {p.toFixed(1)}%
         </span>
         <span className="text-[9px] uppercase tracking-widest text-stone-400">
           Achieved
@@ -391,7 +391,7 @@ function PercentBar({
       <div className="flex items-baseline justify-between text-stone-700">
         <span>{label}</span>
         <span className="tabular-nums font-medium text-stone-900">
-          {value.toFixed(2)}%
+          {value.toFixed(1)}%
         </span>
       </div>
       <div className="mt-1 h-1.5 bg-stone-100 rounded-full overflow-hidden">
@@ -534,7 +534,7 @@ function ZoneRow({
               Actual
             </span>
             <span className="text-stone-900 font-medium tabular-nums">
-              {phase.actualPercent.toFixed(2)}%
+              {phase.actualPercent.toFixed(1)}%
             </span>
           </div>
         </td>
@@ -562,7 +562,7 @@ function PercentInline({ value, colour }: { value: number; colour: string }) {
   return (
     <div className="flex items-center gap-2">
       <span className="text-stone-900 font-medium tabular-nums w-12 text-right">
-        {value.toFixed(2)}%
+        {value.toFixed(1)}%
       </span>
       <span className="flex-1 h-1 rounded-full bg-stone-100 overflow-hidden">
         <span

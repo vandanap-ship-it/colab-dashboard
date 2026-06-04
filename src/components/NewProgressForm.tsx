@@ -265,7 +265,7 @@ export default function NewProgressForm({
             {totalQty > 0 ? (
               <>
                 <div>
-                  <div className="text-xs text-stone-500">Quantity {pct.toFixed(2)}%</div>
+                  <div className="text-xs text-stone-500">Quantity {pct.toFixed(1)}%</div>
                   <input
                     type="range"
                     min={0}
