@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Bug, ClipboardCheck, FileBarChart, GanttChartSquare, ListPlus, ReceiptIndianRupee, Upload, Wallet } from "lucide-react";
+import { ArrowLeft, Bug, ClipboardCheck, FileBarChart, FileStack, GanttChartSquare, ListPlus, ReceiptIndianRupee, Upload, Wallet } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canAccessBilling, canLogExpense, canSeeDesktop, ROLES } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
@@ -108,6 +108,13 @@ export default async function ProjectLayout({
             >
               <FileBarChart className="w-4 h-4 text-stone-400" />
               Reports
+            </Link>
+            <Link
+              href={`/projects/${project.id}/drawings`}
+              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
+            >
+              <FileStack className="w-4 h-4 text-stone-400" />
+              Drawings
             </Link>
             {canAccessBilling(role) && (
               <Link

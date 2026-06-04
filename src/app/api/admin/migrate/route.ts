@@ -221,6 +221,45 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add Expense + ExpensePhoto (P2P project expenses).",
   },
+  {
+    key: "2026-06-04_add_design_drawings",
+    sql: [
+      `CREATE TABLE "DesignDrawing" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "projectId" TEXT NOT NULL,
+        "drawingNumber" TEXT NOT NULL,
+        "title" TEXT NOT NULL,
+        "discipline" TEXT NOT NULL,
+        "notes" TEXT,
+        "currentRevisionId" TEXT,
+        "createdById" TEXT NOT NULL,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL,
+        "deletedAt" DATETIME,
+        CONSTRAINT "DesignDrawing_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT "DesignDrawing_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+        CONSTRAINT "DesignDrawing_currentRevisionId_fkey" FOREIGN KEY ("currentRevisionId") REFERENCES "DesignDrawingRevision" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+      )`,
+      `CREATE INDEX "DesignDrawing_projectId_idx" ON "DesignDrawing"("projectId")`,
+      `CREATE INDEX "DesignDrawing_projectId_discipline_idx" ON "DesignDrawing"("projectId", "discipline")`,
+      `CREATE UNIQUE INDEX "DesignDrawing_projectId_drawingNumber_key" ON "DesignDrawing"("projectId", "drawingNumber")`,
+      `CREATE TABLE "DesignDrawingRevision" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "drawingId" TEXT NOT NULL,
+        "revisionLabel" TEXT NOT NULL,
+        "fileUrl" TEXT NOT NULL,
+        "fileName" TEXT NOT NULL,
+        "issuedDate" DATETIME NOT NULL,
+        "notes" TEXT,
+        "uploadedById" TEXT NOT NULL,
+        "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "DesignDrawingRevision_drawingId_fkey" FOREIGN KEY ("drawingId") REFERENCES "DesignDrawing" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT "DesignDrawingRevision_uploadedById_fkey" FOREIGN KEY ("uploadedById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+      )`,
+      `CREATE INDEX "DesignDrawingRevision_drawingId_idx" ON "DesignDrawingRevision"("drawingId")`,
+    ],
+    describe: "Add DesignDrawing + DesignDrawingRevision (drawing register).",
+  },
 ];
 
 async function ensureLedger() {

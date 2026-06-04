@@ -93,3 +93,14 @@ export function canLogExpense(role: string): boolean {
 export function canApproveExpense(role: string): boolean {
   return role === ROLES.PLANNER || role === ROLES.SITE_MANAGER || role === ROLES.ADMIN;
 }
+
+/**
+ * Drawing register:
+ *   - Any internal user may view drawings (engineers need to reference them on site).
+ *   - Only Planner/Product/Admin may add drawings or upload new revisions, so the
+ *     register stays under control of whoever manages design info.
+ * The scoped-contractor exclusion is enforced separately via isScopedUser().
+ */
+export function canManageDrawings(role: string): boolean {
+  return role === ROLES.PLANNER || role === ROLES.PRODUCT_TEAM || role === ROLES.ADMIN;
+}

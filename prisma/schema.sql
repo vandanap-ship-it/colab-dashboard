@@ -365,6 +365,39 @@ CREATE TABLE "ExpensePhoto" (
     CONSTRAINT "ExpensePhoto_expenseId_fkey" FOREIGN KEY ("expenseId") REFERENCES "Expense" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+-- CreateTable
+CREATE TABLE "DesignDrawing" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "projectId" TEXT NOT NULL,
+    "drawingNumber" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "discipline" TEXT NOT NULL,
+    "notes" TEXT,
+    "currentRevisionId" TEXT,
+    "createdById" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    "deletedAt" DATETIME,
+    CONSTRAINT "DesignDrawing_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "DesignDrawing_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "DesignDrawing_currentRevisionId_fkey" FOREIGN KEY ("currentRevisionId") REFERENCES "DesignDrawingRevision" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "DesignDrawingRevision" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "drawingId" TEXT NOT NULL,
+    "revisionLabel" TEXT NOT NULL,
+    "fileUrl" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "issuedDate" DATETIME NOT NULL,
+    "notes" TEXT,
+    "uploadedById" TEXT NOT NULL,
+    "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "DesignDrawingRevision_drawingId_fkey" FOREIGN KEY ("drawingId") REFERENCES "DesignDrawing" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "DesignDrawingRevision_uploadedById_fkey" FOREIGN KEY ("uploadedById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
 
@@ -487,4 +520,16 @@ CREATE INDEX "Expense_projectId_idx" ON "Expense"("projectId");
 
 -- CreateIndex
 CREATE INDEX "ExpensePhoto_expenseId_idx" ON "ExpensePhoto"("expenseId");
+
+-- CreateIndex
+CREATE INDEX "DesignDrawing_projectId_idx" ON "DesignDrawing"("projectId");
+
+-- CreateIndex
+CREATE INDEX "DesignDrawing_projectId_discipline_idx" ON "DesignDrawing"("projectId", "discipline");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "DesignDrawing_projectId_drawingNumber_key" ON "DesignDrawing"("projectId", "drawingNumber");
+
+-- CreateIndex
+CREATE INDEX "DesignDrawingRevision_drawingId_idx" ON "DesignDrawingRevision"("drawingId");
 

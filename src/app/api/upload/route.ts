@@ -30,13 +30,15 @@ export async function POST(req: Request) {
         return badRequest(`File ${f.name} exceeds 10MB`);
       }
       // Some iPhone photos come through with type "image/heic", "image/jpg",
-      // or even empty type. Accept anything that's an image-ish type or has
-      // a recognisable image extension.
+      // or even empty type. Accept anything that's an image-ish type, has a
+      // recognisable image extension, or is a PDF (used by the drawing
+      // register). PDFs are stored, never executed, so they're safe.
       const looksLikeImage =
         f.type.startsWith("image/") ||
         /\.(jpe?g|png|heic|heif|webp|gif)$/i.test(f.name);
-      if (!looksLikeImage) {
-        return badRequest(`File ${f.name} is not an image (type: ${f.type || "unknown"})`);
+      const looksLikePdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+      if (!looksLikeImage && !looksLikePdf) {
+        return badRequest(`File ${f.name} is not an image or PDF (type: ${f.type || "unknown"})`);
       }
       const result = await uploadPhoto(f, scope);
       urls.push(result.url);

@@ -97,6 +97,11 @@ function createClient() {
           return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
         },
       },
+      designDrawing: {
+        async $allOperations({ operation, args, query }) {
+          return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
+        },
+      },
     },
   });
 }

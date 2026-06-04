@@ -19,19 +19,21 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  createdProjects     Project[]           @relation("ProjectCreator")
-  progressEntries     ProgressEntry[]
-  hindrances          Hindrance[]
-  raisedConcerns      Concern[]           @relation("ConcernRaiser")
-  assignedConcerns    Concern[]           @relation("ConcernAssignee")
-  createdIssues       Issue[]             @relation("IssueCreator")
-  assignedIssues      Issue[]             @relation("IssueAssignee")
-  filledInspections   Inspection[]        @relation("InspectionFiller")
-  reviewedInspections Inspection[]        @relation("InspectionReviewer")
-  preparedBills       SubContractorBill[] @relation("BillPreparer")
-  approvedBills       SubContractorBill[] @relation("BillApprover")
-  loggedExpenses      Expense[]           @relation("ExpenseLogger")
-  approvedExpenses    Expense[]           @relation("ExpenseApprover")
+  createdProjects          Project[]               @relation("ProjectCreator")
+  progressEntries          ProgressEntry[]
+  hindrances               Hindrance[]
+  raisedConcerns           Concern[]               @relation("ConcernRaiser")
+  assignedConcerns         Concern[]               @relation("ConcernAssignee")
+  createdIssues            Issue[]                 @relation("IssueCreator")
+  assignedIssues           Issue[]                 @relation("IssueAssignee")
+  filledInspections        Inspection[]            @relation("InspectionFiller")
+  reviewedInspections      Inspection[]            @relation("InspectionReviewer")
+  preparedBills            SubContractorBill[]     @relation("BillPreparer")
+  approvedBills            SubContractorBill[]     @relation("BillApprover")
+  loggedExpenses           Expense[]               @relation("ExpenseLogger")
+  approvedExpenses         Expense[]               @relation("ExpenseApprover")
+  createdDesignDrawings    DesignDrawing[]         @relation("DrawingCreator")
+  uploadedDrawingRevisions DesignDrawingRevision[] @relation("RevisionUploader")
 }
 
 model Project {
@@ -62,6 +64,7 @@ model Project {
   drawings           ProjectDrawing[]
   subContractorBills SubContractorBill[]
   expenses           Expense[]
+  designDrawings     DesignDrawing[]
 
   @@index([createdById])
 }
@@ -521,4 +524,61 @@ model ExpensePhoto {
   expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
 
   @@index([expenseId])
+}
+
+// ---------------------------------------------------------------------------
+// Design Drawing Register (Phase 1)
+//
+// The canonical list of design drawings for a project — architectural,
+// structural, MEP, interior, landscape. Each drawing has a stable drawing
+// number (e.g. "A-104", "S-201") and a chain of revisions, each pointing at
+// its own uploaded file. The drawing's currentRevisionId points at the latest
+// one so "open the current version" is a single hop.
+// Distinct from the existing ProjectDrawing model, which is for dashboard
+// layout images, not the design register.
+// ---------------------------------------------------------------------------
+model DesignDrawing {
+  id                String  @id @default(cuid())
+  projectId         String
+  drawingNumber     String
+  title             String
+  // ARCHITECTURAL | STRUCTURAL | MEP | INTERIOR | LANDSCAPE | OTHER
+  discipline        String
+  notes             String?
+  currentRevisionId String?
+
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  project         Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy       User                    @relation("DrawingCreator", fields: [createdById], references: [id])
+  currentRevision DesignDrawingRevision?  @relation("CurrentRevisionOf", fields: [currentRevisionId], references: [id])
+  revisions       DesignDrawingRevision[] @relation("DrawingRevisions")
+
+  // Drawing number is unique per project (you can't have two A-104s).
+  @@unique([projectId, drawingNumber])
+  @@index([projectId])
+  @@index([projectId, discipline])
+}
+
+model DesignDrawingRevision {
+  id            String   @id @default(cuid())
+  drawingId     String
+  revisionLabel String // "R0", "R1", "A", "B", etc.
+  fileUrl       String // PDF / image stored in Vercel Blob
+  fileName      String // original filename for download UX
+  issuedDate    DateTime // when the designer issued this version
+  notes         String? // what changed in this revision
+  uploadedById  String
+  uploadedAt    DateTime @default(now())
+
+  drawing    DesignDrawing   @relation("DrawingRevisions", fields: [drawingId], references: [id], onDelete: Cascade)
+  uploadedBy User            @relation("RevisionUploader", fields: [uploadedById], references: [id])
+  // Inverse of DesignDrawing.currentRevision so Prisma can validate the
+  // relation. In practice each revision is "current" for at most one drawing.
+  currentOf  DesignDrawing[] @relation("CurrentRevisionOf")
+
+  @@index([drawingId])
 }
