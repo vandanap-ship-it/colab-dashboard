@@ -1,22 +1,51 @@
 import { NextResponse } from "next/server";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
 /**
- * One-time admin bootstrap for a fresh deploy (e.g. staging on a brand-new DB).
+ * One-time admin bootstrap for a fresh deploy (e.g. a brand-new Neon DB).
  *
  *   POST /api/admin/bootstrap
+ *   Authorization: Bearer <BOOTSTRAP_TOKEN>
  *
- * If the DB has no users, creates a single admin account with a freshly
- * generated random password and returns the plaintext exactly once. As soon as
- * any user exists, this endpoint becomes a 400 forever — so prod (which is
- * already populated) can't be hijacked through it.
+ * Doubly gated:
+ *   1. The caller must present a token matching the `BOOTSTRAP_TOKEN` env var,
+ *      compared with constant-time equality. Without the env var, the endpoint
+ *      is disabled (503) — so deployments that aren't actively being
+ *      bootstrapped can't be hijacked even if the DB happens to be empty.
+ *   2. As soon as any user row exists, the endpoint 400s forever — defence in
+ *      depth in case the token leaks.
  *
- * The admin should sign in immediately, change the password from
- * /admin/users, and create the real user accounts from there.
+ * Operationally: when bootstrapping a fresh Neon, set BOOTSTRAP_TOKEN in
+ * Vercel env, deploy, POST with the token, save the returned password,
+ * UNSET the env var. The endpoint then refuses everyone, the password is
+ * the only path in, and that path is yours.
  */
-export async function POST() {
+
+/** Constant-time compare two strings; returns false on length mismatch. */
+function tokenMatches(presented: string, expected: string): boolean {
+  const a = Buffer.from(presented);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+export async function POST(req: Request) {
+  const expectedToken = process.env.BOOTSTRAP_TOKEN;
+  if (!expectedToken) {
+    return NextResponse.json(
+      { error: "Bootstrap is disabled. Set BOOTSTRAP_TOKEN env var to enable, then unset after use." },
+      { status: 503 },
+    );
+  }
+
+  const header = req.headers.get("authorization") ?? "";
+  const presented = header.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
+  if (!presented || !tokenMatches(presented, expectedToken)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const existingUserCount = await prisma.user.count();
   if (existingUserCount > 0) {
     return NextResponse.json(

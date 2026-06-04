@@ -16,9 +16,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    services:
+      # Postgres for CI. Same engine as prod (Neon), so tests catch any
+      # Postgres-specific behaviour. The credentials are local to the runner.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: siddhi
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: siddhi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U siddhi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
-      # Local SQLite DB for CI — no production credentials involved.
-      DATABASE_URL: "file:./dev.db"
+      # Local Postgres on the runner. No production credentials involved.
+      DATABASE_URL: "postgresql://siddhi:test@localhost:5432/siddhi"
       AUTH_SECRET: "ci-test-secret-not-used-in-production"
       NODE_ENV: "test"
 

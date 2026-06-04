@@ -2,12 +2,26 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canCreateProject } from "@/lib/roles";
+import { isScopedUser } from "@/lib/modules";
 
 const VALID_STATUSES = new Set(["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED"]);
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Scoped external contractors (e.g. an outside QA/QC agency) need the
+  // project list to pick a project on the mobile picker, but they have no
+  // business knowing addresses, target/actual dates, or who created the
+  // project — that's internal-strategy information. Return a reduced shape
+  // for scoped users; full shape for internal staff.
+  if (isScopedUser(session.user.modules)) {
+    const projects = await prisma.project.findMany({
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, code: true, status: true },
+    });
+    return NextResponse.json({ projects });
+  }
 
   const projects = await prisma.project.findMany({
     orderBy: { createdAt: "desc" },

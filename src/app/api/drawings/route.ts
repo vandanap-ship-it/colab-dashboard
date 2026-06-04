@@ -27,6 +27,9 @@ export const drawingInclude = {
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return unauthorized();
+  // Drawing Register is internal-only. Same gate the write endpoints already
+  // apply — otherwise a scoped contractor can list drawings + read fileUrls.
+  if (isScopedUser(session.user.modules)) return forbidden();
 
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");

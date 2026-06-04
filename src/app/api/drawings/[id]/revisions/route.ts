@@ -5,6 +5,7 @@ import { recordAudit } from "@/lib/audit";
 import { canManageDrawings } from "@/lib/roles";
 import { isScopedUser } from "@/lib/modules";
 import { normalizeRevisionLabel } from "@/lib/drawings";
+import { isOwnUploadUrl } from "@/lib/upload";
 import { badRequest, forbidden, handleApiError, notFound, unauthorized } from "@/lib/apiErrors";
 
 /**
@@ -45,6 +46,10 @@ export async function POST(req: Request, ctx: RouteContext<"/api/drawings/[id]/r
   const label = normalizeRevisionLabel(revisionLabel);
   if (label.length < 1) return badRequest("Revision label required (e.g. R0, R1)");
   if (typeof fileUrl !== "string" || fileUrl.length < 1) return badRequest("File URL required");
+  // Only accept URLs from our own /api/upload pipeline. Without this, an
+  // attacker could store a hostile URL — phishing redirect, malware, or a
+  // doxxing image — as the canonical revision of someone else's blueprint.
+  if (!isOwnUploadUrl(fileUrl)) return badRequest("Unsupported file URL");
   if (typeof fileName !== "string" || fileName.length < 1) return badRequest("File name required");
   const when = issuedDate ? new Date(issuedDate) : new Date();
   if (isNaN(when.getTime())) return badRequest("Invalid issued date");

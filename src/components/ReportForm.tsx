@@ -49,10 +49,25 @@ export default function ReportForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
-    fetch(`/api/projects/${projectId}/wbs?leaves=true`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => setActivities(d.nodes));
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/projects/${projectId}/wbs?leaves=true`, { cache: "no-store" });
+        if (!r.ok) throw new Error(`WBS fetch failed: ${r.status}`);
+        const d = (await r.json()) as { nodes?: Activity[] };
+        if (!cancelled) setActivities(Array.isArray(d.nodes) ? d.nodes : []);
+      } catch (e) {
+        if (!cancelled) {
+          setActivities([]); // exits the "Loading…" state instead of hanging forever
+          setLoadError(e instanceof Error ? e.message : "Couldn't load activities");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [projectId]);
 
   const filtered = useMemo(() => {
@@ -229,6 +244,10 @@ export default function ReportForm({
         </label>
         {activities === null ? (
           <p className="text-xs text-stone-500">Loading…</p>
+        ) : loadError ? (
+          <p className="text-xs text-red-600">
+            {loadError}. Pull down to refresh or check your connection.
+          </p>
         ) : (
           <div className="max-h-40 overflow-y-auto rounded-md border border-stone-200 divide-y divide-stone-100">
             <button
@@ -258,6 +277,7 @@ export default function ReportForm({
         <input
           type="file"
           accept="image/*"
+          capture="environment"
           multiple
           onChange={(e) => setPhotos(Array.from(e.target.files ?? []).slice(0, 4))}
           className="mt-1 block w-full text-sm text-stone-700 file:mr-4 file:rounded-full file:border-0 file:bg-stone-900 file:text-white file:px-4 file:py-2 file:text-sm file:font-medium"

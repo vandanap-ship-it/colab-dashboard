@@ -91,7 +91,10 @@ export default async function ActivityPage({
       </div>
 
       <Link
-        href={`/mobile/${projectId}/progress/new?activityId=${node.id}`}
+        // Query key must match the searchParams contract in the target page
+        // (progress/new reads `wbsId`). The mismatch silently lost the
+        // preselect for engineers who used this entry point.
+        href={`/mobile/${projectId}/progress/new?wbsId=${node.id}`}
         className="block w-full text-center rounded-full bg-stone-900 text-white py-3 text-sm font-medium"
       >
         + Log progress for this activity

@@ -1,26 +1,15 @@
 import { PrismaClient } from "../src/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { PrismaLibSql } from "@prisma/adapter-libsql";
+import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
 /**
- * Picks the right Prisma adapter based on DATABASE_URL — same logic as
- * src/lib/prisma.ts. Lets us run the seed against either local SQLite or
- * production Turso.
+ * Same Postgres adapter as src/lib/prisma.ts. DATABASE_URL must be a Postgres
+ * connection string (Neon in prod, local Postgres in dev).
  */
 function buildPrisma() {
-  const url = process.env.DATABASE_URL ?? "file:./dev.db";
-
-  if (url.startsWith("libsql://") || url.startsWith("https://")) {
-    const adapter = new PrismaLibSql({
-      url,
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    });
-    return new PrismaClient({ adapter });
-  }
-
-  const fileUrl = url.startsWith("file:") ? url.slice("file:".length) : url;
-  return new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: fileUrl }) });
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is required (Postgres connection string)");
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
 }
 
 const prisma = buildPrisma();

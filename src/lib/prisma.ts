@@ -1,6 +1,5 @@
 import { PrismaClient } from "@/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { PrismaLibSql } from "@prisma/adapter-libsql";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 type ExtendedClient = ReturnType<typeof createClient>;
 const globalForPrisma = globalThis as unknown as { prisma?: ExtendedClient };
@@ -21,26 +20,17 @@ const READ_OPERATIONS = new Set([
 ]);
 
 /**
- * Pick the database adapter based on DATABASE_URL.
- *
- *   libsql://...  (or has TURSO_AUTH_TOKEN set)  → libsql adapter (Turso, prod)
- *   file:./...    or unset                       → better-sqlite3 (local dev)
+ * Postgres client via the Prisma pg driver adapter. DATABASE_URL points at
+ * Neon in prod / staging, and at a local Postgres (Docker or native) in dev.
+ * Same adapter for every environment — no more libsql/sqlite branching.
  */
 function createClient() {
-  const url = process.env.DATABASE_URL ?? "file:./prisma/dev.db";
-
-  let base: PrismaClient;
-  if (url.startsWith("libsql://") || url.startsWith("https://")) {
-    const adapter = new PrismaLibSql({
-      url,
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    });
-    base = new PrismaClient({ adapter });
-  } else {
-    const fileUrl = url.startsWith("file:") ? url.slice("file:".length) : url;
-    const adapter = new PrismaBetterSqlite3({ url: fileUrl });
-    base = new PrismaClient({ adapter });
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error("DATABASE_URL is required (Postgres connection string)");
   }
+  const adapter = new PrismaPg({ connectionString: url });
+  const base: PrismaClient = new PrismaClient({ adapter });
 
   // Soft-delete extension: for each model, hijack read operations to filter
   // out rows where deletedAt is set, unless the caller explicitly opts out

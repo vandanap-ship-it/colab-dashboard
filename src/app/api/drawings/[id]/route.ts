@@ -30,6 +30,11 @@ const drawingDetailInclude = {
 export async function GET(_req: Request, ctx: RouteContext<"/api/drawings/[id]">) {
   const session = await auth();
   if (!session?.user) return unauthorized();
+  // The Drawing Register is internal-only — same scoped-user gate the LIST
+  // route enforces (src/app/api/drawings/route.ts). Without this, a scoped
+  // external contractor with a guessable drawing id could pull blueprint
+  // file URLs through the detail endpoint.
+  if (isScopedUser(session.user.modules)) return forbidden();
   const { id } = await ctx.params;
   const drawing = await prisma.designDrawing.findUnique({
     where: { id },

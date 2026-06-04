@@ -2,6 +2,15 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
+import { recordAudit } from "@/lib/audit";
+
+// Endpoint historically served two callers:
+//   - `/admin/contractors` page → list ALL contractors across projects (admin-only)
+//   - Mobile progress form → list contractors for ONE project (any user logging
+//     progress needs this)
+// Pre-fix, both shapes were reachable without role checks, so a scoped
+// external contractor could pull every project's contractor roster.
+// Now: `projectId` query → any signed-in user; no projectId → admin only.
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -9,6 +18,10 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");
+
+  if (!projectId && !isAdmin(session.user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const where = projectId ? { projectId } : {};
   const contractors = await prisma.contractor.findMany({
@@ -46,6 +59,15 @@ export async function POST(req: Request) {
     const contractor = await prisma.contractor.create({
       data: { projectId, name: n, category: c },
       include: { project: { select: { id: true, name: true } } },
+    });
+    // Audit every admin-side write — invariant the rest of the codebase keeps.
+    await recordAudit({
+      projectId,
+      userId: session.user.id,
+      action: "CREATE",
+      entityType: "Contractor",
+      entityId: contractor.id,
+      summary: `Added contractor: ${n} (${c})`,
     });
     return NextResponse.json({ contractor }, { status: 201 });
   } catch {

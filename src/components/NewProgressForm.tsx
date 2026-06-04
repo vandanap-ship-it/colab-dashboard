@@ -265,7 +265,7 @@ export default function NewProgressForm({
             {totalQty > 0 ? (
               <>
                 <div>
-                  <div className="text-xs text-stone-500">Quantity {pct.toFixed(2)}%</div>
+                  <div className="text-xs text-stone-500">Quantity {pct.toFixed(1)}%</div>
                   <input
                     type="range"
                     min={0}
@@ -288,6 +288,7 @@ export default function NewProgressForm({
                     <input
                       type="number"
                       step="0.1"
+                      inputMode="decimal"
                       value={achieved}
                       onChange={(e) => setAchieved(Number(e.target.value))}
                       className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
@@ -298,6 +299,7 @@ export default function NewProgressForm({
                     <input
                       type="number"
                       step="0.1"
+                      inputMode="decimal"
                       value={cumulative}
                       onChange={(e) => setCumulative(Number(e.target.value))}
                       className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
@@ -355,6 +357,7 @@ export default function NewProgressForm({
                 <input
                   type="number"
                   min={0}
+                  inputMode="numeric"
                   value={row.count}
                   onChange={(e) => updateLabour(i, { count: Math.max(0, Math.floor(Number(e.target.value))) })}
                   className="w-24 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
@@ -363,7 +366,8 @@ export default function NewProgressForm({
                   <button
                     type="button"
                     onClick={() => removeLabourRow(i)}
-                    className="text-stone-400 hover:text-red-500 text-lg px-2"
+                    // min-h/min-w-11 (~44px) — Apple/Google minimum tap target.
+                    className="text-stone-400 hover:text-red-500 text-lg min-h-11 min-w-11 flex items-center justify-center"
                     aria-label="Remove"
                   >
                     🗑
@@ -378,6 +382,11 @@ export default function NewProgressForm({
             <input
               type="file"
               accept="image/*"
+              // Hint to Android Chrome to open the camera by default — engineers
+              // overwhelmingly take a fresh photo at the site, not pick from
+              // gallery. The `multiple` attribute below still lets them pick
+              // multiple if the OS picker supports it.
+              capture="environment"
               multiple
               onChange={(e) => setPhotos(Array.from(e.target.files ?? []).slice(0, 4))}
               className="mt-1 block w-full text-sm text-stone-700 file:mr-4 file:rounded-full file:border-0 file:bg-stone-900 file:text-white file:px-4 file:py-2 file:text-sm file:font-medium"

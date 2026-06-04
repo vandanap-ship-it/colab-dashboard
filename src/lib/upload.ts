@@ -34,3 +34,29 @@ export async function uploadPhoto(file: File, scope: string): Promise<UploadResu
   await writeFile(fullPath, Buffer.from(arrayBuffer));
   return { url: `/uploads/${safeScope}/${filename}`, storage: "local" };
 }
+
+/**
+ * Validate that a fileUrl came from our own uploader, not from the wider
+ * internet. Used by endpoints that take a fileUrl as input (e.g. drawing
+ * revisions) so an attacker can't store a hostile URL — phishing redirect,
+ * malware, "loud" image that doxxes the viewer — as the canonical revision
+ * of a sensitive blueprint.
+ *
+ * Accepts:
+ *   - `/uploads/...` (local dev fallback storage)
+ *   - any URL whose hostname ends with `.public.blob.vercel-storage.com`
+ *     (the only Vercel Blob host @vercel/blob.put() will return)
+ *
+ * Returns true if the URL is safe to store as a content reference.
+ */
+export function isOwnUploadUrl(url: string): boolean {
+  if (typeof url !== "string" || url.length === 0) return false;
+  if (url.startsWith("/uploads/")) return true;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    return u.hostname.endsWith(".public.blob.vercel-storage.com");
+  } catch {
+    return false;
+  }
+}
