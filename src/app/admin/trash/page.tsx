@@ -1,6 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import RestoreButton from "./RestoreButton";
 
+// Force dynamic rendering — this page hits the DB across six tables to surface
+// soft-deleted rows. Pre-rendering it at build time means the build worker
+// opens a Postgres connection just to seed an empty cache, which times out on
+// Vercel's build sandbox (>60s) and kills the deploy. Render on demand instead.
+export const dynamic = "force-dynamic";
+
 function fmtDate(d: Date | null | undefined): string {
   if (!d) return "—";
   return new Date(d).toLocaleString(undefined, {

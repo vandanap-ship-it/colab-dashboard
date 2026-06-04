@@ -6,6 +6,11 @@ import { canSeeMobile } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import BrandMark from "@/components/BrandMark";
 
+// Force dynamic rendering — project list reflects the caller's permissions
+// and live status, so there is nothing to cache. Also keeps the Vercel build
+// from opening a Postgres connection during static gen (see /admin/trash).
+export const dynamic = "force-dynamic";
+
 const STATUS_PILL: Record<string, { dot: string; text: string; label: string }> = {
   PLANNING: { dot: "bg-amber-500", text: "text-amber-700", label: "Planning" },
   ACTIVE: { dot: "bg-emerald-500", text: "text-emerald-700", label: "Active" },
