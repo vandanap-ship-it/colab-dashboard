@@ -116,10 +116,6 @@ export default async function MasterReportPage({
                 color="bg-amber-500"
               />
             </div>
-            <p className="mt-3 text-[9px] leading-snug text-stone-400 print:text-[8px]">
-              Averaged across all activities, including those not yet started. The live
-              dashboard averages only started activities, so its figure reads higher.
-            </p>
           </div>
 
           {/* Timeline */}

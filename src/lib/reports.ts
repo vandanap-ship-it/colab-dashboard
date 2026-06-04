@@ -677,6 +677,7 @@ export async function getMasterReport(
       actualFinish: true,
       projectedFinish: true,
       percentComplete: true,
+      progressEntered: true,
       delayReason: true,
     },
   });
@@ -728,10 +729,21 @@ export async function getMasterReport(
     .filter((d): d is Date => Boolean(d))
     .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
 
-  const plannedSum = leaves.reduce((s, l) => s + plannedPercentFor(l.baselineStart, l.baselineFinish, today), 0);
-  const achievedSum = leaves.reduce((s, l) => s + (l.percentComplete ?? 0), 0);
-  const overallPlanned = leaves.length === 0 ? 0 : plannedSum / leaves.length;
-  const overallAchieved = leaves.length === 0 ? 0 : achievedSum / leaves.length;
+  // Tracked-only rollup — same denominator as the live dashboard
+  // (src/lib/projectStats.ts). Unstarted leaves (progressEntered=false) drop
+  // out of both numerator and denominator so the Master Report no longer
+  // reports a different number than the dashboard for the same project.
+  // Falls back to all-leaves when nothing is tracked yet so a brand-new
+  // project still gets a sensible "planned vs achieved" rather than 0/0.
+  const tracked = leaves.filter((l) => l.progressEntered);
+  const denom = tracked.length || leaves.length;
+  const plannedSum = tracked.reduce(
+    (s, l) => s + plannedPercentFor(l.baselineStart, l.baselineFinish, today),
+    0,
+  );
+  const achievedSum = tracked.reduce((s, l) => s + (l.percentComplete ?? 0), 0);
+  const overallPlanned = denom === 0 ? 0 : plannedSum / denom;
+  const overallAchieved = denom === 0 ? 0 : achievedSum / denom;
 
   const totalDelayDays =
     projectEnd && latestProjected ? Math.max(0, diffDays(latestProjected, projectEnd) ?? 0) : 0;

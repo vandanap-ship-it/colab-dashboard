@@ -103,9 +103,13 @@ export default async function MobileProjectHome({
           {session?.user?.name}
         </h1>
         <p className="text-xs text-stone-400 mt-1">{project.name}</p>
+        {/* "Last sync" was misleading — this page is a Server Component, so
+            the timestamp is the moment the server rendered the response, not
+            when the offline queue last synced. "Loaded" is the honest label:
+            the data on screen is as fresh as this render. */}
         <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-stone-500 bg-white border border-stone-200 rounded-full px-2.5 py-1">
           <RefreshCw className="w-3 h-3 text-stone-400" />
-          Last sync —{" "}
+          Loaded{" "}
           {new Date().toLocaleString(undefined, {
             day: "2-digit",
             month: "short",
