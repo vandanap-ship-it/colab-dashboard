@@ -2,19 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, Building2, FolderPlus, Loader2 } from "lucide-react";
+import { ArrowRight, Building2, FolderPlus, Loader2, AlertTriangle } from "lucide-react";
 import NewProjectModal from "./NewProjectModal";
+import type { ProjectSummary } from "@/app/api/projects/summary/route";
 
-type Project = {
-  id: string;
-  name: string;
-  code: string | null;
-  status: string;
-  startDate: string | null;
-  endDate: string | null;
-  createdAt: string;
-  createdBy: { id: string; name: string; username: string };
-};
+type Project = ProjectSummary;
 
 const STATUS_STYLES: Record<string, { dot: string; pill: string; label: string }> = {
   PLANNING: { dot: "bg-amber-500", pill: "bg-amber-50 text-amber-800 ring-amber-200", label: "Planning" },
@@ -35,7 +27,10 @@ export default function ProjectList({ canCreate }: { canCreate: boolean }) {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/projects", { cache: "no-store" });
+      // /summary returns achieved/planned %, delay days, and open-action
+      // counts per project — gives the portfolio rollup the MD opens in the
+      // morning a single screen instead of one click per project.
+      const res = await fetch("/api/projects/summary", { cache: "no-store" });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setProjects(data.projects);
@@ -102,6 +97,15 @@ export default function ProjectList({ canCreate }: { canCreate: boolean }) {
         <ul className="grid gap-3">
           {projects.map((p) => {
             const status = STATUS_STYLES[p.status] ?? STATUS_STYLES.PLANNING;
+            // Gap between planned and achieved tells the MD whether a project
+            // is ahead (achieved > planned), at pace (equal), or behind.
+            // Convert to integer % for the headline number so the eye can
+            // scan a portfolio quickly without parsing decimals.
+            const achieved = Math.round(p.progressPercent);
+            const planned = Math.round(p.plannedPercent);
+            const gap = achieved - planned;
+            const totalOpenActions = p.openHindrances + p.openConcerns + p.openIssues;
+            const isDelayed = p.totalDelayDays > 0;
             return (
               <li key={p.id}>
                 <Link
@@ -128,10 +132,72 @@ export default function ProjectList({ canCreate }: { canCreate: boolean }) {
                         </span>
                       </div>
                       <p className="text-xs text-stone-500 mt-1">
-                        {formatDate(p.startDate)} → {formatDate(p.endDate)} · Created by {p.createdBy.name}
+                        {formatDate(p.startDate)} → {formatDate(p.endDate)}
                       </p>
                     </div>
+
+                    {/* Rollup metrics — read left to right, biggest signal first. */}
+                    <div className="hidden sm:flex items-center gap-5 text-right shrink-0">
+                      <Metric
+                        label="Achieved"
+                        value={`${achieved}%`}
+                        sub={
+                          p.totalActivities === 0
+                            ? "no data"
+                            : `vs ${planned}% planned`
+                        }
+                        tone={
+                          p.totalActivities === 0
+                            ? "muted"
+                            : gap >= 0
+                              ? "good"
+                              : gap >= -5
+                                ? "warn"
+                                : "bad"
+                        }
+                      />
+                      <Metric
+                        label="Delay"
+                        value={isDelayed ? `${p.totalDelayDays}d` : "—"}
+                        sub={isDelayed ? "late" : "on track"}
+                        tone={isDelayed ? "bad" : "good"}
+                      />
+                      <Metric
+                        label="Open"
+                        value={String(totalOpenActions)}
+                        sub={
+                          totalOpenActions === 0
+                            ? "—"
+                            : [
+                                p.openHindrances && `${p.openHindrances} hindrances`,
+                                p.openConcerns && `${p.openConcerns} concerns`,
+                                p.openIssues && `${p.openIssues} snags`,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")
+                        }
+                        tone={totalOpenActions === 0 ? "muted" : "warn"}
+                      />
+                    </div>
+
                     <ArrowRight className="w-4 h-4 text-stone-300 group-hover:text-stone-900 group-hover:translate-x-1 transition-all" />
+                  </div>
+
+                  {/* Compact metrics row for sub-sm viewports (so the mobile/
+                      narrow-laptop portfolio glance still has all signals). */}
+                  <div className="sm:hidden flex items-center gap-4 px-4 pb-3 -mt-1 text-xs">
+                    <span className="text-stone-500">
+                      <span className="text-stone-900 font-semibold">{achieved}%</span> done
+                      <span className="text-stone-400"> · {planned}% planned</span>
+                    </span>
+                    {isDelayed && (
+                      <span className="text-red-600 font-medium">{p.totalDelayDays}d late</span>
+                    )}
+                    {totalOpenActions > 0 && (
+                      <span className="text-amber-700 font-medium inline-flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> {totalOpenActions} open
+                      </span>
+                    )}
                   </div>
                 </Link>
               </li>
@@ -149,6 +215,35 @@ export default function ProjectList({ canCreate }: { canCreate: boolean }) {
           }}
         />
       )}
+    </div>
+  );
+}
+
+type MetricTone = "good" | "warn" | "bad" | "muted";
+
+const TONE_STYLES: Record<MetricTone, string> = {
+  good: "text-emerald-700",
+  warn: "text-amber-700",
+  bad: "text-red-700",
+  muted: "text-stone-400",
+};
+
+function Metric({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  tone: MetricTone;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400">{label}</div>
+      <div className={`text-base font-semibold tabular-nums ${TONE_STYLES[tone]}`}>{value}</div>
+      <div className="text-[10px] text-stone-500 truncate">{sub}</div>
     </div>
   );
 }

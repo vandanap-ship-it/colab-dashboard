@@ -11,7 +11,9 @@ export type ProjectSummary = {
   startDate: string | null;
   endDate: string | null;
   progressPercent: number;
+  plannedPercent: number;
   totalActivities: number;
+  totalDelayDays: number;
   openConcerns: number;
   openIssues: number;
   openHindrances: number;
@@ -51,7 +53,9 @@ export async function GET() {
         startDate: p.startDate?.toISOString() ?? null,
         endDate: p.endDate?.toISOString() ?? null,
         progressPercent: stats.achievedPercent,
+        plannedPercent: stats.plannedPercent,
         totalActivities: stats.totalActivities,
+        totalDelayDays: stats.totalDelayDays,
         openConcerns,
         openIssues,
         openHindrances,
