@@ -23,9 +23,13 @@ type Node = {
 type BucketKey = "OVERDUE" | "THIS_WEEK" | "THIS_MONTH" | "LATER";
 
 const BUCKET_META: Record<BucketKey, { label: string; dot: string; defaultOpen: boolean }> = {
+  // Overdue + the two near-term buckets are open by default — they're the only
+  // ones a busy MD / planner actually needs to glance at on the morning load.
+  // "Later" stays collapsed so the screen doesn't drown in 50+ milestones that
+  // aren't asking for attention right now.
   OVERDUE: { label: "Overdue", dot: "bg-red-500", defaultOpen: true },
   THIS_WEEK: { label: "Due this week", dot: "bg-amber-500", defaultOpen: true },
-  THIS_MONTH: { label: "Due this month", dot: "bg-emerald-500", defaultOpen: false },
+  THIS_MONTH: { label: "Due this month", dot: "bg-emerald-500", defaultOpen: true },
   LATER: { label: "Later", dot: "bg-stone-400", defaultOpen: false },
 };
 
@@ -52,7 +56,6 @@ type EnrichedMilestone = Node & {
 
 export default function MilestoneSummary({ projectId }: { projectId: string }) {
   const [nodes, setNodes] = useState<Node[] | null>(null);
-  const [phaseFilter, setPhaseFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState<Set<BucketKey>>(
     () => new Set(BUCKET_ORDER.filter((k) => !BUCKET_META[k].defaultOpen)),
@@ -76,14 +79,6 @@ export default function MilestoneSummary({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
-  /** Top-level phase chips (the labels users navigate by). */
-  const phases = useMemo(() => {
-    if (!nodes) return [] as string[];
-    const set = new Set<string>();
-    for (const n of nodes) if (n.level === 2 || n.level === 3) set.add(n.name);
-    return Array.from(set);
-  }, [nodes]);
-
   /** All non-leaf level-2-or-3 nodes, enriched with bucket + days-until. */
   const enriched: EnrichedMilestone[] = useMemo(() => {
     if (!nodes) return [];
@@ -99,16 +94,15 @@ export default function MilestoneSummary({ projectId }: { projectId: string }) {
     return out;
   }, [nodes]);
 
-  /** Apply phase + search filters and group by bucket. */
+  /** Apply search filter and group by bucket. */
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return enriched.filter((m) => {
       if (m.bucket === null) return false;
-      if (phaseFilter !== "ALL" && !m.path.includes(phaseFilter)) return false;
       if (q && !m.name.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [enriched, phaseFilter, search]);
+  }, [enriched, search]);
 
   const byBucket = useMemo(() => {
     const map: Record<BucketKey, EnrichedMilestone[]> = {
@@ -151,31 +145,16 @@ export default function MilestoneSummary({ projectId }: { projectId: string }) {
       </div>
 
       {nodes !== null && enriched.length > 0 && (
-        <>
-          <div className="relative mb-2">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400" />
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search milestones…"
-              className="w-full pl-7 pr-3 py-1.5 rounded-md border border-stone-200 bg-stone-50 text-sm placeholder:text-stone-400 focus:outline-none focus:border-stone-400 focus:bg-white"
-            />
-          </div>
-
-          {phases.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              <PhaseChip active={phaseFilter === "ALL"} onClick={() => setPhaseFilter("ALL")}>
-                All
-              </PhaseChip>
-              {phases.map((p) => (
-                <PhaseChip key={p} active={phaseFilter === p} onClick={() => setPhaseFilter(p)}>
-                  {p}
-                </PhaseChip>
-              ))}
-            </div>
-          )}
-        </>
+        <div className="relative mb-3">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search milestones…"
+            className="w-full pl-7 pr-3 py-1.5 rounded-md border border-stone-200 bg-stone-50 text-sm placeholder:text-stone-400 focus:outline-none focus:border-stone-400 focus:bg-white"
+          />
+        </div>
       )}
 
       {nodes === null ? (
@@ -184,7 +163,7 @@ export default function MilestoneSummary({ projectId }: { projectId: string }) {
         <p className="text-sm text-stone-500">
           {enriched.length === 0
             ? "No milestones on this project yet."
-            : "Nothing matches the current search or phase."}
+            : "Nothing matches your search."}
         </p>
       ) : (
         <div className="space-y-2">
@@ -231,30 +210,6 @@ function Counter({ dot, label, count }: { dot: string; label: string; count: num
       <span className="font-semibold text-stone-900 tabular-nums">{count}</span>
       <span className="text-stone-500">{label}</span>
     </span>
-  );
-}
-
-function PhaseChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors ${
-        active
-          ? "bg-stone-900 text-white"
-          : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 

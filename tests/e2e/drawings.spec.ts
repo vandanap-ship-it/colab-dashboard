@@ -20,11 +20,13 @@ test.describe("Drawing Register", () => {
     expect(drawing.discipline).toBe("ARCHITECTURAL");
     expect(drawing.currentRevision).toBeNull();
 
-    // Upload revision R0.
+    // Upload revision R0. fileUrl must be from our /api/upload pipeline —
+    // the route allowlists /uploads/... and *.public.blob.vercel-storage.com
+    // (see src/lib/upload.ts isOwnUploadUrl).
     const revRes = await page.request.post(`/api/drawings/${drawing.id}/revisions`, {
       data: {
         revisionLabel: "R0",
-        fileUrl: "https://example.com/drawings/A-104-R0.pdf",
+        fileUrl: `/uploads/drawings-${drawing.id}/A-104-R0.pdf`,
         fileName: "A-104-R0.pdf",
         issuedDate: new Date().toISOString(),
         notes: "Initial issue",
