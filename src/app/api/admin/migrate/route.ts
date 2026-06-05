@@ -83,6 +83,16 @@ const MIGRATIONS: Migration[] = [
     sql: loadBaselineSql(),
     describe: "Initial Postgres schema (all tables, indexes, FKs).",
   },
+  {
+    key: "2026-06-05_inspection_item_passed_nullable",
+    sql: [
+      // Drop the NOT NULL on InspectionItem.passed so the form can represent
+      // "untouched" as NULL (refused at submit). Existing rows are all true/
+      // false already, so no backfill needed.
+      `ALTER TABLE "InspectionItem" ALTER COLUMN "passed" DROP NOT NULL`,
+    ],
+    describe: "Allow InspectionItem.passed to be NULL (engineer hasn't ticked yet).",
+  },
 ];
 
 async function ensureLedger() {

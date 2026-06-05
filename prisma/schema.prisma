@@ -321,12 +321,14 @@ model Inspection {
 }
 
 model InspectionItem {
-  id           String  @id @default(cuid())
+  id           String   @id @default(cuid())
   inspectionId String
   label        String
-  passed       Boolean
+  // Nullable: null = engineer hasn't ticked this item yet (refused at submit).
+  // true = passed, false = failed. Pre-Jun-2026 rows are all true (legacy).
+  passed       Boolean?
   notes        String?
-  orderIndex   Int     @default(0)
+  orderIndex   Int      @default(0)
 
   inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
 

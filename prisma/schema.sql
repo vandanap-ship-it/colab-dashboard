@@ -229,7 +229,7 @@ CREATE TABLE "InspectionItem" (
     "id" TEXT NOT NULL,
     "inspectionId" TEXT NOT NULL,
     "label" TEXT NOT NULL,
-    "passed" BOOLEAN NOT NULL,
+    "passed" BOOLEAN,
     "notes" TEXT,
     "orderIndex" INTEGER NOT NULL DEFAULT 0,
 

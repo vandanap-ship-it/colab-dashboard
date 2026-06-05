@@ -49,7 +49,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ inspections, counts });
 }
 
-type ItemInput = { label?: string; passed?: boolean; notes?: string };
+type ItemInput = { label?: string; passed?: boolean | null; notes?: string };
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -77,16 +77,29 @@ export async function POST(req: Request) {
   const t = (title ?? "").trim();
   if (t.length < 3) return NextResponse.json({ error: "Title too short" }, { status: 400 });
 
-  const itemsClean = Array.isArray(items)
-    ? items
-        .map((i, idx) => ({
-          label: (i.label ?? "").trim(),
-          passed: !!i.passed,
-          notes: i.notes?.trim() || null,
-          orderIndex: idx,
-        }))
-        .filter((i) => i.label.length > 0)
-    : [];
+  // Refuse the submission if any non-empty item has an unset pass/fail.
+  // Pre-Jun-2026 the server coerced `!!i.passed` so a missing value silently
+  // became "passed", which let engineers submit clean-looking inspections
+  // without actually ticking each row. That was a real safety-record risk.
+  const candidateItems = Array.isArray(items) ? items : [];
+  const itemsClean: Array<{ label: string; passed: boolean; notes: string | null; orderIndex: number }> = [];
+  for (let idx = 0; idx < candidateItems.length; idx++) {
+    const i = candidateItems[idx];
+    const label = (i.label ?? "").trim();
+    if (label.length === 0) continue;
+    if (typeof i.passed !== "boolean") {
+      return NextResponse.json(
+        { error: `Item "${label}" was not marked pass or fail.` },
+        { status: 400 },
+      );
+    }
+    itemsClean.push({
+      label,
+      passed: i.passed,
+      notes: i.notes?.trim() || null,
+      orderIndex: idx,
+    });
+  }
   if (itemsClean.length === 0) return NextResponse.json({ error: "At least one checklist item required" }, { status: 400 });
 
   const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 8) : [];
