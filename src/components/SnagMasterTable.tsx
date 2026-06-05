@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Download, Search } from "lucide-react";
 import PhotoStrip, { type Photo } from "./PhotoStrip";
+import { useToast } from "./Toast";
 
 export type SnagRow = {
   id: string;
@@ -57,6 +58,7 @@ export default function SnagMasterTable({
   canManage: boolean;
   assignableUsers: AssignableUser[];
 }) {
+  const toast = useToast();
   const [rows, setRows] = useState<SnagRow[]>(initialRows);
   const [statusFilter, setStatusFilter] = useState<"ALL" | "OPEN" | "RESOLVED">("OPEN");
   const [severityFilter, setSeverityFilter] = useState<string>("ALL");
@@ -142,8 +144,9 @@ export default function SnagMasterTable({
     });
     if (res.ok) {
       setRows((rs) => rs.map((r) => (r.id === id ? { ...r, status: "RESOLVED" } : r)));
+      toast.success("Snag marked resolved.");
     } else {
-      window.alert("Couldn't resolve. Try again.");
+      toast.error("Couldn't resolve. Try again.");
     }
   }
 
@@ -159,7 +162,7 @@ export default function SnagMasterTable({
         rs.map((r) => (r.id === id ? { ...r, assignedToName: user?.name ?? null } : r)),
       );
     } else {
-      window.alert("Couldn't update assignment.");
+      toast.error("Couldn't update assignment.");
     }
   }
 
