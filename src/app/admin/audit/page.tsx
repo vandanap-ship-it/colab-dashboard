@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
+// Force dynamic rendering — every page load filters audit entries by the
+// caller's role + chosen filters, so there is nothing meaningful to cache at
+// build time. Equally important: pre-rendering opens a Postgres connection
+// from the Vercel build sandbox, which can exceed the 60s static-gen budget
+// (see /admin/trash for the same fix).
+export const dynamic = "force-dynamic";
+
 type SearchParams = Promise<{
   entityType?: string;
   action?: string;
