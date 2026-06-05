@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import VoiceTextarea from "./VoiceTextarea";
+import { useToast } from "./Toast";
 
 type Activity = { id: string; name: string; taskCode: string; path: string[] };
 
@@ -30,6 +31,7 @@ export default function ReportForm({
   extraFields?: ExtraField[];
 }) {
   const router = useRouter();
+  const toast = useToast();
 
   const [activities, setActivities] = useState<Activity[] | null>(null);
   const [activityId, setActivityId] = useState("");
@@ -151,11 +153,13 @@ export default function ReportForm({
     }
     setPending(false);
 
-    const queuedNote = queued
-      ? "Saved on this device. It will sync the moment you're back online."
-      : null;
-    if (photoWarning || queuedNote) {
-      alert([`${title} saved.`, queuedNote, photoWarning].filter(Boolean).join("\n\n"));
+    if (queued) {
+      toast.info("Saved on this device. It will sync when you're back online.");
+    } else {
+      toast.success(`${title} saved.`);
+    }
+    if (photoWarning) {
+      toast.warning(photoWarning);
     }
 
     router.push(successPath);

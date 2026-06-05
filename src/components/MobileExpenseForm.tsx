@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { EXPENSE_CATEGORIES } from "@/lib/expenses";
+import { useToast } from "./Toast";
 
 export default function MobileExpenseForm({ projectId }: { projectId: string }) {
   const router = useRouter();
+  const toast = useToast();
   const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
@@ -88,9 +90,13 @@ export default function MobileExpenseForm({ projectId }: { projectId: string }) 
     }
     setPending(false);
 
-    const queuedNote = queued ? "Saved on this device. It will sync the moment you're back online." : null;
-    if (photoWarning || queuedNote) {
-      alert(["Expense saved.", queuedNote, photoWarning].filter(Boolean).join("\n\n"));
+    if (queued) {
+      toast.info("Saved on this device. It will sync when you're back online.");
+    } else {
+      toast.success("Expense saved.");
+    }
+    if (photoWarning) {
+      toast.warning(photoWarning);
     }
 
     router.push(`/mobile/${projectId}`);

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import PhotoStrip from "./PhotoStrip";
 import VoiceTextarea from "./VoiceTextarea";
+import { useToast } from "./Toast";
 
 export type ProgressEntryRow = {
   id: string;
@@ -53,6 +54,7 @@ export default function AddProgressClient({
   activities: ActivityOption[];
   contractors: ContractorOption[];
 }) {
+  const toast = useToast();
   const [entries, setEntries] = useState<ProgressEntryRow[]>(initialEntries);
   const [search, setSearch] = useState("");
   const [contractorFilter, setContractorFilter] = useState("ALL");
@@ -84,8 +86,9 @@ export default function AddProgressClient({
     const res = await fetch(`/api/progress/${id}`, { method: "DELETE" });
     if (res.ok) {
       setEntries((es) => es.filter((e) => e.id !== id));
+      toast.success("Progress entry deleted.");
     } else {
-      window.alert("Couldn't delete. You may not have permission.");
+      toast.error("Couldn't delete. You may not have permission.");
     }
   }
 

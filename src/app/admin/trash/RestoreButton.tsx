@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Undo2 } from "lucide-react";
+import { useToast } from "@/components/Toast";
 
 export default function RestoreButton({
   entityType,
@@ -12,6 +13,7 @@ export default function RestoreButton({
   id: string;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [pending, setPending] = useState(false);
 
   async function restore() {
@@ -25,13 +27,14 @@ export default function RestoreButton({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        alert(data?.error ?? "Restore failed");
+        toast.error(data?.error ?? "Restore failed");
         setPending(false);
         return;
       }
+      toast.success("Restored.");
       router.refresh();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Restore failed");
+      toast.error(e instanceof Error ? e.message : "Restore failed");
       setPending(false);
     }
   }

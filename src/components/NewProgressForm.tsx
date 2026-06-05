@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import VoiceTextarea from "./VoiceTextarea";
+import { useToast } from "./Toast";
 
 type Activity = {
   id: string;
@@ -26,6 +27,7 @@ export default function NewProgressForm({
   initialActivityId?: string;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const today = new Date().toISOString().slice(0, 10);
 
   const [activities, setActivities] = useState<Activity[] | null>(null);
@@ -177,14 +179,17 @@ export default function NewProgressForm({
     }
     setPending(false);
 
-    const queuedNote = saved
-      ? null
-      : "Saved on this device. It will sync the moment you're back online.";
-
-    if (photoWarning || queuedNote) {
-      alert(
-        ["Progress saved.", queuedNote, photoWarning].filter(Boolean).join("\n\n"),
-      );
+    // Always confirm the save — pre-toast, an online save with no warnings
+    // showed NO feedback at all, and engineers on slow networks would
+    // double-submit thinking nothing happened.
+    if (saved) {
+      toast.success("Progress saved.");
+    } else {
+      toast.info("Saved on this device. It will sync when you're back online.");
+    }
+    // Photo failures get their own sticky warning so they don't get buried.
+    if (photoWarning) {
+      toast.warning(photoWarning);
     }
     router.push(`/mobile/${projectId}`);
     router.refresh();
