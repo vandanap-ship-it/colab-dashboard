@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
+import PhotoPicker from "./PhotoPicker";
 
 type Activity = {
   id: string;
@@ -382,24 +383,7 @@ export default function NewProgressForm({
             ))}
           </div>
 
-          <label className="block">
-            <span className="text-sm font-medium text-stone-700">Photos (max 4)</span>
-            <input
-              type="file"
-              accept="image/*"
-              // Hint to Android Chrome to open the camera by default — engineers
-              // overwhelmingly take a fresh photo at the site, not pick from
-              // gallery. The `multiple` attribute below still lets them pick
-              // multiple if the OS picker supports it.
-              capture="environment"
-              multiple
-              onChange={(e) => setPhotos(Array.from(e.target.files ?? []).slice(0, 4))}
-              className="mt-1 block w-full text-sm text-stone-700 file:mr-4 file:rounded-full file:border-0 file:bg-stone-900 file:text-white file:px-4 file:py-2 file:text-sm file:font-medium"
-            />
-            {photos.length > 0 && (
-              <p className="text-xs text-stone-500 mt-1">{photos.length} selected</p>
-            )}
-          </label>
+          <PhotoPicker photos={photos} setPhotos={setPhotos} max={4} label="Photos" />
 
           <label className="block">
             <span className="text-sm font-medium text-stone-700">Notes</span>
