@@ -11,6 +11,7 @@ import {
 import ReportShell, { ReportSection } from "@/components/ReportShell";
 import ProbabilityBadge from "@/components/ProbabilityBadge";
 import PhotoStrip from "@/components/PhotoStrip";
+import MasterReportCsvButton from "@/components/MasterReportCsvButton";
 
 function fmt(d: Date | null | undefined): string {
   if (!d) return "—";
@@ -94,6 +95,14 @@ export default async function MasterReportPage({
       basePath={`/projects/${id}/reports/master`}
       startDate={range.from}
       endDate={range.to}
+      toolbarExtras={
+        <MasterReportCsvButton
+          projectName={project.name}
+          projectCode={project.code ?? null}
+          periodLabel={periodLabel}
+          data={data}
+        />
+      }
     >
       {/* SECTION 01 — Overall Project Health */}
       <ReportSection index={1} title="Overall Project Health">
