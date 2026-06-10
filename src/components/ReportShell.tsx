@@ -107,6 +107,12 @@ export default function ReportShell({
               {projectName && (
                 <p className="text-xs text-stone-400 mt-2">{projectName}</p>
               )}
+              {/* "As of" stamp — answers "is this the morning's report or
+                  last week's?" both on screen and on printed copies passed
+                  around the office. Rendered server-side at request time. */}
+              <p className="text-[10px] text-stone-500 mt-3">
+                As of {fmtAsOf(new Date())}
+              </p>
             </div>
           </div>
         </div>
@@ -119,10 +125,21 @@ export default function ReportShell({
 
       {/* Print footer */}
       <footer className="hidden print:block max-w-5xl w-full mx-auto px-10 py-4 border-t border-stone-200 text-center text-[10px] text-stone-400">
-        {projectName} · {reportTitle} · {periodLabel}
+        {projectName} · {reportTitle} · {periodLabel} · Generated {fmtAsOf(new Date())}
       </footer>
     </div>
   );
+}
+
+/** "5 Jun 2026, 14:32 IST" — locale-formatted timestamp for the as-of stamp. */
+function fmtAsOf(d: Date): string {
+  return d.toLocaleString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export function ReportSection({

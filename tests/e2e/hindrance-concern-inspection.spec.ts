@@ -107,4 +107,66 @@ test.describe("Inspection templates", () => {
     const res = await page.request.post("/api/admin/seed-inspection-templates");
     expect(res.status()).toBe(403);
   });
+
+  test("API: refuses assignment to a deactivated user (issues + concerns)", async ({ page }) => {
+    // Locks down the rule that snags / concerns can't be assigned to
+    // someone whose account is inactive — otherwise the actionable item
+    // lands on /my-actions for an inbox no one can read.
+    const uname = `assignee.test.${uniqueId()}`.toLowerCase().replace(/[^a-z0-9._-]/g, "");
+    await signIn(page, "admin");
+    const projectId = await getProjectId(page);
+
+    // 1. Create a fresh user, then deactivate them
+    const createUser = await page.request.post("/api/admin/users", {
+      data: {
+        username: uname,
+        name: "Assignee Test",
+        role: "PLANNER",
+        password: "Siddhi@Test1",
+      },
+    });
+    expect(createUser.ok()).toBeTruthy();
+    const { user } = await createUser.json();
+    const deactivated = await page.request.patch(`/api/admin/users/${user.id}`, {
+      data: { active: false },
+    });
+    expect(deactivated.ok()).toBeTruthy();
+
+    // 2. Create a snag, try to assign to the deactivated user → 400
+    const snagRes = await page.request.post("/api/issues", {
+      data: { projectId, description: `[E2E assignee test] snag ${uniqueId()}` },
+    });
+    expect(snagRes.ok()).toBeTruthy();
+    const { issue } = await snagRes.json();
+
+    const assignSnag = await page.request.patch(`/api/issues/${issue.id}`, {
+      data: { assignedToId: user.id },
+    });
+    expect(assignSnag.status()).toBe(400);
+    expect((await assignSnag.json()).error).toMatch(/deactivated/i);
+
+    // 3. Same for a concern
+    const concRes = await page.request.post("/api/concerns", {
+      data: { projectId, description: `[E2E assignee test] concern ${uniqueId()}` },
+    });
+    expect(concRes.ok()).toBeTruthy();
+    const { concern } = await concRes.json();
+
+    const assignConc = await page.request.patch(`/api/concerns/${concern.id}`, {
+      data: { assignedToId: user.id },
+    });
+    expect(assignConc.status()).toBe(400);
+    expect((await assignConc.json()).error).toMatch(/deactivated/i);
+
+    // 4. Also blocked on snag creation if you try to set assignedToId at
+    //    POST time — server validates the same way.
+    const directAssign = await page.request.post("/api/issues", {
+      data: {
+        projectId,
+        description: `[E2E assignee test] direct ${uniqueId()}`,
+        assignedToId: user.id,
+      },
+    });
+    expect(directAssign.status()).toBe(400);
+  });
 });

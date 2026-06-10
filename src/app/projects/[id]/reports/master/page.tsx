@@ -22,6 +22,20 @@ function fmt(d: Date | null | undefined): string {
   });
 }
 
+/** Signed delay → readable label. Positive = late, negative = ahead, 0 = on time. */
+function formatDelay(days: number): string {
+  if (days === 0) return "0 Days";
+  if (days > 0) return `${days} Days late`;
+  return `${Math.abs(days)} Days ahead`;
+}
+
+/** Colour tone: positive = danger (red), negative = ok-but-green (success). */
+function delayTone(days: number): "danger" | "ok" | "success" {
+  if (days > 0) return "danger";
+  if (days < 0) return "success";
+  return "ok";
+}
+
 export default async function MasterReportPage({
   params,
   searchParams,
@@ -192,13 +206,13 @@ export default async function MasterReportPage({
             <div className="mt-2 space-y-3">
               <Metric
                 label="Total Delay"
-                value={`${data.overall.totalDelayDays} Days`}
-                tone={data.overall.totalDelayDays > 0 ? "danger" : "ok"}
+                value={formatDelay(data.overall.totalDelayDays)}
+                tone={delayTone(data.overall.totalDelayDays)}
               />
               <Metric
                 label="RERA Delay"
-                value={`${data.overall.reraDelayDays} Days`}
-                tone={data.overall.reraDelayDays > 0 ? "danger" : "ok"}
+                value={formatDelay(data.overall.reraDelayDays)}
+                tone={delayTone(data.overall.reraDelayDays)}
               />
               <Metric
                 label="Hindrances"
@@ -458,9 +472,16 @@ function Metric({
 }: {
   label: string;
   value: string;
-  tone: "ok" | "danger";
+  tone: "ok" | "danger" | "success";
 }) {
-  const colour = tone === "danger" ? "text-red-600" : "text-emerald-600";
+  // "ok" = neutral on-time grey-green, "success" = actively ahead green,
+  // "danger" = late red.
+  const colour =
+    tone === "danger"
+      ? "text-red-600"
+      : tone === "success"
+        ? "text-emerald-600"
+        : "text-stone-700";
   return (
     <div>
       <p className="text-[10px] uppercase tracking-wider text-stone-400">{label}</p>
@@ -522,13 +543,17 @@ function ZoneRow({
           {phase.plannedDurationDays != null ? `${phase.plannedDurationDays} Days` : "—"}
         </td>
         <td className="py-2 px-3 text-right">
-          {phase.totalDelayDays > 0 ? (
-            <span className="text-red-600 font-semibold tabular-nums">
-              {phase.totalDelayDays} Days
-            </span>
-          ) : (
-            <span className="text-emerald-600 font-semibold">0 Days</span>
-          )}
+          <span
+            className={`font-semibold tabular-nums ${
+              phase.totalDelayDays > 0
+                ? "text-red-600"
+                : phase.totalDelayDays < 0
+                  ? "text-emerald-600"
+                  : "text-stone-600"
+            }`}
+          >
+            {formatDelay(phase.totalDelayDays)}
+          </span>
         </td>
         <td className="py-2 px-3 text-right text-stone-700">0 Days</td>
         <td className="py-2 px-3 text-right">
