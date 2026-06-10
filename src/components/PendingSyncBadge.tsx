@@ -1,18 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CloudOff, Loader2 } from "lucide-react";
+import { CloudOff } from "lucide-react";
+import PendingSyncSheet from "./PendingSyncSheet";
 
 /**
  * Small badge that appears on mobile screens when there are entries waiting
- * to sync. Sits inline (no fixed positioning) so it doesn't fight with
- * existing layout.
+ * to sync. Tapping it now opens a detail bottom-sheet (PendingSyncSheet)
+ * instead of running retryAll() blind — engineers can see which entries are
+ * queued, how long they've waited, what error each saw, and discard
+ * permanently-poisoned items individually. "Retry all" still lives one tap
+ * away in the sheet's footer.
  *
- * Hides itself when count is 0. Tapping it triggers a manual retry.
+ * Hides itself when the queue is empty.
  */
 export default function PendingSyncBadge() {
   const [count, setCount] = useState(0);
-  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,31 +36,21 @@ export default function PendingSyncBadge() {
     };
   }, []);
 
-  async function handleRetry() {
-    setBusy(true);
-    try {
-      const { retryAll } = await import("@/lib/offlineQueue");
-      await retryAll();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (count === 0) return null;
+  if (count === 0 && !open) return null;
 
   return (
-    <button
-      type="button"
-      onClick={handleRetry}
-      disabled={busy}
-      className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900 border border-amber-300 hover:bg-amber-200 disabled:opacity-60"
-    >
-      {busy ? (
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-      ) : (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900 border border-amber-300 hover:bg-amber-200"
+      >
         <CloudOff className="w-3.5 h-3.5" />
-      )}
-      {count} pending sync · tap to retry
-    </button>
+        {count} pending sync · tap to view
+      </button>
+      <PendingSyncSheet open={open} onClose={() => setOpen(false)} />
+    </>
   );
 }
