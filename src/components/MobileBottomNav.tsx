@@ -7,12 +7,22 @@ import type { LucideIcon } from "lucide-react";
 
 export default function MobileBottomNav({ projectId }: { projectId: string }) {
   const pathname = usePathname();
+  const home = `/mobile/${projectId}`;
   const items: { href: string; label: string; icon: LucideIcon }[] = [
-    { href: `/mobile/${projectId}`, label: "Home", icon: Home },
-    { href: `/mobile/${projectId}/documents`, label: "Documents", icon: FolderClosed },
-    { href: `/mobile/${projectId}/info`, label: "Info", icon: Inbox },
-    { href: `/mobile/${projectId}/profile`, label: "Profile", icon: User },
+    { href: home, label: "Home", icon: Home },
+    { href: `${home}/documents`, label: "Documents", icon: FolderClosed },
+    { href: `${home}/info`, label: "Info", icon: Inbox },
+    { href: `${home}/profile`, label: "Profile", icon: User },
   ];
+
+  // Engineer on a deep route like /mobile/{id}/progress/new used to see NO
+  // tab highlighted — pathname didn't start with Documents/Info/Profile and
+  // Home was matched only by `pathname === home`. They felt lost mid-flow.
+  // Now: Home is active whenever no non-Home tab matches, so the engineer
+  // always has somewhere their eye lands.
+  const nonHomeActive = items.some(
+    (it) => it.href !== home && pathname.startsWith(it.href),
+  );
 
   return (
     <nav
@@ -21,8 +31,9 @@ export default function MobileBottomNav({ projectId }: { projectId: string }) {
     >
       {items.map((it) => {
         const active =
-          pathname === it.href ||
-          (it.href !== `/mobile/${projectId}` && pathname.startsWith(it.href));
+          it.href === home
+            ? !nonHomeActive
+            : pathname.startsWith(it.href);
         const Icon = it.icon;
         return (
           <Link
