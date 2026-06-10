@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { EXPENSE_CATEGORIES } from "@/lib/expenses";
 import { useToast } from "./Toast";
+import PhotoPicker from "./PhotoPicker";
 
 export default function MobileExpenseForm({ projectId }: { projectId: string }) {
   const router = useRouter();
@@ -176,18 +177,7 @@ export default function MobileExpenseForm({ projectId }: { projectId: string }) 
         </label>
       </div>
 
-      <label className="block">
-        <span className="text-sm font-medium text-stone-700">Receipt photo (optional)</span>
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          multiple
-          onChange={(e) => setPhotos(Array.from(e.target.files ?? []).slice(0, 4))}
-          className="mt-1 block w-full text-sm text-stone-700 file:mr-4 file:rounded-full file:border-0 file:bg-stone-900 file:text-white file:px-4 file:py-2 file:text-sm file:font-medium"
-        />
-        {photos.length > 0 && <p className="text-xs text-stone-500 mt-1">{photos.length} selected</p>}
-      </label>
+      <PhotoPicker photos={photos} setPhotos={setPhotos} max={4} label="Receipt photo (optional)" />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 

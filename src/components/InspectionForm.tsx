@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
+import PhotoPicker from "./PhotoPicker";
 
 type Activity = { id: string; name: string; taskCode: string; path: string[] };
 
@@ -375,18 +376,7 @@ export default function InspectionForm({
         </ul>
       </div>
 
-      <label className="block">
-        <span className="text-sm font-medium text-stone-700">Photos (max 8)</span>
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          multiple
-          onChange={(e) => setPhotos(Array.from(e.target.files ?? []).slice(0, 8))}
-          className="mt-1 block w-full text-sm text-stone-700 file:mr-4 file:rounded-full file:border-0 file:bg-stone-900 file:text-white file:px-4 file:py-2 file:text-sm file:font-medium"
-        />
-        {photos.length > 0 && <p className="text-xs text-stone-500 mt-1">{photos.length} selected</p>}
-      </label>
+      <PhotoPicker photos={photos} setPhotos={setPhotos} max={8} label="Photos" />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
