@@ -51,12 +51,14 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/concerns/[id]"
   if (status && STATUSES.has(status)) data.status = status;
   if (assignedToId === null) data.assignedToId = null;
   else if (typeof assignedToId === "string" && assignedToId.length > 0) {
-    // Verify user exists to surface a 400 instead of an FK error.
+    // Verify user exists + active. Refusing to assign to a deactivated user
+    // keeps work from landing on an inbox no one can read.
     const exists = await prisma.user.findUnique({
       where: { id: assignedToId },
-      select: { id: true },
+      select: { id: true, active: true },
     });
     if (!exists) return badRequest("Assignee not found");
+    if (!exists.active) return badRequest("Cannot assign to a deactivated user.");
     data.assignedToId = assignedToId;
     if (!status) data.status = "TASK_ASSIGNED";
   }

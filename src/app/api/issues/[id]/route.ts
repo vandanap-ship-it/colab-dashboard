@@ -45,9 +45,12 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
     } else {
       const user = await prisma.user.findUnique({
         where: { id: assignedToId },
-        select: { id: true },
+        select: { id: true, active: true },
       });
       if (!user) return badRequest("Assignee not found");
+      // Refuse to assign to a deactivated user — the snag would land on
+      // /my-actions for an account that can't sign in to resolve it.
+      if (!user.active) return badRequest("Cannot assign to a deactivated user.");
       data.assignedToId = assignedToId;
     }
   }

@@ -745,10 +745,14 @@ export async function getMasterReport(
   const overallPlanned = denom === 0 ? 0 : plannedSum / denom;
   const overallAchieved = denom === 0 ? 0 : achievedSum / denom;
 
+  // Signed: positive = days late, negative = days ahead, 0 = on the day.
+  // Previously clamped at 0 which made "ahead of schedule" look identical to
+  // "exactly on time" — sites that worked hard to finish early got no credit
+  // on the board report.
   const totalDelayDays =
-    projectEnd && latestProjected ? Math.max(0, diffDays(latestProjected, projectEnd) ?? 0) : 0;
+    projectEnd && latestProjected ? (diffDays(latestProjected, projectEnd) ?? 0) : 0;
   const reraDelayDays =
-    reraEnd && latestProjected ? Math.max(0, diffDays(latestProjected, reraEnd) ?? 0) : 0;
+    reraEnd && latestProjected ? (diffDays(latestProjected, reraEnd) ?? 0) : 0;
 
   const hindrancesOpen = await prisma.hindrance.count({
     where: { projectId, status: "OPEN" },
@@ -800,9 +804,10 @@ export async function getMasterReport(
         .filter((d): d is Date => Boolean(d))
         .sort((a, b) => b.getTime() - a.getTime())[0] ?? phase.projectedFinish ?? phase.baselineFinish;
 
+    // Signed (same convention as overall): positive = late, negative = ahead.
     const phaseTotalDelay =
       phase.baselineFinish && phaseProjected
-        ? Math.max(0, diffDays(phaseProjected, phase.baselineFinish) ?? 0)
+        ? (diffDays(phaseProjected, phase.baselineFinish) ?? 0)
         : 0;
 
     perZone.push({

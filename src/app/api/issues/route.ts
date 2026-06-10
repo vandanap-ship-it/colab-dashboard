@@ -69,6 +69,20 @@ export async function POST(req: Request) {
   const sev = severity && SEVERITIES.has(severity) ? severity : null;
   const cat = (category ?? "").trim();
   const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 6) : [];
+
+  // If an assignee is set, verify they exist + are active before creating —
+  // matches the PATCH guard so create + assign-on-create stay symmetric.
+  if (assignedToId) {
+    const assignee = await prisma.user.findUnique({
+      where: { id: assignedToId },
+      select: { id: true, active: true },
+    });
+    if (!assignee) return NextResponse.json({ error: "Assignee not found" }, { status: 400 });
+    if (!assignee.active) {
+      return NextResponse.json({ error: "Cannot assign to a deactivated user." }, { status: 400 });
+    }
+  }
+
   // Tag the snag with the creator's module so scoped contractors only ever
   // see their own module's snags. Full-access staff create untagged snags.
   const moduleTag = primaryModuleFor(session.user.modules);
