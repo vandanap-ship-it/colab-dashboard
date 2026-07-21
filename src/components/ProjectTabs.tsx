@@ -7,6 +7,8 @@ import {
   ClipboardCheck,
   LayoutDashboard,
   Lightbulb,
+  Map,
+  ScanEye,
   Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -30,6 +32,18 @@ export default function ProjectTabs({
   const pathname = usePathname();
 
   const tabs: Tab[] = [
+    {
+      key: "overview",
+      label: "Overview",
+      href: `/projects/${projectId}/overview`,
+      icon: ScanEye,
+    },
+    {
+      key: "layout",
+      label: "Layout",
+      href: `/projects/${projectId}/layout`,
+      icon: Map,
+    },
     {
       key: "snapshot",
       label: "Snapshot",

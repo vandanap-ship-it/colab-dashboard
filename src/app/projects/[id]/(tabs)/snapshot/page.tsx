@@ -10,6 +10,7 @@ import HindranceSummary from "@/components/HindranceSummary";
 import ConcernRaised from "@/components/ConcernRaised";
 import IssuesCard from "@/components/IssuesCard";
 import MilestoneSummary from "@/components/MilestoneSummary";
+import MilestoneMatrix from "@/components/executive/MilestoneMatrix";
 import QAQCList from "@/components/QAQCList";
 import InteractiveDrawings from "@/components/InteractiveDrawings";
 import { isAdmin, ROLES, canCreateProject } from "@/lib/roles";
@@ -133,6 +134,8 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
       />
 
       <MilestoneSummary projectId={id} />
+
+      <MilestoneMatrix />
 
       <InteractiveDrawings
         projectId={id}

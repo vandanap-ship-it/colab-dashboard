@@ -1,0 +1,229 @@
+/* Milestone Matrix — per-villa × per-milestone pivot table.
+   Mirrors the Colab Snapshot "Milestone Matrix" view but uses our design tokens. */
+
+.wrap {
+  background: #FFFFFF;
+  border: 1px solid #E2DDD0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(22, 32, 47, 0.04);
+  font-size: 13px;
+  color: #1B2432;
+}
+
+.hd {
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid #EDE9DD;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.hd h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #1B2432;
+}
+.hd .meta { font-size: 11.5px; color: #8B93A0; }
+
+/* ---------- FILTERS ---------- */
+.filters {
+  padding: 12px 18px;
+  background: #F7F5EF;
+  border-bottom: 1px solid #EDE9DD;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 14px;
+  align-items: end;
+}
+.filterField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.filterField label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #4E5866;
+  font-weight: 700;
+}
+.filterField select,
+.filterField input {
+  background: #FFFFFF;
+  border: 1px solid #E2DDD0;
+  border-radius: 5px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  color: #1B2432;
+  font-family: inherit;
+  min-width: 0;
+}
+.filterField select:focus,
+.filterField input:focus {
+  outline: 2px solid #2F5D8A;
+  outline-offset: 1px;
+  border-color: #2F5D8A;
+}
+.filterField.multi {
+  position: relative;
+}
+.filterButtons {
+  display: flex;
+  gap: 8px;
+}
+.applyBtn {
+  background: #16202F;
+  color: #F3EFE4;
+  border: 0;
+  padding: 8px 16px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.applyBtn:hover { background: #1E2A3C; }
+.clearBtn {
+  background: transparent;
+  color: #4E5866;
+  border: 1px solid #E2DDD0;
+  padding: 8px 16px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.clearBtn:hover { background: #F1EEE4; color: #1B2432; }
+
+/* ---------- TABLE ---------- */
+.tableScroll {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 640px;
+}
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Column headers */
+.table thead th {
+  background: #16202F;
+  color: #F3EFE4;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 10px 12px;
+  text-align: left;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 2px solid #1E4266;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+.table thead th.first {
+  left: 0;
+  z-index: 4;
+  border-right: 2px solid #1E4266;
+  min-width: 130px;
+}
+.table thead th.second {
+  left: 130px;
+  z-index: 4;
+  border-right: 2px solid #1E4266;
+  min-width: 130px;
+  background: #16202F;
+}
+
+/* Body cells */
+.table tbody td {
+  padding: 8px 12px;
+  border-right: 1px solid #EDE9DD;
+  border-bottom: 1px solid #F1EEE4;
+  vertical-align: middle;
+  min-width: 110px;
+}
+.table tbody td.villaName {
+  position: sticky;
+  left: 0;
+  background: #FFFFFF;
+  z-index: 2;
+  font-weight: 700;
+  color: #1B2432;
+  border-right: 2px solid #E2DDD0;
+  min-width: 130px;
+}
+.table tbody td.rowLabel {
+  position: sticky;
+  left: 130px;
+  background: #F7F5EF;
+  z-index: 1;
+  font-size: 11px;
+  color: #4E5866;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-right: 2px solid #E2DDD0;
+  min-width: 130px;
+  white-space: nowrap;
+}
+
+/* Villa group border — thicker line between villas */
+.table tbody tr.villaStart td {
+  border-top: 2px solid #C9C3B0;
+}
+
+/* Highlight the completed row */
+.table tbody tr.rowActual td {
+  color: #2E7D5B;
+}
+.table tbody tr.rowDelay td {
+  color: #B33A3A;
+  font-weight: 600;
+}
+.table tbody tr.rowCrmDelay td {
+  color: #C77A2A;
+  font-weight: 600;
+}
+.table tbody tr.rowProgress td {
+  color: #1B2432;
+  font-weight: 700;
+}
+
+/* Data cells */
+.cell {
+  font-size: 12px;
+}
+.cell.zero { color: #B8BCC4; }
+.cell.money { color: #1E4266; font-weight: 600; }
+
+.empty {
+  padding: 30px;
+  text-align: center;
+  color: #8B93A0;
+  font-style: italic;
+  font-size: 13px;
+}
+
+.summary {
+  padding: 10px 18px;
+  font-size: 11.5px;
+  color: #4E5866;
+  background: #F7F5EF;
+  border-top: 1px solid #EDE9DD;
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.summary strong { color: #1B2432; font-weight: 700; }
