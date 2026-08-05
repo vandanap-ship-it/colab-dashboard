@@ -2,7 +2,14 @@
 
 import { useMemo, useState } from "react";
 import styles from "./executive.module.css";
-import { BLOCKS, SECTIONS, type BlockRollup } from "@/lib/executiveMockData";
+import type { BlockRollup } from "@/lib/executiveMockData";
+
+export interface ExecutiveLayoutProps {
+  blocks: BlockRollup[];
+  sections: string[];
+  /** Per-active-villa slip + current section — same shape the mock uses. */
+  villaSlips: Record<number, { slip: number; section: number }>;
+}
 
 type CellStatus = "stGood" | "stWarn" | "stBad" | "stSlip" | "stPending" | "stOos";
 
@@ -36,25 +43,14 @@ function overallStatus(villaCurrentSection: number, villaSlipDays: number): Cell
   return "stWarn";
 }
 
-const VILLA_SLIP_MAP: Record<number, { slip: number; section: number }> = {
-  12: { slip: 8, section: 2 }, 13: { slip: 5, section: 2 }, 14: { slip: 12, section: 1 },
-  25: { slip: 18, section: 1 }, 26: { slip: 26, section: 1 }, 27: { slip: 22, section: 1 },
-  28: { slip: 30, section: 1 }, 29: { slip: 42, section: 1 }, 30: { slip: 36, section: 0 },
-  31: { slip: 15, section: 1 },
-  32: { slip: 10, section: 1 }, 33: { slip: 24, section: 1 }, 34: { slip: 32, section: 1 },
-  35: { slip: 46, section: 0 }, 36: { slip: 20, section: 1 }, 37: { slip: 38, section: 1 },
-  47: { slip: 28, section: 1 }, 48: { slip: 52, section: 0 }, 49: { slip: 40, section: 1 },
-  50: { slip: 44, section: 0 },
-};
-
-export default function ExecutiveLayout() {
+export default function ExecutiveLayout({ blocks, sections, villaSlips }: ExecutiveLayoutProps) {
   const [selected, setSelected] = useState<number | null>(null); // section index, or null for overall
 
-  const activeBlocks = BLOCKS.filter((b) => b.active);
-  const inactiveBlocks = BLOCKS.filter((b) => !b.active);
+  const activeBlocks = blocks.filter((b) => b.active);
+  const inactiveBlocks = blocks.filter((b) => !b.active);
 
   const cellFor = (villaNum: number) => {
-    const profile = VILLA_SLIP_MAP[villaNum];
+    const profile = villaSlips[villaNum];
     if (!profile) return "stOos";
     return selected === null
       ? overallStatus(profile.section, profile.slip)
@@ -91,7 +87,7 @@ export default function ExecutiveLayout() {
           >
             Overall status
           </button>
-          {SECTIONS.map((name, i) => (
+          {sections.map((name, i) => (
             <button
               key={name}
               className={`${styles.milChip} ${selected === i ? styles.on : ""}`}
@@ -111,7 +107,7 @@ export default function ExecutiveLayout() {
         </div>
         <div className={styles.filterSummary}>
           <span className={styles.fsLbl}>
-            {selected === null ? "Overall villa status" : `Milestone: ${SECTIONS[selected]}`}
+            {selected === null ? "Overall villa status" : `Milestone: ${sections[selected]}`}
           </span>
           <span className={styles.sep}>·</span>
           <span className={styles.cGood}>{summary.good} on-time</span>
@@ -129,7 +125,7 @@ export default function ExecutiveLayout() {
         <div className={styles.layoutHd}>
           <h3>Block Layout · Contractor Abraham Thomas</h3>
           <span className={styles.meta}>
-            {selected === null ? "default view — overall villa status" : `filtered by ${SECTIONS[selected]}`}
+            {selected === null ? "default view — overall villa status" : `filtered by ${sections[selected]}`}
           </span>
         </div>
         <div className={styles.layoutBody}>

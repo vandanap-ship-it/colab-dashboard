@@ -98,7 +98,7 @@ export const BLOCKS: BlockRollup[] = [
 
 // Per-villa slip snapshot. Only active villas populated with realistic values;
 // inactive villas fall through to zero-defaults in accessor.
-const VILLA_SLIPS: Record<number, { slip: number; pct: number; section: number; stale: number }> = {
+export const VILLA_SLIPS: Record<number, { slip: number; pct: number; section: number; stale: number }> = {
   // Block 9 (active)
   25: { slip: 18, pct: 85, section: 1, stale: 4 },
   26: { slip: 26, pct: 60, section: 1, stale: 6 },

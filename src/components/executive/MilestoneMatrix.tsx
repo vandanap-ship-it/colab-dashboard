@@ -2,14 +2,22 @@
 
 import { useMemo, useState } from "react";
 import styles from "./milestoneMatrix.module.css";
-import {
-  MATRIX_VILLA_ORDER,
-  SECTION_HEADERS,
-  SECTIONS,
-  CONTRACTORS,
-  milestonesForVilla,
-  type MilestoneCell,
-} from "@/lib/executiveMockData";
+import type { ContractorRollup, MilestoneCell } from "@/lib/executiveMockData";
+
+export interface MilestoneMatrixProps {
+  /** Ordered villa numbers as columns (Villa 25, Villa 12, ...) */
+  villaOrder: number[];
+  /** Display labels per villa — handles grouped-villa case ("Villa 10 & 11"). */
+  villaLabels: Record<number, string>;
+  /** Section names in display order (Foundation → Handover). */
+  sections: string[];
+  /** Uppercase headers for the table columns. */
+  sectionHeaders: string[];
+  /** For each villa number, the 21 MilestoneCells in section order. */
+  cellsByVilla: Record<number, MilestoneCell[]>;
+  /** Contractor list for the filter dropdown. */
+  contractors: ContractorRollup[];
+}
 
 // Rows shown per villa (8 sub-rows per Colab layout).
 const ROW_KEYS = [
@@ -47,7 +55,14 @@ function cellText(row: RowKey, cell: MilestoneCell | undefined): string {
   return v == null ? "—" : String(v);
 }
 
-export default function MilestoneMatrix() {
+export default function MilestoneMatrix({
+  villaOrder,
+  villaLabels,
+  sections,
+  sectionHeaders,
+  cellsByVilla,
+  contractors,
+}: MilestoneMatrixProps) {
   const [selectedVillas, setSelectedVillas] = useState<number[]>([]);
   const [selectedSections, setSelectedSections] = useState<number[]>([]);
   const [contractor, setContractor] = useState<string>("");
@@ -74,11 +89,11 @@ export default function MilestoneMatrix() {
   };
 
   const villasToShow = useMemo(() => {
-    return applied.villas.length ? applied.villas : MATRIX_VILLA_ORDER;
+    return applied.villas.length ? applied.villas : villaOrder;
   }, [applied.villas]);
 
   const sectionIndexes = useMemo(() => {
-    const all = SECTIONS.map((_, i) => i);
+    const all = sections.map((_, i) => i);
     if (!applied.sections.length) return all;
     return all.filter((i) => applied.sections.includes(i));
   }, [applied.sections]);
@@ -90,7 +105,7 @@ export default function MilestoneMatrix() {
     const from = applied.from ? new Date(applied.from) : null;
     const to = applied.to ? new Date(applied.to) : null;
     return villasToShow.filter((v) => {
-      const cells = milestonesForVilla(v);
+      const cells = cellsByVilla[v] ?? [];
       return sectionIndexes.some((i) => {
         const c = cells[i];
         if (!c) return false;
@@ -126,8 +141,8 @@ export default function MilestoneMatrix() {
               )
             }
           >
-            {MATRIX_VILLA_ORDER.map((v) => (
-              <option key={v} value={v}>Villa {v}</option>
+            {villaOrder.map((v) => (
+              <option key={v} value={v}>{villaLabels[v] ?? `Villa ${v}`}</option>
             ))}
           </select>
         </div>
@@ -144,7 +159,7 @@ export default function MilestoneMatrix() {
               )
             }
           >
-            {SECTIONS.map((s, i) => (
+            {sections.map((s, i) => (
               <option key={s} value={i}>{s}</option>
             ))}
           </select>
@@ -157,7 +172,7 @@ export default function MilestoneMatrix() {
             onChange={(e) => setContractor(e.target.value)}
           >
             <option value="">All contractors</option>
-            {CONTRACTORS.map((c) => (
+            {contractors.map((c) => (
               <option key={c.name} value={c.name}>{c.name}</option>
             ))}
           </select>
@@ -194,7 +209,7 @@ export default function MilestoneMatrix() {
               <th className={styles.first}>Villa</th>
               <th className={styles.second}>Metric</th>
               {sectionIndexes.map((i) => (
-                <th key={i}>{SECTION_HEADERS[i]}</th>
+                <th key={i}>{sectionHeaders[i]}</th>
               ))}
             </tr>
           </thead>
@@ -207,7 +222,7 @@ export default function MilestoneMatrix() {
               </tr>
             ) : (
               filteredVillas.flatMap((v) => {
-                const cells = milestonesForVilla(v);
+                const cells = cellsByVilla[v] ?? [];
                 return ROW_KEYS.map((row, rIdx) => (
                   <tr
                     key={`${v}-${row.key}`}
@@ -221,7 +236,7 @@ export default function MilestoneMatrix() {
                         rowSpan={ROW_KEYS.length}
                         className={styles.villaName}
                       >
-                        Villa {v}
+                        {villaLabels[v] ?? `Villa ${v}`}
                       </td>
                     )}
                     <td className={styles.rowLabel}>{row.label}</td>

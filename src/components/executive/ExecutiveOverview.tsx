@@ -1,24 +1,26 @@
 import styles from "./executive.module.css";
 import {
-  BLOCKS,
-  CONTRACTORS,
   SECTIONS,
-  activeVillas,
   blockStatus,
   villaStatus,
-  healthSummary,
   type BlockRollup,
+  type ContractorRollup,
+  type ProjectHealthSummary,
   type VillaRollup,
 } from "@/lib/executiveMockData";
 
-// Executive project rollup — the "Overview" tab of the new dashboard IA.
-// Placeholder data for now; wires to real DB queries once Block/Villa/
-// MilestoneSection are seeded.
-export default function ExecutiveOverview() {
-  const h = healthSummary();
-  const villas = activeVillas();
+export interface ExecutiveOverviewProps {
+  health: ProjectHealthSummary;
+  villas: VillaRollup[];
+  blocks: BlockRollup[];
+  contractors: ContractorRollup[];
+}
 
-  const active = BLOCKS.filter((b) => b.active);
+// Executive project rollup — the "Overview" tab of the new dashboard IA.
+// Props come from the page-level server component: either adapted DB data
+// (adaptDashboardBag) or the mock data helpers as a transitional fallback.
+export default function ExecutiveOverview({ health: h, villas, blocks, contractors }: ExecutiveOverviewProps) {
+  const active = blocks.filter((b) => b.active);
   const projectedDays = daysBetween(h.baselineStart, h.projectedEnd);
   const plannedDays = daysBetween(h.baselineStart, h.baselineEnd);
   const plannedPct = (plannedDays / projectedDays) * 100;
@@ -182,7 +184,7 @@ export default function ExecutiveOverview() {
             <div>Avg delay</div>
             <div>Health</div>
           </div>
-          {CONTRACTORS.map((c) => (
+          {contractors.map((c) => (
             <div
               key={c.name}
               className={`${styles.crRow} ${styles[c.health] ?? ""}`}
@@ -245,7 +247,7 @@ export default function ExecutiveOverview() {
           <span className={styles.meta}>grouped by current delay · click any block to drill in</span>
         </div>
         <div className={styles.cardBd}>
-          <BlockBuckets />
+          <BlockBuckets blocks={blocks} />
         </div>
       </div>
 
@@ -339,8 +341,8 @@ function ScheduleRow({
   );
 }
 
-function BlockBuckets() {
-  const active = BLOCKS.filter((b) => b.active);
+function BlockBuckets({ blocks }: { blocks: BlockRollup[] }) {
+  const active = blocks.filter((b) => b.active);
   const healthy = active.filter((b) => blockStatus(b) === "healthy");
   const warning = active.filter((b) => blockStatus(b) === "warning");
   const critical = active.filter((b) => blockStatus(b) === "critical");

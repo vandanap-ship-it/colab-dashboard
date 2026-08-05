@@ -175,24 +175,29 @@ export async function getProjectRollup(projectId: string): Promise<ProjectRollup
 // Milestone Matrix rows — flattened for the pivot table UI
 // ---------------------------------------------------------------------------
 
+/** Per-cell data in the milestone matrix. RSC-serializable — no Maps. */
+export interface MatrixCell {
+  sectionCode: string;
+  sectionName: string;
+  sectionOrder: number;
+  baselineStart: Date | null;
+  baselineFinish: Date | null;
+  actualStart: Date | null;
+  actualFinish: Date | null;
+  projectedFinish: Date | null;
+  pctComplete: number;
+  crmDate: Date | null;
+  crmDelay: number | null;
+  plannedCollection: number | null;
+}
+
 export interface MatrixRow {
   villaId: string;
   villaNumber: number;
   villaLabel: string;      // "Villa 12" or "Villa 10 & 11"
   blockCode: string;
-  cellsBySection: Map<string, {
-    sectionCode: string;
-    sectionName: string;
-    baselineStart: Date | null;
-    baselineFinish: Date | null;
-    actualStart: Date | null;
-    actualFinish: Date | null;
-    projectedFinish: Date | null;
-    pctComplete: number;
-    crmDate: Date | null;
-    crmDelay: number | null;
-    plannedCollection: number | null;
-  }>;
+  /** Cells ordered by MilestoneSection.orderIndex (Foundation → Handover). */
+  cells: MatrixCell[];
 }
 
 /**
@@ -218,22 +223,25 @@ export async function getMilestoneMatrix(projectId: string): Promise<MatrixRow[]
     },
   });
 
-  const byVilla = new Map<string, MatrixRow>();
+  // Group into per-villa cell arrays. Using a plain object keyed by villaId
+  // so nothing crosses the RSC boundary as a Map.
+  const byVilla: Record<string, MatrixRow> = {};
   for (const r of rows) {
-    let row = byVilla.get(r.villaId);
+    let row = byVilla[r.villaId];
     if (!row) {
       row = {
         villaId: r.villaId,
         villaNumber: r.villa.number,
         villaLabel: r.villa.label ?? `Villa ${r.villa.number}`,
         blockCode: r.villa.block.code,
-        cellsBySection: new Map(),
+        cells: [],
       };
-      byVilla.set(r.villaId, row);
+      byVilla[r.villaId] = row;
     }
-    row.cellsBySection.set(r.section.code, {
+    row.cells.push({
       sectionCode: r.section.code,
       sectionName: r.section.name,
+      sectionOrder: r.section.orderIndex,
       baselineStart: r.baselineStart,
       baselineFinish: r.baselineFinish,
       actualStart: r.actualStart,
@@ -246,15 +254,90 @@ export async function getMilestoneMatrix(projectId: string): Promise<MatrixRow[]
     });
   }
 
-  // Sort villas by block orderIndex then villa number.
-  return [...byVilla.values()].sort((a, b) => {
-    if (a.blockCode !== b.blockCode) {
-      // Rely on numeric block-code first, then string as tiebreak.
-      const ai = parseInt(a.blockCode, 10);
-      const bi = parseInt(b.blockCode, 10);
-      if (!isNaN(ai) && !isNaN(bi) && ai !== bi) return ai - bi;
-      return a.blockCode.localeCompare(b.blockCode);
-    }
-    return a.villaNumber - b.villaNumber;
+  // Sort each villa's cells by section order (Foundation → Handover), then
+  // sort villas by block then villa number.
+  return Object.values(byVilla)
+    .map((row) => ({ ...row, cells: [...row.cells].sort((a, b) => a.sectionOrder - b.sectionOrder) }))
+    .sort((a, b) => {
+      if (a.blockCode !== b.blockCode) {
+        const ai = parseInt(a.blockCode, 10);
+        const bi = parseInt(b.blockCode, 10);
+        if (!isNaN(ai) && !isNaN(bi) && ai !== bi) return ai - bi;
+        return a.blockCode.localeCompare(b.blockCode);
+      }
+      return a.villaNumber - b.villaNumber;
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Project metadata for the executive dashboard header/health snapshot
+// ---------------------------------------------------------------------------
+
+export interface ProjectMeta {
+  id: string;
+  name: string;
+  code: string | null;
+  startDate: Date | null;
+  endDate: Date | null;
+  reraEndDate: Date | null;
+  actualStartDate: Date | null;
+  projectedEndDate: Date | null;
+  address: string | null;
+}
+
+export async function getProjectMeta(projectId: string): Promise<ProjectMeta | null> {
+  return prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      id: true, name: true, code: true,
+      startDate: true, endDate: true, reraEndDate: true,
+      actualStartDate: true, projectedEndDate: true,
+      address: true,
+    },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Section list for a project — used by Layout tab filter chips
+// ---------------------------------------------------------------------------
+
+export interface SectionInfo {
+  id: string;
+  code: string;
+  name: string;
+  order: number;
+}
+
+export async function getSections(projectId: string): Promise<SectionInfo[]> {
+  const rows = await prisma.milestoneSection.findMany({
+    where: { projectId },
+    orderBy: { orderIndex: "asc" },
+    select: { id: true, code: true, name: true, orderIndex: true },
+  });
+  return rows.map((r) => ({ id: r.id, code: r.code, name: r.name, order: r.orderIndex }));
+}
+
+// ---------------------------------------------------------------------------
+// Full executive dashboard bag — one function to feed the Overview + Layout
+// ---------------------------------------------------------------------------
+
+export interface DashboardBag {
+  project: ProjectMeta;
+  sections: SectionInfo[];
+  rollup: ProjectRollup;   // never null when returned from this helper
+}
+
+/**
+ * Fetches everything the executive Overview + Layout tabs need in one call.
+ * Returns null if the project has no imported schedule yet — callers should
+ * render an empty-state instead of an executive dashboard.
+ */
+export async function getDashboardBag(projectId: string): Promise<DashboardBag | null> {
+  const [project, sections, rollup] = await Promise.all([
+    getProjectMeta(projectId),
+    getSections(projectId),
+    getProjectRollup(projectId),
+  ]);
+  if (!project || !rollup) return null;
+  return { project, sections, rollup };
 }
