@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  ClipboardCheck,
   LayoutDashboard,
   Lightbulb,
   Map,
@@ -57,12 +56,6 @@ export default function ProjectTabs({
       icon: BarChart3,
     },
     {
-      key: "qaqc",
-      label: "QAQC",
-      href: `/projects/${projectId}/qaqc`,
-      icon: ClipboardCheck,
-    },
-    {
       key: "my-actions",
       label: "My Actions",
       href: `/projects/${projectId}/my-actions`,
@@ -78,7 +71,7 @@ export default function ProjectTabs({
     },
   ];
 
-  // Match by leading segment so nested URLs (e.g. /qaqc/123) still highlight QAQC.
+  // Match by leading segment so nested URLs still highlight the parent tab.
   const isActive = (tab: Tab) => {
     const seg = `/projects/${projectId}/${tab.key}`;
     return pathname === seg || pathname.startsWith(seg + "/");
