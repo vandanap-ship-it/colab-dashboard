@@ -43,7 +43,8 @@ export type AuditEntityType =
   | "WBSNode"
   | "SubContractorBill"
   | "Expense"
-  | "DesignDrawing";
+  | "DesignDrawing"
+  | "Rfi";
 
 export type AuditInput = {
   projectId?: string | null;

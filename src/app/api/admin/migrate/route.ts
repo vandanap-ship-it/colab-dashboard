@@ -186,6 +186,69 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Executive dashboard: Block, Villa, MilestoneSection (21), VillaMilestone (with CRM columns), plus WBSNode.villaId/sectionId/villaMilestoneId/isSubMilestone.",
   },
+  {
+    key: "2026-08-06_rfi",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS "Rfi" (
+        "id" TEXT NOT NULL,
+        "projectId" TEXT NOT NULL,
+        "number" INTEGER NOT NULL,
+        "subject" TEXT NOT NULL,
+        "description" TEXT NOT NULL,
+        "category" TEXT NOT NULL,
+        "priority" TEXT NOT NULL DEFAULT 'MEDIUM',
+        "status" TEXT NOT NULL DEFAULT 'OPEN',
+        "dueDate" TIMESTAMP(3),
+        "raisedById" TEXT NOT NULL,
+        "assignedToId" TEXT,
+        "wbsNodeId" TEXT,
+        "answer" TEXT,
+        "answeredById" TEXT,
+        "answeredAt" TIMESTAMP(3),
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        "deletedAt" TIMESTAMP(3),
+        "idempotencyKey" TEXT,
+        CONSTRAINT "Rfi_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE TABLE IF NOT EXISTS "RfiPhoto" (
+        "id" TEXT NOT NULL,
+        "rfiId" TEXT NOT NULL,
+        "url" TEXT NOT NULL,
+        "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "RfiPhoto_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Rfi_idempotencyKey_key" ON "Rfi"("idempotencyKey")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Rfi_projectId_number_key" ON "Rfi"("projectId", "number")`,
+      `CREATE INDEX IF NOT EXISTS "Rfi_projectId_idx" ON "Rfi"("projectId")`,
+      `CREATE INDEX IF NOT EXISTS "Rfi_assignedToId_idx" ON "Rfi"("assignedToId")`,
+      `CREATE INDEX IF NOT EXISTS "Rfi_raisedById_idx" ON "Rfi"("raisedById")`,
+      `CREATE INDEX IF NOT EXISTS "RfiPhoto_rfiId_idx" ON "RfiPhoto"("rfiId")`,
+      `ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_projectId_fkey"
+         FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_raisedById_fkey"
+         FOREIGN KEY ("raisedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE`,
+      `ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_assignedToId_fkey"
+         FOREIGN KEY ("assignedToId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE`,
+      `ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_answeredById_fkey"
+         FOREIGN KEY ("answeredById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE`,
+      `ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_wbsNodeId_fkey"
+         FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode"("id") ON DELETE SET NULL ON UPDATE CASCADE`,
+      `ALTER TABLE "RfiPhoto" ADD CONSTRAINT "RfiPhoto_rfiId_fkey"
+         FOREIGN KEY ("rfiId") REFERENCES "Rfi"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+    ],
+    describe: "Add RFI (Request for Information) tables — Rfi + RfiPhoto with linkage to Project, User, WBSNode.",
+  },
+  {
+    key: "2026-08-06_user_email",
+    sql: [
+      // Nullable email so existing users don't need a backfill. Populated as
+      // users are edited via the admin panel; also seeded for new users.
+      `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "email" TEXT`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email") WHERE "email" IS NOT NULL`,
+    ],
+    describe: "Add User.email (nullable, unique) so assignment + milestone-completion emails can address the right person.",
+  },
 ];
 
 async function ensureLedger() {

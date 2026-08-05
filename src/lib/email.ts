@@ -170,7 +170,7 @@ export function shell(opts: {
 export interface AssignmentEmailInput {
   to: string;
   assigneeName: string;
-  itemType: "Concern" | "Issue" | "Task";
+  itemType: "Concern" | "Issue" | "Task" | "RFI";
   itemTitle: string;
   itemUrl: string;
   raisedByName?: string;
