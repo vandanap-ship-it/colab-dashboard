@@ -249,6 +249,39 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add User.email (nullable, unique) so assignment + milestone-completion emails can address the right person.",
   },
+  {
+    key: "2026-08-06_permit",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS "Permit" (
+        "id" TEXT NOT NULL,
+        "projectId" TEXT NOT NULL,
+        "name" TEXT NOT NULL,
+        "number" TEXT,
+        "issuingAuthority" TEXT NOT NULL,
+        "category" TEXT NOT NULL,
+        "issuedDate" TIMESTAMP(3) NOT NULL,
+        "expiryDate" TIMESTAMP(3),
+        "documentUrl" TEXT,
+        "notes" TEXT,
+        "status" TEXT NOT NULL DEFAULT 'ACTIVE',
+        "responsibleUserId" TEXT,
+        "renewalReminderDays" INTEGER NOT NULL DEFAULT 30,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        "deletedAt" TIMESTAMP(3),
+        CONSTRAINT "Permit_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Permit_projectId_name_number_key" ON "Permit"("projectId", "name", "number")`,
+      `CREATE INDEX IF NOT EXISTS "Permit_projectId_idx" ON "Permit"("projectId")`,
+      `CREATE INDEX IF NOT EXISTS "Permit_responsibleUserId_idx" ON "Permit"("responsibleUserId")`,
+      `CREATE INDEX IF NOT EXISTS "Permit_expiryDate_idx" ON "Permit"("expiryDate")`,
+      `ALTER TABLE "Permit" ADD CONSTRAINT "Permit_projectId_fkey"
+         FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "Permit" ADD CONSTRAINT "Permit_responsibleUserId_fkey"
+         FOREIGN KEY ("responsibleUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE`,
+    ],
+    describe: "Add Permit table — legal / regulatory approvals with expiry tracking.",
+  },
 ];
 
 async function ensureLedger() {

@@ -22,6 +22,7 @@ export const MODULES = {
   HINDRANCE: "HINDRANCE", // hindrance reporting
   CONCERN: "CONCERN", // areas of concern
   RFI: "RFI", // requests for information (site → consultant/designer)
+  PERMIT: "PERMIT", // permits register + renewal alerts
 } as const;
 
 export type ModuleKey = (typeof MODULES)[keyof typeof MODULES];
@@ -33,6 +34,7 @@ export const MODULE_LABELS: Record<string, string> = {
   HINDRANCE: "Hindrances",
   CONCERN: "Areas of Concern",
   RFI: "RFI (Requests for Information)",
+  PERMIT: "Permits",
 };
 
 export const ALL_MODULES: ModuleKey[] = Object.values(MODULES);
@@ -88,6 +90,7 @@ export const TOOL_MODULES: Record<string, ModuleKey[]> = {
   hindrance: [MODULES.HINDRANCE],
   concern: [MODULES.CONCERN],
   rfi: [MODULES.RFI],
+  permit: [MODULES.PERMIT],
   // Expenses are internal-only. Gating on PROGRESS shows it to internal site
   // staff (full access) and hides it from scoped QAQC/Safety contractors.
   expense: [MODULES.PROGRESS],

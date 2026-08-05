@@ -44,7 +44,8 @@ export type AuditEntityType =
   | "SubContractorBill"
   | "Expense"
   | "DesignDrawing"
-  | "Rfi";
+  | "Rfi"
+  | "Permit";
 
 export type AuditInput = {
   projectId?: string | null;

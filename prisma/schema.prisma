@@ -30,6 +30,7 @@ model User {
   raisedRfis               Rfi[]                   @relation("RfiRaiser")
   assignedRfis             Rfi[]                   @relation("RfiAssignee")
   answeredRfis             Rfi[]                   @relation("RfiAnswerer")
+  responsiblePermits       Permit[]                @relation("PermitResponsible")
   filledInspections        Inspection[]            @relation("InspectionFiller")
   reviewedInspections      Inspection[]            @relation("InspectionReviewer")
   preparedBills            SubContractorBill[]     @relation("BillPreparer")
@@ -73,6 +74,7 @@ model Project {
   villas             Villa[]
   milestoneSections  MilestoneSection[]
   rfis               Rfi[]
+  permits            Permit[]
 
   @@index([createdById])
 }
@@ -476,6 +478,43 @@ model RfiPhoto {
   rfi Rfi @relation(fields: [rfiId], references: [id], onDelete: Cascade)
 
   @@index([rfiId])
+}
+
+// ---------------------------------------------------------------------------
+// Permit — legal / regulatory approvals with expiry tracking.
+//
+// Examples: BBMP Building Permit, KSPCB Consent to Operate, Fire NOC, Labour
+// License, Ground Water permit. Each has an issuing authority, a number,
+// issue + expiry dates, and a responsible person. Status is derived from the
+// expiry date (see canonicalPermitStatus in src/lib/permit.ts) but stored
+// explicitly so users can override (e.g. RENEWED before expiry).
+// ---------------------------------------------------------------------------
+model Permit {
+  id                   String    @id @default(cuid())
+  projectId            String
+  name                 String
+  number               String? // issuing authority's permit number (e.g. BBMP/2026/12345)
+  issuingAuthority     String
+  category             String // BUILDING | ENVIRONMENTAL | FIRE | LABOUR | WATER | OTHER
+  issuedDate           DateTime
+  expiryDate           DateTime?
+  documentUrl          String? // uploaded PDF / image of the permit
+  notes                String?
+  status               String    @default("ACTIVE") // ACTIVE | EXPIRING_SOON | EXPIRED | RENEWED
+  responsibleUserId    String?
+  renewalReminderDays  Int       @default(30) // how far ahead to flag as EXPIRING_SOON
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  responsible User?   @relation("PermitResponsible", fields: [responsibleUserId], references: [id])
+
+  @@unique([projectId, name, number]) // don't accidentally re-add the same permit
+  @@index([projectId])
+  @@index([responsibleUserId])
+  @@index([expiryDate])
 }
 
 model Inspection {
