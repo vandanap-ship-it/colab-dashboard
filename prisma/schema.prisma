@@ -106,9 +106,14 @@ model Villa {
   id        String  @id @default(cuid())
   projectId String
   blockId   String
-  number    Int // 12, 13, 14, ...
+  number    Int // 12, 13, 14, ... (primary villa number even for grouped villas)
   villaType String? // "A", "B", ...
   inScope   Boolean @default(true) // false for model villas / out-of-scope plots
+  // Some villas in MSP are grouped as one scheduling unit ("Villa 10 & 11",
+  // "Villa 23 & 24") — built together, share tasks. We keep one Villa record
+  // per group but count physical units correctly via unitCount.
+  unitCount Int     @default(1)
+  label     String? // display override, e.g. "Villa 10 & 11". Falls back to "Villa {number}".
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -161,8 +166,8 @@ model VillaMilestone {
   // payment stage. When the milestone hits (or its projected date moves),
   // the CRM collection stage shifts too. Null when the villa has no buyer yet.
   crmDate           DateTime?
-  crmDelay          Int?      // days between planned and CRM-committed date
-  plannedCollection Float?    // INR expected at this milestone
+  crmDelay          Int? // days between planned and CRM-committed date
+  plannedCollection Float? // INR expected at this milestone
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -220,8 +225,12 @@ model WBSNode {
 
   // Executive rollup: which villa + milestone section this activity feeds into.
   // Set on leaf activities; null on structural / parent nodes.
-  villaId   String?
-  sectionId String?
+  villaId          String?
+  sectionId        String?
+  villaMilestoneId String? // direct link to the per-villa-per-section instance
+  // ★ concreting checkpoints (Footing RCC, Raft RCC, Retaining Wall, etc.).
+  // Everything else is a task item that rolls up to the next sub-milestone.
+  isSubMilestone   Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -242,6 +251,7 @@ model WBSNode {
   @@index([parentId])
   @@index([villaId])
   @@index([sectionId])
+  @@index([villaMilestoneId])
 }
 
 model ProgressEntry {

@@ -1,18 +1,21 @@
-// Placeholder data matching the approved executive dashboard mockup (Amanvana AT scope).
-// This will be replaced with real DB queries once Block/Villa/MilestoneSection are seeded.
+// Amanvana placeholder data for the executive dashboard.
+// Structure derived from the real MSP file (Villas Schedule Updated.mpp, 2026-08-06):
+//   • 12 blocks · 41 villas (grouped exactly as per MSP)
+//   • 21 milestone sections (Foundation → Commissioning & Handover)
+//   • 13 star sub-milestones per villa (concreting pours + snagging + handover)
 //
-// Milestone list matches the 9 structural milestones tracked in the live Colab app
-// (Footing → Villa Handover). Sample dates & CRM fields taken from the 2026-07-14
-// verified Snapshot inventory.
+// Real-progress plumbing lives in a follow-up (see scripts/import-msp.ts). Until
+// then, the dashboards render off this file so the UI can be reviewed live.
 
 export type BlockStatus = "healthy" | "warning" | "critical" | "not-started";
 
 export interface BlockRollup {
   code: string;
-  villas: number[];
+  villas: number[];             // integer villa numbers ("Villa 10 & 11" flattened → [10, 11])
+  villaLabels: string[];        // display strings ("Villa 25", "Villa 10 & 11")
   active: boolean;
-  slipDays: number;
-  currentSection: number; // index into SECTIONS
+  slipDays: number;             // handover slip for this block (max villa slip)
+  currentSection: number;
   currentPct: number;
   pod: string;
 }
@@ -26,71 +29,95 @@ export interface VillaRollup {
   staleDays: number;
 }
 
-export const MOCK_TODAY = new Date("2026-07-14");
-export const PHASE_START = new Date("2026-04-01");
-export const PHASE_END = new Date("2028-02-17");
+export const MOCK_TODAY = new Date("2026-08-06");
+export const PHASE_START = new Date("2026-04-14");
+export const PHASE_END = new Date("2029-03-22");
 
-// 9 structural milestones per Colab live data
+// The 21 milestone sections tracked per villa. This is the top level; each
+// section contains 1–3 ★ sub-milestones + prep tasks.
 export const SECTIONS = [
-  "Footing",
-  "Plinth Beam",
-  "Gr Floor Slab",
-  "Gr Floor Blockwork",
-  "1st Floor Slab",
-  "1st Floor Blockwork",
-  "2nd Floor Slab",
-  "2nd Floor Blockwork",
-  "Villa Handover",
+  "Foundation / Substructure",
+  "Plinth Level",
+  "Ground Floor Structure",
+  "First Floor Structure",
+  "Second Floor Structure",
+  "Terrace Works",
+  "GF — Masonry & MEP Rough In",
+  "FF — Masonry & MEP Rough In",
+  "SF — Masonry & MEP Rough In",
+  "External Development & Cladding",
+  "External Finishes & Landscape",
+  "MEP Service Works",
+  "Lift Works",
+  "MS Staircase — Detailed Sequence",
+  "Interior Finishes — Ceilings",
+  "Interior Finishes — Flooring",
+  "Interior Finishes — Bathroom",
+  "Interior Finishes — Doors & Fittings",
+  "Internal Paint",
+  "Automation, Lighting & Appliances",
+  "Commissioning & Handover",
 ];
 
-// Uppercase display for pivot table column headers
-export const SECTION_HEADERS = [
-  "FOOTING",
-  "PLINTH BEAM",
-  "GR FLOOR SLAB",
-  "GR FLOOR BLOCKWORK",
-  "1ST FLOOR SLAB",
-  "1ST FLOOR BLOCKWORK",
-  "2ND FLOOR SLAB",
-  "2ND FLOOR BLOCKWORK",
-  "VILLA HANDOVER",
+export const SECTION_HEADERS = SECTIONS.map((s) => s.toUpperCase());
+
+// The 13 ★ sub-milestones per villa — from the MSP star-marked items.
+export const SUB_MILESTONES = [
+  "Footing RCC — Concreting ★",
+  "Raft RCC — Concreting ★",
+  "Retaining Wall Concreting ★",
+  "Pedestal Column Concreting ★",
+  "Plinth Beam Concreting ★",
+  "Column GF→FF — Concreting ★",
+  "GF Roof Beam + Slab — Concreting ★",
+  "Column FF→SF — Concreting ★",
+  "FF Roof Beam + Slab — Concreting ★",
+  "Column SF→Terrace — Concreting ★",
+  "SF Roof Beam + Slab — Concreting ★",
+  "Snagging — Defect List & Rectification (30 Days) ★",
+  "VILLA HANDOVER ★",
 ];
 
+// Block-villa mapping — matches MSP outline exactly. All 12 blocks are the
+// Abraham Thomas (A&T) scope (41 villas total). Active flag reflects which
+// blocks are in execution today.
 export const BLOCKS: BlockRollup[] = [
-  { code: "4",  villas: [12, 13, 14],                 active: true,  slipDays: 8,  currentSection: 2, currentPct: 55, pod: "Central East" },
-  { code: "9",  villas: [25, 26, 27, 28, 29, 30, 31], active: true,  slipDays: 22, currentSection: 1, currentPct: 70, pod: "South Row East" },
-  { code: "10", villas: [32, 33, 34, 35, 36, 37],     active: true,  slipDays: 16, currentSection: 1, currentPct: 60, pod: "South Row West" },
-  { code: "14", villas: [47, 48, 49, 50],             active: true,  slipDays: 38, currentSection: 1, currentPct: 30, pod: "Central Pod" },
-  { code: "2",  villas: [3, 4, 5],                    active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "East Entry" },
-  { code: "3A", villas: [6, 7, 8],                    active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "East Entry" },
-  { code: "3B", villas: [9, 10, 11],                  active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "East Entry" },
-  { code: "5",  villas: [15, 16],                     active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "Central East" },
-  { code: "6",  villas: [17, 18, 19],                 active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "Central East" },
-  { code: "7",  villas: [20, 21, 22],                 active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "Central East" },
-  { code: "8",  villas: [23, 24],                     active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "Central East" },
+  { code: "9",  villas: [25,26,27,28,29,30,31], villaLabels: ["Villa 25","Villa 26","Villa 27","Villa 28","Villa 29","Villa 30","Villa 31"], active: true,  slipDays: 22, currentSection: 1, currentPct: 70, pod: "South Row East" },
+  { code: "4",  villas: [12,13,14],             villaLabels: ["Villa 12","Villa 13","Villa 14"], active: true,  slipDays: 8,  currentSection: 2, currentPct: 55, pod: "Central East" },
+  { code: "10", villas: [32,33,34,35,36,37],    villaLabels: ["Villa 32","Villa 33","Villa 34","Villa 35","Villa 36","Villa 37"], active: true,  slipDays: 16, currentSection: 1, currentPct: 60, pod: "South Row West" },
+  { code: "6",  villas: [17,18,19],             villaLabels: ["Villa 17","Villa 18","Villa 19"], active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "Central East" },
+  { code: "2",  villas: [3,4,5],                villaLabels: ["Villa 03","Villa 04","Villa 05"], active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "East Entry" },
+  { code: "5",  villas: [15,16],                villaLabels: ["Villa 15","Villa 16"], active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "Central East" },
+  { code: "3A", villas: [6,7,8],                villaLabels: ["Villa 06","Villa 07","Villa 08"], active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "East Entry" },
+  { code: "3B", villas: [9,10,11],              villaLabels: ["Villa 09","Villa 10 & 11"], active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "East Entry" },
+  { code: "7",  villas: [20,21,22],             villaLabels: ["Villa 20","Villa 21","Villa 22"], active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "Central East" },
+  { code: "8",  villas: [23,24],                villaLabels: ["Villa 23 & 24"], active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "Central East" },
+  { code: "12", villas: [41,42,43],             villaLabels: ["Villa 41","Villa 42","Villa 43"], active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "West Row" },
+  { code: "13", villas: [44,45,46],             villaLabels: ["Villa 44","Villa 45","Villa 46"], active: false, slipDays: 0,  currentSection: -1, currentPct: 0, pod: "West Row" },
 ];
 
+// Per-villa slip snapshot. Only active villas populated with realistic values;
+// inactive villas fall through to zero-defaults in accessor.
 const VILLA_SLIPS: Record<number, { slip: number; pct: number; section: number; stale: number }> = {
-  12: { slip: 8,  pct: 60,  section: 2, stale: 2 },
-  13: { slip: 5,  pct: 70,  section: 2, stale: 1 },
-  14: { slip: 12, pct: 40,  section: 1, stale: 3 },
-  25: { slip: 18, pct: 85,  section: 1, stale: 4 },
-  26: { slip: 26, pct: 60,  section: 1, stale: 6 },
-  27: { slip: 22, pct: 75,  section: 1, stale: 5 },
-  28: { slip: 30, pct: 55,  section: 1, stale: 8 },
-  29: { slip: 42, pct: 40,  section: 1, stale: 12 },
-  30: { slip: 36, pct: 90,  section: 0, stale: 3 },
-  31: { slip: 15, pct: 90,  section: 1, stale: 2 },
-  32: { slip: 10, pct: 70,  section: 1, stale: 1 },
-  33: { slip: 24, pct: 55,  section: 1, stale: 4 },
-  34: { slip: 32, pct: 60,  section: 1, stale: 7 },
+  // Block 9 (active)
+  25: { slip: 18, pct: 85, section: 1, stale: 4 },
+  26: { slip: 26, pct: 60, section: 1, stale: 6 },
+  27: { slip: 22, pct: 75, section: 1, stale: 5 },
+  28: { slip: 30, pct: 55, section: 1, stale: 8 },
+  29: { slip: 42, pct: 40, section: 1, stale: 12 },
+  30: { slip: 36, pct: 90, section: 0, stale: 3 },
+  31: { slip: 15, pct: 90, section: 1, stale: 2 },
+  // Block 4 (active)
+  12: { slip: 8,  pct: 60, section: 2, stale: 2 },
+  13: { slip: 5,  pct: 70, section: 2, stale: 1 },
+  14: { slip: 12, pct: 40, section: 1, stale: 3 },
+  // Block 10 (active)
+  32: { slip: 10, pct: 70, section: 1, stale: 1 },
+  33: { slip: 24, pct: 55, section: 1, stale: 4 },
+  34: { slip: 32, pct: 60, section: 1, stale: 7 },
   35: { slip: 46, pct: 100, section: 0, stale: 14 },
-  36: { slip: 20, pct: 45,  section: 1, stale: 3 },
-  37: { slip: 38, pct: 55,  section: 1, stale: 9 },
-  47: { slip: 28, pct: 40,  section: 1, stale: 4 },
-  48: { slip: 52, pct: 100, section: 0, stale: 18 },
-  49: { slip: 40, pct: 30,  section: 1, stale: 6 },
-  50: { slip: 44, pct: 80,  section: 0, stale: 11 },
+  36: { slip: 20, pct: 45, section: 1, stale: 3 },
+  37: { slip: 38, pct: 55, section: 1, stale: 9 },
 };
 
 export function activeVillas(): VillaRollup[] {
@@ -101,12 +128,9 @@ export function activeVillas(): VillaRollup[] {
       const p = VILLA_SLIPS[n];
       if (!p) continue;
       rows.push({
-        number: n,
-        blockCode: b.code,
-        slipDays: p.slip,
-        pctComplete: p.pct,
-        currentSection: p.section,
-        staleDays: p.stale,
+        number: n, blockCode: b.code,
+        slipDays: p.slip, pctComplete: p.pct,
+        currentSection: p.section, staleDays: p.stale,
       });
     }
   }
@@ -116,14 +140,12 @@ export function activeVillas(): VillaRollup[] {
 export function blockStatus(b: BlockRollup): BlockStatus {
   if (!b.active) return "not-started";
   if (b.slipDays > 30) return "critical";
-  if (b.slipDays > 14) return "warning";
   if (b.slipDays > 0)  return "warning";
   return "healthy";
 }
 
 export function villaStatus(v: VillaRollup): "healthy" | "warning" | "critical" {
   if (v.slipDays > 30) return "critical";
-  if (v.slipDays > 14) return "warning";
   if (v.slipDays > 0)  return "warning";
   return "healthy";
 }
@@ -131,10 +153,6 @@ export function villaStatus(v: VillaRollup): "healthy" | "warning" | "critical" 
 // ---------------------------------------------------------------------------
 // MILESTONE MATRIX — per-villa per-milestone data
 // ---------------------------------------------------------------------------
-//
-// Sample values pulled from the 2026-07-14 verified Snapshot inventory. Only a
-// subset of villas × milestones are populated; the rest use the fallback
-// generator further below.
 
 export interface MilestoneCell {
   plannedDate: Date;
@@ -148,84 +166,63 @@ export interface MilestoneCell {
 }
 
 // Baseline planned dates per milestone per villa (dd Mmm yyyy → Date).
-// Keys: villa number → array of 9 planned dates (one per SECTIONS index).
-const PLANNED: Record<number, string[]> = {
-  25: ["2026-04-27", "2026-06-24", "2026-08-02", "2026-10-09", "2026-09-10", "2026-11-19", "2026-10-21", "2026-12-27", "2027-11-05"],
-  12: ["2026-04-27", "2026-06-24", "2026-08-02", "2026-10-09", "2026-09-10", "2026-11-19", "2026-10-21", "2026-12-27", "2027-11-05"],
-  13: ["2026-04-27", "2026-06-24", "2026-08-02", "2026-10-22", "2026-09-10", "2026-12-01", "2026-10-21", "2027-01-08", "2027-11-17"],
-  14: ["2026-06-22", "2026-08-19", "2026-09-29", "2026-12-06", "2026-11-06", "2027-01-14", "2026-12-16", "2027-02-21", "2027-12-29"],
-  26: ["2026-04-27", "2026-06-24", "2026-08-02", "2026-10-22", "2026-09-10", "2026-12-01", "2026-10-21", "2027-01-08", "2027-11-17"],
-  27: ["2026-05-15", "2026-07-13", "2026-08-21", "2026-11-03", "2026-09-30", "2026-12-13", "2026-11-11", "2027-01-21", "2027-11-29"],
-  28: ["2026-05-15", "2026-07-13", "2026-08-21", "2026-11-18", "2026-09-30", "2026-12-25", "2026-11-11", "2027-02-03", "2027-12-10"],
-  29: ["2026-06-03", "2026-07-30", "2026-09-09", "2026-11-30", "2026-10-20", "2027-01-07", "2026-11-29", "2027-02-15", "2027-12-22"],
-  30: ["2026-06-03", "2026-07-30", "2026-09-09", "2026-12-11", "2026-10-20", "2027-01-20", "2026-11-29", "2027-02-26", "2028-01-05"],
-  31: ["2026-06-22", "2026-08-19", "2026-09-29", "2026-12-23", "2026-11-06", "2027-02-02", "2026-12-16", "2027-03-11", "2028-01-17"],
-  32: ["2026-06-03", "2026-07-30", "2026-09-09", "2026-12-06", "2026-10-20", "2027-01-14", "2026-11-29", "2027-02-24", "2028-01-03"],
-  33: ["2026-06-03", "2026-07-30", "2026-09-09", "2026-11-27", "2026-10-20", "2027-01-05", "2026-11-29", "2027-02-16", "2027-12-23"],
-  34: ["2026-05-15", "2026-07-13", "2026-08-21", "2026-11-19", "2026-09-30", "2026-12-27", "2026-11-11", "2027-02-04", "2027-12-12"],
-  35: ["2026-05-15", "2026-07-13", "2026-08-21", "2026-11-11", "2026-09-30", "2026-12-17", "2026-11-11", "2027-01-27", "2027-12-03"],
-  36: ["2026-04-27", "2026-06-24", "2026-08-02", "2026-10-22", "2026-09-10", "2026-12-01", "2026-10-21", "2027-01-08", "2027-11-17"],
-  37: ["2026-04-27", "2026-06-24", "2026-08-02", "2026-10-09", "2026-09-10", "2026-11-19", "2026-10-21", "2026-12-27", "2027-11-05"],
-  47: ["2026-07-10", "2026-09-07", "2026-10-18", "2027-01-08", "2026-11-27", "2027-02-16", "2027-01-05", "2027-03-25", "2028-01-31"],
-  48: ["2026-07-10", "2026-09-07", "2026-10-18", "2027-01-18", "2026-11-27", "2027-02-24", "2027-01-05", "2027-04-04", "2028-02-08"],
-  49: ["2026-07-28", "2026-09-27", "2026-11-05", "2027-02-04", "2026-12-15", "2027-03-04", "2027-01-24", "2027-04-14", "2028-02-16"],
-  50: ["2026-07-28", "2026-09-27", "2026-11-05", "2027-02-05", "2026-12-15", "2027-03-05", "2027-01-24", "2027-04-15", "2028-02-17"],
-};
-
-// Actual completion dates (currently only Villa 12 Footing per live data).
-const ACTUAL: Record<number, Array<string | null>> = {
-  12: ["2026-07-04", null, null, null, null, null, null, null, null],
-};
-
-// Projected finish dates per villa/milestone (Colab-supplied; represents current
-// slip forecast).
-const PROJECTED: Record<number, Array<string | null>> = {
-  25: ["2026-08-06", "2026-09-24", "2026-10-28", "2027-01-03", "2026-12-01", "2027-02-05", "2027-01-03", "2027-03-09", "2028-01-03"],
-  12: [null,         "2026-08-24", "2026-09-27", "2026-12-03", "2026-10-31", "2027-01-05", "2026-12-03", "2027-02-06", "2027-12-03"],
-  13: ["2026-08-06", "2026-09-24", "2026-10-28", "2027-01-02", "2026-12-01", "2027-02-04", "2027-01-03", "2027-03-06", "2028-01-08"],
-  14: ["2026-09-22", "2026-11-10", "2026-12-14", "2027-02-17", "2027-01-15", "2027-03-20", "2027-02-17", "2027-04-22", "2028-02-24"],
-  26: ["2026-08-06", "2026-09-24", "2026-10-28", "2027-01-02", "2026-12-01", "2027-02-04", "2027-01-03", "2027-03-06", "2028-01-08"],
-  27: ["2026-08-22", "2026-10-10", "2026-11-14", "2027-01-18", "2026-12-17", "2027-02-20", "2027-01-17", "2027-03-22", "2028-01-27"],
-  28: ["2026-08-22", "2026-10-10", "2026-11-14", "2027-01-19", "2026-12-17", "2027-02-20", "2027-01-17", "2027-03-23", "2028-01-24"],
-  29: ["2026-09-07", "2026-10-27", "2026-12-03", "2027-02-06", "2027-01-04", "2027-03-07", "2027-02-05", "2027-04-11", "2028-02-12"],
-  30: ["2026-09-07", "2026-10-27", "2026-12-03", "2027-02-06", "2027-01-04", "2027-03-09", "2027-02-05", "2027-04-08", "2028-02-07"],
-  31: ["2026-07-21", "2026-08-19", "2026-12-14", "2027-02-16", "2027-01-15", "2027-03-21", "2027-02-17", "2027-04-20", "2028-02-24"],
-  32: ["2026-09-05", "2026-10-25", "2026-12-01", "2027-02-04", "2027-01-02", "2027-03-07", "2027-02-03", "2027-04-07", "2028-02-10"],
-  33: ["2026-09-05", "2026-10-25", "2026-12-01", "2027-02-04", "2027-01-02", "2027-03-06", "2027-02-03", "2027-04-09", "2028-02-10"],
-  34: ["2026-08-21", "2026-10-09", "2026-11-13", "2027-01-18", "2026-12-16", "2027-02-19", "2027-01-16", "2027-03-22", "2028-01-24"],
-  35: ["2026-08-21", "2026-10-09", "2026-11-13", "2027-01-19", "2026-12-16", "2027-02-18", "2027-01-16", "2027-03-22", "2028-01-22"],
-  36: ["2026-08-06", "2026-09-24", "2026-10-28", "2027-01-02", "2026-12-01", "2027-02-04", "2027-01-03", "2027-03-06", "2028-01-08"],
-  37: ["2026-08-06", "2026-09-24", "2026-10-28", "2027-01-03", "2026-12-01", "2027-02-05", "2027-01-03", "2027-03-09", "2028-01-03"],
-  47: ["2026-10-08", "2026-11-27", "2026-12-30", "2027-03-02", "2027-01-31", "2027-04-06", "2027-03-05", "2027-05-05", "2028-03-09"],
-  48: ["2026-10-08", "2026-11-27", "2026-12-30", "2027-03-04", "2027-01-31", "2027-04-04", "2027-03-05", "2027-05-07", "2028-03-08"],
-  49: ["2026-10-24", "2026-12-11", "2027-01-13", "2027-03-19", "2027-02-15", "2027-04-18", "2027-03-20", "2027-05-24", "2028-03-24"],
-  50: ["2026-10-24", "2026-12-11", "2027-01-13", "2027-03-19", "2027-02-15", "2027-04-18", "2027-03-20", "2027-05-24", "2028-03-24"],
-};
-
-// CRM committed collection dates (per villa/milestone). Colab currently returns
-// "-" for most cells; we populate a few plausible values to exercise the UI.
-const CRM: Record<number, Array<{ date: string | null; delay: number | null; amount: number }>> = {
+// Keys: villa number → array of 21 planned dates (one per SECTIONS index).
+// Only 3 sample villas populated inline; the rest fall back to synthesized dates.
+const PLANNED_BASE: Record<number, string[]> = {
   12: [
-    { date: "2026-05-15", delay: 0, amount: 250000 },
-    { date: null, delay: null, amount: 300000 },
-    { date: null, delay: null, amount: 400000 },
-    { date: null, delay: null, amount: 350000 },
-    { date: null, delay: null, amount: 500000 },
-    { date: null, delay: null, amount: 400000 },
-    { date: null, delay: null, amount: 500000 },
-    { date: null, delay: null, amount: 400000 },
-    { date: null, delay: null, amount: 1500000 },
+    "2026-04-27","2026-06-24","2026-08-02","2026-09-10","2026-10-21","2026-11-19",
+    "2026-11-30","2027-01-15","2027-03-01","2027-04-01","2027-05-15","2027-06-15",
+    "2027-04-01","2027-05-01","2027-06-01","2027-06-20","2027-07-15","2027-08-10",
+    "2027-08-25","2027-09-15","2027-11-05",
   ],
   25: [
-    { date: "2026-05-15", delay: 0, amount: 250000 },
-    { date: null, delay: null, amount: 300000 },
-    { date: null, delay: null, amount: 400000 },
-    { date: null, delay: null, amount: 350000 },
-    { date: null, delay: null, amount: 500000 },
-    { date: null, delay: null, amount: 400000 },
-    { date: null, delay: null, amount: 500000 },
-    { date: null, delay: null, amount: 400000 },
-    { date: null, delay: null, amount: 1500000 },
+    "2026-04-27","2026-06-24","2026-08-02","2026-09-10","2026-10-21","2026-11-19",
+    "2026-11-30","2027-01-15","2027-03-01","2027-04-01","2027-05-15","2027-06-15",
+    "2027-04-01","2027-05-01","2027-06-01","2027-06-20","2027-07-15","2027-08-10",
+    "2027-08-25","2027-09-15","2027-11-05",
+  ],
+  13: [
+    "2026-04-27","2026-06-24","2026-08-02","2026-09-10","2026-10-21","2026-12-01",
+    "2026-12-10","2027-01-25","2027-03-10","2027-04-15","2027-05-25","2027-06-25",
+    "2027-04-10","2027-05-10","2027-06-10","2027-06-30","2027-07-25","2027-08-20",
+    "2027-09-01","2027-09-25","2027-11-17",
+  ],
+};
+
+const ACTUAL: Record<number, Array<string | null>> = {
+  12: ["2026-07-04", ...Array(20).fill(null)],
+};
+
+const PROJECTED: Record<number, Array<string | null>> = {
+  12: [null, "2026-08-24", "2026-09-27", "2026-11-31", "2027-01-15", "2027-02-06",
+       "2027-02-20", "2027-04-05", "2027-05-20", "2027-06-20", "2027-08-05",
+       "2027-09-05", "2027-06-20", "2027-07-20", "2027-08-20", "2027-09-10",
+       "2027-10-05", "2027-10-30", "2027-11-15", "2027-12-05", "2028-01-25"],
+};
+
+const CRM: Record<number, Array<{ date: string | null; delay: number | null; amount: number }>> = {
+  12: [
+    { date: "2026-05-15", delay: 0, amount: 250_000 },
+    { date: null, delay: null, amount: 300_000 },
+    { date: null, delay: null, amount: 400_000 },
+    { date: null, delay: null, amount: 500_000 },
+    { date: null, delay: null, amount: 500_000 },
+    { date: null, delay: null, amount: 350_000 },
+    { date: null, delay: null, amount: 300_000 },
+    { date: null, delay: null, amount: 400_000 },
+    { date: null, delay: null, amount: 400_000 },
+    { date: null, delay: null, amount: 350_000 },
+    { date: null, delay: null, amount: 400_000 },
+    { date: null, delay: null, amount: 300_000 },
+    { date: null, delay: null, amount: 250_000 },
+    { date: null, delay: null, amount: 200_000 },
+    { date: null, delay: null, amount: 300_000 },
+    { date: null, delay: null, amount: 350_000 },
+    { date: null, delay: null, amount: 300_000 },
+    { date: null, delay: null, amount: 250_000 },
+    { date: null, delay: null, amount: 200_000 },
+    { date: null, delay: null, amount: 300_000 },
+    { date: null, delay: null, amount: 1_500_000 },
   ],
 };
 
@@ -233,17 +230,25 @@ function parseDate(s: string | null | undefined): Date | null {
   if (!s) return null;
   return new Date(s + "T00:00:00");
 }
-
 function daysBetween(a: Date, b: Date): number {
   return Math.round((b.getTime() - a.getTime()) / 86400000);
 }
 
-// Build the per-villa cell array for a given villa. Returns 9 cells (one per
-// milestone) with Planned / Actual / Projected / Delay / CRM / Progress % filled
-// from the live-sample tables above. Missing entries fall back to nulls.
+// Synthesize planned dates for villas without inline data — pushes cadence
+// forward based on block position + villa index so downstream widgets still
+// have realistic dates until we import real MSP-per-villa data.
+function synthesizePlanned(villaNum: number): string[] {
+  const base = PLANNED_BASE[25]; // baseline cadence
+  const offset = (villaNum % 10) * 4; // stagger a few days per villa
+  return base.map((d) => {
+    const dt = new Date(d + "T00:00:00");
+    dt.setDate(dt.getDate() + offset);
+    return dt.toISOString().slice(0, 10);
+  });
+}
+
 export function milestonesForVilla(villaNumber: number): MilestoneCell[] {
-  const planned = PLANNED[villaNumber];
-  if (!planned) return [];
+  const planned = PLANNED_BASE[villaNumber] ?? synthesizePlanned(villaNumber);
   const actual = ACTUAL[villaNumber] ?? [];
   const projected = PROJECTED[villaNumber] ?? [];
   const crm = CRM[villaNumber] ?? [];
@@ -269,13 +274,13 @@ export function milestonesForVilla(villaNumber: number): MilestoneCell[] {
   });
 }
 
-// List of villas that appear in the Milestone Matrix (matches Colab active tab
-// strip order — Villa 25 first per live app).
-export const MATRIX_VILLA_ORDER = [
-  25, 12, 13, 14, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 47, 48, 49, 50,
-];
+// Order: villas grouped by block, blocks in "active first" order.
+export const MATRIX_VILLA_ORDER = BLOCKS.flatMap((b) => b.villas);
 
-// Contractor rollups (mockup: Abraham Thomas covers 39 villas, second contractor TBD)
+// ---------------------------------------------------------------------------
+// CONTRACTORS + HEALTH SUMMARY
+// ---------------------------------------------------------------------------
+
 export interface ContractorRollup {
   name: string;
   scopeVillas: number;
@@ -289,19 +294,19 @@ export interface ContractorRollup {
 
 export const CONTRACTORS: ContractorRollup[] = [
   {
-    name: "Abraham Thomas",
-    category: "Civil / Structural — Phase 1 Lead",
-    scopeVillas: 39,
-    activeVillas: 20,
+    name: "Abraham Thomas (A&T)",
+    category: "Civil / Structural — Phase 1 & 2 Lead",
+    scopeVillas: 41,
+    activeVillas: 16, // Blocks 4, 9, 10 currently active
     completePct: 14,
-    avgDelayDays: 18,
-    criticalRisks: 3,
+    avgDelayDays: 22,
+    criticalRisks: 4,
     health: "warning",
   },
   {
     name: "Contractor 2",
-    category: "Civil / Structural — Phase 2 · TBD",
-    scopeVillas: 54,
+    category: "Civil / Structural — Phase 3 · TBD",
+    scopeVillas: 52,
     activeVillas: 0,
     completePct: 0,
     avgDelayDays: 0,
@@ -340,15 +345,15 @@ export function healthSummary(): ProjectHealthSummary {
     modelVillas: 2,
     phase1Villas: active.reduce((n, b) => n + b.villas.length, 0),
     phase1BlocksActive: active.length,
-    atVillas: 39,
-    atBlocks: 11,
+    atVillas: 41,
+    atBlocks: 12,
     baselineStart: PHASE_START,
     baselineEnd: PHASE_END,
     projectedEnd: new Date(PHASE_END.getTime() + maxSlip * 86400000),
     totalDelayDays: maxSlip,
     reraDelayDays: 0,
     hindrances: 3,
-    criticalBlocks: active.filter((b) => b.slipDays > 20).length,
+    criticalBlocks: active.filter((b) => b.slipDays > 30).length,
     probability: maxSlip > 30 ? "low" : maxSlip > 14 ? "med" : "high",
     plannedPct: 2.74,
     achievedPct: 0.01,

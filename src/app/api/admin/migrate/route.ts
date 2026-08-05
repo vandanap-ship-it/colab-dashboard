@@ -93,6 +93,99 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Allow InspectionItem.passed to be NULL (engineer hasn't ticked yet).",
   },
+  {
+    key: "2026-08-06_executive_dashboard",
+    sql: [
+      // New tables: Block, Villa, MilestoneSection, VillaMilestone
+      `CREATE TABLE IF NOT EXISTS "Block" (
+        "id" TEXT NOT NULL,
+        "projectId" TEXT NOT NULL,
+        "code" TEXT NOT NULL,
+        "name" TEXT,
+        "pod" TEXT,
+        "orderIndex" INTEGER NOT NULL DEFAULT 0,
+        "active" BOOLEAN NOT NULL DEFAULT true,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        CONSTRAINT "Block_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE TABLE IF NOT EXISTS "Villa" (
+        "id" TEXT NOT NULL,
+        "projectId" TEXT NOT NULL,
+        "blockId" TEXT NOT NULL,
+        "number" INTEGER NOT NULL,
+        "villaType" TEXT,
+        "inScope" BOOLEAN NOT NULL DEFAULT true,
+        "unitCount" INTEGER NOT NULL DEFAULT 1,
+        "label" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        CONSTRAINT "Villa_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE TABLE IF NOT EXISTS "MilestoneSection" (
+        "id" TEXT NOT NULL,
+        "projectId" TEXT NOT NULL,
+        "code" TEXT NOT NULL,
+        "name" TEXT NOT NULL,
+        "orderIndex" INTEGER NOT NULL DEFAULT 0,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        CONSTRAINT "MilestoneSection_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE TABLE IF NOT EXISTS "VillaMilestone" (
+        "id" TEXT NOT NULL,
+        "villaId" TEXT NOT NULL,
+        "sectionId" TEXT NOT NULL,
+        "baselineStart" TIMESTAMP(3),
+        "baselineFinish" TIMESTAMP(3),
+        "actualStart" TIMESTAMP(3),
+        "actualFinish" TIMESTAMP(3),
+        "projectedFinish" TIMESTAMP(3),
+        "pctComplete" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "delayReason" TEXT,
+        "staleDays" INTEGER,
+        "crmDate" TIMESTAMP(3),
+        "crmDelay" INTEGER,
+        "plannedCollection" DOUBLE PRECISION,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        CONSTRAINT "VillaMilestone_pkey" PRIMARY KEY ("id")
+      )`,
+      // Unique + index constraints for the new tables
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Block_projectId_code_key" ON "Block"("projectId", "code")`,
+      `CREATE INDEX IF NOT EXISTS "Block_projectId_idx" ON "Block"("projectId")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Villa_projectId_number_key" ON "Villa"("projectId", "number")`,
+      `CREATE INDEX IF NOT EXISTS "Villa_projectId_idx" ON "Villa"("projectId")`,
+      `CREATE INDEX IF NOT EXISTS "Villa_blockId_idx" ON "Villa"("blockId")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "MilestoneSection_projectId_code_key" ON "MilestoneSection"("projectId", "code")`,
+      `CREATE INDEX IF NOT EXISTS "MilestoneSection_projectId_idx" ON "MilestoneSection"("projectId")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "VillaMilestone_villaId_sectionId_key" ON "VillaMilestone"("villaId", "sectionId")`,
+      `CREATE INDEX IF NOT EXISTS "VillaMilestone_villaId_idx" ON "VillaMilestone"("villaId")`,
+      `CREATE INDEX IF NOT EXISTS "VillaMilestone_sectionId_idx" ON "VillaMilestone"("sectionId")`,
+      // Foreign keys (added after tables to avoid ordering issues)
+      `ALTER TABLE "Block" ADD CONSTRAINT "Block_projectId_fkey"
+         FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "Villa" ADD CONSTRAINT "Villa_projectId_fkey"
+         FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "Villa" ADD CONSTRAINT "Villa_blockId_fkey"
+         FOREIGN KEY ("blockId") REFERENCES "Block"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "MilestoneSection" ADD CONSTRAINT "MilestoneSection_projectId_fkey"
+         FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "VillaMilestone" ADD CONSTRAINT "VillaMilestone_villaId_fkey"
+         FOREIGN KEY ("villaId") REFERENCES "Villa"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "VillaMilestone" ADD CONSTRAINT "VillaMilestone_sectionId_fkey"
+         FOREIGN KEY ("sectionId") REFERENCES "MilestoneSection"("id") ON DELETE RESTRICT ON UPDATE CASCADE`,
+      // New nullable columns on WBSNode — safe on existing data
+      `ALTER TABLE "WBSNode" ADD COLUMN IF NOT EXISTS "villaId" TEXT`,
+      `ALTER TABLE "WBSNode" ADD COLUMN IF NOT EXISTS "sectionId" TEXT`,
+      `ALTER TABLE "WBSNode" ADD COLUMN IF NOT EXISTS "villaMilestoneId" TEXT`,
+      `ALTER TABLE "WBSNode" ADD COLUMN IF NOT EXISTS "isSubMilestone" BOOLEAN NOT NULL DEFAULT false`,
+      `CREATE INDEX IF NOT EXISTS "WBSNode_villaId_idx" ON "WBSNode"("villaId")`,
+      `CREATE INDEX IF NOT EXISTS "WBSNode_sectionId_idx" ON "WBSNode"("sectionId")`,
+      `CREATE INDEX IF NOT EXISTS "WBSNode_villaMilestoneId_idx" ON "WBSNode"("villaMilestoneId")`,
+    ],
+    describe: "Executive dashboard: Block, Villa, MilestoneSection (21), VillaMilestone (with CRM columns), plus WBSNode.villaId/sectionId/villaMilestoneId/isSubMilestone.",
+  },
 ];
 
 async function ensureLedger() {

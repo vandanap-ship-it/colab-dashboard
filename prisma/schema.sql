@@ -39,6 +39,72 @@ CREATE TABLE "Project" (
 );
 
 -- CreateTable
+CREATE TABLE "Block" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "name" TEXT,
+    "pod" TEXT,
+    "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Block_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Villa" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "blockId" TEXT NOT NULL,
+    "number" INTEGER NOT NULL,
+    "villaType" TEXT,
+    "inScope" BOOLEAN NOT NULL DEFAULT true,
+    "unitCount" INTEGER NOT NULL DEFAULT 1,
+    "label" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Villa_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "MilestoneSection" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "MilestoneSection_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "VillaMilestone" (
+    "id" TEXT NOT NULL,
+    "villaId" TEXT NOT NULL,
+    "sectionId" TEXT NOT NULL,
+    "baselineStart" TIMESTAMP(3),
+    "baselineFinish" TIMESTAMP(3),
+    "actualStart" TIMESTAMP(3),
+    "actualFinish" TIMESTAMP(3),
+    "projectedFinish" TIMESTAMP(3),
+    "pctComplete" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "delayReason" TEXT,
+    "staleDays" INTEGER,
+    "crmDate" TIMESTAMP(3),
+    "crmDelay" INTEGER,
+    "plannedCollection" DOUBLE PRECISION,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "VillaMilestone_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Contractor" (
     "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
@@ -72,6 +138,10 @@ CREATE TABLE "WBSNode" (
     "contractorId" TEXT,
     "delayReason" TEXT,
     "progressEntered" BOOLEAN NOT NULL DEFAULT false,
+    "villaId" TEXT,
+    "sectionId" TEXT,
+    "villaMilestoneId" TEXT,
+    "isSubMilestone" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -412,6 +482,36 @@ CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
 CREATE INDEX "Project_createdById_idx" ON "Project"("createdById");
 
 -- CreateIndex
+CREATE INDEX "Block_projectId_idx" ON "Block"("projectId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Block_projectId_code_key" ON "Block"("projectId", "code");
+
+-- CreateIndex
+CREATE INDEX "Villa_projectId_idx" ON "Villa"("projectId");
+
+-- CreateIndex
+CREATE INDEX "Villa_blockId_idx" ON "Villa"("blockId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Villa_projectId_number_key" ON "Villa"("projectId", "number");
+
+-- CreateIndex
+CREATE INDEX "MilestoneSection_projectId_idx" ON "MilestoneSection"("projectId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "MilestoneSection_projectId_code_key" ON "MilestoneSection"("projectId", "code");
+
+-- CreateIndex
+CREATE INDEX "VillaMilestone_villaId_idx" ON "VillaMilestone"("villaId");
+
+-- CreateIndex
+CREATE INDEX "VillaMilestone_sectionId_idx" ON "VillaMilestone"("sectionId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "VillaMilestone_villaId_sectionId_key" ON "VillaMilestone"("villaId", "sectionId");
+
+-- CreateIndex
 CREATE INDEX "Contractor_projectId_idx" ON "Contractor"("projectId");
 
 -- CreateIndex
@@ -422,6 +522,15 @@ CREATE INDEX "WBSNode_projectId_idx" ON "WBSNode"("projectId");
 
 -- CreateIndex
 CREATE INDEX "WBSNode_parentId_idx" ON "WBSNode"("parentId");
+
+-- CreateIndex
+CREATE INDEX "WBSNode_villaId_idx" ON "WBSNode"("villaId");
+
+-- CreateIndex
+CREATE INDEX "WBSNode_sectionId_idx" ON "WBSNode"("sectionId");
+
+-- CreateIndex
+CREATE INDEX "WBSNode_villaMilestoneId_idx" ON "WBSNode"("villaMilestoneId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "WBSNode_projectId_taskCode_key" ON "WBSNode"("projectId", "taskCode");
@@ -542,6 +651,24 @@ CREATE INDEX "DesignDrawingRevision_drawingId_idx" ON "DesignDrawingRevision"("d
 
 -- AddForeignKey
 ALTER TABLE "Project" ADD CONSTRAINT "Project_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Block" ADD CONSTRAINT "Block_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Villa" ADD CONSTRAINT "Villa_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Villa" ADD CONSTRAINT "Villa_blockId_fkey" FOREIGN KEY ("blockId") REFERENCES "Block"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "MilestoneSection" ADD CONSTRAINT "MilestoneSection_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "VillaMilestone" ADD CONSTRAINT "VillaMilestone_villaId_fkey" FOREIGN KEY ("villaId") REFERENCES "Villa"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "VillaMilestone" ADD CONSTRAINT "VillaMilestone_sectionId_fkey" FOREIGN KEY ("sectionId") REFERENCES "MilestoneSection"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Contractor" ADD CONSTRAINT "Contractor_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
