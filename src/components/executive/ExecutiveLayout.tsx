@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import styles from "./executive.module.css";
 import type { BlockRollup } from "@/lib/executiveMockData";
 
@@ -169,20 +170,38 @@ function BlockGrid({
   return (
     <div className={`${styles.blockGroup} ${dim ? styles.dim : ""}`}>
       <h4>
-        Block {block.code}
+        <Link
+          href={`?bd=${encodeURIComponent(block.code)}`}
+          scroll={false}
+          style={{ color: "inherit", textDecoration: "none" }}
+        >
+          Block {block.code}
+        </Link>
         <span className="sub">{block.pod}</span>
       </h4>
       <div className={`${styles.villaGrid} ${colsClass}`}>
         {block.villas.map((n) => {
           const status = cellFor(n);
-          return (
+          const isOos = status === "stOos";
+          const inner = (
             <div
-              key={n}
               className={`${styles.villaBox} ${styles[status]}`}
               title={`Villa ${n} · Block ${block.code}`}
             >
               {n}
             </div>
+          );
+          // Not-in-scope villas aren't clickable (no data to drill into).
+          if (isOos) return <div key={n}>{inner}</div>;
+          return (
+            <Link
+              key={n}
+              href={`?vn=${n}`}
+              scroll={false}
+              style={{ textDecoration: "none", color: "inherit" }}
+            >
+              {inner}
+            </Link>
           );
         })}
       </div>

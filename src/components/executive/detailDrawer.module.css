@@ -1,0 +1,251 @@
+/* Right-side slide-in drawer used for villa / block drill-in. */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(22, 32, 47, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.24s ease;
+  z-index: 40;
+}
+.scrimOpen {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.drawer {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: 560px;
+  max-width: 100vw;
+  background: #16202F;
+  color: #F3EFE4;
+  transform: translateX(105%);
+  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -20px 0 60px rgba(22, 32, 47, 0.22);
+}
+.drawerOpen { transform: translateX(0); }
+
+@media (max-width: 600px) {
+  .drawer { width: 100vw; }
+}
+
+.header {
+  padding: 20px 24px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.headerText { flex: 1; min-width: 0; }
+.eyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #A9B4C4;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #FFFFFF;
+  margin: 0;
+}
+.subtitle {
+  font-size: 13px;
+  color: #A9B4C4;
+  margin-top: 4px;
+}
+.closeBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #E7E2D3;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.closeBtn:hover { background: rgba(255,255,255,0.14); }
+.closeBtn:focus-visible { outline: 2px solid #E5D08A; outline-offset: 2px; }
+.closeIcon { width: 16px; height: 16px; }
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px 28px;
+}
+
+/* --- summary stats grid used inside the body --- */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.statCard {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+.statCard .lb {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #A9B4C4;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.statCard .vl {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #FFFFFF;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.statCard .vl.good { color: #79C2A0; }
+.statCard .vl.warn { color: #E5B966; }
+.statCard .vl.bad { color: #E58A8A; }
+.statCard .sub {
+  font-size: 10.5px;
+  color: #A9B4C4;
+  margin-top: 3px;
+}
+
+/* --- section subheads inside body --- */
+.section {
+  margin-bottom: 20px;
+}
+.sectionHd {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #A9B4C4;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+/* --- milestone list row --- */
+.msRow {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 5px;
+  margin-bottom: 5px;
+  align-items: center;
+}
+.msDot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  align-self: center;
+  margin-left: 6px;
+}
+.msDot.done { background: #79C2A0; }
+.msDot.doneLate { background: #E5B966; }
+.msDot.inProgress {
+  background: #6BA5D8;
+  box-shadow: 0 0 0 4px rgba(107,165,216,0.18);
+}
+.msDot.atRisk { background: #E58A8A; }
+.msDot.notStarted { background: rgba(255,255,255,0.15); }
+
+.msMain {
+  min-width: 0;
+}
+.msName {
+  font-size: 13px;
+  color: #F3EFE4;
+  font-weight: 500;
+  margin-bottom: 3px;
+}
+.msDates {
+  font-size: 10.5px;
+  color: #A9B4C4;
+  font-variant-numeric: tabular-nums;
+}
+.msDates .dLabel { color: #7B8697; }
+.msMeta {
+  text-align: right;
+  min-width: 80px;
+}
+.msPct {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #FFFFFF;
+}
+.msSlipChip {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: rgba(229, 138, 138, 0.16);
+  color: #E58A8A;
+}
+
+/* --- villa row in block-detail view --- */
+.villaRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 5px;
+  margin-bottom: 5px;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+.villaRow:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.14);
+}
+.villaRowMain { min-width: 0; }
+.villaRowName {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #F3EFE4;
+}
+.villaRowSub {
+  font-size: 10.5px;
+  color: #A9B4C4;
+  margin-top: 2px;
+}
+.villaRowPct {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #FFFFFF;
+  text-align: right;
+}
+.villaRowStatus {
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.villaRowStatus.healthy { background: rgba(46,125,91,0.22); color: #79C2A0; }
+.villaRowStatus.warning { background: rgba(199,122,42,0.22); color: #E5B966; }
+.villaRowStatus.critical { background: rgba(179,58,58,0.22); color: #E58A8A; }
+.villaRowStatus.notStarted { background: rgba(255,255,255,0.08); color: #A9B4C4; }

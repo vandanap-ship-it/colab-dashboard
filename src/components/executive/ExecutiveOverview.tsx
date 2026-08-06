@@ -1,3 +1,4 @@
+import Link from "next/link";
 import styles from "./executive.module.css";
 import {
   SECTIONS,
@@ -389,7 +390,13 @@ function BlockBucket({
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {blocks.map((b) => (
-              <div key={b.code} className={styles.blockTile}>
+              <Link
+                key={b.code}
+                href={`?bd=${encodeURIComponent(b.code)}`}
+                scroll={false}
+                className={styles.blockTile}
+                style={{ display: "block", textDecoration: "none", color: "inherit" }}
+              >
                 <div className={styles.btName}>Block {b.code}</div>
                 <div className={styles.btSub}>
                   {b.villas.length} villas · {b.pod} · {SECTIONS[b.currentSection] ?? "Not started"}
@@ -402,7 +409,7 @@ function BlockBucket({
                   <span className={styles.lb}>Current milestone</span>
                   <span className={styles.vl}>{b.currentPct}%</span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
@@ -456,12 +463,18 @@ function VillaBucket({
             {villas
               .sort((a, b) => b.slipDays - a.slipDays)
               .map((v) => (
-                <div key={v.number} className={styles.bucketChip}>
+                <Link
+                  key={v.number}
+                  href={`?vn=${v.number}`}
+                  scroll={false}
+                  className={styles.bucketChip}
+                  style={{ textDecoration: "none" }}
+                >
                   V{v.number}
                   <span className={styles.slip}>
                     {v.slipDays > 0 ? `+${v.slipDays}d` : "on-time"}
                   </span>
-                </div>
+                </Link>
               ))}
           </div>
         )}
