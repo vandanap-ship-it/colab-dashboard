@@ -5,6 +5,7 @@ CREATE SCHEMA IF NOT EXISTS "public";
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
     "username" TEXT NOT NULL,
+    "email" TEXT,
     "name" TEXT NOT NULL,
     "passwordHash" TEXT NOT NULL,
     "role" TEXT NOT NULL DEFAULT 'SITE_ENGINEER',
@@ -36,6 +37,72 @@ CREATE TABLE "Project" (
     "createdById" TEXT NOT NULL,
 
     CONSTRAINT "Project_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Block" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "name" TEXT,
+    "pod" TEXT,
+    "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Block_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Villa" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "blockId" TEXT NOT NULL,
+    "number" INTEGER NOT NULL,
+    "villaType" TEXT,
+    "inScope" BOOLEAN NOT NULL DEFAULT true,
+    "unitCount" INTEGER NOT NULL DEFAULT 1,
+    "label" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Villa_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "MilestoneSection" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "MilestoneSection_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "VillaMilestone" (
+    "id" TEXT NOT NULL,
+    "villaId" TEXT NOT NULL,
+    "sectionId" TEXT NOT NULL,
+    "baselineStart" TIMESTAMP(3),
+    "baselineFinish" TIMESTAMP(3),
+    "actualStart" TIMESTAMP(3),
+    "actualFinish" TIMESTAMP(3),
+    "projectedFinish" TIMESTAMP(3),
+    "pctComplete" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "delayReason" TEXT,
+    "staleDays" INTEGER,
+    "crmDate" TIMESTAMP(3),
+    "crmDelay" INTEGER,
+    "plannedCollection" DOUBLE PRECISION,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "VillaMilestone_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -72,6 +139,10 @@ CREATE TABLE "WBSNode" (
     "contractorId" TEXT,
     "delayReason" TEXT,
     "progressEntered" BOOLEAN NOT NULL DEFAULT false,
+    "villaId" TEXT,
+    "sectionId" TEXT,
+    "villaMilestoneId" TEXT,
+    "isSubMilestone" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -202,6 +273,63 @@ CREATE TABLE "IssuePhoto" (
     "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "IssuePhoto_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Rfi" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "number" INTEGER NOT NULL,
+    "subject" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "category" TEXT NOT NULL,
+    "priority" TEXT NOT NULL DEFAULT 'MEDIUM',
+    "status" TEXT NOT NULL DEFAULT 'OPEN',
+    "dueDate" TIMESTAMP(3),
+    "raisedById" TEXT NOT NULL,
+    "assignedToId" TEXT,
+    "wbsNodeId" TEXT,
+    "answer" TEXT,
+    "answeredById" TEXT,
+    "answeredAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
+    "idempotencyKey" TEXT,
+
+    CONSTRAINT "Rfi_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "RfiPhoto" (
+    "id" TEXT NOT NULL,
+    "rfiId" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "RfiPhoto_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Permit" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "number" TEXT,
+    "issuingAuthority" TEXT NOT NULL,
+    "category" TEXT NOT NULL,
+    "issuedDate" TIMESTAMP(3) NOT NULL,
+    "expiryDate" TIMESTAMP(3),
+    "documentUrl" TEXT,
+    "notes" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'ACTIVE',
+    "responsibleUserId" TEXT,
+    "renewalReminderDays" INTEGER NOT NULL DEFAULT 30,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
+
+    CONSTRAINT "Permit_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -409,7 +537,40 @@ CREATE TABLE "DesignDrawingRevision" (
 CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+
+-- CreateIndex
 CREATE INDEX "Project_createdById_idx" ON "Project"("createdById");
+
+-- CreateIndex
+CREATE INDEX "Block_projectId_idx" ON "Block"("projectId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Block_projectId_code_key" ON "Block"("projectId", "code");
+
+-- CreateIndex
+CREATE INDEX "Villa_projectId_idx" ON "Villa"("projectId");
+
+-- CreateIndex
+CREATE INDEX "Villa_blockId_idx" ON "Villa"("blockId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Villa_projectId_number_key" ON "Villa"("projectId", "number");
+
+-- CreateIndex
+CREATE INDEX "MilestoneSection_projectId_idx" ON "MilestoneSection"("projectId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "MilestoneSection_projectId_code_key" ON "MilestoneSection"("projectId", "code");
+
+-- CreateIndex
+CREATE INDEX "VillaMilestone_villaId_idx" ON "VillaMilestone"("villaId");
+
+-- CreateIndex
+CREATE INDEX "VillaMilestone_sectionId_idx" ON "VillaMilestone"("sectionId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "VillaMilestone_villaId_sectionId_key" ON "VillaMilestone"("villaId", "sectionId");
 
 -- CreateIndex
 CREATE INDEX "Contractor_projectId_idx" ON "Contractor"("projectId");
@@ -422,6 +583,15 @@ CREATE INDEX "WBSNode_projectId_idx" ON "WBSNode"("projectId");
 
 -- CreateIndex
 CREATE INDEX "WBSNode_parentId_idx" ON "WBSNode"("parentId");
+
+-- CreateIndex
+CREATE INDEX "WBSNode_villaId_idx" ON "WBSNode"("villaId");
+
+-- CreateIndex
+CREATE INDEX "WBSNode_sectionId_idx" ON "WBSNode"("sectionId");
+
+-- CreateIndex
+CREATE INDEX "WBSNode_villaMilestoneId_idx" ON "WBSNode"("villaMilestoneId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "WBSNode_projectId_taskCode_key" ON "WBSNode"("projectId", "taskCode");
@@ -473,6 +643,36 @@ CREATE INDEX "Issue_assignedToId_idx" ON "Issue"("assignedToId");
 
 -- CreateIndex
 CREATE INDEX "IssuePhoto_issueId_idx" ON "IssuePhoto"("issueId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Rfi_idempotencyKey_key" ON "Rfi"("idempotencyKey");
+
+-- CreateIndex
+CREATE INDEX "Rfi_projectId_idx" ON "Rfi"("projectId");
+
+-- CreateIndex
+CREATE INDEX "Rfi_assignedToId_idx" ON "Rfi"("assignedToId");
+
+-- CreateIndex
+CREATE INDEX "Rfi_raisedById_idx" ON "Rfi"("raisedById");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Rfi_projectId_number_key" ON "Rfi"("projectId", "number");
+
+-- CreateIndex
+CREATE INDEX "RfiPhoto_rfiId_idx" ON "RfiPhoto"("rfiId");
+
+-- CreateIndex
+CREATE INDEX "Permit_projectId_idx" ON "Permit"("projectId");
+
+-- CreateIndex
+CREATE INDEX "Permit_responsibleUserId_idx" ON "Permit"("responsibleUserId");
+
+-- CreateIndex
+CREATE INDEX "Permit_expiryDate_idx" ON "Permit"("expiryDate");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Permit_projectId_name_number_key" ON "Permit"("projectId", "name", "number");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Inspection_idempotencyKey_key" ON "Inspection"("idempotencyKey");
@@ -544,6 +744,24 @@ CREATE INDEX "DesignDrawingRevision_drawingId_idx" ON "DesignDrawingRevision"("d
 ALTER TABLE "Project" ADD CONSTRAINT "Project_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "Block" ADD CONSTRAINT "Block_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Villa" ADD CONSTRAINT "Villa_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Villa" ADD CONSTRAINT "Villa_blockId_fkey" FOREIGN KEY ("blockId") REFERENCES "Block"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "MilestoneSection" ADD CONSTRAINT "MilestoneSection_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "VillaMilestone" ADD CONSTRAINT "VillaMilestone_villaId_fkey" FOREIGN KEY ("villaId") REFERENCES "Villa"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "VillaMilestone" ADD CONSTRAINT "VillaMilestone_sectionId_fkey" FOREIGN KEY ("sectionId") REFERENCES "MilestoneSection"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "Contractor" ADD CONSTRAINT "Contractor_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -554,6 +772,9 @@ ALTER TABLE "WBSNode" ADD CONSTRAINT "WBSNode_parentId_fkey" FOREIGN KEY ("paren
 
 -- AddForeignKey
 ALTER TABLE "WBSNode" ADD CONSTRAINT "WBSNode_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WBSNode" ADD CONSTRAINT "WBSNode_villaMilestoneId_fkey" FOREIGN KEY ("villaMilestoneId") REFERENCES "VillaMilestone"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ProgressEntry" ADD CONSTRAINT "ProgressEntry_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -614,6 +835,30 @@ ALTER TABLE "Issue" ADD CONSTRAINT "Issue_assignedToId_fkey" FOREIGN KEY ("assig
 
 -- AddForeignKey
 ALTER TABLE "IssuePhoto" ADD CONSTRAINT "IssuePhoto_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "Issue"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_raisedById_fkey" FOREIGN KEY ("raisedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_answeredById_fkey" FOREIGN KEY ("answeredById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RfiPhoto" ADD CONSTRAINT "RfiPhoto_rfiId_fkey" FOREIGN KEY ("rfiId") REFERENCES "Rfi"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Permit" ADD CONSTRAINT "Permit_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Permit" ADD CONSTRAINT "Permit_responsibleUserId_fkey" FOREIGN KEY ("responsibleUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Inspection" ADD CONSTRAINT "Inspection_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;

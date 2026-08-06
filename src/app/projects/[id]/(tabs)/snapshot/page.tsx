@@ -10,9 +10,20 @@ import HindranceSummary from "@/components/HindranceSummary";
 import ConcernRaised from "@/components/ConcernRaised";
 import IssuesCard from "@/components/IssuesCard";
 import MilestoneSummary from "@/components/MilestoneSummary";
+import MilestoneMatrix from "@/components/executive/MilestoneMatrix";
 import QAQCList from "@/components/QAQCList";
 import InteractiveDrawings from "@/components/InteractiveDrawings";
 import { isAdmin, ROLES, canCreateProject } from "@/lib/roles";
+import { getMilestoneMatrix, getSections } from "@/lib/rollupServer";
+import { adaptMatrixRows } from "@/lib/executiveDataAdapter";
+import {
+  CONTRACTORS,
+  MATRIX_VILLA_ORDER,
+  SECTIONS,
+  SECTION_HEADERS,
+  milestonesForVilla,
+  BLOCKS,
+} from "@/lib/executiveMockData";
 
 export default async function SnapshotPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -134,6 +145,8 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
 
       <MilestoneSummary projectId={id} />
 
+      {await renderMilestoneMatrix(id)}
+
       <InteractiveDrawings
         projectId={id}
         canManage={canCreateProject(session.user.role)}
@@ -150,5 +163,51 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
         />
       </div>
     </div>
+  );
+}
+
+async function renderMilestoneMatrix(projectId: string) {
+  // Try live DB first — if the executive schema hasn't been migrated / imported
+  // yet, fall back to the placeholder mock data so the section still renders.
+  const rows = await getMilestoneMatrix(projectId).catch(() => [] as never[]);
+  const sections = await getSections(projectId).catch(() => [] as never[]);
+
+  if (rows.length > 0 && sections.length > 0) {
+    const adapted = adaptMatrixRows(rows, sections);
+    const villaLabelsObj: Record<number, string> = {};
+    adapted.villaLabels.forEach((v, k) => (villaLabelsObj[k] = v));
+    const cellsByVillaObj: Record<number, ReturnType<typeof milestonesForVilla>> = {};
+    adapted.cellsByVilla.forEach((v, k) => (cellsByVillaObj[k] = v));
+    return (
+      <MilestoneMatrix
+        villaOrder={adapted.villaOrder}
+        villaLabels={villaLabelsObj}
+        sections={adapted.sectionNames}
+        sectionHeaders={adapted.sectionHeaders}
+        cellsByVilla={cellsByVillaObj}
+        contractors={CONTRACTORS}
+      />
+    );
+  }
+
+  // Fallback — mock. Same shape, so the UI is identical.
+  const villaLabels: Record<number, string> = {};
+  const cellsByVilla: Record<number, ReturnType<typeof milestonesForVilla>> = {};
+  for (const b of BLOCKS) {
+    for (const n of b.villas) {
+      const idx = b.villas.indexOf(n);
+      villaLabels[n] = b.villaLabels[idx] ?? `Villa ${n}`;
+      cellsByVilla[n] = milestonesForVilla(n);
+    }
+  }
+  return (
+    <MilestoneMatrix
+      villaOrder={MATRIX_VILLA_ORDER}
+      villaLabels={villaLabels}
+      sections={SECTIONS}
+      sectionHeaders={SECTION_HEADERS}
+      cellsByVilla={cellsByVilla}
+      contractors={CONTRACTORS}
+    />
   );
 }

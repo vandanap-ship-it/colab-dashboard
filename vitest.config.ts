@@ -15,6 +15,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // Next.js's "server-only" package is a build-time guard against client
+      // bundling. It has no runtime behaviour and Vitest can't resolve it —
+      // stub with an empty module so tests can import server-side lib files.
+      "server-only": fileURLToPath(new URL("./tests/stubs/server-only.ts", import.meta.url)),
     },
   },
 });

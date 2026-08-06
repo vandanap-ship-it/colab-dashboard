@@ -1,0 +1,122 @@
+name: Nightly DB backup
+
+# Runs every day at 20:30 UTC = 02:00 IST (early morning India time, off-peak).
+# Also supports manual trigger from the Actions tab.
+on:
+  schedule:
+    - cron: "30 20 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  dump-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install postgresql-client (matches Neon's server version 17)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg lsb-release
+          # Neon runs Postgres 17 — install matching client to avoid version-mismatch pg_dump errors.
+          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_URL secret not set on the repo."
+            exit 1
+          fi
+          TIMESTAMP=$(date -u +'%Y-%m-%dT%H-%M-%SZ')
+          FILENAME="siddhi-backup-${TIMESTAMP}.sql.gz"
+          echo "BACKUP_FILE=${FILENAME}" >> $GITHUB_ENV
+          # --no-owner + --no-acl → portable dump, no role assumptions.
+          # --format=plain + gzip → simple, greppable, small.
+          pg_dump "$DATABASE_URL" --no-owner --no-acl --format=plain \
+            | gzip -9 > "$FILENAME"
+          SIZE=$(du -h "$FILENAME" | cut -f1)
+          echo "Backup created: $FILENAME ($SIZE)"
+          echo "BACKUP_SIZE=${SIZE}" >> $GITHUB_ENV
+
+      - name: Upload to Vercel Blob
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: |
+          if [ -z "$BLOB_READ_WRITE_TOKEN" ]; then
+            echo "::warning::BLOB_READ_WRITE_TOKEN not set — skipping Blob upload. Backup file is in the workflow artifacts instead."
+            exit 0
+          fi
+          # Vercel Blob HTTP API: PUT to https://blob.vercel-storage.com/<pathname>
+          # Path convention: backups/YYYY-MM/filename.sql.gz — groups by month for easy pruning.
+          MONTH=$(date -u +'%Y-%m')
+          PATH="backups/${MONTH}/${BACKUP_FILE}"
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
+            -H "authorization: Bearer $BLOB_READ_WRITE_TOKEN" \
+            -H "x-content-type: application/gzip" \
+            -H "x-add-random-suffix: 0" \
+            --data-binary "@${BACKUP_FILE}" \
+            "https://blob.vercel-storage.com/${PATH}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "::error::Blob upload failed with HTTP $HTTP_CODE: $BODY"
+            exit 1
+          fi
+          BLOB_URL=$(echo "$BODY" | python3 -c "import json,sys; print(json.load(sys.stdin)['url'])")
+          echo "BLOB_URL=${BLOB_URL}" >> $GITHUB_ENV
+          echo "Uploaded to: ${BLOB_URL}"
+
+      - name: Upload workflow artifact (fallback + audit trail)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BACKUP_FILE }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 30
+
+      - name: Notify by email (Resend)
+        if: env.BLOB_URL != ''
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          BACKUP_EMAIL_RECIPIENTS: ${{ secrets.BACKUP_EMAIL_RECIPIENTS }}
+        run: |
+          if [ -z "$RESEND_API_KEY" ]; then
+            echo "::notice::RESEND_API_KEY not set — skipping email digest. Backup is at ${BLOB_URL}"
+            exit 0
+          fi
+          RECIPIENTS=${BACKUP_EMAIL_RECIPIENTS:-"vandana.p@whitelotusgroup.in,shraddha.b@whitelotusgroup.in"}
+          # Convert comma-separated recipients to JSON array
+          TO_JSON=$(echo "$RECIPIENTS" | python3 -c "import json,sys; print(json.dumps([e.strip() for e in sys.stdin.read().split(',')]))")
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.resend.com/emails" \
+            -H "authorization: Bearer $RESEND_API_KEY" \
+            -H "content-type: application/json" \
+            -d "{
+              \"from\": \"Siddhi Backups <backups@whitelotusgroup.in>\",
+              \"to\": ${TO_JSON},
+              \"subject\": \"Siddhi backup ready — ${BACKUP_FILE} (${BACKUP_SIZE})\",
+              \"html\": \"<p>Nightly backup complete.</p><p><b>File:</b> ${BACKUP_FILE}<br><b>Size:</b> ${BACKUP_SIZE}<br><b>Download:</b> <a href=\\\"${BLOB_URL}\\\">${BLOB_URL}</a></p><p>Link expires when the file is deleted (retention set on the Blob store side).</p>\"
+            }")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          if [ "$HTTP_CODE" -ge 400 ]; then
+            echo "::warning::Email dispatch failed with HTTP $HTTP_CODE (backup itself succeeded)."
+          else
+            echo "Email digest sent to ${RECIPIENTS}"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Backup summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **File:** \`${BACKUP_FILE:-not-produced}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Size:** ${BACKUP_SIZE:-n/a}" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$BLOB_URL" ]; then
+            echo "- **Blob:** ${BLOB_URL}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Blob:** upload skipped (see logs)" >> $GITHUB_STEP_SUMMARY
+          fi

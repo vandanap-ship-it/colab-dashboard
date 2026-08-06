@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Bug, ClipboardCheck, FileBarChart, FileStack, GanttChartSquare, ListPlus, ReceiptIndianRupee, Upload, Wallet } from "lucide-react";
+import { ArrowLeft, Bug, CalendarClock, CalendarRange, ClipboardCheck, FileBarChart, FileStack, GanttChartSquare, ListPlus, MessageSquareQuote, ReceiptIndianRupee, ShieldCheck, Upload, Wallet } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canAccessBilling, canLogExpense, canSeeDesktop, ROLES } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
@@ -89,6 +89,20 @@ export default async function ProjectLayout({
               Gantt
             </Link>
             <Link
+              href={`/projects/${project.id}/timeline`}
+              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
+            >
+              <CalendarRange className="w-4 h-4 text-stone-400" />
+              Timeline
+            </Link>
+            <Link
+              href={`/projects/${project.id}/look-ahead`}
+              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
+            >
+              <CalendarClock className="w-4 h-4 text-stone-400" />
+              Look-ahead
+            </Link>
+            <Link
               href={`/projects/${project.id}/snags`}
               className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
             >
@@ -115,6 +129,20 @@ export default async function ProjectLayout({
             >
               <FileStack className="w-4 h-4 text-stone-400" />
               Drawings
+            </Link>
+            <Link
+              href={`/projects/${project.id}/rfi`}
+              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
+            >
+              <MessageSquareQuote className="w-4 h-4 text-stone-400" />
+              RFI
+            </Link>
+            <Link
+              href={`/projects/${project.id}/permits`}
+              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
+            >
+              <ShieldCheck className="w-4 h-4 text-stone-400" />
+              Permits
             </Link>
             {canAccessBilling(role) && (
               <Link

@@ -93,6 +93,195 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Allow InspectionItem.passed to be NULL (engineer hasn't ticked yet).",
   },
+  {
+    key: "2026-08-06_executive_dashboard",
+    sql: [
+      // New tables: Block, Villa, MilestoneSection, VillaMilestone
+      `CREATE TABLE IF NOT EXISTS "Block" (
+        "id" TEXT NOT NULL,
+        "projectId" TEXT NOT NULL,
+        "code" TEXT NOT NULL,
+        "name" TEXT,
+        "pod" TEXT,
+        "orderIndex" INTEGER NOT NULL DEFAULT 0,
+        "active" BOOLEAN NOT NULL DEFAULT true,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        CONSTRAINT "Block_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE TABLE IF NOT EXISTS "Villa" (
+        "id" TEXT NOT NULL,
+        "projectId" TEXT NOT NULL,
+        "blockId" TEXT NOT NULL,
+        "number" INTEGER NOT NULL,
+        "villaType" TEXT,
+        "inScope" BOOLEAN NOT NULL DEFAULT true,
+        "unitCount" INTEGER NOT NULL DEFAULT 1,
+        "label" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        CONSTRAINT "Villa_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE TABLE IF NOT EXISTS "MilestoneSection" (
+        "id" TEXT NOT NULL,
+        "projectId" TEXT NOT NULL,
+        "code" TEXT NOT NULL,
+        "name" TEXT NOT NULL,
+        "orderIndex" INTEGER NOT NULL DEFAULT 0,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        CONSTRAINT "MilestoneSection_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE TABLE IF NOT EXISTS "VillaMilestone" (
+        "id" TEXT NOT NULL,
+        "villaId" TEXT NOT NULL,
+        "sectionId" TEXT NOT NULL,
+        "baselineStart" TIMESTAMP(3),
+        "baselineFinish" TIMESTAMP(3),
+        "actualStart" TIMESTAMP(3),
+        "actualFinish" TIMESTAMP(3),
+        "projectedFinish" TIMESTAMP(3),
+        "pctComplete" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "delayReason" TEXT,
+        "staleDays" INTEGER,
+        "crmDate" TIMESTAMP(3),
+        "crmDelay" INTEGER,
+        "plannedCollection" DOUBLE PRECISION,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        CONSTRAINT "VillaMilestone_pkey" PRIMARY KEY ("id")
+      )`,
+      // Unique + index constraints for the new tables
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Block_projectId_code_key" ON "Block"("projectId", "code")`,
+      `CREATE INDEX IF NOT EXISTS "Block_projectId_idx" ON "Block"("projectId")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Villa_projectId_number_key" ON "Villa"("projectId", "number")`,
+      `CREATE INDEX IF NOT EXISTS "Villa_projectId_idx" ON "Villa"("projectId")`,
+      `CREATE INDEX IF NOT EXISTS "Villa_blockId_idx" ON "Villa"("blockId")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "MilestoneSection_projectId_code_key" ON "MilestoneSection"("projectId", "code")`,
+      `CREATE INDEX IF NOT EXISTS "MilestoneSection_projectId_idx" ON "MilestoneSection"("projectId")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "VillaMilestone_villaId_sectionId_key" ON "VillaMilestone"("villaId", "sectionId")`,
+      `CREATE INDEX IF NOT EXISTS "VillaMilestone_villaId_idx" ON "VillaMilestone"("villaId")`,
+      `CREATE INDEX IF NOT EXISTS "VillaMilestone_sectionId_idx" ON "VillaMilestone"("sectionId")`,
+      // Foreign keys (added after tables to avoid ordering issues)
+      `ALTER TABLE "Block" ADD CONSTRAINT "Block_projectId_fkey"
+         FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "Villa" ADD CONSTRAINT "Villa_projectId_fkey"
+         FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "Villa" ADD CONSTRAINT "Villa_blockId_fkey"
+         FOREIGN KEY ("blockId") REFERENCES "Block"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "MilestoneSection" ADD CONSTRAINT "MilestoneSection_projectId_fkey"
+         FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "VillaMilestone" ADD CONSTRAINT "VillaMilestone_villaId_fkey"
+         FOREIGN KEY ("villaId") REFERENCES "Villa"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "VillaMilestone" ADD CONSTRAINT "VillaMilestone_sectionId_fkey"
+         FOREIGN KEY ("sectionId") REFERENCES "MilestoneSection"("id") ON DELETE RESTRICT ON UPDATE CASCADE`,
+      // New nullable columns on WBSNode — safe on existing data
+      `ALTER TABLE "WBSNode" ADD COLUMN IF NOT EXISTS "villaId" TEXT`,
+      `ALTER TABLE "WBSNode" ADD COLUMN IF NOT EXISTS "sectionId" TEXT`,
+      `ALTER TABLE "WBSNode" ADD COLUMN IF NOT EXISTS "villaMilestoneId" TEXT`,
+      `ALTER TABLE "WBSNode" ADD COLUMN IF NOT EXISTS "isSubMilestone" BOOLEAN NOT NULL DEFAULT false`,
+      `CREATE INDEX IF NOT EXISTS "WBSNode_villaId_idx" ON "WBSNode"("villaId")`,
+      `CREATE INDEX IF NOT EXISTS "WBSNode_sectionId_idx" ON "WBSNode"("sectionId")`,
+      `CREATE INDEX IF NOT EXISTS "WBSNode_villaMilestoneId_idx" ON "WBSNode"("villaMilestoneId")`,
+    ],
+    describe: "Executive dashboard: Block, Villa, MilestoneSection (21), VillaMilestone (with CRM columns), plus WBSNode.villaId/sectionId/villaMilestoneId/isSubMilestone.",
+  },
+  {
+    key: "2026-08-06_rfi",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS "Rfi" (
+        "id" TEXT NOT NULL,
+        "projectId" TEXT NOT NULL,
+        "number" INTEGER NOT NULL,
+        "subject" TEXT NOT NULL,
+        "description" TEXT NOT NULL,
+        "category" TEXT NOT NULL,
+        "priority" TEXT NOT NULL DEFAULT 'MEDIUM',
+        "status" TEXT NOT NULL DEFAULT 'OPEN',
+        "dueDate" TIMESTAMP(3),
+        "raisedById" TEXT NOT NULL,
+        "assignedToId" TEXT,
+        "wbsNodeId" TEXT,
+        "answer" TEXT,
+        "answeredById" TEXT,
+        "answeredAt" TIMESTAMP(3),
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        "deletedAt" TIMESTAMP(3),
+        "idempotencyKey" TEXT,
+        CONSTRAINT "Rfi_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE TABLE IF NOT EXISTS "RfiPhoto" (
+        "id" TEXT NOT NULL,
+        "rfiId" TEXT NOT NULL,
+        "url" TEXT NOT NULL,
+        "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "RfiPhoto_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Rfi_idempotencyKey_key" ON "Rfi"("idempotencyKey")`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Rfi_projectId_number_key" ON "Rfi"("projectId", "number")`,
+      `CREATE INDEX IF NOT EXISTS "Rfi_projectId_idx" ON "Rfi"("projectId")`,
+      `CREATE INDEX IF NOT EXISTS "Rfi_assignedToId_idx" ON "Rfi"("assignedToId")`,
+      `CREATE INDEX IF NOT EXISTS "Rfi_raisedById_idx" ON "Rfi"("raisedById")`,
+      `CREATE INDEX IF NOT EXISTS "RfiPhoto_rfiId_idx" ON "RfiPhoto"("rfiId")`,
+      `ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_projectId_fkey"
+         FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_raisedById_fkey"
+         FOREIGN KEY ("raisedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE`,
+      `ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_assignedToId_fkey"
+         FOREIGN KEY ("assignedToId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE`,
+      `ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_answeredById_fkey"
+         FOREIGN KEY ("answeredById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE`,
+      `ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_wbsNodeId_fkey"
+         FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode"("id") ON DELETE SET NULL ON UPDATE CASCADE`,
+      `ALTER TABLE "RfiPhoto" ADD CONSTRAINT "RfiPhoto_rfiId_fkey"
+         FOREIGN KEY ("rfiId") REFERENCES "Rfi"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+    ],
+    describe: "Add RFI (Request for Information) tables — Rfi + RfiPhoto with linkage to Project, User, WBSNode.",
+  },
+  {
+    key: "2026-08-06_user_email",
+    sql: [
+      // Nullable email so existing users don't need a backfill. Populated as
+      // users are edited via the admin panel; also seeded for new users.
+      `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "email" TEXT`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email") WHERE "email" IS NOT NULL`,
+    ],
+    describe: "Add User.email (nullable, unique) so assignment + milestone-completion emails can address the right person.",
+  },
+  {
+    key: "2026-08-06_permit",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS "Permit" (
+        "id" TEXT NOT NULL,
+        "projectId" TEXT NOT NULL,
+        "name" TEXT NOT NULL,
+        "number" TEXT,
+        "issuingAuthority" TEXT NOT NULL,
+        "category" TEXT NOT NULL,
+        "issuedDate" TIMESTAMP(3) NOT NULL,
+        "expiryDate" TIMESTAMP(3),
+        "documentUrl" TEXT,
+        "notes" TEXT,
+        "status" TEXT NOT NULL DEFAULT 'ACTIVE',
+        "responsibleUserId" TEXT,
+        "renewalReminderDays" INTEGER NOT NULL DEFAULT 30,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        "deletedAt" TIMESTAMP(3),
+        CONSTRAINT "Permit_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Permit_projectId_name_number_key" ON "Permit"("projectId", "name", "number")`,
+      `CREATE INDEX IF NOT EXISTS "Permit_projectId_idx" ON "Permit"("projectId")`,
+      `CREATE INDEX IF NOT EXISTS "Permit_responsibleUserId_idx" ON "Permit"("responsibleUserId")`,
+      `CREATE INDEX IF NOT EXISTS "Permit_expiryDate_idx" ON "Permit"("expiryDate")`,
+      `ALTER TABLE "Permit" ADD CONSTRAINT "Permit_projectId_fkey"
+         FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "Permit" ADD CONSTRAINT "Permit_responsibleUserId_fkey"
+         FOREIGN KEY ("responsibleUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE`,
+    ],
+    describe: "Add Permit table — legal / regulatory approvals with expiry tracking.",
+  },
 ];
 
 async function ensureLedger() {

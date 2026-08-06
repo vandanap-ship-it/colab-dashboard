@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  ClipboardCheck,
   LayoutDashboard,
   Lightbulb,
+  Map,
+  ScanEye,
   Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -31,6 +32,18 @@ export default function ProjectTabs({
 
   const tabs: Tab[] = [
     {
+      key: "overview",
+      label: "Overview",
+      href: `/projects/${projectId}/overview`,
+      icon: ScanEye,
+    },
+    {
+      key: "layout",
+      label: "Layout",
+      href: `/projects/${projectId}/layout`,
+      icon: Map,
+    },
+    {
       key: "snapshot",
       label: "Snapshot",
       href: `/projects/${projectId}/snapshot`,
@@ -41,12 +54,6 @@ export default function ProjectTabs({
       label: "Progress",
       href: `/projects/${projectId}/progress`,
       icon: BarChart3,
-    },
-    {
-      key: "qaqc",
-      label: "QAQC",
-      href: `/projects/${projectId}/qaqc`,
-      icon: ClipboardCheck,
     },
     {
       key: "my-actions",
@@ -64,7 +71,7 @@ export default function ProjectTabs({
     },
   ];
 
-  // Match by leading segment so nested URLs (e.g. /qaqc/123) still highlight QAQC.
+  // Match by leading segment so nested URLs still highlight the parent tab.
   const isActive = (tab: Tab) => {
     const seg = `/projects/${projectId}/${tab.key}`;
     return pathname === seg || pathname.startsWith(seg + "/");

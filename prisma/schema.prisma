@@ -10,6 +10,7 @@ datasource db {
 model User {
   id           String   @id @default(cuid())
   username     String   @unique
+  email        String?  @unique // required for assignment / milestone notifications
   name         String
   passwordHash String
   role         String   @default("SITE_ENGINEER")
@@ -26,6 +27,10 @@ model User {
   assignedConcerns         Concern[]               @relation("ConcernAssignee")
   createdIssues            Issue[]                 @relation("IssueCreator")
   assignedIssues           Issue[]                 @relation("IssueAssignee")
+  raisedRfis               Rfi[]                   @relation("RfiRaiser")
+  assignedRfis             Rfi[]                   @relation("RfiAssignee")
+  answeredRfis             Rfi[]                   @relation("RfiAnswerer")
+  responsiblePermits       Permit[]                @relation("PermitResponsible")
   filledInspections        Inspection[]            @relation("InspectionFiller")
   reviewedInspections      Inspection[]            @relation("InspectionReviewer")
   preparedBills            SubContractorBill[]     @relation("BillPreparer")
@@ -65,8 +70,122 @@ model Project {
   subContractorBills SubContractorBill[]
   expenses           Expense[]
   designDrawings     DesignDrawing[]
+  blocks             Block[]
+  villas             Villa[]
+  milestoneSections  MilestoneSection[]
+  rfis               Rfi[]
+  permits            Permit[]
 
   @@index([createdById])
+}
+
+// ---------------------------------------------------------------------------
+// Villa Project structure (executive rollup)
+//
+// A villa project like Amanvana is organised as a set of Blocks, each holding
+// a small group of Villas. Each Villa moves through the same ordered list of
+// MilestoneSections (Foundation → Plinth → ... → Handover) with its own
+// baseline / actual / projected dates. Progress on WBS activities rolls up
+// into VillaMilestone.pctComplete; villa slip = max milestone slip; block slip
+// = max villa slip. This drives the executive dashboard's block/villa health
+// buckets and the layout site plan.
+// ---------------------------------------------------------------------------
+model Block {
+  id         String  @id @default(cuid())
+  projectId  String
+  code       String // "4", "9", "10", "14", "3A", "3B", ...
+  name       String? // display name if different from code
+  pod        String? // grouping e.g. "Central East", "South Row East"
+  orderIndex Int     @default(0)
+  active     Boolean @default(true) // true once execution has begun
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  villas  Villa[]
+
+  @@unique([projectId, code])
+  @@index([projectId])
+}
+
+model Villa {
+  id        String  @id @default(cuid())
+  projectId String
+  blockId   String
+  number    Int // 12, 13, 14, ... (primary villa number even for grouped villas)
+  villaType String? // "A", "B", ...
+  inScope   Boolean @default(true) // false for model villas / out-of-scope plots
+  // Some villas in MSP are grouped as one scheduling unit ("Villa 10 & 11",
+  // "Villa 23 & 24") — built together, share tasks. We keep one Villa record
+  // per group but count physical units correctly via unitCount.
+  unitCount Int     @default(1)
+  label     String? // display override, e.g. "Villa 10 & 11". Falls back to "Villa {number}".
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  block      Block            @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  milestones VillaMilestone[]
+
+  @@unique([projectId, number])
+  @@index([projectId])
+  @@index([blockId])
+}
+
+// Project-scoped ordered milestone list. NOT an enum — each villa project can
+// tune its own sections (Amanvana's 21 differ from a highrise's 15).
+model MilestoneSection {
+  id         String @id @default(cuid())
+  projectId  String
+  code       String // stable slug, e.g. "FOUNDATION", "PLINTH"
+  name       String // display, e.g. "Foundation / Substructure"
+  orderIndex Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestones VillaMilestone[]
+
+  @@unique([projectId, code])
+  @@index([projectId])
+}
+
+model VillaMilestone {
+  id        String @id @default(cuid())
+  villaId   String
+  sectionId String
+
+  baselineStart   DateTime?
+  baselineFinish  DateTime?
+  actualStart     DateTime?
+  actualFinish    DateTime?
+  projectedFinish DateTime?
+
+  pctComplete Float   @default(0)
+  delayReason String?
+  // Days since last field update on any linked activity — feeds Data Hygiene.
+  staleDays   Int?
+
+  // CRM integration — Colab ties each construction milestone to a customer
+  // payment stage. When the milestone hits (or its projected date moves),
+  // the CRM collection stage shifts too. Null when the villa has no buyer yet.
+  crmDate           DateTime?
+  crmDelay          Int? // days between planned and CRM-committed date
+  plannedCollection Float? // INR expected at this milestone
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  villa   Villa            @relation(fields: [villaId], references: [id], onDelete: Cascade)
+  section MilestoneSection @relation(fields: [sectionId], references: [id])
+  wbsNodes WBSNode[]
+
+  @@unique([villaId, sectionId])
+  @@index([villaId])
+  @@index([sectionId])
 }
 
 model Contractor {
@@ -112,6 +231,15 @@ model WBSNode {
   delayReason     String?
   progressEntered Boolean @default(false)
 
+  // Executive rollup: which villa + milestone section this activity feeds into.
+  // Set on leaf activities; null on structural / parent nodes.
+  villaId          String?
+  sectionId        String?
+  villaMilestoneId String? // direct link to the per-villa-per-section instance
+  // ★ concreting checkpoints (Footing RCC, Raft RCC, Retaining Wall, etc.).
+  // Everything else is a task item that rolls up to the next sub-milestone.
+  isSubMilestone   Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -119,16 +247,21 @@ model WBSNode {
   parent          WBSNode?                @relation("WBSTree", fields: [parentId], references: [id])
   children        WBSNode[]               @relation("WBSTree")
   contractor      Contractor?             @relation(fields: [contractorId], references: [id])
+  villaMilestone  VillaMilestone?         @relation(fields: [villaMilestoneId], references: [id])
   progressEntries ProgressEntry[]
   hindrances      Hindrance[]
   concerns        Concern[]
   issues          Issue[]
   inspections     Inspection[]
+  rfis            Rfi[]
   billLines       SubContractorBillLine[]
 
   @@unique([projectId, taskCode])
   @@index([projectId])
   @@index([parentId])
+  @@index([villaId])
+  @@index([sectionId])
+  @@index([villaMilestoneId])
 }
 
 model ProgressEntry {
@@ -290,6 +423,100 @@ model IssuePhoto {
   issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
 
   @@index([issueId])
+}
+
+// ---------------------------------------------------------------------------
+// RFI — Request for Information.
+//
+// Formal query from site to a consultant / designer / authority. Distinct
+// from Concern (internal alert) and Issue (open snag). A typical RFI:
+//   "Foundation depth on Villa 28 hits rock at -1.4m; RCC drawing shows -2m.
+//    Do we redesign the footing or blast? Please clarify by 20-Aug."
+//
+// Lifecycle: OPEN → ANSWERED → CLOSED. Assignee is who owes the answer.
+// Auto-numbered per-project as RFI-0001, RFI-0002, ...
+// ---------------------------------------------------------------------------
+model Rfi {
+  id           String    @id @default(cuid())
+  projectId    String
+  number       Int // sequential per project
+  subject      String // one-line summary
+  description  String // detailed question
+  category     String // STRUCTURAL | MEP | ARCHITECTURAL | FINISHING | OTHER
+  priority     String    @default("MEDIUM") // LOW | MEDIUM | HIGH
+  status       String    @default("OPEN") // OPEN | ANSWERED | CLOSED
+  dueDate      DateTime?
+  raisedById   String
+  assignedToId String? // who owes the answer
+  wbsNodeId    String? // optional link to activity
+  answer       String? // consultant's response
+  answeredById String?
+  answeredAt   DateTime?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  idempotencyKey String?   @unique // de-dupes offline-queue replays
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  raisedBy   User       @relation("RfiRaiser", fields: [raisedById], references: [id])
+  assignedTo User?      @relation("RfiAssignee", fields: [assignedToId], references: [id])
+  answeredBy User?      @relation("RfiAnswerer", fields: [answeredById], references: [id])
+  wbsNode    WBSNode?   @relation(fields: [wbsNodeId], references: [id])
+  photos     RfiPhoto[]
+
+  @@unique([projectId, number])
+  @@index([projectId])
+  @@index([assignedToId])
+  @@index([raisedById])
+}
+
+model RfiPhoto {
+  id         String   @id @default(cuid())
+  rfiId      String
+  url        String
+  uploadedAt DateTime @default(now())
+
+  rfi Rfi @relation(fields: [rfiId], references: [id], onDelete: Cascade)
+
+  @@index([rfiId])
+}
+
+// ---------------------------------------------------------------------------
+// Permit — legal / regulatory approvals with expiry tracking.
+//
+// Examples: BBMP Building Permit, KSPCB Consent to Operate, Fire NOC, Labour
+// License, Ground Water permit. Each has an issuing authority, a number,
+// issue + expiry dates, and a responsible person. Status is derived from the
+// expiry date (see canonicalPermitStatus in src/lib/permit.ts) but stored
+// explicitly so users can override (e.g. RENEWED before expiry).
+// ---------------------------------------------------------------------------
+model Permit {
+  id                   String    @id @default(cuid())
+  projectId            String
+  name                 String
+  number               String? // issuing authority's permit number (e.g. BBMP/2026/12345)
+  issuingAuthority     String
+  category             String // BUILDING | ENVIRONMENTAL | FIRE | LABOUR | WATER | OTHER
+  issuedDate           DateTime
+  expiryDate           DateTime?
+  documentUrl          String? // uploaded PDF / image of the permit
+  notes                String?
+  status               String    @default("ACTIVE") // ACTIVE | EXPIRING_SOON | EXPIRED | RENEWED
+  responsibleUserId    String?
+  renewalReminderDays  Int       @default(30) // how far ahead to flag as EXPIRING_SOON
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  responsible User?   @relation("PermitResponsible", fields: [responsibleUserId], references: [id])
+
+  @@unique([projectId, name, number]) // don't accidentally re-add the same permit
+  @@index([projectId])
+  @@index([responsibleUserId])
+  @@index([expiryDate])
 }
 
 model Inspection {
