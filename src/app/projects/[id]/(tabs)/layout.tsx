@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Bug, CalendarClock, CalendarRange, ClipboardCheck, FileBarChart, FileStack, GanttChartSquare, ListPlus, MessageSquareQuote, ReceiptIndianRupee, ShieldCheck, Upload, Wallet } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { canAccessBilling, canLogExpense, canSeeDesktop, ROLES } from "@/lib/roles";
+import { canAccessBilling, canLogExpense, canSeeDesktop, isAdmin, ROLES } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
 import ProjectTabs from "@/components/ProjectTabs";
 import HighlightsButton from "@/components/HighlightsButton";
+import Sidebar from "@/components/Sidebar";
 
 export default async function ProjectLayout({
   children,
@@ -72,103 +73,18 @@ export default async function ProjectLayout({
               <p className="text-sm text-stone-500 mt-1">{project.address}</p>
             )}
           </div>
-          <div className="flex gap-2 shrink-0 flex-wrap">
+          {/* Collapsed action row: sidebar has everything else. Only the
+              highest-frequency "Project Highlights" stays inline (it's a modal,
+              opens without page nav — belongs with the header not the sidebar). */}
+          <div className="flex gap-2 shrink-0 items-center">
             <HighlightsButton projectId={project.id} />
-            <Link
-              href={`/projects/${project.id}/add-progress`}
-              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
-            >
-              <ListPlus className="w-4 h-4 text-stone-400" />
-              Add Progress
-            </Link>
-            <Link
-              href={`/projects/${project.id}/gantt`}
-              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
-            >
-              <GanttChartSquare className="w-4 h-4 text-stone-400" />
-              Gantt
-            </Link>
-            <Link
-              href={`/projects/${project.id}/timeline`}
-              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
-            >
-              <CalendarRange className="w-4 h-4 text-stone-400" />
-              Timeline
-            </Link>
-            <Link
-              href={`/projects/${project.id}/look-ahead`}
-              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
-            >
-              <CalendarClock className="w-4 h-4 text-stone-400" />
-              Look-ahead
-            </Link>
-            <Link
-              href={`/projects/${project.id}/snags`}
-              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
-            >
-              <Bug className="w-4 h-4 text-stone-400" />
-              Snag Master
-            </Link>
-            <Link
-              href={`/projects/${project.id}/dlr`}
-              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
-            >
-              <ClipboardCheck className="w-4 h-4 text-stone-400" />
-              DLR
-            </Link>
-            <Link
-              href={`/projects/${project.id}/reports`}
-              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
-            >
-              <FileBarChart className="w-4 h-4 text-stone-400" />
-              Reports
-            </Link>
-            <Link
-              href={`/projects/${project.id}/drawings`}
-              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
-            >
-              <FileStack className="w-4 h-4 text-stone-400" />
-              Drawings
-            </Link>
-            <Link
-              href={`/projects/${project.id}/rfi`}
-              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
-            >
-              <MessageSquareQuote className="w-4 h-4 text-stone-400" />
-              RFI
-            </Link>
-            <Link
-              href={`/projects/${project.id}/permits`}
-              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
-            >
-              <ShieldCheck className="w-4 h-4 text-stone-400" />
-              Permits
-            </Link>
-            {canAccessBilling(role) && (
-              <Link
-                href={`/projects/${project.id}/bills`}
-                className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
-              >
-                <ReceiptIndianRupee className="w-4 h-4 text-stone-400" />
-                Billing
-              </Link>
-            )}
-            {canLogExpense(role) && (
-              <Link
-                href={`/projects/${project.id}/expenses`}
-                className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
-              >
-                <Wallet className="w-4 h-4 text-stone-400" />
-                Expenses
-              </Link>
-            )}
-            <Link
-              href={`/projects/${project.id}/import`}
-              className="inline-flex items-center gap-1.5 text-sm rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-700 hover:bg-stone-50 hover:text-stone-900 hover:border-stone-300 transition-colors"
-            >
-              <Upload className="w-4 h-4 text-stone-400" />
-              Import schedule
-            </Link>
+            <Sidebar
+              projectId={project.id}
+              canAccessBilling={canAccessBilling(role)}
+              canLogExpense={canLogExpense(role)}
+              canImport={isAdmin(role)}
+              canManageUsers={isAdmin(role)}
+            />
           </div>
         </div>
 
