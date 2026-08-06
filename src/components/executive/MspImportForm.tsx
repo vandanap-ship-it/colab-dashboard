@@ -7,34 +7,134 @@ export interface MspImportFormProps {
   defaultProjectName?: string;
 }
 
+interface ImportStats {
+  projectName?: string;
+  projectId?: string;
+  totalRows?: number;
+  totalUnits?: number;
+  blocks: { created: number; updated: number };
+  villas: { created: number; updated: number };
+  sections: { created: number; updated: number };
+  villaMilestones: { created: number; updated: number };
+  wbsNodes: { created: number; updated: number };
+  skipped: { rows: number; reasons: Record<string, number> };
+}
+
 interface ImportResult {
   ok: boolean;
   elapsedMs?: number;
   error?: string;
-  stats?: {
-    projectName?: string;
-    projectId?: string;
-    totalRows?: number;
-    totalUnits?: number;
-    blocks: { created: number; updated: number };
-    villas: { created: number; updated: number };
-    sections: { created: number; updated: number };
-    villaMilestones: { created: number; updated: number };
-    wbsNodes: { created: number; updated: number };
-    skipped: { rows: number; reasons: Record<string, number> };
-  };
+  stats?: ImportStats;
 }
 
 /**
- * Admin-only file uploader for MSP CSVs (the output of
- * scripts/convert-mpp.py, which converts a .mpp binary into a CSV). Posts to
- * /api/admin/import-msp and shows the per-entity stats on success.
+ * Splits the MSP CSV into per-block sub-CSVs so each POST stays comfortably
+ * under Vercel's function timeout. Header row + rows above the first block
+ * (levels 0-1) are prepended to every chunk so the parser can see the
+ * scaffolding it needs.
  */
+function splitCsvByBlock(csvText: string): string[] {
+  const lines = csvText.split(/\r?\n/);
+  if (lines.length < 2) return [csvText];
+  const header = lines[0];
+
+  // Find column indexes for "Outline Level" and "Task Name" (order can vary).
+  const cols = parseCsvLine(header);
+  const levelIdx = cols.findIndex((c) => c.trim() === "Outline Level");
+  const nameIdx = cols.findIndex((c) => c.trim() === "Task Name");
+  if (levelIdx === -1 || nameIdx === -1) {
+    // Unknown format — just fall back to single upload.
+    return [csvText];
+  }
+
+  // Pre-header rows: everything above the first level-2 (block) row.
+  const preamble: string[] = [];
+  const blocks: string[][] = [];
+  let currentBlock: string[] | null = null;
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    const cells = parseCsvLine(line);
+    const level = parseInt(cells[levelIdx] ?? "", 10);
+    const name = (cells[nameIdx] ?? "").trim();
+    if (level === 2 && /^Block\s+/i.test(name)) {
+      // Start a new block chunk
+      if (currentBlock) blocks.push(currentBlock);
+      currentBlock = [line];
+    } else if (currentBlock == null) {
+      preamble.push(line);
+    } else {
+      currentBlock.push(line);
+    }
+  }
+  if (currentBlock) blocks.push(currentBlock);
+
+  // Assemble one CSV per block: header + preamble + block rows.
+  const preambleBlob = preamble.length ? preamble.join("\n") + "\n" : "";
+  return blocks.map((rows) => header + "\n" + preambleBlob + rows.join("\n") + "\n");
+}
+
+/** Tiny CSV parser (comma-only, quoted-field aware) — no full escape handling. */
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuote) {
+      if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (c === '"') inQuote = false;
+      else cur += c;
+    } else {
+      if (c === ",") { out.push(cur); cur = ""; }
+      else if (c === '"') inQuote = true;
+      else cur += c;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function mergeStats(all: ImportStats[]): ImportStats {
+  const merged: ImportStats = {
+    projectName: all[0]?.projectName,
+    projectId: all[0]?.projectId,
+    totalRows: 0,
+    totalUnits: 0,
+    blocks: { created: 0, updated: 0 },
+    villas: { created: 0, updated: 0 },
+    sections: { created: 0, updated: 0 },
+    villaMilestones: { created: 0, updated: 0 },
+    wbsNodes: { created: 0, updated: 0 },
+    skipped: { rows: 0, reasons: {} },
+  };
+  for (const s of all) {
+    merged.totalRows! += s.totalRows ?? 0;
+    merged.totalUnits! += s.totalUnits ?? 0;
+    merged.blocks.created += s.blocks.created;
+    merged.blocks.updated += s.blocks.updated;
+    merged.villas.created += s.villas.created;
+    merged.villas.updated += s.villas.updated;
+    merged.sections.created += s.sections.created;
+    merged.sections.updated += s.sections.updated;
+    merged.villaMilestones.created += s.villaMilestones.created;
+    merged.villaMilestones.updated += s.villaMilestones.updated;
+    merged.wbsNodes.created += s.wbsNodes.created;
+    merged.wbsNodes.updated += s.wbsNodes.updated;
+    merged.skipped.rows += s.skipped.rows;
+    for (const [k, v] of Object.entries(s.skipped.reasons)) {
+      merged.skipped.reasons[k] = (merged.skipped.reasons[k] ?? 0) + v;
+    }
+  }
+  return merged;
+}
+
 export default function MspImportForm({ defaultProjectName = "Amanvana" }: MspImportFormProps) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [projectName, setProjectName] = useState(defaultProjectName);
   const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
@@ -42,14 +142,33 @@ export default function MspImportForm({ defaultProjectName = "Amanvana" }: MspIm
     if (!file) return;
     setSubmitting(true);
     setResult(null);
+    setProgress(null);
     try {
-      const form = new FormData();
-      form.set("file", file);
-      form.set("projectName", projectName);
-      const res = await fetch("/api/admin/import-msp", { method: "POST", body: form });
-      const body = (await res.json()) as ImportResult;
-      setResult(res.ok ? body : { ok: false, error: body.error ?? "Import failed" });
-      if (res.ok) router.refresh();
+      const csvText = await file.text();
+      const chunks = splitCsvByBlock(csvText);
+      setProgress({ done: 0, total: chunks.length });
+
+      const chunkStats: ImportStats[] = [];
+      const t0 = Date.now();
+      for (let i = 0; i < chunks.length; i++) {
+        const res = await fetch("/api/admin/import-msp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ csv: chunks[i], projectName }),
+        });
+        if (!res.ok) {
+          const body = await res.text();
+          throw new Error(
+            `Chunk ${i + 1}/${chunks.length} failed (HTTP ${res.status}): ${body.slice(0, 200)}`,
+          );
+        }
+        const body = (await res.json()) as ImportResult;
+        if (body.stats) chunkStats.push(body.stats);
+        setProgress({ done: i + 1, total: chunks.length });
+      }
+      const elapsedMs = Date.now() - t0;
+      setResult({ ok: true, elapsedMs, stats: mergeStats(chunkStats) });
+      router.refresh();
     } catch (e) {
       setResult({ ok: false, error: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -86,18 +205,24 @@ export default function MspImportForm({ defaultProjectName = "Amanvana" }: MspIm
         <span className="block text-[10px] text-stone-400 mt-1">
           Produced by <code className="font-mono">scripts/convert-mpp.py &lt;.mpp&gt; &lt;output.csv&gt;</code>.
           Must have &quot;Task Name&quot; + &quot;Outline Level&quot; columns.
-          File cap 20MB.
+          Uploaded one block at a time so each request stays under Vercel&apos;s function timeout.
         </span>
       </label>
 
-      <div className="flex gap-2">
+      <div className="flex items-center gap-3">
         <button
           type="submit"
           disabled={submitting || !file}
           className="inline-flex items-center rounded-lg bg-stone-900 text-white px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50"
         >
-          {submitting ? "Importing (may take up to 5 minutes)..." : "Import schedule"}
+          {submitting ? "Importing..." : "Import schedule"}
         </button>
+        {progress && (
+          <span className="text-sm text-stone-600">
+            Block {progress.done} / {progress.total}
+            {progress.done < progress.total && " …"}
+          </span>
+        )}
       </div>
 
       {result && (
