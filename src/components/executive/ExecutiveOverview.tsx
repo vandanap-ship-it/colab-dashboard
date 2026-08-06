@@ -17,19 +17,25 @@ export interface ExecutiveOverviewProps {
   contractors: ContractorRollup[];
 }
 
-// Executive project rollup — the "Overview" tab of the new dashboard IA.
-// Props come from the page-level server component: either adapted DB data
-// (adaptDashboardBag) or the mock data helpers as a transitional fallback.
+// Executive project rollup — the "Dashboard" tab of the new dashboard IA.
+// Restructured to match the approved mockup: KPI row at top, health snapshot
+// with 2-col grid (Schedule Summary | Timeline), no repeated stats.
 export default function ExecutiveOverview({ health: h, villas, blocks, contractors }: ExecutiveOverviewProps) {
-  const active = blocks.filter((b) => b.active);
+  const activeVillas = villas.filter((v) => v.currentSection >= 0);
+  const villasDelayed = activeVillas.filter((v) => v.slipDays > 0).length;
   const projectedDays = daysBetween(h.baselineStart, h.projectedEnd);
   const plannedDays = daysBetween(h.baselineStart, h.baselineEnd);
   const plannedPct = (plannedDays / projectedDays) * 100;
   const overshootPct = 100 - plannedPct;
+  const activeBlocks = blocks.filter((b) => b.active);
+
+  const probLabel = h.probability === "low" ? "Low" : h.probability === "med" ? "Medium" : "High";
+  const healthLabel =
+    h.probability === "high" ? "On track" : h.probability === "med" ? "Watch" : "At risk";
 
   return (
     <div className={styles.wrap}>
-      {/* Scope strip */}
+      {/* Scope strip — context */}
       <div className={styles.scopeStrip}>
         <div className={`${styles.scopeCell} ${styles.hi}`}>
           <div className={styles.lb}>Total Project</div>
@@ -57,12 +63,52 @@ export default function ExecutiveOverview({ health: h, villas, blocks, contracto
         </div>
       </div>
 
+      {/* KPI row — 4 headline stats */}
+      <div className={styles.kpiRow}>
+        <div className={`${styles.kpi} ${h.totalDelayDays > 0 ? styles.bad : styles.good}`}>
+          <div className={styles.kpiLbl}>Total Delay</div>
+          <div className={`${styles.kpiVal} ${h.totalDelayDays > 0 ? styles.bad : styles.good}`}>
+            {h.totalDelayDays}
+            <span className={styles.unit}>{h.totalDelayDays === 1 ? "day" : "days"}</span>
+          </div>
+          <div className={styles.kpiSub}>
+            {h.totalDelayDays === 0 ? "No slippage vs baseline" : `Behind ${fmtDate(h.baselineEnd)} baseline`}
+          </div>
+        </div>
+
+        <div className={`${styles.kpi} ${styles.info}`}>
+          <div className={styles.kpiLbl}>Projected Handover</div>
+          <div className={styles.kpiVal}>{fmtDate(h.projectedEnd)}</div>
+          <div className={styles.kpiSub}>Planned {fmtDate(h.baselineEnd)}</div>
+        </div>
+
+        <div className={`${styles.kpi} ${h.hindrances > 0 ? styles.warn : styles.good}`}>
+          <div className={styles.kpiLbl}>Active Hindrances</div>
+          <div className={`${styles.kpiVal} ${h.hindrances > 0 ? styles.warn : styles.good}`}>
+            {h.hindrances}
+          </div>
+          <div className={styles.kpiSub}>Open blockers on site</div>
+        </div>
+
+        <div className={`${styles.kpi} ${h.criticalBlocks > 0 ? styles.bad : styles.good}`}>
+          <div className={styles.kpiLbl}>Critical Blocks</div>
+          <div className={`${styles.kpiVal} ${h.criticalBlocks > 0 ? styles.bad : styles.good}`}>
+            {h.criticalBlocks}
+            <span className={styles.unit}>of {activeBlocks.length}</span>
+          </div>
+          <div className={styles.kpiSub}>Slip &gt; 30 days</div>
+        </div>
+      </div>
+
       {/* Health Snapshot */}
       <div className={`${styles.card} ${styles.hs}`}>
         <div className={styles.hsHd}>
           <h3>
             <span className={styles.viewPill}>Block wise</span>
             <span>Overall Project Health Snapshot</span>
+            <span className={`${styles.projectHealthPill} ${styles[h.probability]}`}>
+              {healthLabel}
+            </span>
           </h3>
           <span className={styles.meta}>
             As of {fmtDate(h.asOf)} · Phase 1 · Contractor: Abraham Thomas
@@ -70,97 +116,86 @@ export default function ExecutiveOverview({ health: h, villas, blocks, contracto
         </div>
 
         <div className={styles.hsGrid}>
-          {/* Left cell — Physical progress + timeline */}
-          <div className={styles.hsCell}>
-            <div className={styles.ptCmp}>
-              <div className={styles.ptProgress}>
-                <div className={styles.ptSecHd}>Physical Progress</div>
-                <div className={styles.ptProgressBody}>
-                  <div className={styles.ptBig}>
-                    <div className={styles.num}>
-                      {h.achievedPct}
-                      <span className={styles.pct}>%</span>
-                    </div>
-                    <div className={styles.lb}>Achieved</div>
-                  </div>
-                  <div className={styles.ptBarList}>
-                    <BarRow name="Planned" pct={h.plannedPct} kind="planned" />
-                    <BarRow name="Achieved" pct={h.achievedPct} kind="achieved" />
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.ptTimeline}>
-                <div className={styles.ptSecHd}>Timeline</div>
-                <TimelineRow
-                  name="Overall"
-                  plannedStart={h.baselineStart}
-                  plannedEnd={h.baselineEnd}
-                  projectedEnd={h.projectedEnd}
-                  slipDays={h.totalDelayDays}
-                  plannedPct={plannedPct}
-                  overshootPct={overshootPct}
-                />
-                {active.slice(0, 3).map((b) => {
-                  const bpDays = plannedDays; // simplification for placeholder
-                  const bSlipPct = (b.slipDays / (bpDays + b.slipDays)) * 100;
-                  return (
-                    <TimelineRow
-                      key={b.code}
-                      name={`Block ${b.code}`}
-                      plannedStart={h.baselineStart}
-                      plannedEnd={h.baselineEnd}
-                      projectedEnd={new Date(h.baselineEnd.getTime() + b.slipDays * 86400000)}
-                      slipDays={b.slipDays}
-                      plannedPct={100 - bSlipPct}
-                      overshootPct={bSlipPct}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Middle — Schedule summary rows */}
+          {/* LEFT — Schedule Summary in 2-col grid (Planned | Projected) */}
           <div className={styles.hsCell}>
             <div className={styles.hsLbl}>Schedule Summary</div>
-            <div className={styles.ssRows}>
-              <ScheduleRow label="Planned Start" value={fmtDate(h.baselineStart)} />
-              <ScheduleRow label="Planned Finish" value={fmtDate(h.baselineEnd)} />
-              <ScheduleRow
-                label="Projected Finish"
-                value={fmtDate(h.projectedEnd)}
-                variant="projected"
-              />
-              <ScheduleRow label="Planned Duration" value={`${plannedDays} days`} />
-              <ScheduleRow label="Projected Duration" value={`${plannedDays + h.totalDelayDays} days`} />
-              <ScheduleRow label="Total Delay" value={`${h.totalDelayDays} days`} variant={h.totalDelayDays > 0 ? "projected" : undefined} />
-              <ScheduleRow label="RERA Delay" value={`${h.reraDelayDays} days`} />
-              <ScheduleRow
-                label="Probability of Timely Completion"
-                value={
-                  <span className={`${styles.probPill} ${styles[h.probability]}`}>
-                    {h.probability === "low" ? "Low" : h.probability === "med" ? "Medium" : "High"}
+            <div className={styles.ssGrid}>
+              <div className={styles.ssCol}>
+                <div className={styles.ssColHd}>Planned</div>
+                <div className={styles.ssRow}>
+                  <span className={styles.ssLb}>Start</span>
+                  <span className={styles.ssVl}>{fmtDate(h.baselineStart)}</span>
+                </div>
+                <div className={styles.ssRow}>
+                  <span className={styles.ssLb}>Finish</span>
+                  <span className={styles.ssVl}>{fmtDate(h.baselineEnd)}</span>
+                </div>
+                <div className={styles.ssRow}>
+                  <span className={styles.ssLb}>Duration</span>
+                  <span className={styles.ssVl}>{plannedDays} d</span>
+                </div>
+                <div className={styles.ssRow}>
+                  <span className={styles.ssLb}>RERA delay</span>
+                  <span className={styles.ssVl}>{h.reraDelayDays} d</span>
+                </div>
+              </div>
+              <div className={styles.ssCol}>
+                <div className={`${styles.ssColHd} ${styles.projected}`}>Projected</div>
+                <div className={styles.ssRow}>
+                  <span className={styles.ssLb}>Start</span>
+                  <span className={styles.ssVl}>{fmtDate(h.baselineStart)}</span>
+                </div>
+                <div className={styles.ssRow}>
+                  <span className={styles.ssLb}>Finish</span>
+                  <span className={`${styles.ssVl} ${h.totalDelayDays > 0 ? styles.projected : ""}`}>
+                    {fmtDate(h.projectedEnd)}
                   </span>
-                }
-              />
+                </div>
+                <div className={styles.ssRow}>
+                  <span className={styles.ssLb}>Duration</span>
+                  <span className={`${styles.ssVl} ${h.totalDelayDays > 0 ? styles.projected : ""}`}>
+                    {plannedDays + h.totalDelayDays} d
+                  </span>
+                </div>
+                <div className={styles.ssRow}>
+                  <span className={styles.ssLb}>Total delay</span>
+                  <span className={`${styles.ssVl} ${h.totalDelayDays > 0 ? styles.projected : ""}`}>
+                    {h.totalDelayDays} d
+                  </span>
+                </div>
+              </div>
+              <div className={styles.ssProbRow}>
+                <span className={styles.lb}>Probability of timely completion</span>
+                <span className={`${styles.probPill} ${styles[h.probability]}`}>{probLabel}</span>
+              </div>
             </div>
           </div>
 
-          {/* Right — big stats */}
+          {/* RIGHT — Timeline: two clean bars (Planned + Projected) */}
           <div className={styles.hsCell}>
-            <div className={styles.hsStats}>
-              <div className={styles.hsStat}>
-                <div className={`${styles.v} ${styles.bad}`}>{h.totalDelayDays}</div>
-                <div className={styles.l}>Days of delay</div>
-              </div>
-              <div className={styles.hsStat}>
-                <div className={`${styles.v} ${styles.warn}`}>{h.hindrances}</div>
-                <div className={styles.l}>Active hindrances</div>
-              </div>
-              <div className={styles.hsStat}>
-                <div className={`${styles.v} ${styles.bad}`}>{h.criticalBlocks}</div>
-                <div className={styles.l}>Critical blocks</div>
+            <div className={styles.hsLbl}>Timeline</div>
+            <div className={styles.ptTimeline}>
+              <TimelineRow
+                name="Planned"
+                plannedStart={h.baselineStart}
+                plannedEnd={h.baselineEnd}
+                projectedEnd={h.baselineEnd}
+                slipDays={0}
+                plannedPct={100}
+                overshootPct={0}
+              />
+              <TimelineRow
+                name="Projected"
+                plannedStart={h.baselineStart}
+                plannedEnd={h.baselineEnd}
+                projectedEnd={h.projectedEnd}
+                slipDays={h.totalDelayDays}
+                plannedPct={plannedPct}
+                overshootPct={overshootPct}
+              />
+              <div className={styles.timelineFoot}>
+                <div><span className={styles.tfLb}>Villas delayed</span><span className={styles.tfVl}>{villasDelayed} / {activeVillas.length}</span></div>
+                <div><span className={styles.tfLb}>Blocks in red</span><span className={styles.tfVl}>{h.criticalBlocks} / {activeBlocks.length}</span></div>
               </div>
             </div>
           </div>
@@ -266,19 +301,6 @@ export default function ExecutiveOverview({ health: h, villas, blocks, contracto
   );
 }
 
-function BarRow({ name, pct, kind }: { name: string; pct: number; kind: "planned" | "achieved" }) {
-  const fillClass = kind === "planned" ? styles.fillPlanned : styles.fillAchieved;
-  return (
-    <div className={styles.ptBarRow}>
-      <span className={styles.name}>{name}</span>
-      <div className={styles.track}>
-        <div className={`${styles.fill} ${fillClass}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className={styles.val}>{pct}%</span>
-    </div>
-  );
-}
-
 function TimelineRow({
   name,
   plannedStart,
@@ -319,25 +341,6 @@ function TimelineRow({
           <div className={styles.ptTlOvershoot} style={{ width: `${overshootPct}%` }} />
         )}
       </div>
-    </div>
-  );
-}
-
-function ScheduleRow({
-  label,
-  value,
-  variant,
-}: {
-  label: string;
-  value: React.ReactNode;
-  variant?: "projected";
-}) {
-  return (
-    <div className={styles.ssRow}>
-      <span className={styles.ssLb}>{label}</span>
-      <span className={`${styles.ssVl} ${variant === "projected" ? styles.projected : ""}`}>
-        {value}
-      </span>
     </div>
   );
 }
