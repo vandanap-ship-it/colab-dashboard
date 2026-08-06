@@ -31,7 +31,7 @@ export function PlaceholderBanner({ projectId }: { projectId: string }) {
         Import the MS Project schedule to see real Amanvana numbers here.
       </span>
       <Link
-        href={`/projects/${projectId}/import`}
+        href={`/projects/${projectId}/import-msp`}
         style={{
           background: "#16202F",
           color: "#F3EFE4",
@@ -75,7 +75,7 @@ export function EmptyExecutiveState({ projectId, message }: { projectId: string;
         {message ?? "This view rolls up data from an imported MS Project schedule. Import once and this dashboard populates."}
       </p>
       <Link
-        href={`/projects/${projectId}/import`}
+        href={`/projects/${projectId}/import-msp`}
         style={{
           display: "inline-block",
           background: "#16202F",

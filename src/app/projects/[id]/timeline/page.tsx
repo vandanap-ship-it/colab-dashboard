@@ -54,7 +54,7 @@ export default async function TimelinePage({
               Import the MSP schedule to populate the timeline. Once imported, this view
               rolls up every villa's 21 milestone sections into one Gantt.
             </p>
-            <Link href={`/projects/${projectId}/import`} className="text-sm text-stone-900 underline mt-3 inline-block">
+            <Link href={`/projects/${projectId}/import-msp`} className="text-sm text-stone-900 underline mt-3 inline-block">
               Import schedule →
             </Link>
           </div>
