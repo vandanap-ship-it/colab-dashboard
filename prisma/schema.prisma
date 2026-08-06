@@ -181,6 +181,7 @@ model VillaMilestone {
 
   villa   Villa            @relation(fields: [villaId], references: [id], onDelete: Cascade)
   section MilestoneSection @relation(fields: [sectionId], references: [id])
+  wbsNodes WBSNode[]
 
   @@unique([villaId, sectionId])
   @@index([villaId])
@@ -246,6 +247,7 @@ model WBSNode {
   parent          WBSNode?                @relation("WBSTree", fields: [parentId], references: [id])
   children        WBSNode[]               @relation("WBSTree")
   contractor      Contractor?             @relation(fields: [contractorId], references: [id])
+  villaMilestone  VillaMilestone?         @relation(fields: [villaMilestoneId], references: [id])
   progressEntries ProgressEntry[]
   hindrances      Hindrance[]
   concerns        Concern[]

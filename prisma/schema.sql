@@ -774,6 +774,9 @@ ALTER TABLE "WBSNode" ADD CONSTRAINT "WBSNode_parentId_fkey" FOREIGN KEY ("paren
 ALTER TABLE "WBSNode" ADD CONSTRAINT "WBSNode_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "WBSNode" ADD CONSTRAINT "WBSNode_villaMilestoneId_fkey" FOREIGN KEY ("villaMilestoneId") REFERENCES "VillaMilestone"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "ProgressEntry" ADD CONSTRAINT "ProgressEntry_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
