@@ -33,7 +33,7 @@ export default function ProjectTabs({
   const tabs: Tab[] = [
     {
       key: "overview",
-      label: "Overview",
+      label: "Dashboard",
       href: `/projects/${projectId}/overview`,
       icon: ScanEye,
     },
