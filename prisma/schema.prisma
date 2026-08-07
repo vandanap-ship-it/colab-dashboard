@@ -326,6 +326,11 @@ model Hindrance {
   daysImpact   Int?
   status       String    @default("OPEN")
 
+  // Root-cause tagging so the Dashboard can cluster blockers by reason.
+  // Values come from src/lib/hindranceReasons.ts (MATERIAL / LABOUR / RMC / …).
+  reasonCode   String?
+  reasonNote   String?
+
   createdById    String
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

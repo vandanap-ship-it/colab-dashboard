@@ -6,6 +6,7 @@ import BlockDetailContent from "@/components/executive/BlockDetailContent";
 import { getDashboardBag } from "@/lib/rollupServer";
 import { adaptDashboardBag } from "@/lib/executiveDataAdapter";
 import { getBlockDetail, getVillaDetailByNumber } from "@/lib/detailServer";
+import { getDelayReasonClusters } from "@/lib/delayReasons";
 import {
   BLOCKS,
   CONTRACTORS,
@@ -27,13 +28,14 @@ export default async function OverviewPage({
   const villaNumber = vn ? parseInt(vn, 10) : null;
   const bag = await getDashboardBag(id);
 
-  // Drawer detail data — fetched in parallel with the main bag so opening a
-  // drawer costs at most one extra round-trip.
-  const [villaDetail, blockDetail] = await Promise.all([
+  // Drawer detail data + delay-reason aggregation — fetched in parallel with
+  // the main bag so opening a drawer costs at most one extra round-trip.
+  const [villaDetail, blockDetail, reasonClusters] = await Promise.all([
     villaNumber && !isNaN(villaNumber)
       ? getVillaDetailByNumber(id, villaNumber).catch(() => null)
       : Promise.resolve(null),
     bd ? getBlockDetail(id, bd).catch(() => null) : Promise.resolve(null),
+    getDelayReasonClusters(id).catch(() => []),
   ]);
 
   const overview = bag
@@ -45,6 +47,7 @@ export default async function OverviewPage({
             villas={adapted.villas}
             blocks={adapted.blocks}
             contractors={adapted.contractors}
+            reasonClusters={reasonClusters}
           />
         );
       })()
@@ -56,6 +59,7 @@ export default async function OverviewPage({
           villas={activeVillas()}
           blocks={BLOCKS}
           contractors={CONTRACTORS}
+          reasonClusters={reasonClusters}
         />
       </>
     );

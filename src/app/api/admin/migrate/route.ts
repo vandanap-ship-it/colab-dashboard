@@ -282,6 +282,17 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add Permit table — legal / regulatory approvals with expiry tracking.",
   },
+  {
+    key: "2026-08-07_hindrance_reason",
+    sql: [
+      // Root-cause tagging for hindrances. Nullable so existing rows don't
+      // need a backfill — dashboard aggregation treats NULL as "Unspecified".
+      `ALTER TABLE "Hindrance" ADD COLUMN IF NOT EXISTS "reasonCode" TEXT`,
+      `ALTER TABLE "Hindrance" ADD COLUMN IF NOT EXISTS "reasonNote" TEXT`,
+      `CREATE INDEX IF NOT EXISTS "Hindrance_reasonCode_idx" ON "Hindrance"("reasonCode")`,
+    ],
+    describe: "Add Hindrance.reasonCode + reasonNote so the Dashboard can cluster overdue villas by root cause.",
+  },
 ];
 
 async function ensureLedger() {

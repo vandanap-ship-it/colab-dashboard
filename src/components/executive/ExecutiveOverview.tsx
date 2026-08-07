@@ -9,18 +9,20 @@ import {
   type ProjectHealthSummary,
   type VillaRollup,
 } from "@/lib/executiveMockData";
+import type { DelayReasonCluster } from "@/lib/delayReasons";
 
 export interface ExecutiveOverviewProps {
   health: ProjectHealthSummary;
   villas: VillaRollup[];
   blocks: BlockRollup[];
   contractors: ContractorRollup[];
+  reasonClusters: DelayReasonCluster[];
 }
 
 // Executive project rollup — the "Dashboard" tab of the new dashboard IA.
 // Restructured to match the approved mockup: KPI row at top, health snapshot
 // with 2-col grid (Schedule Summary | Timeline), no repeated stats.
-export default function ExecutiveOverview({ health: h, villas, blocks, contractors }: ExecutiveOverviewProps) {
+export default function ExecutiveOverview({ health: h, villas, blocks, contractors, reasonClusters }: ExecutiveOverviewProps) {
   const activeVillas = villas.filter((v) => v.currentSection >= 0);
   const villasDelayed = activeVillas.filter((v) => v.slipDays > 0).length;
   const projectedDays = daysBetween(h.baselineStart, h.projectedEnd);
@@ -276,6 +278,19 @@ export default function ExecutiveOverview({ health: h, villas, blocks, contracto
         </div>
       </div>
 
+      {/* Delay Reason Clusters */}
+      <div className={styles.card}>
+        <div className={styles.cardHd}>
+          <h3>Delay Reason Clusters</h3>
+          <span className={styles.meta}>
+            open hindrances grouped by root cause · site team tags at log-time
+          </span>
+        </div>
+        <div className={styles.cardBd}>
+          <DelayReasonList clusters={reasonClusters} />
+        </div>
+      </div>
+
       {/* Block Buckets */}
       <div className={styles.card}>
         <div className={styles.cardHd}>
@@ -482,6 +497,53 @@ function VillaBucket({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function DelayReasonList({ clusters }: { clusters: DelayReasonCluster[] }) {
+  if (clusters.length === 0) {
+    return (
+      <div className={styles.drEmpty}>
+        No open hindrances. Site team logs blockers with a reason tag —
+        once any are open, they cluster here by root cause.
+      </div>
+    );
+  }
+  const maxCount = Math.max(...clusters.map((c) => c.count), 1);
+  return (
+    <div className={styles.drList}>
+      {clusters.map((c) => (
+        <div key={c.code} className={styles.drRow}>
+          <div className={styles.drHd}>
+            <span className={styles.drLabel}>{c.label}</span>
+            <span className={styles.drCount}>{c.count}</span>
+          </div>
+          <div className={styles.drBar}>
+            <div
+              className={styles.drBarFill}
+              style={{ width: `${(c.count / maxCount) * 100}%` }}
+            />
+          </div>
+          <div className={styles.drMeta}>
+            {c.daysImpact > 0 && (
+              <>
+                <span className={styles.drImpact}>+{c.daysImpact}d</span>
+                <span className={styles.drSep}>·</span>
+              </>
+            )}
+            <span className={styles.drSince}>
+              latest {c.latestAt ? fmtDate(new Date(c.latestAt)) : "—"}
+            </span>
+            {c.sampleNote && (
+              <>
+                <span className={styles.drSep}>·</span>
+                <span className={styles.drNote} title={c.sampleNote}>“{c.sampleNote}”</span>
+              </>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

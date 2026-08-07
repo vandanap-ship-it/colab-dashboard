@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
+import { isValidReasonCode } from "@/lib/hindranceReasons";
 
 const STATUSES = new Set(["OPEN", "RESOLVED"]);
 
@@ -44,13 +45,15 @@ export async function POST(req: Request) {
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const { projectId, wbsNodeId, description, startDate, daysImpact, photoUrls } = (body ?? {}) as {
+  const { projectId, wbsNodeId, description, startDate, daysImpact, photoUrls, reasonCode, reasonNote } = (body ?? {}) as {
     projectId?: string;
     wbsNodeId?: string;
     description?: string;
     startDate?: string;
     daysImpact?: number;
     photoUrls?: string[];
+    reasonCode?: string;
+    reasonNote?: string;
   };
 
   if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
@@ -62,6 +65,10 @@ export async function POST(req: Request) {
 
   const impact = Number.isFinite(Number(daysImpact)) ? Math.max(0, Math.floor(Number(daysImpact))) : null;
   const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 6) : [];
+  // Silently drop unknown reason codes (client-only enum guard) rather than
+  // rejecting — the record is more important than the tag.
+  const reason = isValidReasonCode(reasonCode) ? reasonCode : null;
+  const note = typeof reasonNote === "string" ? reasonNote.trim().slice(0, 500) : "";
   const idempotencyKey = readIdempotencyKey(body);
   const hindranceInclude = {
     createdBy: { select: { id: true, name: true } },
@@ -80,6 +87,8 @@ export async function POST(req: Request) {
           description: desc,
           startDate: start,
           daysImpact: impact,
+          reasonCode: reason,
+          reasonNote: note || null,
           createdById: session.user.id,
           idempotencyKey,
           photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
