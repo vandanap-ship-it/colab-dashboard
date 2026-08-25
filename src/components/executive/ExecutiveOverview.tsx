@@ -10,6 +10,7 @@ import {
   type VillaRollup,
 } from "@/lib/executiveMockData";
 import type { DelayReasonCluster } from "@/lib/delayReasons";
+import type { MilestoneProgressRow, SiteActivityBlockGroup } from "@/lib/dashboardSectionsServer";
 
 export interface ManpowerStrip {
   planned: number;
@@ -26,12 +27,23 @@ export interface ExecutiveOverviewProps {
   contractors: ContractorRollup[];
   reasonClusters: DelayReasonCluster[];
   manpowerStrip: ManpowerStrip;
+  milestoneProgress: MilestoneProgressRow[];
+  siteActivity: SiteActivityBlockGroup[];
 }
 
 // Executive project rollup — the "Dashboard" tab of the new dashboard IA.
 // Restructured to match the approved mockup: KPI row at top, health snapshot
 // with 2-col grid (Schedule Summary | Timeline), no repeated stats.
-export default function ExecutiveOverview({ health: h, villas, blocks, contractors, reasonClusters, manpowerStrip }: ExecutiveOverviewProps) {
+export default function ExecutiveOverview({
+  health: h,
+  villas,
+  blocks,
+  contractors,
+  reasonClusters,
+  manpowerStrip,
+  milestoneProgress,
+  siteActivity,
+}: ExecutiveOverviewProps) {
   const activeVillas = villas.filter((v) => v.currentSection >= 0);
   const villasDelayed = activeVillas.filter((v) => v.slipDays > 0).length;
   const projectedDays = daysBetween(h.baselineStart, h.projectedEnd);
@@ -216,6 +228,19 @@ export default function ExecutiveOverview({ health: h, villas, blocks, contracto
       {/* Daily Manpower strip */}
       <ManpowerStripRow strip={manpowerStrip} />
 
+      {/* Milestone Progress */}
+      <div className={styles.card}>
+        <div className={styles.cardHd}>
+          <h3>Milestone Progress</h3>
+          <span className={styles.meta}>
+            line items due by today · closed / pending / status per milestone
+          </span>
+        </div>
+        <div className={styles.cardBd}>
+          <MilestoneProgressTable rows={milestoneProgress} />
+        </div>
+      </div>
+
       {/* Contractor Scope Health */}
       <div className={styles.card}>
         <div className={styles.cardHd}>
@@ -322,6 +347,19 @@ export default function ExecutiveOverview({ health: h, villas, blocks, contracto
         </div>
         <div className={styles.cardBd}>
           <VillaBuckets villas={villas} />
+        </div>
+      </div>
+
+      {/* Site Activity Highlights */}
+      <div className={styles.card}>
+        <div className={styles.cardHd}>
+          <h3>Site Activity Highlights</h3>
+          <span className={styles.meta}>
+            activities logged today · grouped by block, then villa
+          </span>
+        </div>
+        <div className={styles.cardBd}>
+          <SiteActivityHighlights groups={siteActivity} />
         </div>
       </div>
     </div>
@@ -560,6 +598,139 @@ function ManpowerStripRow({ strip }: { strip: ManpowerStrip }) {
       </div>
     </div>
   );
+}
+
+function MilestoneProgressTable({ rows }: { rows: MilestoneProgressRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <div className={styles.mpTblEmpty}>
+        No milestones defined yet. Import an MSP schedule to populate.
+      </div>
+    );
+  }
+  return (
+    <div className={styles.mpTblWrap}>
+      <table className={styles.mpTbl}>
+        <thead>
+          <tr>
+            <th className={styles.mpTblName}>Milestone</th>
+            <th className={styles.mpTblNum}>Line items due</th>
+            <th className={styles.mpTblNum}>Done</th>
+            <th className={styles.mpTblNum}>Pending</th>
+            <th className={styles.mpTblStatus}>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.code}>
+              <td className={styles.mpTblName}>{r.name}</td>
+              <td className={styles.mpTblNum}>{r.due === 0 ? "—" : r.due}</td>
+              <td className={styles.mpTblNum}>{r.due === 0 ? "—" : r.done}</td>
+              <td className={styles.mpTblNum}>{r.due === 0 ? "—" : r.pending}</td>
+              <td className={styles.mpTblStatus}>
+                <MilestoneStatusPill row={r} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MilestoneStatusPill({ row }: { row: MilestoneProgressRow }) {
+  if (row.status === "not-started") {
+    return <span className={`${styles.mpPill} ${styles.mpPillMuted}`}>Not started</span>;
+  }
+  if (row.status === "all-done") {
+    return <span className={`${styles.mpPill} ${styles.mpPillGood}`}>All done</span>;
+  }
+  return <span className={`${styles.mpPill} ${styles.mpPillBad}`}>{row.pending} pending</span>;
+}
+
+function SiteActivityHighlights({ groups }: { groups: SiteActivityBlockGroup[] }) {
+  if (groups.length === 0) {
+    return (
+      <div className={styles.sahEmpty}>
+        Nothing logged today. Site activities will appear here as engineers
+        submit progress on their phones.
+      </div>
+    );
+  }
+  return (
+    <div className={styles.sahList}>
+      {groups.map((g) => (
+        <div key={g.blockCode} className={styles.sahBlockGroup}>
+          <div className={styles.sahBlockHd}>
+            Block {g.blockCode}
+            <span className={styles.sahBlockCount}>
+              {g.villas.reduce((n, v) => n + v.activities.length, 0)} activities · {g.villas.length} villas
+            </span>
+          </div>
+          {g.villas.map((v) => (
+            <div key={v.villaNumber} className={styles.sahVillaBlock}>
+              <div className={styles.sahVillaHd}>
+                <Link
+                  href={`?vn=${v.villaNumber}`}
+                  scroll={false}
+                  style={{ color: "inherit", textDecoration: "none" }}
+                >
+                  {v.villaLabel}
+                </Link>
+                <span className={styles.sahActCount}>
+                  {v.activities.length} {v.activities.length === 1 ? "activity" : "activities"}
+                </span>
+              </div>
+              <div className={styles.sahCardGrid}>
+                {v.activities.map((a) => (
+                  <SiteActivityCard key={a.progressEntryId} activity={a} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SiteActivityCard({ activity: a }: { activity: import("@/lib/dashboardSectionsServer").SiteActivity }) {
+  return (
+    <div className={styles.sahCard}>
+      {a.photoUrl ? (
+        <div className={styles.sahPhotoWrap}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={a.photoUrl} alt="" className={styles.sahPhoto} />
+        </div>
+      ) : (
+        <div className={styles.sahPhotoStub}>No photo</div>
+      )}
+      <div className={styles.sahCardBody}>
+        <div className={styles.sahEyebrow}>{a.milestoneName}</div>
+        <div className={styles.sahActName}>{a.activityName}</div>
+        <div className={styles.sahMeta}>
+          {a.achievedPct != null && <span className={styles.sahPct}>{Math.round(a.achievedPct)}%</span>}
+          {a.overdueDays != null && <span className={styles.sahOverdue}>{a.overdueDays}d overdue</span>}
+        </div>
+        {a.notes && <div className={styles.sahRemark}>“{a.notes}”</div>}
+        {(a.reasonLabel || a.reasonNote) && (
+          <div className={styles.sahReason}>
+            <span className={styles.sahReasonLbl}>Delay reason:</span>{" "}
+            {a.reasonLabel ?? ""}{a.reasonLabel && a.reasonNote ? " · " : ""}
+            {a.reasonNote ? <span className={styles.sahReasonNote}>{a.reasonNote}</span> : null}
+          </div>
+        )}
+        <div className={styles.sahFoot}>
+          {a.contractorName ?? "—"} · {a.loggedByName} · {fmtTime(a.loggedAt)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
 function DelayReasonList({ clusters }: { clusters: DelayReasonCluster[] }) {

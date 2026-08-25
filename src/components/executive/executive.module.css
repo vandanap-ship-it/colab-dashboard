@@ -613,6 +613,194 @@
 .crRow.tbd { opacity: 0.5; }
 .crRow.tbd .healthPill { background: var(--ex-ink-3); }
 
+/* ---------- MILESTONE PROGRESS TABLE ---------- */
+.mpTblWrap { overflow-x: auto; }
+.mpTbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.mpTbl thead th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ex-ink-3);
+  font-weight: 700;
+  border-bottom: 1px solid var(--ex-border);
+  background: var(--ex-rule-soft);
+}
+.mpTbl tbody tr {
+  border-bottom: 1px solid var(--ex-rule);
+}
+.mpTbl tbody tr:last-child { border-bottom: 0; }
+.mpTbl td {
+  padding: 10px 12px;
+  color: var(--ex-ink);
+}
+.mpTblName { text-align: left; font-weight: 600; }
+.mpTblNum { text-align: right; width: 120px; }
+.mpTblStatus { text-align: right; width: 140px; }
+.mpPill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+}
+.mpPillGood { background: var(--ex-good); }
+.mpPillBad { background: var(--ex-bad); }
+.mpPillMuted { background: var(--ex-ink-4); color: #FFFFFF; }
+.mpTblEmpty {
+  padding: 24px 0;
+  text-align: center;
+  color: var(--ex-ink-3);
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+/* ---------- SITE ACTIVITY HIGHLIGHTS ---------- */
+.sahList { display: flex; flex-direction: column; gap: 20px; }
+.sahBlockGroup { display: flex; flex-direction: column; gap: 12px; }
+.sahBlockHd {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ex-ink);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--ex-border);
+}
+.sahBlockCount {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--ex-ink-3);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.sahVillaBlock { display: flex; flex-direction: column; gap: 8px; }
+.sahVillaHd {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ex-ink);
+  padding: 4px 0;
+}
+.sahActCount {
+  font-size: 10.5px;
+  color: var(--ex-ink-3);
+  font-weight: 500;
+}
+.sahCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.sahCard {
+  border: 1px solid var(--ex-border);
+  border-radius: 6px;
+  background: var(--ex-paper);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--ex-shadow-sm);
+}
+.sahPhotoWrap { position: relative; aspect-ratio: 4 / 3; background: var(--ex-rule-soft); }
+.sahPhoto {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sahPhotoStub {
+  aspect-ratio: 4 / 3;
+  background: var(--ex-rule-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ex-ink-3);
+  font-size: 11px;
+  font-style: italic;
+}
+.sahCardBody { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; }
+.sahEyebrow {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ex-ink-3);
+  font-weight: 700;
+}
+.sahActName { font-size: 13.5px; font-weight: 700; color: var(--ex-ink); }
+.sahMeta { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-top: 2px; }
+.sahPct {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ex-good);
+  font-variant-numeric: tabular-nums;
+}
+.sahOverdue {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #FFFFFF;
+  background: var(--ex-bad);
+  padding: 2px 7px;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.sahRemark {
+  font-size: 11.5px;
+  color: var(--ex-ink-2);
+  font-style: italic;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.sahReason {
+  font-size: 11.5px;
+  color: var(--ex-ink);
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: var(--ex-warn-tint);
+  border-left: 3px solid var(--ex-warn);
+  border-radius: 3px;
+}
+.sahReasonLbl {
+  font-weight: 700;
+  color: var(--ex-warn);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.sahReasonNote { color: var(--ex-ink-2); }
+.sahFoot {
+  font-size: 10.5px;
+  color: var(--ex-ink-3);
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--ex-rule);
+}
+.sahEmpty {
+  padding: 32px 0;
+  text-align: center;
+  color: var(--ex-ink-3);
+  font-size: 12.5px;
+  font-style: italic;
+  line-height: 1.5;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
 /* ---------- MANPOWER STRIP ---------- */
 .mpStrip { padding: 0; }
 .mpStripBody {
