@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  HardHat,
   Lightbulb,
   ScanEye,
   ShieldCheck,
@@ -51,6 +52,12 @@ export default function ProjectTabs({
       label: "QA/QC",
       href: `/projects/${projectId}/qaqc`,
       icon: ShieldCheck,
+    },
+    {
+      key: "safety",
+      label: "Safety",
+      href: `/projects/${projectId}/safety`,
+      icon: HardHat,
     },
     {
       key: "my-actions",
