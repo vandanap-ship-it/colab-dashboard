@@ -1,0 +1,165 @@
+/* Insights tab styling */
+
+.wrap {
+  --in-ink: #16202F;
+  --in-ink-2: #4E5866;
+  --in-ink-3: #8B93A0;
+  --in-ink-4: #B8BCC4;
+  --in-paper: #FFFFFF;
+  --in-border: #E2DDD0;
+  --in-rule: #EDE9DD;
+  --in-rule-soft: #F1EEE4;
+  --in-good: #2E7D5B;
+  --in-good-tint: #E4EFE8;
+  --in-warn: #C77A2A;
+  --in-warn-tint: #F7EAD5;
+  --in-bad: #B33A3A;
+  --in-bad-tint: #F3DFDF;
+  --in-blue: #2F5D8A;
+  --in-blue-tint: #E9F0F7;
+
+  color: var(--in-ink);
+  font-size: 13.5px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.card {
+  background: var(--in-paper);
+  border: 1px solid var(--in-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(22, 32, 47, 0.04);
+  overflow: hidden;
+}
+.cardHd {
+  padding: 12px 18px 10px;
+  border-bottom: 1px solid var(--in-rule);
+  background: linear-gradient(180deg, var(--in-rule-soft), var(--in-paper));
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--in-ink);
+}
+.cardMeta {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--in-ink-3);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.cardBd { padding: 16px 18px 18px; }
+
+.emptyIcon {
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--in-ink-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.emptyText { font-size: 12.5px; max-width: 500px; line-height: 1.5; margin: 0; font-style: italic; }
+
+.insightGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 12px;
+}
+.insight {
+  padding: 14px 16px;
+  border-radius: 6px;
+  border: 1px solid;
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 12px;
+  background: var(--in-paper);
+}
+.sevCritical {
+  background: var(--in-bad-tint);
+  border-color: rgba(179, 58, 58, 0.4);
+}
+.sevCritical .insightIcon { color: var(--in-bad); }
+.sevWarning {
+  background: var(--in-warn-tint);
+  border-color: rgba(199, 122, 42, 0.4);
+}
+.sevWarning .insightIcon { color: var(--in-warn); }
+.sevInfo {
+  background: var(--in-blue-tint);
+  border-color: rgba(47, 93, 138, 0.35);
+}
+.sevInfo .insightIcon { color: var(--in-blue); }
+
+.insightIcon {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 3px;
+}
+.insightBody { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.insightTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--in-ink);
+  letter-spacing: -0.005em;
+}
+.insightDetail {
+  font-size: 12px;
+  color: var(--in-ink-2);
+  line-height: 1.5;
+}
+.insightFooter {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px dashed rgba(28, 25, 23, 0.15);
+  padding-top: 8px;
+}
+.insightMetric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 10px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--in-ink-2);
+  font-weight: 500;
+  border: 1px solid rgba(28, 25, 23, 0.08);
+}
+.insightMetric b {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--in-ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.insightVillas {
+  font-size: 11px;
+  color: var(--in-ink-2);
+  font-variant-numeric: tabular-nums;
+  font-family: 'SF Mono', 'Menlo', monospace;
+}
+.insightLink {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--in-ink);
+  text-decoration: none;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 4px;
+  border: 1px solid rgba(28, 25, 23, 0.15);
+}
+.insightLink:hover { background: var(--in-paper); border-color: var(--in-ink); }
