@@ -4,21 +4,45 @@ import { useRef, useState } from "react";
 import { Building2, Loader2, Upload, X } from "lucide-react";
 import { PROJECT_TYPES } from "@/lib/projectTypes";
 
+/**
+ * Dual-mode modal:
+ *   - create mode (no `existing`) — POSTs to /api/projects, hits onCreated
+ *   - edit mode   (`existing` set) — PATCHes /api/projects/[id], hits onCreated
+ *
+ * Same layout in both modes; the header title, submit label, and endpoint
+ * flip. Fields that aren't touched during an edit are omitted from the PATCH
+ * body so audit-log summaries don't fill up with no-op diffs.
+ */
+export interface EditableProject {
+  id: string;
+  name: string;
+  code: string | null;
+  status: string;
+  projectType: string | null;
+  logoUrl: string | null;
+  startDate: string | null; // ISO
+  endDate: string | null;
+  address: string | null;
+}
+
 export default function NewProjectModal({
   onClose,
   onCreated,
+  existing,
 }: {
   onClose: () => void;
   onCreated: () => void;
+  existing?: EditableProject;
 }) {
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [status, setStatus] = useState("PLANNING");
-  const [projectType, setProjectType] = useState<string>("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [address, setAddress] = useState("");
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const isEdit = !!existing;
+  const [name, setName] = useState(existing?.name ?? "");
+  const [code, setCode] = useState(existing?.code ?? "");
+  const [status, setStatus] = useState(existing?.status ?? "PLANNING");
+  const [projectType, setProjectType] = useState<string>(existing?.projectType ?? "");
+  const [startDate, setStartDate] = useState(existing?.startDate ? existing.startDate.slice(0, 10) : "");
+  const [endDate, setEndDate] = useState(existing?.endDate ? existing.endDate.slice(0, 10) : "");
+  const [address, setAddress] = useState(existing?.address ?? "");
+  const [logoUrl, setLogoUrl] = useState<string | null>(existing?.logoUrl ?? null);
   const [logoUploading, setLogoUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -55,24 +79,30 @@ export default function NewProjectModal({
     e.preventDefault();
     setPending(true);
     setError(null);
-    const res = await fetch("/api/projects", {
-      method: "POST",
+
+    const endpoint = isEdit ? `/api/projects/${existing!.id}` : "/api/projects";
+    const method = isEdit ? "PATCH" : "POST";
+
+    const payload: Record<string, unknown> = {
+      name,
+      status,
+      code: code || (isEdit ? null : undefined),
+      startDate: startDate || (isEdit ? null : undefined),
+      endDate: endDate || (isEdit ? null : undefined),
+      address: address || (isEdit ? null : undefined),
+      projectType: projectType || (isEdit ? null : undefined),
+      logoUrl: logoUrl || (isEdit ? null : undefined),
+    };
+
+    const res = await fetch(endpoint, {
+      method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        code: code || undefined,
-        status,
-        startDate: startDate || undefined,
-        endDate: endDate || undefined,
-        address: address || undefined,
-        projectType: projectType || undefined,
-        logoUrl: logoUrl || undefined,
-      }),
+      body: JSON.stringify(payload),
     });
     setPending(false);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      setError(data?.error ?? "Failed to create");
+      setError(data?.error ?? `Failed to ${isEdit ? "save" : "create"}`);
       return;
     }
     onCreated();
@@ -89,11 +119,12 @@ export default function NewProjectModal({
         className="w-full max-w-lg bg-white rounded-xl border border-stone-200 p-6 space-y-4 shadow-xl"
       >
         <div className="flex items-start justify-between">
-          <h2 className="text-lg font-semibold text-stone-900">New project</h2>
+          <h2 className="text-lg font-semibold text-stone-900">
+            {isEdit ? `Edit ${existing!.name}` : "New project"}
+          </h2>
           <button type="button" onClick={onClose} className="text-stone-400 hover:text-stone-600 text-xl leading-none" aria-label="Close">×</button>
         </div>
 
-        {/* Logo + Name row */}
         <div className="flex items-start gap-3">
           <LogoPicker
             logoUrl={logoUrl}
@@ -180,7 +211,7 @@ export default function NewProjectModal({
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="rounded-full border border-stone-300 text-sm px-4 py-2 hover:bg-ivory">Cancel</button>
           <button type="submit" disabled={pending || logoUploading} className="rounded-full bg-stone-900 text-white text-sm font-medium px-4 py-2 disabled:opacity-60">
-            {pending ? "Creating…" : "Create"}
+            {pending ? (isEdit ? "Saving…" : "Creating…") : (isEdit ? "Save changes" : "Create")}
           </button>
         </div>
       </form>
@@ -218,14 +249,14 @@ function LogoPicker({
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={uploading}
-        className="w-20 h-20 rounded-lg border-2 border-dashed border-stone-300 bg-stone-50 flex flex-col items-center justify-center gap-1 hover:border-stone-500 transition-colors disabled:opacity-60"
+        className="w-20 h-20 rounded-lg border-2 border-dashed border-stone-300 bg-stone-50 flex flex-col items-center justify-center gap-1 hover:border-stone-500 transition-colors disabled:opacity-60 overflow-hidden"
         aria-label={logoUrl ? "Replace logo" : "Upload logo"}
       >
         {uploading ? (
           <Loader2 className="w-5 h-5 text-stone-400 animate-spin" />
         ) : logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt="Logo preview" className="w-full h-full object-cover rounded-md" />
+          <img src={logoUrl} alt="Logo preview" className="w-full h-full object-cover" />
         ) : (
           <>
             <Building2 className="w-5 h-5 text-stone-400" />

@@ -7,9 +7,10 @@ import {
   Building2,
   FolderPlus,
   Loader2,
+  Pencil,
   Search,
 } from "lucide-react";
-import NewProjectModal from "./NewProjectModal";
+import NewProjectModal, { type EditableProject } from "./NewProjectModal";
 import type { ProjectSummary } from "@/app/api/projects/summary/route";
 import { projectTypeLabel } from "@/lib/projectTypes";
 
@@ -67,6 +68,21 @@ interface Column {
 // Aggregated "issues & actions" — sum of the three open counts.
 function actionCount(r: ProjectSummary): number {
   return r.openIssues + r.openConcerns + r.openHindrances;
+}
+
+/** Adapt a ProjectSummary row into the modal's editable shape. */
+function toEditable(r: ProjectSummary): EditableProject {
+  return {
+    id: r.id,
+    name: r.name,
+    code: r.code,
+    status: r.status,
+    projectType: r.projectType,
+    logoUrl: r.logoUrl,
+    startDate: r.startDate,
+    endDate: r.endDate,
+    address: null, // not returned by /summary — the edit modal defaults blank
+  };
 }
 
 const COLUMNS: Column[] = [
@@ -259,6 +275,7 @@ export default function ProjectTable({ canCreate }: { canCreate: boolean }) {
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<EditableProject | null>(null);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -407,6 +424,9 @@ export default function ProjectTable({ canCreate }: { canCreate: boolean }) {
                       </th>
                     );
                   })}
+                  {canCreate && (
+                    <th className="px-3 py-2.5 w-12" aria-label="Actions" />
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
@@ -425,6 +445,19 @@ export default function ProjectTable({ canCreate }: { canCreate: boolean }) {
                         {col.render(row)}
                       </td>
                     ))}
+                    {canCreate && (
+                      <td className="px-3 py-3 text-right w-12">
+                        <button
+                          type="button"
+                          onClick={() => setEditing(toEditable(row))}
+                          className="p-1.5 rounded hover:bg-stone-100 text-stone-500 hover:text-stone-900 transition-colors"
+                          title="Edit project"
+                          aria-label={`Edit ${row.name}`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -438,6 +471,17 @@ export default function ProjectTable({ canCreate }: { canCreate: boolean }) {
           onClose={() => setModalOpen(false)}
           onCreated={() => {
             setModalOpen(false);
+            load();
+          }}
+        />
+      )}
+
+      {editing && (
+        <NewProjectModal
+          existing={editing}
+          onClose={() => setEditing(null)}
+          onCreated={() => {
+            setEditing(null);
             load();
           }}
         />
