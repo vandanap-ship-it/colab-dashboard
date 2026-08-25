@@ -39,6 +39,8 @@ model User {
   approvedExpenses         Expense[]               @relation("ExpenseApprover")
   createdDesignDrawings    DesignDrawing[]         @relation("DrawingCreator")
   uploadedDrawingRevisions DesignDrawingRevision[] @relation("RevisionUploader")
+  createdTradePlans        TradePlan[]             @relation("TradePlanCreator")
+  loggedManpower           ManpowerEntry[]         @relation("ManpowerEntryCreator")
 }
 
 model Project {
@@ -75,6 +77,8 @@ model Project {
   milestoneSections  MilestoneSection[]
   rfis               Rfi[]
   permits            Permit[]
+  tradePlans         TradePlan[]
+  manpowerEntries    ManpowerEntry[]
 
   @@index([createdById])
 }
@@ -179,8 +183,8 @@ model VillaMilestone {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  villa   Villa            @relation(fields: [villaId], references: [id], onDelete: Cascade)
-  section MilestoneSection @relation(fields: [sectionId], references: [id])
+  villa    Villa            @relation(fields: [villaId], references: [id], onDelete: Cascade)
+  section  MilestoneSection @relation(fields: [sectionId], references: [id])
   wbsNodes WBSNode[]
 
   @@unique([villaId, sectionId])
@@ -200,6 +204,8 @@ model Contractor {
   progressEntries ProgressEntry[]
   wbsNodes        WBSNode[]
   bills           SubContractorBill[]
+  tradePlans      TradePlan[]
+  manpowerEntries ManpowerEntry[]
 
   @@unique([projectId, name])
   @@index([projectId])
@@ -328,8 +334,8 @@ model Hindrance {
 
   // Root-cause tagging so the Dashboard can cluster blockers by reason.
   // Values come from src/lib/hindranceReasons.ts (MATERIAL / LABOUR / RMC / …).
-  reasonCode   String?
-  reasonNote   String?
+  reasonCode String?
+  reasonNote String?
 
   createdById    String
   createdAt      DateTime  @default(now())
@@ -497,19 +503,19 @@ model RfiPhoto {
 // explicitly so users can override (e.g. RENEWED before expiry).
 // ---------------------------------------------------------------------------
 model Permit {
-  id                   String    @id @default(cuid())
-  projectId            String
-  name                 String
-  number               String? // issuing authority's permit number (e.g. BBMP/2026/12345)
-  issuingAuthority     String
-  category             String // BUILDING | ENVIRONMENTAL | FIRE | LABOUR | WATER | OTHER
-  issuedDate           DateTime
-  expiryDate           DateTime?
-  documentUrl          String? // uploaded PDF / image of the permit
-  notes                String?
-  status               String    @default("ACTIVE") // ACTIVE | EXPIRING_SOON | EXPIRED | RENEWED
-  responsibleUserId    String?
-  renewalReminderDays  Int       @default(30) // how far ahead to flag as EXPIRING_SOON
+  id                  String    @id @default(cuid())
+  projectId           String
+  name                String
+  number              String? // issuing authority's permit number (e.g. BBMP/2026/12345)
+  issuingAuthority    String
+  category            String // BUILDING | ENVIRONMENTAL | FIRE | LABOUR | WATER | OTHER
+  issuedDate          DateTime
+  expiryDate          DateTime?
+  documentUrl         String? // uploaded PDF / image of the permit
+  notes               String?
+  status              String    @default("ACTIVE") // ACTIVE | EXPIRING_SOON | EXPIRED | RENEWED
+  responsibleUserId   String?
+  renewalReminderDays Int       @default(30) // how far ahead to flag as EXPIRING_SOON
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -815,4 +821,71 @@ model DesignDrawingRevision {
   currentOf  DesignDrawing[] @relation("CurrentRevisionOf")
 
   @@index([drawingId])
+}
+
+// ---------------------------------------------------------------------------
+// Manpower — planned vs actual daily headcount by trade
+//
+// TradePlan holds the admin-set target: for a given (project, contractor,
+// trade) pair, how many workers should be on site every working day.
+// Effective from `startDate` and (optionally) until `endDate`; the newest
+// non-expired plan for a (contractor, trade) wins.
+//
+// ManpowerEntry is what the site engineer logs from mobile each day —
+// (date, contractor, trade, actual count). One entry per (date, contractor,
+// trade), enforced by a unique index; a resubmit replaces the previous value
+// so the report layer never sees duplicates.
+//
+// Both together power:
+//   - Daily Report Section 4 (headcount vs plan for the day)
+//   - Weekly Report Section 3 (7-day trend + trade breakdown)
+//   - Dashboard "Daily Manpower" strip
+// ---------------------------------------------------------------------------
+model TradePlan {
+  id           String    @id @default(cuid())
+  projectId    String
+  contractorId String
+  trade        String // "Bar Bender" | "Carpenter" | "Helper" | "Mason" — see src/lib/manpower.ts
+  plannedCount Int
+  startDate    DateTime // when this plan takes effect
+  endDate      DateTime? // NULL = still current
+  notes        String?
+
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contractor Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+  createdBy  User       @relation("TradePlanCreator", fields: [createdById], references: [id])
+
+  @@index([projectId, contractorId])
+  @@index([projectId, startDate])
+}
+
+model ManpowerEntry {
+  id             String   @id @default(cuid())
+  projectId      String
+  contractorId   String
+  trade          String
+  entryDate      DateTime // date the workers were on site (day-precision, stored at 00:00 UTC)
+  actualCount    Int
+  notes          String?
+  idempotencyKey String?  @unique // dedupes offline-queue replays from mobile
+
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contractor Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+  createdBy  User       @relation("ManpowerEntryCreator", fields: [createdById], references: [id])
+
+  // One row per (project, contractor, trade, date) — a re-submit updates the
+  // existing entry (via upsert in the POST handler) rather than duplicating.
+  @@unique([projectId, contractorId, trade, entryDate])
+  @@index([projectId, entryDate])
+  @@index([contractorId, entryDate])
 }

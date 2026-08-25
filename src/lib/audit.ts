@@ -29,7 +29,8 @@ export type AuditAction =
   | "UPDATE"
   | "DELETE"
   | "RESTORE"
-  | "STATUS_CHANGE";
+  | "STATUS_CHANGE"
+  | "UPSERT";
 
 export type AuditEntityType =
   | "ProgressEntry"
@@ -45,7 +46,9 @@ export type AuditEntityType =
   | "Expense"
   | "DesignDrawing"
   | "Rfi"
-  | "Permit";
+  | "Permit"
+  | "TradePlan"
+  | "ManpowerEntry";
 
 export type AuditInput = {
   projectId?: string | null;

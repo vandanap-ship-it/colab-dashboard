@@ -11,18 +11,27 @@ import {
 } from "@/lib/executiveMockData";
 import type { DelayReasonCluster } from "@/lib/delayReasons";
 
+export interface ManpowerStrip {
+  planned: number;
+  actual: number;
+  variance: number;
+  pctOfPlan: number | null;
+  status: "no-plan" | "above" | "on-plan" | "below" | "not-logged";
+}
+
 export interface ExecutiveOverviewProps {
   health: ProjectHealthSummary;
   villas: VillaRollup[];
   blocks: BlockRollup[];
   contractors: ContractorRollup[];
   reasonClusters: DelayReasonCluster[];
+  manpowerStrip: ManpowerStrip;
 }
 
 // Executive project rollup — the "Dashboard" tab of the new dashboard IA.
 // Restructured to match the approved mockup: KPI row at top, health snapshot
 // with 2-col grid (Schedule Summary | Timeline), no repeated stats.
-export default function ExecutiveOverview({ health: h, villas, blocks, contractors, reasonClusters }: ExecutiveOverviewProps) {
+export default function ExecutiveOverview({ health: h, villas, blocks, contractors, reasonClusters, manpowerStrip }: ExecutiveOverviewProps) {
   const activeVillas = villas.filter((v) => v.currentSection >= 0);
   const villasDelayed = activeVillas.filter((v) => v.slipDays > 0).length;
   const projectedDays = daysBetween(h.baselineStart, h.projectedEnd);
@@ -203,6 +212,9 @@ export default function ExecutiveOverview({ health: h, villas, blocks, contracto
           </div>
         </div>
       </div>
+
+      {/* Daily Manpower strip */}
+      <ManpowerStripRow strip={manpowerStrip} />
 
       {/* Contractor Scope Health */}
       <div className={styles.card}>
@@ -496,6 +508,55 @@ function VillaBucket({
               ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ManpowerStripRow({ strip }: { strip: ManpowerStrip }) {
+  const statusLabel = (() => {
+    switch (strip.status) {
+      case "above":      return `+${strip.variance} above plan`;
+      case "on-plan":    return "On plan";
+      case "below":      return `${strip.variance} below plan`;
+      case "not-logged": return "Not logged today";
+      case "no-plan":    return "No plan set";
+    }
+  })();
+  const statusClass = (() => {
+    switch (strip.status) {
+      case "above":      return styles.mpStatusGood;
+      case "on-plan":    return styles.mpStatusOk;
+      case "below":      return styles.mpStatusBad;
+      case "not-logged": return styles.mpStatusWarn;
+      case "no-plan":    return styles.mpStatusMuted;
+    }
+  })();
+
+  return (
+    <div className={`${styles.card} ${styles.mpStrip}`}>
+      <div className={styles.mpStripBody}>
+        <div className={styles.mpMetric}>
+          <div className={styles.mpLbl}>Daily Manpower</div>
+          <div className={styles.mpMeta}>Today · planned vs actual</div>
+        </div>
+        <div className={styles.mpFig}>
+          <div className={styles.mpFigLbl}>Planned</div>
+          <div className={styles.mpFigVl}>{strip.planned}</div>
+        </div>
+        <div className={styles.mpFig}>
+          <div className={styles.mpFigLbl}>Actual</div>
+          <div className={`${styles.mpFigVl} ${strip.status === "above" ? styles.mpGood : strip.status === "below" ? styles.mpBad : ""}`}>
+            {strip.status === "not-logged" ? "—" : strip.actual}
+          </div>
+        </div>
+        <div className={styles.mpFig}>
+          <div className={styles.mpFigLbl}>% of plan</div>
+          <div className={`${styles.mpFigVl} ${strip.status === "above" ? styles.mpGood : strip.status === "below" ? styles.mpBad : ""}`}>
+            {strip.pctOfPlan == null ? "—" : `${strip.pctOfPlan}%`}
+          </div>
+        </div>
+        <div className={`${styles.mpStatusPill} ${statusClass}`}>{statusLabel}</div>
       </div>
     </div>
   );

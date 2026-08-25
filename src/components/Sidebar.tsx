@@ -19,6 +19,7 @@ import {
   ReceiptIndianRupee,
   Wallet,
   Upload,
+  Users,
   Users as UsersIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -92,6 +93,7 @@ export default function Sidebar(props: SidebarProps) {
       title: "Data entry",
       items: [
         { label: "Add Progress",    href: `/projects/${props.projectId}/add-progress`, icon: ListPlus },
+        { label: "Manpower",        href: `/projects/${props.projectId}/manpower`,     icon: Users },
         { label: "Import schedule", href: `/projects/${props.projectId}/import-msp`,   icon: Upload, hidden: !props.canImport },
       ],
     },

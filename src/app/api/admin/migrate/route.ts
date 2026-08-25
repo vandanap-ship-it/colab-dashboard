@@ -293,6 +293,66 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add Hindrance.reasonCode + reasonNote so the Dashboard can cluster overdue villas by root cause.",
   },
+  {
+    key: "2026-08-25_manpower",
+    sql: [
+      // TradePlan — admin's planned daily headcount per contractor × trade,
+      // effective startDate → endDate. endDate NULL means still current.
+      `CREATE TABLE IF NOT EXISTS "TradePlan" (
+        "id" TEXT NOT NULL,
+        "projectId" TEXT NOT NULL,
+        "contractorId" TEXT NOT NULL,
+        "trade" TEXT NOT NULL,
+        "plannedCount" INTEGER NOT NULL,
+        "startDate" TIMESTAMP(3) NOT NULL,
+        "endDate" TIMESTAMP(3),
+        "notes" TEXT,
+        "createdById" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        "deletedAt" TIMESTAMP(3),
+        CONSTRAINT "TradePlan_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE INDEX IF NOT EXISTS "TradePlan_projectId_contractorId_idx" ON "TradePlan"("projectId", "contractorId")`,
+      `CREATE INDEX IF NOT EXISTS "TradePlan_projectId_startDate_idx" ON "TradePlan"("projectId", "startDate")`,
+      `ALTER TABLE "TradePlan" ADD CONSTRAINT "TradePlan_projectId_fkey"
+         FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "TradePlan" ADD CONSTRAINT "TradePlan_contractorId_fkey"
+         FOREIGN KEY ("contractorId") REFERENCES "Contractor"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "TradePlan" ADD CONSTRAINT "TradePlan_createdById_fkey"
+         FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE`,
+
+      // ManpowerEntry — one row per (project, contractor, trade, day) with the
+      // actual headcount site engineer logged that day. Unique index makes a
+      // resubmit an update (via upsert), not a duplicate.
+      `CREATE TABLE IF NOT EXISTS "ManpowerEntry" (
+        "id" TEXT NOT NULL,
+        "projectId" TEXT NOT NULL,
+        "contractorId" TEXT NOT NULL,
+        "trade" TEXT NOT NULL,
+        "entryDate" TIMESTAMP(3) NOT NULL,
+        "actualCount" INTEGER NOT NULL,
+        "notes" TEXT,
+        "idempotencyKey" TEXT,
+        "createdById" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        "deletedAt" TIMESTAMP(3),
+        CONSTRAINT "ManpowerEntry_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "ManpowerEntry_idempotencyKey_key" ON "ManpowerEntry"("idempotencyKey") WHERE "idempotencyKey" IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "ManpowerEntry_projectId_contractorId_trade_entryDate_key" ON "ManpowerEntry"("projectId", "contractorId", "trade", "entryDate")`,
+      `CREATE INDEX IF NOT EXISTS "ManpowerEntry_projectId_entryDate_idx" ON "ManpowerEntry"("projectId", "entryDate")`,
+      `CREATE INDEX IF NOT EXISTS "ManpowerEntry_contractorId_entryDate_idx" ON "ManpowerEntry"("contractorId", "entryDate")`,
+      `ALTER TABLE "ManpowerEntry" ADD CONSTRAINT "ManpowerEntry_projectId_fkey"
+         FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "ManpowerEntry" ADD CONSTRAINT "ManpowerEntry_contractorId_fkey"
+         FOREIGN KEY ("contractorId") REFERENCES "Contractor"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      `ALTER TABLE "ManpowerEntry" ADD CONSTRAINT "ManpowerEntry_createdById_fkey"
+         FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE`,
+    ],
+    describe: "Add TradePlan + ManpowerEntry tables so admin can plan headcount per trade and site engineers can log actuals daily.",
+  },
 ];
 
 async function ensureLedger() {

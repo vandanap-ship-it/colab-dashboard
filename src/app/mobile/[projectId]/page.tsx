@@ -10,6 +10,7 @@ import {
   PlusCircle,
   RefreshCw,
   TrendingUp,
+  Users,
   Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -62,6 +63,7 @@ export default async function MobileProjectHome({
     { key: "site-progress", href: `/mobile/${projectId}/site-progress`, label: "Site Progress", icon: ListChecks },
     { key: "snag", href: `/mobile/${projectId}/issue/new`, label: "Snag", icon: AlertTriangle },
     { key: "hindrance", href: `/mobile/${projectId}/hindrance/new`, label: "Hindrance", icon: CheckSquare },
+    { key: "manpower", href: `/mobile/${projectId}/manpower/new`, label: "Log Manpower", icon: Users },
     { key: "concern", href: `/mobile/${projectId}/concern/new`, label: "Areas of Concern", icon: Eye },
     {
       key: "inspection",

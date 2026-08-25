@@ -613,6 +613,65 @@
 .crRow.tbd { opacity: 0.5; }
 .crRow.tbd .healthPill { background: var(--ex-ink-3); }
 
+/* ---------- MANPOWER STRIP ---------- */
+.mpStrip { padding: 0; }
+.mpStripBody {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(3, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+  padding: 16px 20px;
+}
+@media (max-width: 900px) {
+  .mpStripBody {
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+}
+.mpMetric { display: flex; flex-direction: column; gap: 2px; }
+.mpLbl {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ex-ink);
+  font-weight: 700;
+}
+.mpMeta { font-size: 11px; color: var(--ex-ink-3); font-weight: 500; }
+.mpFig { display: flex; flex-direction: column; gap: 2px; text-align: right; }
+.mpFigLbl {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ex-ink-3);
+  font-weight: 700;
+}
+.mpFigVl {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ex-ink);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.mpGood { color: var(--ex-good); }
+.mpBad { color: var(--ex-bad); }
+.mpStatusPill {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #FFFFFF;
+  white-space: nowrap;
+}
+.mpStatusGood { background: var(--ex-good); }
+.mpStatusOk { background: var(--ex-accent); }
+.mpStatusBad { background: var(--ex-bad); }
+.mpStatusWarn { background: var(--ex-warn); }
+.mpStatusMuted { background: var(--ex-ink-4); color: #FFFFFF; }
+
 /* ---------- DELAY REASON CLUSTERS ---------- */
 .drList {
   display: flex;

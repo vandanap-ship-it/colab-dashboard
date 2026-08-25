@@ -88,6 +88,7 @@ export const TOOL_MODULES: Record<string, ModuleKey[]> = {
   snag: [MODULES.QAQC, MODULES.SAFETY],
   inspection: [MODULES.QAQC, MODULES.SAFETY],
   hindrance: [MODULES.HINDRANCE],
+  manpower: [MODULES.PROGRESS],
   concern: [MODULES.CONCERN],
   rfi: [MODULES.RFI],
   permit: [MODULES.PERMIT],

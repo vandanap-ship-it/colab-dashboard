@@ -7,6 +7,7 @@ import { getDashboardBag } from "@/lib/rollupServer";
 import { adaptDashboardBag } from "@/lib/executiveDataAdapter";
 import { getBlockDetail, getVillaDetailByNumber } from "@/lib/detailServer";
 import { getDelayReasonClusters } from "@/lib/delayReasons";
+import { getDashboardManpowerStrip } from "@/lib/manpowerServer";
 import {
   BLOCKS,
   CONTRACTORS,
@@ -28,14 +29,16 @@ export default async function OverviewPage({
   const villaNumber = vn ? parseInt(vn, 10) : null;
   const bag = await getDashboardBag(id);
 
-  // Drawer detail data + delay-reason aggregation — fetched in parallel with
-  // the main bag so opening a drawer costs at most one extra round-trip.
-  const [villaDetail, blockDetail, reasonClusters] = await Promise.all([
+  // Drawer detail data + delay-reason aggregation + manpower strip — fetched
+  // in parallel with the main bag so opening a drawer costs at most one extra
+  // round-trip.
+  const [villaDetail, blockDetail, reasonClusters, manpowerStrip] = await Promise.all([
     villaNumber && !isNaN(villaNumber)
       ? getVillaDetailByNumber(id, villaNumber).catch(() => null)
       : Promise.resolve(null),
     bd ? getBlockDetail(id, bd).catch(() => null) : Promise.resolve(null),
     getDelayReasonClusters(id).catch(() => []),
+    getDashboardManpowerStrip(id),
   ]);
 
   const overview = bag
@@ -48,6 +51,7 @@ export default async function OverviewPage({
             blocks={adapted.blocks}
             contractors={adapted.contractors}
             reasonClusters={reasonClusters}
+            manpowerStrip={manpowerStrip}
           />
         );
       })()
@@ -60,6 +64,7 @@ export default async function OverviewPage({
           blocks={BLOCKS}
           contractors={CONTRACTORS}
           reasonClusters={reasonClusters}
+          manpowerStrip={manpowerStrip}
         />
       </>
     );
