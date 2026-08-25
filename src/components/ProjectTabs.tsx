@@ -4,10 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  LayoutDashboard,
   Lightbulb,
-  Map,
   ScanEye,
+  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -30,6 +29,10 @@ export default function ProjectTabs({
 }) {
   const pathname = usePathname();
 
+  // 6-tab layout per Shraddha's 24 Aug spec: Dashboard, Progress, QA/QC,
+  // Safety, My Actions, Insights. (Layout + Snapshot routes still exist, just
+  // not in the top nav — Layout's content moved onto the Progress tab as
+  // the Interactive Drawing section.)
   const tabs: Tab[] = [
     {
       key: "overview",
@@ -38,22 +41,16 @@ export default function ProjectTabs({
       icon: ScanEye,
     },
     {
-      key: "layout",
-      label: "Layout",
-      href: `/projects/${projectId}/layout`,
-      icon: Map,
-    },
-    {
-      key: "snapshot",
-      label: "Snapshot",
-      href: `/projects/${projectId}/snapshot`,
-      icon: LayoutDashboard,
-    },
-    {
       key: "progress",
       label: "Progress",
       href: `/projects/${projectId}/progress`,
       icon: BarChart3,
+    },
+    {
+      key: "qaqc",
+      label: "QA/QC",
+      href: `/projects/${projectId}/qaqc`,
+      icon: ShieldCheck,
     },
     {
       key: "my-actions",
