@@ -261,17 +261,17 @@ export default async function MyActionsTabPage({
         />
 
         <MyActionsCard
-          title="Snags"
+          title="Issues"
           totalCount={allOpenIssues}
           chips={issueChips}
           panels={{
             "assigned-to-me": {
               items: issuesAssignedItems,
-              emptyText: "No snags assigned to you.",
+              emptyText: "No issues assigned to you.",
             },
             "created-by-me": {
               items: issuesCreatedItems,
-              emptyText: "No open snags you raised.",
+              emptyText: "No open issues you raised.",
             },
           }}
         />
