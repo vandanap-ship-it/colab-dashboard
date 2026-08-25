@@ -44,6 +44,15 @@ export default async function ReportsLandingPage({
 
   const reports: Report[] = [
     {
+      key: "scorecard",
+      title: "Site Progress Scorecard",
+      description:
+        "The daily master report — snapshot, contractor movement, block coverage, manpower, activity highlights with photos, milestone progress, block-wise progress + project health footer. Matches the Amanvana Phase 1 Scorecard PDF layout.",
+      href: `/projects/${id}/reports/scorecard`,
+      icon: FileBarChart,
+      cadence: "Daily",
+    },
+    {
       key: "dpr",
       title: "Daily Progress Report",
       description:
