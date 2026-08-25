@@ -4,6 +4,50 @@ import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
+import { milestoneCompletionEmail, sendEmail } from "@/lib/email";
+
+const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
+
+/**
+ * Look up the sub-milestone context and fire the completion email. Safe to
+ * call after a DB update; silent no-op when the node isn't tied to a villa
+ * milestone, isn't a sub-milestone, or when RESEND_API_KEY isn't set.
+ */
+async function maybeSendMilestoneCompletionEmail(wbsNodeId: string, actualFinishDate: Date) {
+  const node = await prisma.wBSNode.findUnique({
+    where: { id: wbsNodeId },
+    select: {
+      isSubMilestone: true,
+      villaMilestoneId: true,
+      villaMilestone: {
+        select: {
+          baselineFinish: true,
+          villa: {
+            select: {
+              number: true,
+              label: true,
+              project: { select: { id: true, name: true } },
+            },
+          },
+          section: { select: { name: true } },
+        },
+      },
+    },
+  });
+  if (!node?.isSubMilestone) return;
+  const vm = node.villaMilestone;
+  if (!vm) return;
+  await sendEmail(
+    milestoneCompletionEmail({
+      projectName: vm.villa.project.name,
+      villaLabel: vm.villa.label ?? `Villa ${vm.villa.number}`,
+      sectionName: vm.section?.name ?? "Milestone",
+      actualFinish: actualFinishDate,
+      baselineFinish: vm.baselineFinish,
+      dashboardUrl: `${SIDDHI_BASE_URL}/projects/${vm.villa.project.id}/overview?vn=${vm.villa.number}`,
+    }),
+  );
+}
 
 const VALID_TYPES = new Set(["LABOUR_SUPPLY", "PRW", "MISC"]);
 
@@ -159,11 +203,23 @@ export async function POST(req: Request) {
       if (current && !current.actualStart) updates.actualStart = entryDate;
       if (pct >= 100 && current && !current.actualFinish) updates.actualFinish = entryDate;
       await tx.wBSNode.update({ where: { id: wbsNodeId }, data: updates });
+      // Signal via the returned tuple so the outer code can send the
+      // milestone-completion email AFTER the transaction commits.
+      if (updates.actualFinish) {
+        (created as unknown as { __justClosed?: Date }).__justClosed = updates.actualFinish;
+      }
     }
 
     return created;
     }),
   );
+
+  // Fire-and-forget email side-effects outside the transaction so a slow
+  // Resend call never blocks the DB commit.
+  const justClosed = (entry as unknown as { __justClosed?: Date }).__justClosed;
+  if (justClosed && !duplicate) {
+    await maybeSendMilestoneCompletionEmail(wbsNodeId, justClosed);
+  }
 
   // On a replayed duplicate the entry (and its rollup + audit) already exist —
   // just hand back the original so the client clears it from the queue.

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
 import { recordAudit, diffSummary } from "@/lib/audit";
+import { assignmentEmail, sendEmail } from "@/lib/email";
 import {
   badRequest,
   forbidden,
@@ -10,6 +11,8 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/apiErrors";
+
+const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
 const STATUSES = new Set(["OPEN", "RESOLVED"]);
 
@@ -70,11 +73,32 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
       data,
       include: {
         createdBy: { select: { id: true, name: true } },
-        assignedTo: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, name: true, email: true } },
         wbsNode: { select: { id: true, name: true } },
         photos: true,
       },
     });
+
+    // Assignment email — silent no-op when the assignee has no email or
+    // RESEND_API_KEY isn't set on the deploy.
+    if (
+      issue.assignedToId &&
+      issue.assignedToId !== before.assignedToId &&
+      issue.assignedTo?.email
+    ) {
+      const desc = (await prisma.issue.findUnique({ where: { id }, select: { description: true } }))?.description ?? "Snag";
+      const title = desc.length > 80 ? desc.slice(0, 80) + "…" : desc;
+      await sendEmail(
+        assignmentEmail({
+          to: issue.assignedTo.email,
+          assigneeName: issue.assignedTo.name,
+          itemType: "Issue",
+          itemTitle: title,
+          itemUrl: `${SIDDHI_BASE_URL}/projects/${issue.projectId}/my-actions`,
+          raisedByName: issue.createdBy.name,
+        }),
+      );
+    }
     {
       const diff = diffSummary(
         { status: before.status, assignedToId: before.assignedToId },

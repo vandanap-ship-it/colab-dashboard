@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdmin, ROLES } from "@/lib/roles";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
+import { milestoneCompletionEmail, sendEmail } from "@/lib/email";
 import {
   badRequest,
   forbidden,
@@ -11,6 +12,44 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/apiErrors";
+
+const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
+
+/** Same helper as in POST — sends milestone-completion email for sub-milestone
+ *  WBS nodes that just crossed to actualFinish. Silent no-op otherwise. */
+async function maybeSendMilestoneCompletionEmail(wbsNodeId: string, actualFinishDate: Date) {
+  const node = await prisma.wBSNode.findUnique({
+    where: { id: wbsNodeId },
+    select: {
+      isSubMilestone: true,
+      villaMilestone: {
+        select: {
+          baselineFinish: true,
+          villa: {
+            select: {
+              number: true,
+              label: true,
+              project: { select: { id: true, name: true } },
+            },
+          },
+          section: { select: { name: true } },
+        },
+      },
+    },
+  });
+  if (!node?.isSubMilestone || !node.villaMilestone) return;
+  const vm = node.villaMilestone;
+  await sendEmail(
+    milestoneCompletionEmail({
+      projectName: vm.villa.project.name,
+      villaLabel: vm.villa.label ?? `Villa ${vm.villa.number}`,
+      sectionName: vm.section?.name ?? "Milestone",
+      actualFinish: actualFinishDate,
+      baselineFinish: vm.baselineFinish,
+      dashboardUrl: `${SIDDHI_BASE_URL}/projects/${vm.villa.project.id}/overview?vn=${vm.villa.number}`,
+    }),
+  );
+}
 
 const VALID_TYPES = new Set(["LABOUR_SUPPLY", "PRW", "MISC"]);
 
@@ -162,10 +201,19 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
           if (pct >= 100 && !node.actualFinish) updates.actualFinish = stamp;
           if (pct < 100 && node.actualFinish) updates.actualFinish = null;
           await tx.wBSNode.update({ where: { id: u.wbsNodeId }, data: updates });
+          // Signal via the returned tuple so the email fires after commit.
+          if (updates.actualFinish) {
+            (u as unknown as { __justClosed?: Date }).__justClosed = updates.actualFinish;
+          }
         }
       }
       return u;
     });
+
+    const justClosed = (updated as unknown as { __justClosed?: Date }).__justClosed;
+    if (justClosed) {
+      await maybeSendMilestoneCompletionEmail(updated.wbsNodeId, justClosed);
+    }
 
     const diff = diffSummary(
       {
