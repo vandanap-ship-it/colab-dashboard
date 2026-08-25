@@ -9,7 +9,8 @@ import {
   type ProjectHealthSummary,
   type VillaRollup,
 } from "@/lib/executiveMockData";
-import type { DelayReasonCluster } from "@/lib/delayReasons";
+import type { ContractorDelayReasonGroup, DelayReasonCluster } from "@/lib/delayReasons";
+import DelayReasonsCard from "./DelayReasonsCard";
 import type { MilestoneProgressRow, SiteActivityBlockGroup } from "@/lib/dashboardSectionsServer";
 
 export interface ManpowerStrip {
@@ -26,6 +27,7 @@ export interface ExecutiveOverviewProps {
   blocks: BlockRollup[];
   contractors: ContractorRollup[];
   reasonClusters: DelayReasonCluster[];
+  reasonClustersByContractor: ContractorDelayReasonGroup[];
   manpowerStrip: ManpowerStrip;
   milestoneProgress: MilestoneProgressRow[];
   siteActivity: SiteActivityBlockGroup[];
@@ -40,6 +42,7 @@ export default function ExecutiveOverview({
   blocks,
   contractors,
   reasonClusters,
+  reasonClustersByContractor,
   manpowerStrip,
   milestoneProgress,
   siteActivity,
@@ -315,18 +318,8 @@ export default function ExecutiveOverview({
         </div>
       </div>
 
-      {/* Delay Reason Clusters */}
-      <div className={styles.card}>
-        <div className={styles.cardHd}>
-          <h3>Delay Reason Clusters</h3>
-          <span className={styles.meta}>
-            open hindrances grouped by root cause · site team tags at log-time
-          </span>
-        </div>
-        <div className={styles.cardBd}>
-          <DelayReasonList clusters={reasonClusters} />
-        </div>
-      </div>
+      {/* Delay Reason Clusters — with Overall / By-contractor toggle */}
+      <DelayReasonsCard overall={reasonClusters} byContractor={reasonClustersByContractor} />
 
       {/* Block Buckets */}
       <div className={styles.card}>
@@ -731,53 +724,6 @@ function SiteActivityCard({ activity: a }: { activity: import("@/lib/dashboardSe
 function fmtTime(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-}
-
-function DelayReasonList({ clusters }: { clusters: DelayReasonCluster[] }) {
-  if (clusters.length === 0) {
-    return (
-      <div className={styles.drEmpty}>
-        No open hindrances. Site team logs blockers with a reason tag —
-        once any are open, they cluster here by root cause.
-      </div>
-    );
-  }
-  const maxCount = Math.max(...clusters.map((c) => c.count), 1);
-  return (
-    <div className={styles.drList}>
-      {clusters.map((c) => (
-        <div key={c.code} className={styles.drRow}>
-          <div className={styles.drHd}>
-            <span className={styles.drLabel}>{c.label}</span>
-            <span className={styles.drCount}>{c.count}</span>
-          </div>
-          <div className={styles.drBar}>
-            <div
-              className={styles.drBarFill}
-              style={{ width: `${(c.count / maxCount) * 100}%` }}
-            />
-          </div>
-          <div className={styles.drMeta}>
-            {c.daysImpact > 0 && (
-              <>
-                <span className={styles.drImpact}>+{c.daysImpact}d</span>
-                <span className={styles.drSep}>·</span>
-              </>
-            )}
-            <span className={styles.drSince}>
-              latest {c.latestAt ? fmtDate(new Date(c.latestAt)) : "—"}
-            </span>
-            {c.sampleNote && (
-              <>
-                <span className={styles.drSep}>·</span>
-                <span className={styles.drNote} title={c.sampleNote}>“{c.sampleNote}”</span>
-              </>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function fmtDate(d: Date): string {

@@ -860,7 +860,60 @@
 .mpStatusWarn { background: var(--ex-warn); }
 .mpStatusMuted { background: var(--ex-ink-4); color: #FFFFFF; }
 
-/* ---------- DELAY REASON CLUSTERS ---------- */
+/* ---------- DELAY REASON CLUSTERS (with toggle) ---------- */
+.drToggle {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.drToggleGroup {
+  display: flex;
+  gap: 3px;
+  background: var(--ex-rule-soft);
+  border-radius: 4px;
+  padding: 2px;
+}
+.drToggleBtn {
+  padding: 4px 12px;
+  border: 0;
+  background: transparent;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ex-ink-3);
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.drToggleBtn:hover { color: var(--ex-ink); }
+.drToggleOn {
+  background: var(--ex-paper);
+  color: var(--ex-ink);
+  box-shadow: 0 1px 2px rgba(22, 32, 47, 0.08);
+}
+.drContractorList { display: flex; flex-direction: column; gap: 18px; }
+.drContractorGroup { display: flex; flex-direction: column; gap: 8px; }
+.drContractorHd {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--ex-border);
+}
+.drContractorName {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ex-ink);
+  letter-spacing: -0.005em;
+}
+.drContractorMeta {
+  font-size: 10.5px;
+  color: var(--ex-ink-3);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
 .drList {
   display: flex;
   flex-direction: column;
