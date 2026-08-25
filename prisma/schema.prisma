@@ -60,6 +60,10 @@ model Project {
   // labels live in src/lib/projectTypes.ts. Nullable so existing rows don't
   // need a backfill.
   projectType      String?
+  // Master plan / site layout image (isometric aerial view with villa plots
+  // labelled) — powers the Progress tab's Interactive Drawing. Stored in
+  // Vercel Blob; nullable until admin uploads.
+  masterPlanUrl    String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   createdById      String

@@ -361,6 +361,13 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add Project.projectType so the multi-project landing table can label + filter by kind.",
   },
+  {
+    key: "2026-08-26_master_plan_url",
+    sql: [
+      `ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "masterPlanUrl" TEXT`,
+    ],
+    describe: "Add Project.masterPlanUrl so the Progress tab's Interactive Drawing can render each project's site layout.",
+  },
 ];
 
 async function ensureLedger() {
