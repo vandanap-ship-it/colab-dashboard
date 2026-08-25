@@ -40,13 +40,15 @@ export async function POST(req: Request) {
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const { name, code, status, startDate, endDate, address } = (body ?? {}) as {
+  const { name, code, status, startDate, endDate, address, projectType, logoUrl } = (body ?? {}) as {
     name?: string;
     code?: string;
     status?: string;
     startDate?: string;
     endDate?: string;
     address?: string;
+    projectType?: string;
+    logoUrl?: string;
   };
 
   const trimmed = (name ?? "").trim();
@@ -63,6 +65,8 @@ export async function POST(req: Request) {
       startDate: startDate ? new Date(startDate) : null,
       endDate: endDate ? new Date(endDate) : null,
       address: address?.trim() || null,
+      projectType: projectType?.trim() || null,
+      logoUrl: logoUrl?.trim() || null,
       createdById: session.user.id,
     },
     include: { createdBy: { select: { id: true, name: true, username: true } } },
