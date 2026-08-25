@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   Menu,
   X,
+  BookOpen,
   CalendarClock,
   CalendarRange,
   GanttChartSquare,
@@ -108,9 +109,10 @@ export default function Sidebar(props: SidebarProps) {
     {
       title: "Reports & Docs",
       items: [
-        { label: "DLR",      href: `/projects/${props.projectId}/dlr`,      icon: ClipboardCheck },
-        { label: "Reports",  href: `/projects/${props.projectId}/reports`,  icon: FileBarChart },
-        { label: "Drawings", href: `/projects/${props.projectId}/drawings`, icon: FileStack },
+        { label: "DLR",             href: `/projects/${props.projectId}/dlr`,     icon: ClipboardCheck },
+        { label: "Reports",         href: `/projects/${props.projectId}/reports`, icon: FileBarChart },
+        { label: "Drawings",        href: `/projects/${props.projectId}/drawings`, icon: FileStack },
+        { label: "Logic Reference", href: `/logic-reference`,                     icon: BookOpen },
       ],
     },
     {
