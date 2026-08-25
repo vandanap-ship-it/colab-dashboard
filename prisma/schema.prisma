@@ -56,6 +56,10 @@ model Project {
   address          String?
   tagline          String?
   logoUrl          String?
+  // Free-form-ish category so the landing table can group / filter — display
+  // labels live in src/lib/projectTypes.ts. Nullable so existing rows don't
+  // need a backfill.
+  projectType      String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   createdById      String

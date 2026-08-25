@@ -353,6 +353,14 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add TradePlan + ManpowerEntry tables so admin can plan headcount per trade and site engineers can log actuals daily.",
   },
+  {
+    key: "2026-08-25_project_type",
+    sql: [
+      // Nullable; existing rows show as "—" on the landing table until edited.
+      `ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "projectType" TEXT`,
+    ],
+    describe: "Add Project.projectType so the multi-project landing table can label + filter by kind.",
+  },
 ];
 
 async function ensureLedger() {
