@@ -53,6 +53,15 @@ export default async function ReportsLandingPage({
       cadence: "Daily",
     },
     {
+      key: "weekly",
+      title: "Weekly Progress Report",
+      description:
+        "The weekly summary — overall progress, per-contractor milestone plan (to complete / to start / in progress / stalled), manpower chart + trade breakdown, delay reasons with mitigation plans. Matches the Amanvana weekly PDF layout.",
+      href: `/projects/${id}/reports/weekly`,
+      icon: FileBarChart,
+      cadence: "Weekly",
+    },
+    {
       key: "dpr",
       title: "Daily Progress Report",
       description:

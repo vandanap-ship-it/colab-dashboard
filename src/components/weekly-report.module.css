@@ -1,0 +1,255 @@
+/* Weekly report — piggybacks on scorecard.module.css palette but with
+   its own local vars so tokens don't need to be duplicated. Reuses
+   .wrap, .header, .section, .empty from scorecard.module.css. */
+
+.overallRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.overallCell {
+  padding: 14px 16px;
+  border-radius: 6px;
+  border: 1px solid #EDE9DD;
+  text-align: center;
+}
+.overallLbl {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8B93A0;
+  font-weight: 700;
+}
+.overallVal {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #16202F;
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+}
+.overallPlanned { background: #E9F0F7; border-color: rgba(47, 93, 138, 0.35); }
+.overallActual { background: #E4EFE8; border-color: rgba(46, 125, 91, 0.35); }
+.overallVarGood { background: #E4EFE8; border-color: rgba(46, 125, 91, 0.35); }
+.overallVarGood .overallVal { color: #2E7D5B; }
+.overallVarBad { background: #F3DFDF; border-color: rgba(179, 58, 58, 0.35); }
+.overallVarBad .overallVal { color: #B33A3A; }
+
+/* Contractor block */
+.contractorBlock {
+  padding: 12px 0;
+  border-bottom: 1px dashed #EDE9DD;
+}
+.contractorBlock:last-child { border-bottom: 0; padding-bottom: 0; }
+.contractorTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: #16202F;
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
+}
+.contractorNoSched {
+  font-weight: 500;
+  color: #8B93A0;
+  font-style: italic;
+}
+
+/* Milestone bucket */
+.bucket { padding: 8px 0; }
+.bucket + .bucket { border-top: 1px dashed #F1EEE4; }
+.bucketHd {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.bucketLbl {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #16202F;
+  font-weight: 700;
+}
+.bucketMetric {
+  font-size: 15px;
+  font-weight: 700;
+  color: #16202F;
+  font-variant-numeric: tabular-nums;
+}
+.bucketMetricLbl {
+  font-size: 10.5px;
+  color: #8B93A0;
+  font-weight: 500;
+  margin-left: 4px;
+}
+.bucketEmpty { padding: 4px 0; color: #B8BCC4; font-size: 11px; }
+.bucketItems { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 0; }
+.bucketItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid #E2DDD0;
+  border-radius: 3px;
+  font-size: 11px;
+  background: #FFFFFF;
+}
+.bucketItemVilla { font-weight: 700; color: #16202F; font-variant-numeric: tabular-nums; }
+.bucketItemMilestone { color: #4E5866; }
+.bucketItemLate {
+  font-size: 10px;
+  font-weight: 700;
+  color: #FFFFFF;
+  background: #B33A3A;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.bucketItemStalled {
+  font-size: 10px;
+  font-weight: 700;
+  color: #FFFFFF;
+  background: #C77A2A;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.bucketItemMore {
+  padding: 3px 8px;
+  color: #8B93A0;
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* Manpower headline */
+.mpHead {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.mpHeadCell {
+  padding: 8px 10px;
+  background: #F1EEE4;
+  border-radius: 5px;
+}
+.mpHeadLbl { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8B93A0; font-weight: 700; }
+.mpHeadVal { font-size: 18px; font-weight: 700; color: #16202F; font-variant-numeric: tabular-nums; margin-top: 3px; letter-spacing: -0.02em; }
+
+/* Manpower chart */
+.chart {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  height: 120px;
+  padding: 8px 0;
+  border-top: 1px dashed #EDE9DD;
+  border-bottom: 1px dashed #EDE9DD;
+  margin-bottom: 10px;
+}
+.chartCell { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.chartBars { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 100%; width: 100%; }
+.chartBar {
+  width: 40%;
+  min-height: 3px;
+  border-radius: 2px 2px 0 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  position: relative;
+}
+.chartBarPlanned { background: linear-gradient(180deg, #4C7FB0, #2F5D8A); }
+.chartBarActual { background: linear-gradient(180deg, #369669, #2E7D5B); }
+.chartValue { font-size: 8.5px; color: #FFFFFF; font-weight: 700; margin-top: -12px; text-shadow: 0 1px 1px rgba(0,0,0,0.2); }
+.chartDay { font-size: 9px; color: #8B93A0; font-variant-numeric: tabular-nums; }
+
+/* Trade table */
+.tradeTbl { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+.tradeTbl thead th {
+  padding: 4px 6px;
+  border-bottom: 1px solid #E2DDD0;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8B93A0;
+  font-weight: 700;
+  text-align: left;
+}
+.tradeTbl thead th:first-child { text-align: left; }
+.tradeTbl tbody td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #EDE9DD;
+  font-variant-numeric: tabular-nums;
+  color: #4E5866;
+}
+.tradeTbl tbody tr:last-child td { border-bottom: 0; }
+.tradeTblRight { text-align: right !important; }
+
+/* Delay reason cards */
+.reasonList { display: flex; flex-direction: column; gap: 8px; }
+.reasonCard {
+  border: 1px solid #E2DDD0;
+  border-radius: 5px;
+  padding: 10px 12px;
+  background: #FFFFFF;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.reasonHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  border-bottom: 1px solid #EDE9DD;
+  padding-bottom: 4px;
+  margin-bottom: 6px;
+}
+.reasonName { font-size: 13px; font-weight: 700; color: #16202F; }
+.reasonStat { display: flex; gap: 8px; align-items: baseline; font-size: 10.5px; }
+.reasonDays {
+  padding: 2px 7px;
+  background: #F3DFDF;
+  color: #B33A3A;
+  border-radius: 3px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.reasonCount { color: #4E5866; font-weight: 500; }
+.reasonVillas { color: #8B93A0; font-weight: 500; }
+.reasonVillasList { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+.reasonVillaChip {
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  background: #F1EEE4;
+  color: #4E5866;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid #E2DDD0;
+}
+.reasonMoreChip {
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #8B93A0;
+  font-style: italic;
+}
+.reasonMitigation {
+  padding: 6px 10px;
+  background: #E9F0F7;
+  border-left: 3px solid #2F5D8A;
+  border-radius: 3px;
+  font-size: 11px;
+  color: #16202F;
+  line-height: 1.5;
+}
+.reasonMitigationLbl {
+  display: block;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #2F5D8A;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
