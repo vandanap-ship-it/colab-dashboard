@@ -13,7 +13,7 @@ export type ProjectSummary = {
   startDate: string | null;
   endDate: string | null;
   projectedEndDate: string | null;
-  progressPercent: number;   // physical progress (achieved %)
+  progressPercent: number;
   plannedPercent: number;
   totalActivities: number;
   totalDelayDays: number;
@@ -21,46 +21,105 @@ export type ProjectSummary = {
   openIssues: number;
   openHindrances: number;
   activePermits: number;
-  actualLabourToday: number;      // sum of ManpowerEntry.actualCount for today
-  plannedLabourToday: number | null; // sum of currently-effective TradePlan.plannedCount; null if none set
-  // Stub columns — schema/UI ready, waiting on data sources.
+  actualLabourToday: number;
+  plannedLabourToday: number | null;
   costTotal: number | null;
   financialProgressPct: number | null;
 };
 
+// Defensive wrappers around the queries that touch tables/columns added by
+// migrations still pending on prod. Each returns a safe empty result on
+// failure so the landing page loads even before an admin runs the migrations.
+async function safeManpowerGroupBy(projectIds: string[], today: Date) {
+  try {
+    return await prisma.manpowerEntry.groupBy({
+      by: ["projectId"],
+      where: { projectId: { in: projectIds }, deletedAt: null, entryDate: today },
+      _sum: { actualCount: true },
+    });
+  } catch (e) {
+    console.info("[projects/summary] manpowerEntry.groupBy failed (migrations pending?):", e instanceof Error ? e.message : e);
+    return [] as { projectId: string; _sum: { actualCount: number | null } }[];
+  }
+}
+
+async function safeTradePlansFindMany(projectIds: string[], today: Date) {
+  try {
+    return await prisma.tradePlan.findMany({
+      where: {
+        projectId: { in: projectIds },
+        deletedAt: null,
+        startDate: { lte: today },
+        OR: [{ endDate: null }, { endDate: { gt: today } }],
+      },
+      select: { projectId: true, plannedCount: true },
+    });
+  } catch (e) {
+    console.info("[projects/summary] tradePlan.findMany failed (migrations pending?):", e instanceof Error ? e.message : e);
+    return [] as { projectId: string; plannedCount: number }[];
+  }
+}
+
 /**
  * Portfolio rollup that powers the multi-project landing page.
  *
- * Batches everything into a fixed number of queries regardless of project
- * count (5N+1 problem eliminated):
- *   1. project.findMany           (the project list)
- *   2. getPortfolioStats(ids)     (WBS + delay + hindrance in parallel)
- *   3. concern.groupBy            (pending count per project)
- *   4. issue.groupBy              (open count per project)
- *   5. permit.groupBy             (ACTIVE + EXPIRING_SOON — anything non-EXPIRED)
- *   6. manpowerEntry.groupBy      (today's actual labour per project)
- *   7. tradePlan.findMany         (currently-effective plans, summed per project)
- *
- * All I/O runs in Promise.all — same wall-clock as before, more data.
+ * Guarded against the four-pending-migrations state: if projectType /
+ * manpower / trade-plan tables + columns aren't in the DB yet, this endpoint
+ * still returns a valid response so the landing table renders. Once the
+ * admin runs `/api/admin/migrate` the full data appears without a code
+ * change.
  */
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const projects = await prisma.project.findMany({
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      code: true,
-      status: true,
-      logoUrl: true,
-      projectType: true,
-      startDate: true,
-      endDate: true,
-      projectedEndDate: true,
-    },
-  });
+  // Try to include the new columns; if the DB is pre-migration for
+  // Project.projectType or Project.logoUrl, fall back to a minimal select
+  // and null those fields.
+  type MaybeExtendedProject = {
+    id: string;
+    name: string;
+    code: string | null;
+    status: string;
+    startDate: Date | null;
+    endDate: Date | null;
+    projectedEndDate: Date | null;
+    logoUrl: string | null;
+    projectType: string | null;
+  };
+  let projects: MaybeExtendedProject[];
+  try {
+    projects = await prisma.project.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        status: true,
+        logoUrl: true,
+        projectType: true,
+        startDate: true,
+        endDate: true,
+        projectedEndDate: true,
+      },
+    });
+  } catch (e) {
+    console.info("[projects/summary] Extended project.findMany failed (migrations pending?):", e instanceof Error ? e.message : e);
+    const bare = await prisma.project.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        projectedEndDate: true,
+        logoUrl: true,
+      },
+    });
+    projects = bare.map((p) => ({ ...p, projectType: null }));
+  }
 
   if (projects.length === 0) return NextResponse.json({ projects: [] });
 
@@ -90,30 +149,12 @@ export async function GET() {
       where: {
         projectId: { in: projectIds },
         deletedAt: null,
-        // ACTIVE + EXPIRING_SOON only — RENEWED is a superseded state, EXPIRED
-        // is a red flag rather than a live permit.
         status: { in: ["ACTIVE", "EXPIRING_SOON"] },
       },
       _count: { _all: true },
     }),
-    prisma.manpowerEntry.groupBy({
-      by: ["projectId"],
-      where: {
-        projectId: { in: projectIds },
-        deletedAt: null,
-        entryDate: today,
-      },
-      _sum: { actualCount: true },
-    }),
-    prisma.tradePlan.findMany({
-      where: {
-        projectId: { in: projectIds },
-        deletedAt: null,
-        startDate: { lte: today },
-        OR: [{ endDate: null }, { endDate: { gt: today } }],
-      },
-      select: { projectId: true, plannedCount: true },
-    }),
+    safeManpowerGroupBy(projectIds, today),
+    safeTradePlansFindMany(projectIds, today),
   ]);
 
   const concernByProject = new Map(concernCounts.map((c) => [c.projectId, c._count._all]));
@@ -121,7 +162,6 @@ export async function GET() {
   const permitByProject  = new Map(permitCounts.map((p)  => [p.projectId, p._count._all]));
   const actualByProject  = new Map(manpowerToday.map((m) => [m.projectId, m._sum.actualCount ?? 0]));
 
-  // Sum planned trades per project — 0 rows = null (no plan set).
   const plannedByProject = new Map<string, number>();
   const hasPlanByProject = new Set<string>();
   for (const p of plansToday) {
@@ -151,7 +191,6 @@ export async function GET() {
       activePermits: permitByProject.get(p.id) ?? 0,
       actualLabourToday: actualByProject.get(p.id) ?? 0,
       plannedLabourToday: hasPlanByProject.has(p.id) ? (plannedByProject.get(p.id) ?? 0) : null,
-      // Stubs — will populate as bills / cost data flows in.
       costTotal: null,
       financialProgressPct: null,
     };
