@@ -129,8 +129,9 @@ export default function Sidebar(props: SidebarProps) {
     groups.push({
       title: "Admin",
       items: [
-        { label: "Users",       href: `/admin/users`,       icon: UsersIcon },
-        { label: "Contractors", href: `/admin/contractors`, icon: UsersIcon },
+        { label: "Users",              href: `/admin/users`,       icon: UsersIcon },
+        { label: "Contractors",        href: `/admin/contractors`, icon: UsersIcon },
+        { label: "Assign contractors", href: `/projects/${props.projectId}/admin/contractor-assign`, icon: Users },
       ],
     });
   }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
+import { HINDRANCE_REASONS } from "@/lib/hindranceReasons";
 
 type Activity = {
   id: string;
@@ -39,6 +40,8 @@ export default function NewProgressForm({
   const [achieved, setAchieved] = useState(0);
   const [cumulative, setCumulative] = useState(0);
   const [contractorId, setContractorId] = useState<string>("");
+  const [reasonCode, setReasonCode] = useState<string>("");
+  const [reasonNote, setReasonNote] = useState<string>("");
   const [labour, setLabour] = useState<{ category: string; count: number }[]>([
     { category: "Skilled", count: 0 },
   ]);
@@ -138,6 +141,8 @@ export default function NewProgressForm({
       notes,
       labour,
       photoUrls,
+      reasonCode: reasonCode || undefined,
+      reasonNote: reasonNote.trim() || undefined,
     };
 
     // Try the network first. If it succeeds, great — entry is saved and we
@@ -396,6 +401,38 @@ export default function NewProgressForm({
               />
             </div>
           </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-stone-700">
+              Reason for delay <span className="text-stone-400">(optional)</span>
+            </span>
+            <select
+              value={reasonCode}
+              onChange={(e) => setReasonCode(e.target.value)}
+              className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">— No delay</option>
+              {HINDRANCE_REASONS.map((r) => (
+                <option key={r.code} value={r.code}>{r.label}</option>
+              ))}
+            </select>
+          </label>
+
+          {reasonCode && (
+            <label className="block">
+              <span className="text-sm font-medium text-stone-700">
+                Reason detail <span className="text-stone-400">(optional)</span>
+              </span>
+              <input
+                type="text"
+                value={reasonNote}
+                onChange={(e) => setReasonNote(e.target.value)}
+                maxLength={500}
+                placeholder="e.g. cement delivery skipped for the day"
+                className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+              />
+            </label>
+          )}
         </>
       )}
 

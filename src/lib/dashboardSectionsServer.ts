@@ -157,7 +157,26 @@ export async function getSiteActivityHighlights(
       contractor: { select: { name: true } },
       createdBy: { select: { name: true } },
     },
-  });
+  }) as unknown as Array<{
+    id: string;
+    createdAt: Date;
+    notes: string | null;
+    reasonCode: string | null;
+    reasonNote: string | null;
+    wbsNodeId: string;
+    wbsNode: {
+      name: string;
+      villaMilestone: {
+        pctComplete: number | null;
+        baselineFinish: Date | null;
+        section: { name: string } | null;
+        villa: { number: number; label: string | null; block: { code: string } } | null;
+      } | null;
+    };
+    photos: { url: string }[];
+    contractor: { name: string } | null;
+    createdBy: { name: string };
+  }>;
 
   // Join today's hindrances so we can attach delay reason inline. Grouped by
   // wbsNodeId so lookup is O(1) per progress entry.
@@ -187,10 +206,14 @@ export async function getSiteActivityHighlights(
       ? Math.max(0, Math.round((dayStart.getTime() - vm.baselineFinish.getTime()) / 86400000))
       : null;
 
-    // Try to find a matching hindrance on the same node today.
-    // We match by node id — the wbsNode itself doesn't come back here, so
-    // grab from the raw wbsNodeId on the progress entry.
+    // Resolve the delay reason with a two-source lookup:
+    //   1. Reason tagged directly on the progress entry (preferred — the
+    //      site engineer set it at log-time in the same form).
+    //   2. Otherwise fall back to a hindrance opened on the same wbsNode
+    //      the same day.
     const h = hindrancesByNode.get(e.wbsNodeId);
+    const effectiveReasonCode = e.reasonCode ?? h?.reasonCode ?? null;
+    const effectiveReasonNote = e.reasonNote ?? h?.reasonNote ?? null;
 
     const activity: SiteActivity = {
       progressEntryId: e.id,
@@ -205,8 +228,8 @@ export async function getSiteActivityHighlights(
       contractorName: e.contractor?.name ?? null,
       photoUrl: e.photos[0]?.url ?? null,
       notes: e.notes,
-      reasonLabel: h?.reasonCode ? reasonLabel(h.reasonCode) : null,
-      reasonNote: h?.reasonNote ?? null,
+      reasonLabel: effectiveReasonCode ? reasonLabel(effectiveReasonCode) : null,
+      reasonNote: effectiveReasonNote,
       overdueDays: overdueDays && overdueDays > 0 ? overdueDays : null,
     };
 

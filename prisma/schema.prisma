@@ -291,6 +291,13 @@ model ProgressEntry {
   contractorId String?
   notes        String?
 
+  // Optional root-cause tag on late progress. Colab CSVs carry a
+  // Reason_for_Delay column on each progress row — this brings us to parity
+  // so the site engineer can log a reason without opening a Hindrance.
+  // Same taxonomy as Hindrance (src/lib/hindranceReasons.ts).
+  reasonCode  String?
+  reasonNote  String?
+
   createdById    String
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

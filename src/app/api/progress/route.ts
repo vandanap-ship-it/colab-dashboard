@@ -5,6 +5,8 @@ import { recordAudit } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { milestoneCompletionEmail, sendEmail } from "@/lib/email";
+import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
+import { isValidReasonCode } from "@/lib/hindranceReasons";
 
 const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
@@ -109,6 +111,8 @@ export async function POST(req: Request) {
     notes,
     labour,
     photoUrls,
+    reasonCode,
+    reasonNote,
   } = (body ?? {}) as {
     wbsNodeId?: string;
     date?: string;
@@ -119,6 +123,8 @@ export async function POST(req: Request) {
     notes?: string;
     labour?: LabourInput[];
     photoUrls?: string[];
+    reasonCode?: string;
+    reasonNote?: string;
   };
 
   if (!wbsNodeId) return NextResponse.json({ error: "wbsNodeId required" }, { status: 400 });
@@ -156,6 +162,11 @@ export async function POST(req: Request) {
 
   const photosClean = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 6) : [];
 
+  // Silent-drop unknown reason codes rather than 400 — the entry is more
+  // important than the tag.
+  const reason = isValidReasonCode(reasonCode) ? reasonCode : null;
+  const reasonNoteClean = typeof reasonNote === "string" ? reasonNote.trim().slice(0, 500) : "";
+
   const idempotencyKey = readIdempotencyKey(body);
   const entryInclude = {
     labour: true,
@@ -178,6 +189,8 @@ export async function POST(req: Request) {
         cumulativeQuantity: isFinite(cumulative) ? cumulative : 0,
         contractorId: contractorId ?? null,
         notes: notes?.trim() || null,
+        reasonCode: reason,
+        reasonNote: reasonNoteClean || null,
         createdById: session.user.id,
         idempotencyKey,
         labour: labourClean.length > 0 ? { create: labourClean } : undefined,
@@ -191,7 +204,7 @@ export async function POST(req: Request) {
       const pct = Math.max(0, Math.min(100, (cumulative / node.totalQuantity) * 100));
       const current = await tx.wBSNode.findUnique({
         where: { id: wbsNodeId },
-        select: { actualStart: true, actualFinish: true },
+        select: { actualStart: true, actualFinish: true, villaMilestoneId: true },
       });
       // progressEntered flips an activity from "unstarted" to "tracked" so it
       // counts in the dashboard rollup (getProjectStats averages over tracked
@@ -203,6 +216,15 @@ export async function POST(req: Request) {
       if (current && !current.actualStart) updates.actualStart = entryDate;
       if (pct >= 100 && current && !current.actualFinish) updates.actualFinish = entryDate;
       await tx.wBSNode.update({ where: { id: wbsNodeId }, data: updates });
+
+      // Roll the child's new state up to its parent VillaMilestone so the
+      // Milestone Progress table, Block-wise Progress, and Weekly Milestone
+      // Plan all read fresh data. No-op when the node isn't linked to a
+      // VillaMilestone (e.g. structural WBS nodes).
+      if (current?.villaMilestoneId) {
+        await syncVillaMilestoneFromChildren(tx, current.villaMilestoneId);
+      }
+
       // Signal via the returned tuple so the outer code can send the
       // milestone-completion email AFTER the transaction commits.
       if (updates.actualFinish) {

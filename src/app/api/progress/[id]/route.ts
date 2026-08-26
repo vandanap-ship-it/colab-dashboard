@@ -5,6 +5,7 @@ import { isAdmin, ROLES } from "@/lib/roles";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { milestoneCompletionEmail, sendEmail } from "@/lib/email";
+import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import {
   badRequest,
   forbidden,
@@ -201,6 +202,18 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
           if (pct >= 100 && !node.actualFinish) updates.actualFinish = stamp;
           if (pct < 100 && node.actualFinish) updates.actualFinish = null;
           await tx.wBSNode.update({ where: { id: u.wbsNodeId }, data: updates });
+
+          // Roll up to parent VillaMilestone. This handles both the "just
+          // closed" and "just re-opened" cases — the sync recomputes both
+          // pctComplete and actualFinish from all children.
+          const villaMilestoneId = (await tx.wBSNode.findUnique({
+            where: { id: u.wbsNodeId },
+            select: { villaMilestoneId: true },
+          }))?.villaMilestoneId;
+          if (villaMilestoneId) {
+            await syncVillaMilestoneFromChildren(tx, villaMilestoneId);
+          }
+
           // Signal via the returned tuple so the email fires after commit.
           if (updates.actualFinish) {
             (u as unknown as { __justClosed?: Date }).__justClosed = updates.actualFinish;

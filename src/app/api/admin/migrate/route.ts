@@ -368,6 +368,17 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add Project.masterPlanUrl so the Progress tab's Interactive Drawing can render each project's site layout.",
   },
+  {
+    key: "2026-08-26_progress_reason",
+    sql: [
+      // Optional per-row delay reason on progress entries. Matches the
+      // Reason_for_Delay column on Colab progress exports.
+      `ALTER TABLE "ProgressEntry" ADD COLUMN IF NOT EXISTS "reasonCode" TEXT`,
+      `ALTER TABLE "ProgressEntry" ADD COLUMN IF NOT EXISTS "reasonNote" TEXT`,
+      `CREATE INDEX IF NOT EXISTS "ProgressEntry_reasonCode_idx" ON "ProgressEntry"("reasonCode")`,
+    ],
+    describe: "Add ProgressEntry.reasonCode + reasonNote so site engineers can tag a delay reason on a progress row without opening a Hindrance.",
+  },
 ];
 
 async function ensureLedger() {
