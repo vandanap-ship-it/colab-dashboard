@@ -22,6 +22,15 @@ const DB_NAME = "siddhi-offline-queue";
 const DB_VERSION = 1;
 const STORE = "mutations";
 
+/** A single photo persisted alongside a queued mutation. IndexedDB supports
+ *  Blobs natively so we store the raw file bytes; the upload step in flush()
+ *  ships them to /api/upload before the main entry POST. */
+export interface QueuedPhoto {
+  filename: string;
+  scope: string; // /api/upload scope arg (e.g. "progress-<projectId>")
+  blob: Blob;
+}
+
 export type QueuedMutation = {
   id?: number;
   endpoint: string;
@@ -32,6 +41,12 @@ export type QueuedMutation = {
   lastError?: string;
   nextAttemptAt: number;
   label: string; // human-readable, e.g. "Progress for Footing Reinforcement"
+  /** Optional pending photos — uploaded on flush before the main fetch, then
+   *  cleared from the queue item so subsequent retries don't re-upload. */
+  photos?: QueuedPhoto[];
+  /** JSON path inside `body` to write photo URLs into once uploads succeed.
+   *  Defaults to "photoUrls". */
+  photosField?: string;
 };
 
 type QueueListener = (count: number) => void;
@@ -177,11 +192,55 @@ export async function flush(): Promise<void> {
       for (const item of items) {
         if (!item.id) continue;
         if (item.nextAttemptAt > now) continue;
+
+        // Step 1: if there are photos still pending, upload them first.
+        // On success, update the queued item so the next flush skips this step.
+        // On failure, bump backoff and move on — do NOT fire the main POST yet.
+        let itemWithUrls = item;
+        if (item.photos && item.photos.length > 0) {
+          const uploadOutcome = await tryUploadPhotos(item.photos);
+          if (uploadOutcome.status === "ok") {
+            const field = item.photosField ?? "photoUrls";
+            const bodyObj = (typeof item.body === "object" && item.body !== null ? item.body : {}) as Record<string, unknown>;
+            const existing = Array.isArray(bodyObj[field]) ? (bodyObj[field] as string[]) : [];
+            const mergedBody = { ...bodyObj, [field]: [...existing, ...uploadOutcome.urls] };
+            const updated: QueuedMutation = {
+              ...item,
+              body: mergedBody,
+              photos: undefined,
+              lastError: undefined,
+            };
+            await update(updated);
+            itemWithUrls = updated;
+          } else if (uploadOutcome.status === "retry") {
+            await update({
+              ...item,
+              attempts: item.attempts + 1,
+              lastError: `Photo upload failed: ${uploadOutcome.message ?? "network error"}`,
+              nextAttemptAt: now + nextDelay(item.attempts + 1),
+            });
+            continue;
+          } else {
+            // Non-retryable photo failure (400 / 415 / etc.) — park the mutation
+            // for a day and drop the photos so the entry itself can proceed on
+            // a manual retry. The entry survives, just without photos.
+            await update({
+              ...item,
+              body: { ...(item.body as object), [item.photosField ?? "photoUrls"]: [] },
+              photos: undefined,
+              attempts: item.attempts + 1,
+              lastError: `Photo upload rejected: ${uploadOutcome.message ?? "unknown"}`,
+              nextAttemptAt: now + 24 * 60 * 60 * 1000,
+            });
+            continue;
+          }
+        }
+
         try {
-          const res = await fetch(item.endpoint, {
-            method: item.method,
+          const res = await fetch(itemWithUrls.endpoint, {
+            method: itemWithUrls.method,
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(item.body),
+            body: JSON.stringify(itemWithUrls.body),
           });
           const outcome = classifyResponse(res.status);
           if (outcome === "remove") {
@@ -229,6 +288,42 @@ export async function flush(): Promise<void> {
 /** Exponential backoff per attempt: 5s, 10s, 20s, 40s, 80s, 160s, capped at 300s. */
 export function nextDelay(attempt: number): number {
   return Math.min(300_000, 5_000 * Math.pow(2, attempt - 1));
+}
+
+// ---------------------------------------------------------------------------
+// Photo upload helper (used by flush)
+// ---------------------------------------------------------------------------
+
+type UploadOutcome =
+  | { status: "ok"; urls: string[] }
+  | { status: "retry"; message?: string }
+  | { status: "park"; message?: string };
+
+async function tryUploadPhotos(photos: QueuedPhoto[]): Promise<UploadOutcome> {
+  try {
+    const fd = new FormData();
+    // Every photo in a queued mutation shares the same scope (they were
+    // grouped by the same enqueue call).
+    fd.set("scope", photos[0]?.scope ?? "misc");
+    for (const p of photos) {
+      fd.append("file", p.blob, p.filename);
+    }
+    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    if (res.ok) {
+      const data = (await res.json()) as { urls?: string[] };
+      return { status: "ok", urls: Array.isArray(data.urls) ? data.urls : [] };
+    }
+    // Reuse the same status → outcome mapping as the entry classifier.
+    const outcome = classifyResponse(res.status);
+    const text = await res.text().catch(() => `HTTP ${res.status}`);
+    return outcome === "remove"
+      ? { status: "ok", urls: [] }
+      : outcome === "retry"
+      ? { status: "retry", message: `HTTP ${res.status}` }
+      : { status: "park", message: `HTTP ${res.status}: ${text.slice(0, 200)}` };
+  } catch (e) {
+    return { status: "retry", message: e instanceof Error ? e.message : "network error" };
+  }
 }
 
 /** Subscribe to count updates. Returns an unsubscribe function. */

@@ -1,21 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Pencil } from "lucide-react";
 import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
+import ActivityPicker from "./ActivityPicker";
 import { HINDRANCE_REASONS } from "@/lib/hindranceReasons";
 
-type Activity = {
+// Local selection state — enriched with the metadata the picker returned so
+// the form can render the picked activity + preserve totalQuantity/unit for
+// the % slider.
+interface PickedActivity {
   id: string;
   name: string;
   taskCode: string;
-  path: string[];
   totalQuantity: number | null;
   unit: string | null;
-  contractor: { id: string; name: string; category: string } | null;
-};
+  contractor: { id: string; name: string } | null;
+  path: { blockCode: string; villaLabel: string; sectionName: string };
+}
 
 type Contractor = { id: string; name: string; category: string };
 
@@ -32,10 +37,9 @@ export default function NewProgressForm({
   const toast = useToast();
   const today = new Date().toISOString().slice(0, 10);
 
-  const [activities, setActivities] = useState<Activity[] | null>(null);
   const [contractors, setContractors] = useState<Contractor[] | null>(null);
-  const [activityId, setActivityId] = useState(initialActivityId ?? "");
-  const [activitySearch, setActivitySearch] = useState("");
+  const [selected, setSelected] = useState<PickedActivity | null>(null);
+  const activityId = selected?.id ?? "";
   const [date, setDate] = useState(today);
   const [achieved, setAchieved] = useState(0);
   const [cumulative, setCumulative] = useState(0);
@@ -52,14 +56,7 @@ export default function NewProgressForm({
 
   useEffect(() => {
     (async () => {
-      const [wbsRes, conRes] = await Promise.all([
-        fetch(`/api/projects/${projectId}/wbs?leaves=true`, { cache: "no-store" }),
-        fetch(`/api/admin/contractors?projectId=${projectId}`, { cache: "no-store" }),
-      ]);
-      if (wbsRes.ok) {
-        const data = await wbsRes.json();
-        setActivities(data.nodes);
-      }
+      const conRes = await fetch(`/api/admin/contractors?projectId=${projectId}`, { cache: "no-store" });
       if (conRes.ok) {
         const data = await conRes.json();
         setContractors(data.contractors);
@@ -67,20 +64,10 @@ export default function NewProgressForm({
     })();
   }, [projectId]);
 
-  const filtered = useMemo(() => {
-    if (!activities) return [];
-    const q = activitySearch.trim().toLowerCase();
-    if (!q) return activities.slice(0, 50);
-    return activities
-      .filter((a) => a.name.toLowerCase().includes(q) || a.path.join(" / ").toLowerCase().includes(q))
-      .slice(0, 50);
-  }, [activities, activitySearch]);
-
-  const selected = activities?.find((a) => a.id === activityId);
   const totalQty = selected?.totalQuantity ?? 0;
   const pct = totalQty > 0 ? Math.max(0, Math.min(100, (cumulative / totalQty) * 100)) : 0;
 
-  // Auto-pick contractor if activity has one assigned
+  // Auto-pick contractor if the newly-picked activity has one tagged.
   useEffect(() => {
     if (selected?.contractor && !contractorId) setContractorId(selected.contractor.id);
   }, [selected, contractorId]);
@@ -105,11 +92,16 @@ export default function NewProgressForm({
     setPending(true);
     setError(null);
 
+    // Try to upload photos inline first (fast path). If the online upload
+    // fails, we queue the whole entry WITH the raw photo blobs — the offline
+    // queue's upload step will retry the photos on flush and then fire the
+    // main entry POST. Nothing gets saved to prod without its photos.
     let photoUrls: string[] = [];
-    let photoWarning: string | null = null;
+    let photosNeedQueue: { filename: string; scope: string; blob: Blob }[] = [];
     if (photos.length > 0) {
+      const scope = `progress-${projectId}`;
       const fd = new FormData();
-      fd.set("scope", `progress-${projectId}`);
+      fd.set("scope", scope);
       for (const p of photos) fd.append("file", p);
       try {
         const upRes = await fetch("/api/upload", { method: "POST", body: fd });
@@ -117,14 +109,10 @@ export default function NewProgressForm({
           const upData = await upRes.json();
           photoUrls = upData.urls;
         } else {
-          // Don't block the entry on photo failure — save the entry without
-          // photos and surface a warning so the user can retry photo upload
-          // from the entry's edit screen later.
-          const data = await upRes.json().catch(() => null);
-          photoWarning = data?.error ?? `Photo upload failed (status ${upRes.status})`;
+          photosNeedQueue = photos.map((f) => ({ filename: f.name, scope, blob: f }));
         }
-      } catch (e) {
-        photoWarning = e instanceof Error ? `Photo upload failed: ${e.message}` : "Photo upload failed";
+      } catch {
+        photosNeedQueue = photos.map((f) => ({ filename: f.name, scope, blob: f }));
       }
     }
 
@@ -144,11 +132,31 @@ export default function NewProgressForm({
       reasonCode: reasonCode || undefined,
       reasonNote: reasonNote.trim() || undefined,
     };
+    const entryLabel = `Progress for ${selected?.name ?? "activity"}`;
+
+    // Photos couldn't upload → queue the WHOLE entry with raw blobs. Skip the
+    // online entry POST entirely so we don't create an entry without its
+    // photos.
+    if (photosNeedQueue.length > 0) {
+      const { enqueue } = await import("@/lib/offlineQueue");
+      await enqueue({
+        endpoint: "/api/progress",
+        method: "POST",
+        body: payload,
+        label: entryLabel,
+        photos: photosNeedQueue,
+        photosField: "photoUrls",
+      });
+      setPending(false);
+      toast.info("Saved on this device. Photos will upload when you're back online.");
+      router.push(`/mobile/${projectId}`);
+      router.refresh();
+      return;
+    }
 
     // Try the network first. If it succeeds, great — entry is saved and we
     // navigate away. If it fails (offline, slow signal, server hiccup), we
-    // drop the entry into the offline queue so it isn't lost; the queue
-    // retries automatically when connectivity returns.
+    // drop the entry into the offline queue.
     let saved = false;
     try {
       const res = await fetch("/api/progress", {
@@ -166,22 +174,12 @@ export default function NewProgressForm({
       } else {
         // 5xx — queue it and let the user keep moving.
         const { enqueue } = await import("@/lib/offlineQueue");
-        await enqueue({
-          endpoint: "/api/progress",
-          method: "POST",
-          body: payload,
-          label: `Progress for ${selected?.name ?? "activity"}`,
-        });
+        await enqueue({ endpoint: "/api/progress", method: "POST", body: payload, label: entryLabel });
       }
     } catch {
       // Network error → queue.
       const { enqueue } = await import("@/lib/offlineQueue");
-      await enqueue({
-        endpoint: "/api/progress",
-        method: "POST",
-        body: payload,
-        label: `Progress for ${selected?.name ?? "activity"}`,
-      });
+      await enqueue({ endpoint: "/api/progress", method: "POST", body: payload, label: entryLabel });
     }
     setPending(false);
 
@@ -192,10 +190,6 @@ export default function NewProgressForm({
       toast.success("Progress saved.");
     } else {
       toast.info("Saved on this device. It will sync when you're back online.");
-    }
-    // Photo failures get their own sticky warning so they don't get buried.
-    if (photoWarning) {
-      toast.warning(photoWarning);
     }
     router.push(`/mobile/${projectId}`);
     router.refresh();
@@ -230,49 +224,40 @@ export default function NewProgressForm({
       </div>
 
       <div className="space-y-2">
-        <label className="block">
-          <span className="text-sm font-medium text-stone-700">Activity</span>
-          <input
-            type="text"
-            placeholder="Search activity by name or location…"
-            value={activitySearch}
-            onChange={(e) => setActivitySearch(e.target.value)}
-            className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
-          />
-        </label>
-        {activities === null ? (
-          <p className="text-xs text-stone-500">Loading activities…</p>
-        ) : activities.length === 0 ? (
-          <p className="text-xs text-amber-600">No activities yet — import a schedule first.</p>
-        ) : (
-          <div className="max-h-48 overflow-y-auto rounded-md border border-stone-200 divide-y divide-stone-100">
-            {filtered.map((a) => (
-              <button
-                type="button"
-                key={a.id}
-                onClick={() => setActivityId(a.id)}
-                className={`w-full text-left px-3 py-2 hover:bg-ivory ${
-                  activityId === a.id ? "bg-amber-50" : ""
-                }`}
-              >
-                <div className="text-sm font-medium text-stone-900">{a.name}</div>
-                <div className="text-[10px] text-stone-500">{a.path.slice(0, -1).join(" / ") || a.taskCode}</div>
-              </button>
-            ))}
-            {filtered.length === 0 && <p className="text-xs text-stone-500 px-3 py-2">No matches.</p>}
+        <div className="text-sm font-medium text-stone-700">Activity</div>
+        {selected ? (
+          <div className="rounded-md border border-stone-200 bg-white px-3 py-2.5 flex items-start gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-stone-900 truncate">{selected.name}</div>
+              <div className="text-[11px] text-stone-500 truncate">
+                Block {selected.path.blockCode} · {selected.path.villaLabel} · {selected.path.sectionName}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelected(null)}
+              className="text-xs text-stone-500 hover:text-stone-900 inline-flex items-center gap-1 flex-shrink-0"
+              aria-label="Change activity"
+            >
+              <Pencil className="w-3 h-3" />
+              Change
+            </button>
           </div>
+        ) : (
+          <ActivityPicker
+            projectId={projectId}
+            initialActivityId={initialActivityId}
+            onPick={(a) => {
+              setSelected(a);
+              setCumulative(0); // reset for fresh entry
+            }}
+          />
         )}
       </div>
 
       {selected && (
         <>
           <div className="rounded-xl border border-stone-200 bg-white p-4 space-y-3">
-            <div>
-              <div className="text-xs text-stone-500">Selected</div>
-              <div className="text-sm font-medium text-stone-900">{selected.name}</div>
-              <div className="text-[10px] text-stone-500">{selected.path.slice(0, -1).join(" / ")}</div>
-            </div>
-
             {totalQty > 0 ? (
               <>
                 <div>
