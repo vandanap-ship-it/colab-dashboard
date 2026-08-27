@@ -5,24 +5,14 @@ import { useRouter } from "next/navigation";
 
 interface Stats {
   totalRows: number;
-  matchedRows: number;
-  matchedActivityRows: number;
-  unmatchedRows: number;
-  unmatchedSamples: Array<{
-    line: number;
-    villa: string;
-    section: string;
-    activity: string;
-    reason: string;
-  }>;
-  villasNotFound: string[];
-  sectionsUnmatched: string[];
-  progressEntriesCreated: number;
-  progressEntriesUpdated: number;
-  photosCreated: number;
-  wbsNodesUpdated: number;
-  villaMilestonesUpdated: number;
+  skippedRows: number;
+  skippedContractors: string[];
   contractorsCreated: string[];
+  tradePlansCreated: number;
+  tradePlansUpdated: number;
+  manpowerEntriesCreated: number;
+  manpowerEntriesUpdated: number;
+  unmappedTrades: string[];
   elapsedMs: number;
 }
 
@@ -33,11 +23,11 @@ interface Result {
   dryRun: boolean;
 }
 
-export default function ColabProgressImportForm({ projectId }: { projectId: string }) {
+export default function ColabManpowerImportForm({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [projectFilter, setProjectFilter] = useState("AMANVANA");
-  const [defaultContractor, setDefaultContractor] = useState("Abraham Thomas");
+  const [ignoreCsv, setIgnoreCsv] = useState("Charge Infra");
   const [dryRun, setDryRun] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
@@ -49,7 +39,11 @@ export default function ColabProgressImportForm({ projectId }: { projectId: stri
     setResult(null);
     try {
       const csv = await file.text();
-      const res = await fetch("/api/admin/import-colab-progress", {
+      const ignoreContractors = ignoreCsv
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const res = await fetch("/api/admin/import-colab-manpower", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -57,7 +51,7 @@ export default function ColabProgressImportForm({ projectId }: { projectId: stri
           projectId,
           dryRun,
           projectName: projectFilter.trim() || undefined,
-          defaultContractorName: defaultContractor.trim() || undefined,
+          ignoreContractors,
         }),
       });
       const body = await res.json();
@@ -93,29 +87,27 @@ export default function ColabProgressImportForm({ projectId }: { projectId: stri
           className={`${inputCls} mt-1`}
         />
         <span className="block text-[10px] text-stone-400 mt-1">
-          Only imports rows whose <code>Project_Name</code> matches. Leave blank to import all rows in the CSV.
+          Only imports rows whose <code>Project_Name</code> matches. Leave blank to import all.
         </span>
       </label>
 
       <label className="block">
         <span className="text-xs font-semibold uppercase tracking-wider text-stone-600">
-          Default contractor (for rows with blank Contractor_Name)
+          Ignore these contractors (comma-separated)
         </span>
         <input
-          value={defaultContractor}
-          onChange={(e) => setDefaultContractor(e.target.value)}
+          value={ignoreCsv}
+          onChange={(e) => setIgnoreCsv(e.target.value)}
           className={`${inputCls} mt-1`}
         />
         <span className="block text-[10px] text-stone-400 mt-1">
-          Colab exports leave most rows blank. For Amanvana all historical
-          progress belongs to <strong>Abraham Thomas</strong>, so that&apos;s the safe default.
-          Leave blank to skip auto-tagging.
+          Names to skip (matched after stripping <code>NA-</code> prefix, case-insensitive). Default skips Charge Infra per Shraddha&apos;s 2026-08-28 call.
         </span>
       </label>
 
       <label className="block">
         <span className="text-xs font-semibold uppercase tracking-wider text-stone-600">
-          CollabTools progress CSV
+          Manpower CSV
         </span>
         <input
           type="file"
@@ -125,8 +117,9 @@ export default function ColabProgressImportForm({ projectId }: { projectId: stri
           required
         />
         <span className="block text-[10px] text-stone-400 mt-1">
-          The master export CSV from Colab. Headers must include{" "}
-          <code>Location_Name</code>, <code>Sub_Location</code>, <code>Activity_Type</code>, <code>Progress_Date</code>, <code>Total__Progress_%</code>, and <code>Activity_ID</code>.
+          Must have columns:{" "}
+          <code>Contractor_Name</code>, <code>Date</code>, <code>Trade_Name</code>,{" "}
+          <code>Planned_Labour</code>, <code>Actual_Labour</code>, <code>Project_Name</code>.
         </span>
       </label>
 
@@ -138,10 +131,7 @@ export default function ColabProgressImportForm({ projectId }: { projectId: stri
           className="w-4 h-4"
         />
         <span>
-          <strong>Dry run</strong> — parse + match only, don&apos;t write to the DB.
-          <span className="block text-[10px] text-stone-400">
-            Recommended for the first run so you can review the match report before touching the schedule.
-          </span>
+          <strong>Dry run</strong> — parse only, don&apos;t write to the DB.
         </span>
       </label>
 
@@ -163,59 +153,34 @@ export default function ColabProgressImportForm({ projectId }: { projectId: stri
                 ✓ {result.dryRun ? "Dry-run complete" : "Import complete"} in {(result.stats.elapsedMs / 1000).toFixed(1)}s
               </div>
               <ul className="text-xs text-stone-700 space-y-1 font-mono">
-                <li>Rows in CSV: <strong>{result.stats.totalRows}</strong></li>
-                <li>Matched to villa + section: <strong>{result.stats.matchedRows}</strong></li>
-                <li>Also matched to specific activity: <strong>{result.stats.matchedActivityRows}</strong></li>
-                <li className="text-orange-700">Unmatched: <strong>{result.stats.unmatchedRows}</strong></li>
-                {!result.dryRun && (
-                  <>
-                    <li className="pt-2">Progress entries created: <strong>{result.stats.progressEntriesCreated}</strong></li>
-                    <li>Progress entries updated: <strong>{result.stats.progressEntriesUpdated}</strong></li>
-                    <li>Photos created: <strong>{result.stats.photosCreated}</strong></li>
-                    <li>WBS nodes updated: <strong>{result.stats.wbsNodesUpdated}</strong></li>
-                    <li>Villa milestones rolled up: <strong>{result.stats.villaMilestonesUpdated}</strong></li>
-                  </>
+                <li>Rows read: <strong>{result.stats.totalRows}</strong></li>
+                <li>Rows skipped: <strong>{result.stats.skippedRows}</strong></li>
+                <li>Trade plans {result.dryRun ? "that would be created" : "created"}: <strong>{result.stats.tradePlansCreated}</strong></li>
+                <li>Manpower entries {result.dryRun ? "that would be created" : "created"}: <strong>{result.stats.manpowerEntriesCreated}</strong></li>
+                {result.stats.manpowerEntriesUpdated > 0 && (
+                  <li>Manpower entries updated: <strong>{result.stats.manpowerEntriesUpdated}</strong></li>
                 )}
                 {result.stats.contractorsCreated.length > 0 && (
                   <li className="pt-2">
-                    {result.dryRun ? "Contractors that WOULD be created" : "Contractors created"}: {result.stats.contractorsCreated.join(", ")}
+                    Contractors {result.dryRun ? "that would be created" : "created"}: {result.stats.contractorsCreated.join(", ")}
                   </li>
                 )}
-                {result.stats.villasNotFound.length > 0 && (
+                {result.stats.skippedContractors.length > 0 && (
                   <li className="text-orange-700 pt-2">
-                    Villa numbers in CSV but not in project: {result.stats.villasNotFound.slice(0, 30).join(", ")}
-                    {result.stats.villasNotFound.length > 30 && ` (+${result.stats.villasNotFound.length - 30} more)`}
+                    Ignored contractors: {result.stats.skippedContractors.join(", ")}
                   </li>
                 )}
-                {result.stats.sectionsUnmatched.length > 0 && (
+                {result.stats.unmappedTrades.length > 0 && (
                   <li className="text-orange-700 pt-2">
-                    Section combos with no mapping ({result.stats.sectionsUnmatched.length} unique):
-                    <ul className="mt-1 ml-4">
-                      {result.stats.sectionsUnmatched.slice(0, 15).map((s) => (
-                        <li key={s} className="text-[11px]">- {s}</li>
-                      ))}
-                      {result.stats.sectionsUnmatched.length > 15 && (
-                        <li className="text-[11px] italic">+{result.stats.sectionsUnmatched.length - 15} more</li>
-                      )}
-                    </ul>
-                  </li>
-                )}
-                {result.stats.unmatchedSamples.length > 0 && (
-                  <li className="text-orange-700 pt-2">
-                    Sample of unmatched rows (first {result.stats.unmatchedSamples.length}):
-                    <ul className="mt-1 ml-4">
-                      {result.stats.unmatchedSamples.map((s, i) => (
-                        <li key={i} className="text-[11px]">
-                          line {s.line}: {s.villa} · {s.section} · {s.activity} → <span className="text-red-700">{s.reason}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    Trade names in CSV but not in Siddhi&apos;s TRADES list: {result.stats.unmappedTrades.join(", ")}
+                    <br />
+                    <span className="text-[10px]">(These rows were still imported using the raw name. Consider adding an alias or extending TRADES.)</span>
                   </li>
                 )}
               </ul>
-              {result.dryRun && result.stats.matchedRows > 0 && (
+              {result.dryRun && (
                 <div className="text-xs text-emerald-900 mt-3 border-t border-emerald-200 pt-2">
-                  Match rate looks OK? Uncheck &quot;Dry run&quot; and click <em>Import to database</em> to write.
+                  Numbers look right? Uncheck &quot;Dry run&quot; and click <em>Import to database</em>.
                 </div>
               )}
             </>

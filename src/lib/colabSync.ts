@@ -99,6 +99,12 @@ export interface ColabSyncOptions {
   dryRun: boolean;
   createdById: string;      // user attribution for the imported ProgressEntry rows
   projectName?: string;     // "AMANVANA" — filters CSV rows to that project (optional)
+  /** Contractor name (case-insensitive) to fall back to when a row's
+   *  Contractor_Name column is blank. Colab exports mostly blank contractor,
+   *  but Shraddha confirmed on 2026-08-28 that every historical progress
+   *  entry at Amanvana is Abraham Thomas's work — so passing "Abraham Thomas"
+   *  here auto-tags ~7,343 of the 7,525 rows without manual assignment. */
+  defaultContractorName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -374,8 +380,10 @@ export async function importColabProgress(
     if (bestScore < 1) bestWbs = null;
     if (bestWbs) stats.matchedActivityRows++;
 
-    // ----- 5. Contractor
-    const contractorId = await ensureContractor(r.Contractor_Name ?? "");
+    // ----- 5. Contractor. If the row is blank, fall back to the
+    //          project's default (Amanvana = Abraham Thomas per Shraddha).
+    const contractorNameRaw = r.Contractor_Name?.trim() || options.defaultContractorName || "";
+    const contractorId = await ensureContractor(contractorNameRaw);
 
     // ----- 6. Parse row fields
     const actualStart = parseColabDate(r.Actual_Start);

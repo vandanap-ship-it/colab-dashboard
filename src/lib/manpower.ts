@@ -23,6 +23,7 @@
  */
 export const TRADES = [
   "Bar Bender",
+  "Bar Bender Helper",
   "Carpenter",
   "Helper",
   "Mason",

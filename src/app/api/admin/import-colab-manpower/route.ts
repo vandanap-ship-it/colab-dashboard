@@ -2,20 +2,25 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
-import { importColabProgress } from "@/lib/colabSync";
+import { importColabManpower } from "@/lib/colabManpowerImport";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// Full sync of a 7k-row Colab export runs ~2 min for dry-run, ~4 min live.
-// Keep well under Vercel's 5-min ceiling.
 export const maxDuration = 300;
 
 /**
- * POST /api/admin/import-colab-progress
+ * POST /api/admin/import-colab-manpower
  *
- * Body: JSON { csv: string, projectId: string, dryRun: boolean, projectName?: string }
+ * Body: JSON {
+ *   csv: string,
+ *   projectId: string,
+ *   dryRun: boolean,
+ *   projectName?: string,
+ *   ignoreContractors?: string[],
+ *   tradeAliases?: { [colabTrade]: siddhiTrade }
+ * }
  *
- * Admin-only. Idempotent. Dry-run returns match counts without writing.
+ * Admin-only. Idempotent.
  */
 export async function POST(req: Request) {
   const session = await auth();
@@ -27,7 +32,8 @@ export async function POST(req: Request) {
     projectId?: string;
     dryRun?: boolean;
     projectName?: string;
-    defaultContractorName?: string;
+    ignoreContractors?: string[];
+    tradeAliases?: Record<string, string>;
   };
   try {
     body = await req.json();
@@ -41,20 +47,21 @@ export async function POST(req: Request) {
 
   const project = await prisma.project.findUnique({
     where: { id: body.projectId },
-    select: { id: true, name: true },
+    select: { id: true },
   });
   if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
   try {
-    const stats = await importColabProgress(prisma, body.projectId, body.csv, {
+    const stats = await importColabManpower(prisma, body.projectId, body.csv, {
       dryRun: body.dryRun !== false,
       createdById: session.user.id,
       projectName: body.projectName,
-      defaultContractorName: body.defaultContractorName,
+      ignoreContractors: body.ignoreContractors,
+      tradeAliases: body.tradeAliases,
     });
     return NextResponse.json({ ok: true, stats });
   } catch (err) {
-    console.error("[colab-sync] failed", err);
+    console.error("[colab-manpower-sync] failed", err);
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : String(err) },
       { status: 500 },
