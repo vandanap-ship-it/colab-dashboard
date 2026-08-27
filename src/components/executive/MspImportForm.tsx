@@ -28,11 +28,20 @@ interface ImportResult {
 }
 
 /**
- * Splits the MSP CSV into per-block sub-CSVs so each POST stays comfortably
- * under Vercel's function timeout. Header row + rows above the first block
- * (levels 0-1) are prepended to every chunk so the parser can see the
+ * Splits the MSP CSV into sub-CSVs so each POST stays comfortably under
+ * Vercel's 300s function timeout. Header row + rows above the first block
+ * (levels 0-1) are prepended to every chunk so the parser sees the
  * scaffolding it needs.
+ *
+ * Two-pass split:
+ *  1. Split by L2 (block).
+ *  2. Any block with more than MAX_VILLAS_PER_CHUNK villas is further split
+ *     by L3 (villa) — a single Elegant "Block 24" carried 19 villas and
+ *     ~4000 activities, which is > 5 min to import. Sub-chunks re-carry
+ *     the block header row so the importer keeps block context.
  */
+const MAX_VILLAS_PER_CHUNK = 6;
+
 function splitCsvByBlock(csvText: string): string[] {
   const lines = csvText.split(/\r?\n/);
   if (lines.length < 2) return [csvText];
@@ -69,9 +78,49 @@ function splitCsvByBlock(csvText: string): string[] {
   }
   if (currentBlock) blocks.push(currentBlock);
 
-  // Assemble one CSV per block: header + preamble + block rows.
+  // Pass 2 — sub-split any block whose villa count exceeds MAX. Each sub-
+  // chunk re-carries the block's L2 header row so the importer still binds
+  // the villa to the correct block.
+  const finalChunks: string[][] = [];
+  for (const blockRows of blocks) {
+    const blockHeader = blockRows[0];
+    // Between block-header and first L3 villa, sometimes there are stray
+    // block-level rows (rare, but seen in some exports). Prepend those to
+    // the first villa group so nothing is dropped.
+    const beforeFirstVilla: string[] = [];
+    const villaGroups: string[][] = [];
+    let currentVilla: string[] | null = null;
+    for (let i = 1; i < blockRows.length; i++) {
+      const line = blockRows[i];
+      const cells = parseCsvLine(line);
+      const level = parseInt(cells[levelIdx] ?? "", 10);
+      if (level === 3) {
+        if (currentVilla) villaGroups.push(currentVilla);
+        currentVilla = [line];
+      } else if (currentVilla) {
+        currentVilla.push(line);
+      } else {
+        beforeFirstVilla.push(line);
+      }
+    }
+    if (currentVilla) villaGroups.push(currentVilla);
+
+    if (villaGroups.length <= MAX_VILLAS_PER_CHUNK) {
+      // Small enough — one chunk per block, keep original ordering.
+      finalChunks.push([blockHeader, ...beforeFirstVilla, ...villaGroups.flat()]);
+      continue;
+    }
+    // Big block — batch villas MAX at a time. The block header + any pre-
+    // villa rows are re-emitted at the top of each batch chunk.
+    for (let i = 0; i < villaGroups.length; i += MAX_VILLAS_PER_CHUNK) {
+      const batch = villaGroups.slice(i, i + MAX_VILLAS_PER_CHUNK).flat();
+      finalChunks.push([blockHeader, ...beforeFirstVilla, ...batch]);
+    }
+  }
+
+  // Assemble one CSV per chunk: header + preamble + block header + rows.
   const preambleBlob = preamble.length ? preamble.join("\n") + "\n" : "";
-  return blocks.map((rows) => header + "\n" + preambleBlob + rows.join("\n") + "\n");
+  return finalChunks.map((rows) => header + "\n" + preambleBlob + rows.join("\n") + "\n");
 }
 
 /** Tiny CSV parser (comma-only, quoted-field aware) — no full escape handling. */
@@ -205,7 +254,7 @@ export default function MspImportForm({ defaultProjectName = "Amanvana" }: MspIm
         <span className="block text-[10px] text-stone-400 mt-1">
           Produced by <code className="font-mono">scripts/convert-mpp.py &lt;.mpp&gt; &lt;output.csv&gt;</code>.
           Must have &quot;Task Name&quot; + &quot;Outline Level&quot; columns.
-          Uploaded one block at a time so each request stays under Vercel&apos;s function timeout.
+          Uploaded in chunks (one block, or a batch of villas for large blocks) so each request stays under Vercel&apos;s function timeout.
         </span>
       </label>
 
@@ -219,7 +268,7 @@ export default function MspImportForm({ defaultProjectName = "Amanvana" }: MspIm
         </button>
         {progress && (
           <span className="text-sm text-stone-600">
-            Block {progress.done} / {progress.total}
+            Chunk {progress.done} / {progress.total}
             {progress.done < progress.total && " …"}
           </span>
         )}
