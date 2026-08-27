@@ -121,6 +121,22 @@
   font-size: 11px;
   font-style: italic;
 }
+.bucketItemMoving {
+  font-size: 10px;
+  font-weight: 700;
+  color: #FFFFFF;
+  background: #2E7D5B;
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+.bucketItemReason {
+  font-size: 10px;
+  color: #4E5866;
+  font-style: italic;
+  padding-left: 4px;
+  border-left: 1px solid #E2DDD0;
+  margin-left: 2px;
+}
 
 /* Manpower headline */
 .mpHead {

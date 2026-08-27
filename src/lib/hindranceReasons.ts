@@ -6,14 +6,18 @@
 // query on the server must agree exactly on the codes.
 
 export const HINDRANCE_REASONS = [
-  { code: "MATERIAL",     label: "Material shortage"     },
-  { code: "LABOUR",       label: "Skilled labour shortage" },
-  { code: "RMC",          label: "RMC slot missed"       },
-  { code: "DESIGN",       label: "Design revision"       },
-  { code: "WEATHER",      label: "Weather"               },
-  { code: "COORDINATION", label: "Coordination gap"      },
-  { code: "APPROVAL",     label: "Approval pending"      },
-  { code: "OTHER",        label: "Other"                 },
+  { code: "CHANGE_ORDER",   label: "Change orders (design/scope)" },
+  { code: "MATERIAL",       label: "Material shortage"            },
+  { code: "LABOUR",         label: "Skilled labour shortage"      },
+  { code: "PRIORITY_CHANGE",label: "Priority change"              },
+  { code: "MEP_DRAWING",    label: "MEP drawing delay"            },
+  { code: "DESIGN",         label: "Design revision"              },
+  { code: "VENDOR_CHANGE",  label: "Vendor change"                },
+  { code: "RMC",            label: "RMC slot missed"              },
+  { code: "WEATHER",        label: "Weather / climate"            },
+  { code: "COORDINATION",   label: "Coordination gap"             },
+  { code: "APPROVAL",       label: "Approval pending"             },
+  { code: "OTHER",          label: "Other"                        },
 ] as const;
 
 export type HindranceReasonCode = (typeof HINDRANCE_REASONS)[number]["code"];

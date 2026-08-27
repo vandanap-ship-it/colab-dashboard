@@ -22,6 +22,7 @@ import {
   type MilestoneProgressRow,
   type SiteActivityBlockGroup,
 } from "@/lib/dashboardSectionsServer";
+import { istDayStart } from "@/lib/istDay";
 
 export interface ScorecardProject {
   id: string;
@@ -46,9 +47,11 @@ export interface ScorecardDailySnapshot {
   villasExpected: number;           // # villas with scope planned today (fallback: active villas)
 }
 
-/** §2 — one row per contractor summarising today's movement. */
+/** §2 — one row per contractor summarising today's movement.
+ *  contractorId=null → the "Untagged" catch-all row for activities that
+ *  aren't yet assigned to a contractor (Amanvana has 7k on Aug 27). */
 export interface ScorecardContractorMovement {
-  contractorId: string;
+  contractorId: string | null;
   contractorName: string;
   scopeVillas: number;
   executed: number;      // # villas that logged progress today
@@ -125,7 +128,7 @@ export interface Scorecard {
 // ---------------------------------------------------------------------------
 
 function toDay(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  return istDayStart(d);
 }
 
 function daysBetween(a: Date | null, b: Date | null): number | null {
@@ -227,33 +230,35 @@ async function computeDailySnapshotAndMovement(
   // Expected sets
   const expectedVillaIds = new Set<string>();
   const expectedBlockCodes = new Set<string>();
-  const expectedByBlock = new Map<string, Map<number, { villaNumber: number; villaLabel: string }>>();
+  // Map by villaId (unique) to avoid grouped-villa number collisions.
+  const expectedByBlock = new Map<string, Map<string, { villaId: string; villaNumber: number; villaLabel: string }>>();
   for (const vm of plannedMilestonesToday) {
     expectedVillaIds.add(vm.villaId);
     const bcode = vm.villa.block.code;
     expectedBlockCodes.add(bcode);
     if (!expectedByBlock.has(bcode)) expectedByBlock.set(bcode, new Map());
-    expectedByBlock.get(bcode)!.set(vm.villa.number, {
+    expectedByBlock.get(bcode)!.set(vm.villaId, {
+      villaId: vm.villaId,
       villaNumber: vm.villa.number,
       villaLabel: vm.villa.label ?? `Villa ${vm.villa.number}`,
     });
   }
 
-  // Updated sets — anyone that logged today
+  // Updated sets — anyone that logged today. Uses villaId (unique) as the
+  // set identity so villas that share a number (grouped villas) don't collide.
   const updatedVillaIds = new Set<string>();
-  const updatedVillaNumbers = new Set<number>();
   const updatedBlockCodes = new Set<string>();
-  const updatedByContractor = new Map<string, Set<number>>();
+  // contractorId=null bucket = untagged progress entries.
+  const updatedByContractor = new Map<string | null, Set<string>>();
   for (const e of entriesToday) {
-    const villaNum = e.wbsNode.villaMilestone?.villa.number;
     const blockCode = e.wbsNode.villaMilestone?.villa.block.code;
     const villaId = e.wbsNode.villaId;
     if (villaId) updatedVillaIds.add(villaId);
-    if (villaNum != null) updatedVillaNumbers.add(villaNum);
     if (blockCode) updatedBlockCodes.add(blockCode);
-    if (e.contractorId && villaNum != null) {
-      if (!updatedByContractor.has(e.contractorId)) updatedByContractor.set(e.contractorId, new Set());
-      updatedByContractor.get(e.contractorId)!.add(villaNum);
+    if (villaId) {
+      const key = e.contractorId ?? null;
+      if (!updatedByContractor.has(key)) updatedByContractor.set(key, new Set());
+      updatedByContractor.get(key)!.add(villaId);
     }
   }
 
@@ -269,39 +274,33 @@ async function computeDailySnapshotAndMovement(
   };
 
   // §2 contractor movement
-  const villaCountByContractor = new Map<string, number>();
   // Villa scope per contractor = distinct villaIds via that contractor's WBS.
+  // Also count how many activities across the project are UNTAGGED (contractorId=null)
+  // and surface that as its own row so the reader sees the gap.
   const contractorScope = await prisma.wBSNode.findMany({
     where: {
       projectId,
-      contractorId: { in: contractors.map((c) => c.id) },
       villaId: { not: null },
     },
     select: { contractorId: true, villaId: true },
     distinct: ["contractorId", "villaId"],
   });
+  const villaCountByContractor = new Map<string | null, number>();
+  const expectedByContractor = new Map<string | null, Set<string>>();
   for (const row of contractorScope) {
-    if (!row.contractorId) continue;
-    villaCountByContractor.set(row.contractorId, (villaCountByContractor.get(row.contractorId) ?? 0) + 1);
-  }
-
-  // Villas expected per contractor today = villas contracted to that contractor
-  // AND with a planned milestone today.
-  const expectedByContractor = new Map<string, number>();
-  const expectedVillasByContractor = new Map<string, Set<number>>();
-  for (const row of contractorScope) {
-    if (!row.contractorId || !row.villaId) continue;
+    if (!row.villaId) continue;
+    const key = row.contractorId ?? null;
+    villaCountByContractor.set(key, (villaCountByContractor.get(key) ?? 0) + 1);
     if (expectedVillaIds.has(row.villaId)) {
-      expectedByContractor.set(row.contractorId, (expectedByContractor.get(row.contractorId) ?? 0) + 1);
+      const setForKey = expectedByContractor.get(key) ?? new Set<string>();
+      setForKey.add(row.villaId);
+      expectedByContractor.set(key, setForKey);
     }
-  }
-  for (const c of contractors) {
-    expectedVillasByContractor.set(c.id, new Set());
   }
 
   const movement: ScorecardContractorMovement[] = contractors.map((c) => {
     const executed = updatedByContractor.get(c.id)?.size ?? 0;
-    const planned = expectedByContractor.get(c.id) ?? 0;
+    const planned = expectedByContractor.get(c.id)?.size ?? 0;
     const hasSchedule = c._count.wbsNodes > 0;
     return {
       contractorId: c.id,
@@ -314,6 +313,22 @@ async function computeDailySnapshotAndMovement(
     };
   });
 
+  // "Untagged" catch-all row — only surface when there's something to say.
+  const untaggedScope = villaCountByContractor.get(null) ?? 0;
+  const untaggedExecuted = updatedByContractor.get(null)?.size ?? 0;
+  const untaggedPlanned = expectedByContractor.get(null)?.size ?? 0;
+  if (untaggedScope > 0 || untaggedExecuted > 0 || untaggedPlanned > 0) {
+    movement.push({
+      contractorId: null,
+      contractorName: "Untagged (assign a contractor)",
+      scopeVillas: untaggedScope,
+      executed: untaggedExecuted,
+      planned: untaggedPlanned,
+      notUpdated: Math.max(0, untaggedPlanned - untaggedExecuted),
+      hasSchedule: untaggedScope > 0,
+    });
+  }
+
   // §3 block coverage — only blocks that had scope today
   const blockCoverage: ScorecardBlockCoverage[] = [];
   const orderedBlocks = [...expectedByBlock.keys()].sort((a, b) => {
@@ -322,12 +337,16 @@ async function computeDailySnapshotAndMovement(
     if (!isNaN(na) && !isNaN(nb)) return na - nb;
     return a.localeCompare(b);
   });
+  // We need villaId in the per-block map so §3 matches by unique villa id
+  // (not villa number, which can collide with grouped villas).
   for (const bcode of orderedBlocks) {
     const villaMap = expectedByBlock.get(bcode)!;
     const villaList = [...villaMap.values()].sort((a, b) => a.villaNumber - b.villaNumber);
     let updatedCount = 0;
     const villas = villaList.map((v) => {
-      const upd = updatedVillaNumbers.has(v.villaNumber);
+      // Look up the villaId via number+block — but we have it directly in
+      // expectedByBlock population; extend that map to carry villaId (below).
+      const upd = updatedVillaIds.has(v.villaId);
       if (upd) updatedCount++;
       return { villaNumber: v.villaNumber, villaLabel: v.villaLabel, updated: upd };
     });
@@ -351,7 +370,7 @@ async function computeDailySnapshotAndMovement(
 /** §4 — manpower day summary. */
 async function computeManpower(projectId: string, day: Date): Promise<DaySummary> {
   const dayStart = toDay(day);
-  const [rawPlans, rawEntries] = await Promise.all([
+  const [rawPlans, rawEntries, contractors] = await Promise.all([
     prisma.tradePlan.findMany({
       where: {
         projectId,
@@ -371,6 +390,10 @@ async function computeManpower(projectId: string, day: Date): Promise<DaySummary
       where: { projectId, deletedAt: null, entryDate: dayStart },
       select: { contractorId: true, trade: true, entryDate: true, actualCount: true },
     }),
+    prisma.contractor.findMany({
+      where: { projectId },
+      select: { id: true, name: true },
+    }),
   ]);
   const plans: TradePlanRow[] = rawPlans.map((p) => ({
     contractorId: p.contractorId,
@@ -385,7 +408,16 @@ async function computeManpower(projectId: string, day: Date): Promise<DaySummary
     entryDate: e.entryDate,
     actualCount: e.actualCount,
   }));
-  return daySummary(plans, entries, day);
+  const summary = daySummary(plans, entries, day);
+  const nameById = new Map(contractors.map((c) => [c.id, c.name]));
+  summary.trades = summary.trades
+    .map((t) => ({ ...t, contractorName: nameById.get(t.contractorId) ?? "Unknown" }))
+    .sort((a, b) => {
+      const nameCmp = (a.contractorName ?? "").localeCompare(b.contractorName ?? "");
+      if (nameCmp !== 0) return nameCmp;
+      return a.trade.localeCompare(b.trade);
+    });
+  return summary;
 }
 
 /** §7 — per-block progress. */

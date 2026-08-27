@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Printer } from "lucide-react";
+import { Download } from "lucide-react";
 import styles from "./scorecard.module.css";
 import weekly from "./weekly-report.module.css";
 import type { WeeklyReport, WeeklyMilestoneItem } from "@/lib/weeklyReportServer";
@@ -27,7 +27,16 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
   const onDateChange = useCallback((v: string) => {
     if (v) router.push(`/projects/${projectId}/reports/weekly?weekEnding=${v}`);
   }, [router, projectId]);
-  const onPrint = useCallback(() => {
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const previous = document.title;
+    const projectSlug = report.project.name.replace(/[^\w\s-]/g, "").trim();
+    document.title = `${projectSlug} Weekly Report ${weekEndingStr}`;
+    return () => { document.title = previous; };
+  }, [weekEndingStr, report.project.name]);
+
+  const onDownload = useCallback(() => {
     if (typeof window !== "undefined") window.print();
   }, []);
 
@@ -46,9 +55,9 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
             className={styles.toolbarDate}
           />
         </div>
-        <button type="button" onClick={onPrint} className={styles.toolbarBtn}>
-          <Printer size={14} aria-hidden />
-          Download / Print
+        <button type="button" onClick={onDownload} className={styles.toolbarBtn}>
+          <Download size={14} aria-hidden />
+          Download PDF
         </button>
       </div>
 
@@ -113,6 +122,15 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
                   items={[...plan.inProgress.movingItems, ...plan.inProgress.stalledItems]}
                   variant="in-progress"
                 />
+                {plan.overdue.total > 0 && (
+                  <MilestoneBucket
+                    label="Overdue (still open, from earlier weeks)"
+                    metric={`${plan.overdue.total}`}
+                    metricLbl="milestone(s) past baseline"
+                    items={plan.overdue.items}
+                    variant="overdue"
+                  />
+                )}
               </>
             ) : (
               <div className={styles.empty}>No schedule loaded in the tracker.</div>
@@ -141,7 +159,12 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
                   </div>
                   <div className={weekly.mpHeadCell}>
                     <div className={weekly.mpHeadLbl}>Best day</div>
-                    <div className={weekly.mpHeadVal}>{c.bestDayActual}</div>
+                    <div className={weekly.mpHeadVal}>
+                      {c.bestDayActual}
+                      {c.bestDayDate && (
+                        <span className={styles.of}> on {new Date(c.bestDayDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <ManpowerChart perDay={c.perDay} />
@@ -165,7 +188,10 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
                   <div className={weekly.reasonStat}>
                     {r.daysImpact > 0 && <span className={weekly.reasonDays}>+{r.daysImpact}d</span>}
                     <span className={weekly.reasonCount}>{r.count} record{r.count === 1 ? "" : "s"}</span>
-                    <span className={weekly.reasonVillas}>{r.affectedVillas.length} villa{r.affectedVillas.length === 1 ? "" : "s"}</span>
+                    <span className={weekly.reasonVillas}>
+                      {r.affectedVillas.length} villa{r.affectedVillas.length === 1 ? "" : "s"}
+                      {r.hasProjectLevel && " · +project-level"}
+                    </span>
                   </div>
                 </div>
                 {r.affectedVillas.length > 0 && (
@@ -204,7 +230,7 @@ function MilestoneBucket({
   metric: string;
   metricLbl: string;
   items: WeeklyMilestoneItem[];
-  variant?: "in-progress";
+  variant?: "in-progress" | "overdue";
 }) {
   return (
     <div className={weekly.bucket}>
@@ -220,12 +246,16 @@ function MilestoneBucket({
         <div className={weekly.bucketItems}>
           {items.slice(0, 12).map((it, i) => (
             <div key={`${it.villaNumber}-${it.milestoneName}-${i}`} className={weekly.bucketItem}>
-              <span className={weekly.bucketItemVilla}>V{it.villaNumber}</span>
+              <span className={weekly.bucketItemVilla}>{it.villaLabel ?? `V${it.villaNumber}`}</span>
               <span className={weekly.bucketItemMilestone}>{it.milestoneName}</span>
-              {it.daysLate != null && it.daysLate > 0 && <span className={weekly.bucketItemLate}>+{it.daysLate}d</span>}
-              {variant === "in-progress" && it.movedThisWeek === false && it.daysIdle && (
+              {it.daysLate != null && it.daysLate > 0 && <span className={weekly.bucketItemLate}>+{it.daysLate}d late</span>}
+              {variant === "in-progress" && it.movedThisWeek === false && it.daysIdle != null && (
                 <span className={weekly.bucketItemStalled}>idle {it.daysIdle}d</span>
               )}
+              {variant === "in-progress" && it.movedThisWeek === true && (
+                <span className={weekly.bucketItemMoving}>moved this week</span>
+              )}
+              {it.reason && <span className={weekly.bucketItemReason}>reason: {it.reason}</span>}
             </div>
           ))}
           {items.length > 12 && (

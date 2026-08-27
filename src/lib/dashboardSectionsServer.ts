@@ -5,6 +5,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { reasonLabel } from "@/lib/hindranceReasons";
+import { istDayStart } from "@/lib/istDay";
 
 // ---------------------------------------------------------------------------
 // Milestone Progress — per-milestone line items due / done / pending
@@ -121,7 +122,7 @@ export async function getSiteActivityHighlights(
   projectId: string,
   forDate: Date = new Date(),
 ): Promise<SiteActivityBlockGroup[]> {
-  const dayStart = new Date(Date.UTC(forDate.getUTCFullYear(), forDate.getUTCMonth(), forDate.getUTCDate()));
+  const dayStart = istDayStart(forDate);
   const dayEnd = new Date(dayStart.getTime() + 86400000);
 
   const entries = await prisma.progressEntry.findMany({

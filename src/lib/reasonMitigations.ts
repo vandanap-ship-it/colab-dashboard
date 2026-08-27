@@ -7,16 +7,24 @@
 import type { HindranceReasonCode } from "@/lib/hindranceReasons";
 
 export const REASON_MITIGATIONS: Record<HindranceReasonCode | "UNSPECIFIED", string> = {
-  DESIGN:
+  CHANGE_ORDER:
     "Freeze design and close all open change orders before the next structural stage; get design sign-off dated.",
-  LABOUR:
-    "Top up the short trades to planned headcount; hold the contractor to the daily labour histogram.",
   MATERIAL:
     "Expedite the open PO / procurement; confirm delivery date and pre-stage material at site block.",
-  APPROVAL:
-    "Escalate pending approvals with a dated commitment; move dependent activities out of the critical path where possible.",
+  LABOUR:
+    "Top up the short trades to planned headcount; hold the contractor to the daily labour histogram.",
+  PRIORITY_CHANGE:
+    "Re-sequence works and confirm the revised priority in writing so the site plan reflects it.",
+  MEP_DRAWING:
+    "Release pending MEP drawings for the affected villas; coordinate the MEP + civil sequence in writing.",
+  DESIGN:
+    "Confirm the revised design with the consultant and re-baseline the affected activities before restarting.",
+  VENDOR_CHANGE:
+    "Complete the new vendor onboarding and issue a revised start date for the affected activity.",
   RMC:
     "Re-book the RMC slot; confirm truck delivery time and hold curing plan in writing.",
+  APPROVAL:
+    "Escalate pending approvals with a dated commitment; move dependent activities out of the critical path where possible.",
   COORDINATION:
     "Run a coordination huddle between the affected trades; document the sequenced hand-off and enforce with the daily checklist.",
   WEATHER:

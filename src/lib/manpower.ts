@@ -59,6 +59,9 @@ export interface ManpowerEntryRow {
 
 export interface TradeCell {
   contractorId: string;
+  /** Optional; populated by callers with DB access so the report can render
+   *  "Mason · Abraham Thomas" instead of two indistinguishable "Mason" rows. */
+  contractorName?: string;
   trade: string;
   planned: number;
   actual: number;

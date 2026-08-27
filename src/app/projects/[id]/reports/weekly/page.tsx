@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { canSeeDesktop } from "@/lib/roles";
 import { getWeeklyReport } from "@/lib/weeklyReportServer";
 import WeeklyReportView from "@/components/WeeklyReportView";
+import ReportErrorFallback from "@/components/ReportErrorFallback";
+import { istDayStart } from "@/lib/istDay";
 
 export const dynamic = "force-dynamic";
 
@@ -32,15 +34,27 @@ export default async function WeeklyReportPage({
       const d = new Date(qsWeek + "T00:00:00Z");
       if (!isNaN(d.getTime())) return d;
     }
-    // Default to most recent Sunday (UTC).
-    const t = new Date();
-    t.setUTCHours(0, 0, 0, 0);
-    const dow = t.getUTCDay(); // 0 = Sunday
+    // Default to most recent Sunday, anchored to IST calendar so late-night
+    // opens don't roll back a day.
+    const t = istDayStart();
+    const dow = t.getUTCDay(); // 0 = Sunday (UTC midnight represents an IST date)
     if (dow !== 0) t.setUTCDate(t.getUTCDate() - dow);
     return t;
   })();
 
-  const report = await getWeeklyReport(projectId, weekEnd);
+  let report;
+  try {
+    report = await getWeeklyReport(projectId, weekEnd);
+  } catch (err) {
+    console.error("[weekly] failed", err);
+    return (
+      <ReportErrorFallback
+        title="Weekly Report could not be generated"
+        detail={err instanceof Error ? err.message : String(err)}
+        projectId={projectId}
+      />
+    );
+  }
   if (!report) notFound();
 
   return (

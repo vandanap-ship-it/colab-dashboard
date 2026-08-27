@@ -8,6 +8,7 @@ import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
 import ActivityPicker from "./ActivityPicker";
 import { HINDRANCE_REASONS } from "@/lib/hindranceReasons";
+import { istDayString } from "@/lib/istDay";
 
 // Local selection state — enriched with the metadata the picker returned so
 // the form can render the picked activity + preserve totalQuantity/unit for
@@ -35,7 +36,7 @@ export default function NewProgressForm({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = istDayString();
 
   const [contractors, setContractors] = useState<Contractor[] | null>(null);
   const [selected, setSelected] = useState<PickedActivity | null>(null);

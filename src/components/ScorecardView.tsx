@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Printer } from "lucide-react";
+import { Download } from "lucide-react";
 import styles from "./scorecard.module.css";
 import type { Scorecard } from "@/lib/scorecardServer";
 
@@ -49,7 +49,19 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
     if (v) router.push(`/projects/${projectId}/reports/scorecard?date=${v}`);
   }, [router, projectId]);
 
-  const onPrint = useCallback(() => {
+  // Set document.title so the browser's Print → Save-as-PDF flow proposes a
+  // meaningful default filename (e.g. "Amanvana Daily Scorecard 2026-08-27.pdf")
+  // instead of the ugly URL slug. Restore on unmount so the tab title isn't
+  // stuck if the user navigates away without printing.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const previous = document.title;
+    const projectSlug = s.project.name.replace(/[^\w\s-]/g, "").trim();
+    document.title = `${projectSlug} Daily Scorecard ${dateStr}`;
+    return () => { document.title = previous; };
+  }, [dateStr, s.project.name]);
+
+  const onDownload = useCallback(() => {
     if (typeof window !== "undefined") window.print();
   }, []);
 
@@ -68,9 +80,9 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
             className={styles.toolbarDate}
           />
         </div>
-        <button type="button" onClick={onPrint} className={styles.toolbarBtn}>
-          <Printer size={14} aria-hidden />
-          Download / Print
+        <button type="button" onClick={onDownload} className={styles.toolbarBtn}>
+          <Download size={14} aria-hidden />
+          Download PDF
         </button>
       </div>
 
@@ -90,10 +102,10 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
       <Section num="01" title="Daily Site Snapshot" meta={`reporting cadence · ${asOfLabel}`}>
         <div className={styles.snap}>
           <div className={styles.snapCell}>
-            <div className={styles.snapKey}>Site progress updated</div>
+            <div className={styles.snapKey}>Contractors updated</div>
             <div className={styles.snapValue}>
-              {s.dailySnapshot.progressUpdatedToday ? "Yes" : "No"}
-              <span className={styles.of}>/ {s.dailySnapshot.contractorsExpected} contractors</span>
+              {s.dailySnapshot.contractorsUpdated}
+              <span className={styles.of}>/ {s.dailySnapshot.contractorsExpected}</span>
             </div>
           </div>
           <div className={styles.snapCell}>
@@ -131,11 +143,14 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
           </thead>
           <tbody>
             {s.movement.map((row) => (
-              <tr key={row.contractorId}>
+              <tr key={row.contractorId ?? "__untagged__"}>
                 <td>
                   <div className={styles.tblName}>{row.contractorName}</div>
                   {!row.hasSchedule && (
                     <div className={styles.tblSub}>schedule yet to be received</div>
+                  )}
+                  {row.contractorId === null && (
+                    <div className={styles.tblSub}>activities without a contractor tag</div>
                   )}
                 </td>
                 <td className={styles.tblRight}>{row.scopeVillas || "—"}</td>
@@ -188,10 +203,10 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
               <div className={styles.bcVillas}>
                 {b.villas.map((v) => (
                   <span
-                    key={v.villaNumber}
+                    key={`${v.villaNumber}-${v.villaLabel}`}
                     className={`${styles.bcChip} ${v.updated ? styles.bcChipUpdated : styles.bcChipNotUpdated}`}
                   >
-                    V{v.villaNumber}
+                    {v.villaLabel.replace(/^Villa\s+/i, "V")}
                   </span>
                 ))}
               </div>
@@ -202,7 +217,7 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
 
       {/* §4 Daily Manpower */}
       <Section num="04" title="Daily Manpower" meta={`present vs planned · ${asOfLabel}`}>
-        {!s.manpower.hasEntries && s.manpower.plannedTotal === 0 ? (
+        {s.manpower.trades.length === 0 && s.manpower.plannedTotal === 0 && s.manpower.actualTotal === 0 ? (
           <div className={styles.empty}>
             No planned or actual manpower recorded for {asOfLabel}.
           </div>
@@ -233,6 +248,7 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
             <table className={styles.tbl}>
               <thead>
                 <tr>
+                  <th>Contractor</th>
                   <th>Trade</th>
                   <th className={styles.tblRight}>Planned</th>
                   <th className={styles.tblRight}>Present</th>
@@ -243,6 +259,7 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
               <tbody>
                 {s.manpower.trades.map((t) => (
                   <tr key={`${t.contractorId}::${t.trade}`}>
+                    <td className={styles.tblName}>{t.contractorName ?? "—"}</td>
                     <td>{t.trade}</td>
                     <td className={styles.tblRight}>{t.planned || "—"}</td>
                     <td className={styles.tblRight}>{t.actual || "—"}</td>
@@ -299,12 +316,14 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
                         {(a.reasonLabel || a.reasonNote) && (
                           <div className={styles.actReason}>
                             <strong>Delay reason: </strong>
-                            {a.reasonLabel ?? ""}{a.reasonLabel && a.reasonNote ? " · " : ""}
-                            {a.reasonNote ?? ""}
+                            {[a.reasonLabel, a.reasonNote].filter(Boolean).join(" · ")}
                           </div>
                         )}
                         <div className={styles.actFoot}>
-                          {a.contractorName ?? "—"} · {a.loggedByName}
+                          {a.contractorName ?? "Untagged"} · {a.loggedByName}
+                          {a.loggedAt && (
+                            <span className={styles.of}> · logged {new Date(a.loggedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>
+                          )}
                         </div>
                       </div>
                     </div>

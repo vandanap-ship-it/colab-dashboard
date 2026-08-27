@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "./Toast";
+import { istDayString } from "@/lib/istDay";
 
 export interface ContractorOption {
   id: string;
@@ -37,7 +38,7 @@ export default function ManpowerEntryForm({
   const router = useRouter();
   const toast = useToast();
 
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(() => istDayString(), []);
 
   const [entryDate, setEntryDate] = useState<string>(today);
   const [contractorId, setContractorId] = useState<string>(contractors[0]?.id ?? "");

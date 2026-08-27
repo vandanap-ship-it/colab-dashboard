@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { rangeSummary, type DaySummary, type ManpowerEntryRow, type TradePlanRow } from "@/lib/manpower";
 import { reasonLabel } from "@/lib/hindranceReasons";
 import { mitigationFor } from "@/lib/reasonMitigations";
+import { istDayStart } from "@/lib/istDay";
 
 // ---------------------------------------------------------------------------
 // Shapes
@@ -30,21 +31,20 @@ export interface WeeklyMilestoneItem {
   villaLabel: string;
   blockCode: string;
   milestoneName: string;
-  // Days late relative to baseline. Positive = late, negative = ahead.
   daysLate: number | null;
-  // For in-progress items: has any progress logged this week?
   movedThisWeek?: boolean;
   daysIdle?: number;
-  reason?: string; // reason label if a hindrance covers this
+  reason?: string;
 }
 
 export interface WeeklyMilestonePlan {
-  contractorId: string | null;
+  contractorId: string | null; // null = "Untagged / project-level" bucket
   contractorName: string;
   hasSchedule: boolean;
   toComplete: { total: number; closed: number; items: WeeklyMilestoneItem[] };
   toStart:    { total: number; started: number; items: WeeklyMilestoneItem[] };
   inProgress: { total: number; moving: number; stalled: number; movingItems: WeeklyMilestoneItem[]; stalledItems: WeeklyMilestoneItem[] };
+  overdue:    { total: number; items: WeeklyMilestoneItem[] };
 }
 
 export interface WeeklyManpowerRow {
@@ -62,10 +62,11 @@ export interface WeeklyManpowerRow {
 export interface DelayReasonWithMitigation {
   code: string;
   label: string;
-  count: number;
-  daysImpact: number;
+  count: number;         // # of hindrance / progress-reason rows contributing
+  daysImpact: number;    // sum of daysImpact from hindrances
   affectedVillas: number[];
-  activityCount: number;
+  activityCount: number; // distinct wbsNodes involved
+  hasProjectLevel: boolean; // true if any project-level (no wbsNode) row
   mitigation: string;
 }
 
@@ -89,11 +90,14 @@ export interface WeeklyReport {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function toDay(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
+const UNTAGGED_LABEL = "Untagged / to be assigned";
+
 function daysBetween(a: Date, b: Date): number {
-  return Math.max(0, Math.round((b.getTime() - a.getTime()) / 86400000));
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+function daysLatePos(baseline: Date | null | undefined, at: Date): number | null {
+  if (!baseline) return null;
+  return Math.max(0, daysBetween(baseline, at));
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +105,7 @@ function daysBetween(a: Date, b: Date): number {
 // ---------------------------------------------------------------------------
 
 export async function getWeeklyReport(projectId: string, weekEnding: Date): Promise<WeeklyReport | null> {
-  const weekEnd = toDay(weekEnding);
+  const weekEnd = istDayStart(weekEnding);
   const weekStart = new Date(weekEnd.getTime() - 6 * 86400000);
   const weekEndExclusive = new Date(weekEnd.getTime() + 86400000);
 
@@ -113,6 +117,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     tradePlans,
     manpower,
     weekHindrances,
+    weekProgressReasons,
     projectMilestones,
   ] = await Promise.all([
     prisma.project.findUnique({
@@ -128,6 +133,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
         block: { select: { code: true } },
         milestones: {
           select: {
+            id: true,
             baselineStart: true,
             baselineFinish: true,
             actualStart: true,
@@ -156,7 +162,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
         wbsNode: {
           select: {
             villaId: true,
-            villaMilestone: { select: { villaId: true, sectionId: true } },
+            villaMilestone: { select: { id: true, villaId: true } },
           },
         },
       },
@@ -189,18 +195,53 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
         actualCount: true,
       },
     }),
+    // Hindrances that were OPEN at any point during the week — either
+    // started this week, or already open going in and either resolved
+    // this week or still open. This matches "impacted this week", not
+    // "still open forever".
     prisma.hindrance.findMany({
       where: {
         projectId,
-        status: "OPEN",
-        startDate: { lte: weekEnd },
+        OR: [
+          { startDate: { gte: weekStart, lte: weekEnd } },
+          {
+            startDate: { lt: weekStart },
+            OR: [{ status: "OPEN" }, { resolvedDate: { gte: weekStart, lte: weekEndExclusive } }],
+          },
+        ],
       },
       select: {
         id: true,
         reasonCode: true,
         daysImpact: true,
+        startDate: true,
+        resolvedDate: true,
+        status: true,
+        wbsNodeId: true,
         wbsNode: {
           select: {
+            id: true,
+            villaMilestone: { select: { id: true, villaId: true } },
+          },
+        },
+      },
+    }),
+    // Progress entries this week that carry a reasonCode — they never
+    // opened a Hindrance, but the site engineer flagged a delay reason
+    // on the log itself. These must feed the Weekly Delay Reasons.
+    prisma.progressEntry.findMany({
+      where: {
+        projectId,
+        deletedAt: null,
+        date: { gte: weekStart, lt: weekEndExclusive },
+        reasonCode: { not: null },
+      },
+      select: {
+        reasonCode: true,
+        wbsNodeId: true,
+        wbsNode: {
+          select: {
+            id: true,
             villaMilestone: { select: { villaId: true } },
           },
         },
@@ -217,12 +258,15 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
   const villaIdToNumber = new Map(villas.map((v) => [v.id, v.number]));
 
   // ------- §1 Overall Progress at week end -------
+  // Denominator = milestones that have a baseline plan. Un-baselined ones
+  // can't dilute the %.
   const overall: WeeklyOverallProgress = (() => {
-    const total = projectMilestones.length;
-    const plannedThroughWeek = projectMilestones.filter(
+    const baselined = projectMilestones.filter((m) => m.baselineFinish);
+    const total = baselined.length;
+    const plannedThroughWeek = baselined.filter(
       (m) => m.baselineFinish && m.baselineFinish <= weekEnd,
     ).length;
-    const actualThroughWeek = projectMilestones.filter(
+    const actualThroughWeek = baselined.filter(
       (m) => m.actualFinish && m.actualFinish <= weekEnd,
     ).length;
     const p = total > 0 ? Math.round((plannedThroughWeek / total) * 10000) / 100 : 0;
@@ -230,102 +274,188 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     return { plannedPct: p, actualPct: a, variancePct: Math.round((a - p) * 100) / 100 };
   })();
 
+  // ------- Reason index: per villaMilestone, best-effort reason label -------
+  // Weekly Milestone Breakdown wants each item to show WHY it's late.
+  // Sources in order of preference:
+  //   1) Hindrance opened on the milestone's wbsNode(s) this week
+  //   2) ProgressEntry.reasonCode logged on the milestone's wbsNode(s) this week
+  const reasonByMilestone = new Map<string, string>();
+  {
+    // Build a wbsNode -> villaMilestoneId lookup from villas we already loaded.
+    const wbsToMilestone = new Map<string, string>();
+    for (const v of villas) {
+      for (const m of v.milestones) {
+        for (const w of m.wbsNodes) wbsToMilestone.set(w.id, m.id);
+      }
+    }
+    for (const h of weekHindrances) {
+      if (!h.reasonCode) continue;
+      const wbsId = h.wbsNode?.id;
+      const mid = wbsId ? wbsToMilestone.get(wbsId) : h.wbsNode?.villaMilestone?.id;
+      if (!mid || reasonByMilestone.has(mid)) continue;
+      reasonByMilestone.set(mid, reasonLabel(h.reasonCode));
+    }
+    for (const pe of weekProgressReasons) {
+      if (!pe.reasonCode) continue;
+      const wbsId = pe.wbsNode?.id;
+      const mid = wbsId ? wbsToMilestone.get(wbsId) : undefined;
+      if (!mid || reasonByMilestone.has(mid)) continue;
+      reasonByMilestone.set(mid, reasonLabel(pe.reasonCode));
+    }
+  }
+
   // ------- §2 Milestone Plan per contractor -------
-  // Villas that logged progress this week, by villa id.
-  const villaIdsMoved = new Set<string>(
+  // Milestones that had a ProgressEntry this week — a villa can move on
+  // one milestone while another on the same villa sits stalled, so we
+  // track at milestone granularity, not villa granularity.
+  const movedMilestoneIds = new Set<string>(
     weekEntries
-      .map((e) => e.wbsNode.villaMilestone?.villaId)
+      .map((e) => e.wbsNode.villaMilestone?.id)
       .filter((x): x is string => !!x),
   );
-  const villaIdsMovedThisWeekWithSection = new Set<string>(
-    weekEntries
-      .map((e) => e.wbsNode.villaMilestone?.villaId + "::" + e.wbsNode.villaMilestone?.sectionId)
-      .filter((x) => !x.startsWith("undefined")),
-  );
-
-  // Group milestones by responsible contractor via wbsNodes.
-  const contractorItems = new Map<
-    string,
-    {
-      toComplete: WeeklyMilestoneItem[];
-      toStart: WeeklyMilestoneItem[];
-      inProgressMoving: WeeklyMilestoneItem[];
-      inProgressStalled: WeeklyMilestoneItem[];
+  // Milestones that closed this week (for `toComplete.closed`).
+  const closedThisWeekMilestones = new Set<string>();
+  // Milestones that started this week (for `toStart.started`).
+  const startedThisWeekMilestones = new Set<string>();
+  for (const v of villas) {
+    for (const m of v.milestones) {
+      if (m.actualFinish && m.actualFinish >= weekStart && m.actualFinish <= weekEnd) {
+        closedThisWeekMilestones.add(m.id);
+      }
+      if (m.actualStart && m.actualStart >= weekStart && m.actualStart <= weekEnd) {
+        startedThisWeekMilestones.add(m.id);
+      }
     }
-  >();
-  contractors.forEach((c) => contractorItems.set(c.id, {
-    toComplete: [], toStart: [], inProgressMoving: [], inProgressStalled: [],
-  }));
+  }
+
+  type Bucket = {
+    toComplete: WeeklyMilestoneItem[];
+    toStart: WeeklyMilestoneItem[];
+    inProgressMoving: WeeklyMilestoneItem[];
+    inProgressStalled: WeeklyMilestoneItem[];
+    overdue: WeeklyMilestoneItem[];
+    closedCount: number;
+    startedCount: number;
+  };
+  const emptyBucket = (): Bucket => ({
+    toComplete: [], toStart: [], inProgressMoving: [], inProgressStalled: [], overdue: [],
+    closedCount: 0, startedCount: 0,
+  });
+
+  const contractorItems = new Map<string, Bucket>();
+  contractors.forEach((c) => contractorItems.set(c.id, emptyBucket()));
+  // Untagged bucket — populated on demand so we don't show it for projects
+  // with 100 % coverage.
+  const untaggedBucket: Bucket = emptyBucket();
+  let untaggedHasAny = false;
 
   for (const v of villas) {
     for (const m of v.milestones) {
-      const contractorId = m.wbsNodes[0]?.contractorId;
-      if (!contractorId) continue;
-      const bucket = contractorItems.get(contractorId);
-      if (!bucket) continue;
+      // Which contractor(s) claim this milestone? A milestone with no
+      // wbsNodes, or wbsNodes with all-null contractorId, is "untagged".
+      const contractorIds = [...new Set(
+        m.wbsNodes.map((w) => w.contractorId).filter((c): c is string => !!c),
+      )];
+      let buckets: Bucket[];
+      if (contractorIds.length > 0) {
+        buckets = contractorIds
+          .map((cid) => contractorItems.get(cid))
+          .filter((b): b is Bucket => !!b);
+        if (buckets.length === 0) {
+          // Tagged to contractor(s) that aren't active — fall back to untagged.
+          buckets = [untaggedBucket];
+          untaggedHasAny = true;
+        }
+      } else {
+        buckets = [untaggedBucket];
+        untaggedHasAny = true;
+      }
 
-      const item: WeeklyMilestoneItem = {
+      const reason = reasonByMilestone.get(m.id);
+      const baseItem: WeeklyMilestoneItem = {
         villaNumber: v.number,
         villaLabel: v.label ?? `Villa ${v.number}`,
         blockCode: v.block.code,
         milestoneName: m.section?.name ?? "—",
-        daysLate: m.baselineFinish ? daysBetween(m.baselineFinish, weekEnd) : null,
+        daysLate: daysLatePos(m.baselineFinish, weekEnd),
+        reason,
       };
 
-      // TO COMPLETE: baselineFinish falls inside this week.
-      if (m.baselineFinish && m.baselineFinish >= weekStart && m.baselineFinish <= weekEnd) {
-        bucket.toComplete.push(item);
-      }
-      // TO START: baselineStart falls inside this week AND actualStart is null.
-      if (m.baselineStart && m.baselineStart >= weekStart && m.baselineStart <= weekEnd && !m.actualStart) {
-        bucket.toStart.push(item);
-      }
-      // IN PROGRESS: has actualStart, no actualFinish yet.
-      if (m.actualStart && !m.actualFinish) {
-        const moved = villaIdsMoved.has(v.id);
-        const daysIdle = moved
-          ? 0
-          : m.actualStart
-          ? daysBetween(m.actualStart, weekEnd)
-          : 0;
-        if (moved) {
-          bucket.inProgressMoving.push({ ...item, movedThisWeek: true });
-        } else {
-          bucket.inProgressStalled.push({ ...item, movedThisWeek: false, daysIdle });
+      for (const b of buckets) {
+        // TO COMPLETE: baselineFinish falls inside this week.
+        if (m.baselineFinish && m.baselineFinish >= weekStart && m.baselineFinish <= weekEnd) {
+          b.toComplete.push(baseItem);
+          if (closedThisWeekMilestones.has(m.id)) b.closedCount++;
+        }
+        // TO START: baselineStart falls inside this week AND not yet started.
+        if (m.baselineStart && m.baselineStart >= weekStart && m.baselineStart <= weekEnd && !m.actualStart) {
+          b.toStart.push(baseItem);
+        }
+        // Started this week counts even if the plan said start earlier.
+        if (m.baselineStart && m.baselineStart >= weekStart && m.baselineStart <= weekEnd && startedThisWeekMilestones.has(m.id)) {
+          b.startedCount++;
+        }
+        // IN PROGRESS: has actualStart, no actualFinish yet.
+        if (m.actualStart && !m.actualFinish) {
+          const moved = movedMilestoneIds.has(m.id);
+          const daysIdle = moved ? 0 : Math.max(0, daysBetween(m.actualStart, weekEnd));
+          if (moved) {
+            b.inProgressMoving.push({ ...baseItem, movedThisWeek: true });
+          } else {
+            b.inProgressStalled.push({ ...baseItem, movedThisWeek: false, daysIdle });
+          }
+        }
+        // OVERDUE: baselineFinish already passed AND not closed AND not
+        // caught by TO COMPLETE (i.e. spilled from before this week).
+        if (
+          m.baselineFinish &&
+          m.baselineFinish < weekStart &&
+          !m.actualFinish
+        ) {
+          b.overdue.push(baseItem);
         }
       }
     }
   }
 
-  const milestonePlans: WeeklyMilestonePlan[] = contractors.map((c) => {
-    const b = contractorItems.get(c.id)!;
-    const toComplete = b.toComplete;
-    const toStart = b.toStart;
-    const moving = b.inProgressMoving;
-    const stalled = b.inProgressStalled;
-    return {
-      contractorId: c.id,
-      contractorName: c.name,
-      hasSchedule: c._count.wbsNodes > 0,
-      toComplete: {
-        total: toComplete.length,
-        closed: 0, // We don't know within this week if they closed — could refine later
-        items: toComplete,
-      },
-      toStart: {
-        total: toStart.length,
-        started: 0,
-        items: toStart,
-      },
-      inProgress: {
-        total: moving.length + stalled.length,
-        moving: moving.length,
-        stalled: stalled.length,
-        movingItems: moving.slice(0, 8),
-        stalledItems: stalled.slice(0, 8),
-      },
-    };
+  const buildPlan = (
+    contractorId: string | null,
+    contractorName: string,
+    hasSchedule: boolean,
+    b: Bucket,
+  ): WeeklyMilestonePlan => ({
+    contractorId,
+    contractorName,
+    hasSchedule,
+    toComplete: {
+      total: b.toComplete.length,
+      closed: b.closedCount,
+      items: b.toComplete,
+    },
+    toStart: {
+      total: b.toStart.length,
+      started: b.startedCount,
+      items: b.toStart,
+    },
+    inProgress: {
+      total: b.inProgressMoving.length + b.inProgressStalled.length,
+      moving: b.inProgressMoving.length,
+      stalled: b.inProgressStalled.length,
+      movingItems: b.inProgressMoving.slice(0, 12),
+      stalledItems: b.inProgressStalled.slice(0, 12),
+    },
+    overdue: {
+      total: b.overdue.length,
+      items: b.overdue.slice(0, 12),
+    },
   });
+
+  const milestonePlans: WeeklyMilestonePlan[] = contractors.map((c) =>
+    buildPlan(c.id, c.name, c._count.wbsNodes > 0, contractorItems.get(c.id)!),
+  );
+  if (untaggedHasAny) {
+    milestonePlans.push(buildPlan(null, UNTAGGED_LABEL, true, untaggedBucket));
+  }
 
   // ------- §3 Manpower -------
   const planRows: TradePlanRow[] = tradePlans.map((p) => ({
@@ -375,26 +505,45 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     count: number;
     daysImpact: number;
     villas: Set<number>;
-    activityCount: number;
+    activityIds: Set<string>;
+    hasProjectLevel: boolean;
   }>();
-  for (const h of weekHindrances) {
-    const code = h.reasonCode ?? "UNSPECIFIED";
-    const entry = reasonMap.get(code) ?? {
-      label: reasonLabel(code === "UNSPECIFIED" ? null : code),
+  const upsertReason = (
+    code: string | null,
+    daysImpact: number,
+    villaId: string | null | undefined,
+    activityId: string | null | undefined,
+    isProjectLevel: boolean,
+  ) => {
+    const key = code ?? "UNSPECIFIED";
+    const entry = reasonMap.get(key) ?? {
+      label: reasonLabel(code),
       count: 0,
       daysImpact: 0,
       villas: new Set<number>(),
-      activityCount: 0,
+      activityIds: new Set<string>(),
+      hasProjectLevel: false,
     };
     entry.count++;
-    entry.daysImpact += h.daysImpact ?? 0;
-    const villaId = h.wbsNode?.villaMilestone?.villaId;
+    entry.daysImpact += daysImpact;
     if (villaId) {
       const num = villaIdToNumber.get(villaId);
       if (num != null) entry.villas.add(num);
     }
-    entry.activityCount++;
-    reasonMap.set(code, entry);
+    if (activityId) entry.activityIds.add(activityId);
+    if (isProjectLevel) entry.hasProjectLevel = true;
+    reasonMap.set(key, entry);
+  };
+
+  for (const h of weekHindrances) {
+    const villaId = h.wbsNode?.villaMilestone?.villaId ?? null;
+    const activityId = h.wbsNode?.id ?? null;
+    upsertReason(h.reasonCode, h.daysImpact ?? 0, villaId, activityId, !h.wbsNodeId);
+  }
+  for (const pe of weekProgressReasons) {
+    // ProgressEntry reasons don't have a daysImpact — count them but don't inflate days.
+    const villaId = pe.wbsNode?.villaMilestone?.villaId ?? null;
+    upsertReason(pe.reasonCode, 0, villaId, pe.wbsNodeId, !pe.wbsNodeId);
   }
   const delayReasons: DelayReasonWithMitigation[] = [...reasonMap.entries()]
     .map(([code, v]) => ({
@@ -403,13 +552,11 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
       count: v.count,
       daysImpact: v.daysImpact,
       affectedVillas: [...v.villas].sort((a, b) => a - b),
-      activityCount: v.activityCount,
+      activityCount: v.activityIds.size,
+      hasProjectLevel: v.hasProjectLevel,
       mitigation: mitigationFor(code),
     }))
     .sort((a, b) => b.daysImpact - a.daysImpact || b.count - a.count);
-
-  // Fold the sub-week-flag warning
-  void villaIdsMovedThisWeekWithSection;
 
   return {
     project,

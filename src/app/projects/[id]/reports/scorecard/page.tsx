@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { canSeeDesktop } from "@/lib/roles";
 import { getScorecard } from "@/lib/scorecardServer";
 import ScorecardView from "@/components/ScorecardView";
+import ReportErrorFallback from "@/components/ReportErrorFallback";
+import { istDayStart } from "@/lib/istDay";
 
 export const dynamic = "force-dynamic";
 
@@ -33,15 +35,25 @@ export default async function ScorecardPage({
       const d = new Date(dateParam + "T00:00:00Z");
       if (!isNaN(d.getTime())) return d;
     }
-    const t = new Date();
-    t.setUTCHours(0, 0, 0, 0);
-    return t;
+    return istDayStart();
   })();
 
-  const scorecard = await getScorecard(projectId, day);
-  if (!scorecard) notFound();
-
   const dateStr = day.toISOString().slice(0, 10);
+
+  let scorecard;
+  try {
+    scorecard = await getScorecard(projectId, day);
+  } catch (err) {
+    console.error("[scorecard] failed", err);
+    return (
+      <ReportErrorFallback
+        title="Daily Scorecard could not be generated"
+        detail={err instanceof Error ? err.message : String(err)}
+        projectId={projectId}
+      />
+    );
+  }
+  if (!scorecard) notFound();
 
   return (
     <ScorecardView scorecard={scorecard} projectId={projectId} dateStr={dateStr} />
