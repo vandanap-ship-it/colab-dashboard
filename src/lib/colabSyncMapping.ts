@@ -70,6 +70,9 @@ const ALL_FLOORS_RULES: AllFloorsRule[] = [
   { type: "MEP",                head: "Knobs & Handles",      section: "Automation, Lighting & Appliances" },
   { type: "MEP",                                               section: "MEP Service Works" },
 
+  // Electrical is a distinct Activity_Type in Colab exports (e.g. "Electrical 2nd Fix").
+  { type: "Electrical",                                        section: "MEP Service Works" },
+
   // HVAC + Plumbing — everything under MEP Service Works.
   { type: "HVAC",                                              section: "MEP Service Works" },
   { type: "Plumbing",                                          section: "MEP Service Works" },
