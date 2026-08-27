@@ -133,33 +133,55 @@ export default function ColabProgressImportForm({ projectId }: { projectId: stri
       setProgress({ done: 0, total: chunks.length });
       const collected: Stats[] = [];
       for (let i = 0; i < chunks.length; i++) {
-        const res = await fetch("/api/admin/import-colab-progress", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            csv: chunks[i],
-            projectId,
-            dryRun,
-            projectName: projectFilter.trim() || undefined,
-            defaultContractorName: defaultContractor.trim() || undefined,
-          }),
-        });
-        const raw = await res.text();
-        let body: { ok?: boolean; stats?: Stats; error?: string };
-        try {
-          body = JSON.parse(raw);
-        } catch {
-          throw new Error(
-            `Chunk ${i + 1}/${chunks.length} returned non-JSON (HTTP ${res.status}): ${raw.slice(0, 200)}`,
-          );
+        // Retry each chunk up to 3 times on transient network errors — the
+        // import is idempotent (colab:{Activity_ID}:{date} key), so re-sending
+        // a chunk that partially wrote does the right thing.
+        let lastErr: unknown = null;
+        let succeeded = false;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const res = await fetch("/api/admin/import-colab-progress", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                csv: chunks[i],
+                projectId,
+                dryRun,
+                projectName: projectFilter.trim() || undefined,
+                defaultContractorName: defaultContractor.trim() || undefined,
+              }),
+            });
+            const raw = await res.text();
+            let body: { ok?: boolean; stats?: Stats; error?: string };
+            try {
+              body = JSON.parse(raw);
+            } catch {
+              throw new Error(
+                `Chunk ${i + 1}/${chunks.length} returned non-JSON (HTTP ${res.status}): ${raw.slice(0, 200)}`,
+              );
+            }
+            if (!res.ok || !body.ok) {
+              throw new Error(
+                `Chunk ${i + 1}/${chunks.length} failed: ${body.error ?? `HTTP ${res.status}`}`,
+              );
+            }
+            if (body.stats) collected.push(body.stats);
+            setProgress({ done: i + 1, total: chunks.length });
+            succeeded = true;
+            break;
+          } catch (err) {
+            lastErr = err;
+            if (attempt < 3) {
+              // Exponential-ish backoff — 1s, 3s.
+              await new Promise((r) => setTimeout(r, attempt === 1 ? 1000 : 3000));
+            }
+          }
         }
-        if (!res.ok || !body.ok) {
-          throw new Error(
-            `Chunk ${i + 1}/${chunks.length} failed: ${body.error ?? `HTTP ${res.status}`}`,
-          );
+        if (!succeeded) {
+          throw lastErr instanceof Error
+            ? lastErr
+            : new Error(`Chunk ${i + 1}/${chunks.length} failed after 3 attempts`);
         }
-        if (body.stats) collected.push(body.stats);
-        setProgress({ done: i + 1, total: chunks.length });
       }
       setResult({ ok: true, stats: mergeStats(collected), dryRun });
       if (!dryRun) router.refresh();
