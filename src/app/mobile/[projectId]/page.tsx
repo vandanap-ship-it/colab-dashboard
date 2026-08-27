@@ -1,11 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  AlertTriangle,
   CheckSquare,
   ClipboardCheck,
-  ClipboardList,
-  Eye,
   ListChecks,
   PlusCircle,
   RefreshCw,
@@ -51,7 +48,14 @@ export default async function MobileProjectHome({
     label: string;
     icon: LucideIcon;
     primary?: boolean;
+    tier: "primary" | "secondary";
   };
+  // V1 mobile home — three primary CTAs (Progress, Manpower, Hindrance) that
+  // the site team hits every day, plus a compact "More" section below for
+  // less-frequent flows. QA/QC surfaces (Snag, Areas of Concern, Inspection)
+  // are hidden entirely for V1 — those teams stay on their current tools
+  // (WhatsApp / Colab wind-down) and come to Siddhi in V2. Expense/DLR live
+  // in "More" only for staff (scoped contractors don't see them).
   const allTools: Tool[] = [
     {
       key: "new-progress",
@@ -59,29 +63,42 @@ export default async function MobileProjectHome({
       label: "New Progress",
       icon: PlusCircle,
       primary: true,
+      tier: "primary",
     },
-    { key: "site-progress", href: `/mobile/${projectId}/site-progress`, label: "Site Progress", icon: ListChecks },
-    { key: "snag", href: `/mobile/${projectId}/issue/new`, label: "Snag", icon: AlertTriangle },
-    { key: "hindrance", href: `/mobile/${projectId}/hindrance/new`, label: "Hindrance", icon: CheckSquare },
-    { key: "manpower", href: `/mobile/${projectId}/manpower/new`, label: "Log Manpower", icon: Users },
-    { key: "concern", href: `/mobile/${projectId}/concern/new`, label: "Areas of Concern", icon: Eye },
     {
-      key: "inspection",
-      href: `/mobile/${projectId}/inspection/new`,
-      label: "Inspection",
-      icon: ClipboardList,
+      key: "manpower",
+      href: `/mobile/${projectId}/manpower/new`,
+      label: "Log Manpower",
+      icon: Users,
+      tier: "primary",
+    },
+    {
+      key: "hindrance",
+      href: `/mobile/${projectId}/hindrance/new`,
+      label: "Log Hindrance",
+      icon: CheckSquare,
+      tier: "primary",
+    },
+    {
+      key: "site-progress",
+      href: `/mobile/${projectId}/site-progress`,
+      label: "Site Progress",
+      icon: ListChecks,
+      tier: "secondary",
     },
     {
       key: "expense",
       href: `/mobile/${projectId}/expense/new`,
       label: "Log Expense",
       icon: Wallet,
+      tier: "secondary",
     },
     {
       key: "dlr",
       href: `/projects/${projectId}/dlr`,
       label: "DLR Updates",
       icon: ClipboardCheck,
+      tier: "secondary",
     },
   ];
 
@@ -94,6 +111,8 @@ export default async function MobileProjectHome({
   if (tools.length > 0 && !tools.some((t) => t.primary)) {
     tools[0] = { ...tools[0], primary: true };
   }
+  const primaryTools = tools.filter((t) => t.tier === "primary");
+  const secondaryTools = tools.filter((t) => t.tier === "secondary");
 
   const scoped = isScopedUser(userModules);
 
@@ -123,28 +142,28 @@ export default async function MobileProjectHome({
 
       <section>
         <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
-          My Tools
+          Log today
         </h2>
-        <div className="grid grid-cols-2 gap-2.5">
-          {tools.map((t) => {
+        <div className="grid grid-cols-1 gap-2.5">
+          {primaryTools.map((t) => {
             const Icon = t.icon;
             return (
               <Link
                 key={t.href}
                 href={t.href}
-                className={`rounded-xl border p-4 active:scale-[0.99] transition-all ${
+                className={`rounded-xl border p-5 active:scale-[0.99] transition-all flex items-center gap-4 ${
                   t.primary
                     ? "bg-stone-900 border-stone-900 text-white shadow-card hover:bg-stone-800"
                     : "bg-white border-stone-200 hover:border-stone-300 hover:shadow-soft"
                 }`}
               >
                 <Icon
-                  className={`w-5 h-5 ${
+                  className={`w-6 h-6 shrink-0 ${
                     t.primary ? "text-brand-400" : "text-stone-500"
                   }`}
                 />
                 <div
-                  className={`mt-3 text-sm font-medium ${
+                  className={`text-base font-medium ${
                     t.primary ? "" : "text-stone-900"
                   }`}
                 >
@@ -155,6 +174,31 @@ export default async function MobileProjectHome({
           })}
         </div>
       </section>
+
+      {secondaryTools.length > 0 && (
+        <section>
+          <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
+            More
+          </h2>
+          <div className="grid grid-cols-2 gap-2.5">
+            {secondaryTools.map((t) => {
+              const Icon = t.icon;
+              return (
+                <Link
+                  key={t.href}
+                  href={t.href}
+                  className="rounded-xl border p-4 active:scale-[0.99] transition-all bg-white border-stone-200 hover:border-stone-300 hover:shadow-soft"
+                >
+                  <Icon className="w-5 h-5 text-stone-500" />
+                  <div className="mt-3 text-sm font-medium text-stone-900">
+                    {t.label}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {!scoped && (
         <section className="rounded-xl border border-stone-200 bg-white p-5">

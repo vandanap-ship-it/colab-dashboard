@@ -2,14 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  BarChart3,
-  HardHat,
-  Lightbulb,
-  ScanEye,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
+import { BarChart3, ScanEye, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 type Tab = {
@@ -30,10 +23,10 @@ export default function ProjectTabs({
 }) {
   const pathname = usePathname();
 
-  // 6-tab layout per Shraddha's 24 Aug spec: Dashboard, Progress, QA/QC,
-  // Safety, My Actions, Insights. (Layout + Snapshot routes still exist, just
-  // not in the top nav — Layout's content moved onto the Progress tab as
-  // the Interactive Drawing section.)
+  // V1 nav — 3 tabs: Dashboard, Progress, My Actions. QA/QC, Safety, and
+  // Insights are deferred to V2 (Shraddha's 28 Aug launch scope call) —
+  // their routes still resolve via direct URL, but they don't clutter the
+  // primary nav during launch when the site team is learning the tool.
   const tabs: Tab[] = [
     {
       key: "overview",
@@ -48,30 +41,11 @@ export default function ProjectTabs({
       icon: BarChart3,
     },
     {
-      key: "qaqc",
-      label: "QA/QC",
-      href: `/projects/${projectId}/qaqc`,
-      icon: ShieldCheck,
-    },
-    {
-      key: "safety",
-      label: "Safety",
-      href: `/projects/${projectId}/safety`,
-      icon: HardHat,
-    },
-    {
       key: "my-actions",
       label: "My Actions",
       href: `/projects/${projectId}/my-actions`,
       icon: Sparkles,
       badge: myActionsCount,
-    },
-    {
-      key: "insights",
-      label: "Insights",
-      href: `/projects/${projectId}/insights`,
-      icon: Lightbulb,
-      tone: "accent",
     },
   ];
 
