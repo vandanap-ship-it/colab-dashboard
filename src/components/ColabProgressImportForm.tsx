@@ -33,6 +33,84 @@ interface Result {
   dryRun: boolean;
 }
 
+/**
+ * Split the Colab progress CSV into per-villa sub-CSVs so each POST completes
+ * well under Vercel's 5-min function timeout. Preserves the header row.
+ * Rows without a recognisable Location_Name land in the last chunk.
+ */
+function splitByVilla(csvText: string): string[] {
+  const lines = csvText.split(/\r?\n/);
+  if (lines.length < 2) return [csvText];
+  const header = lines[0];
+  const cols = header.split(",");
+  const locIdx = cols.findIndex((c) => c.trim() === "Location_Name");
+  if (locIdx === -1) return [csvText];
+
+  const byVilla = new Map<string, string[]>();
+  const orphans: string[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    // Cheap parse — Colab exports don't quote commas in Location_Name.
+    const cells = line.split(",");
+    const villa = (cells[locIdx] ?? "").trim();
+    if (!villa) {
+      orphans.push(line);
+      continue;
+    }
+    const arr = byVilla.get(villa) ?? [];
+    arr.push(line);
+    byVilla.set(villa, arr);
+  }
+
+  // Villas roughly balanced (~175 rows each), so per-villa chunks are ideal.
+  const chunks: string[] = [];
+  for (const rows of byVilla.values()) {
+    chunks.push(header + "\n" + rows.join("\n") + "\n");
+  }
+  if (orphans.length) chunks.push(header + "\n" + orphans.join("\n") + "\n");
+  return chunks;
+}
+
+function mergeStats(all: Stats[]): Stats {
+  const out: Stats = {
+    totalRows: 0,
+    matchedRows: 0,
+    matchedActivityRows: 0,
+    unmatchedRows: 0,
+    unmatchedSamples: [],
+    villasNotFound: [],
+    sectionsUnmatched: [],
+    progressEntriesCreated: 0,
+    progressEntriesUpdated: 0,
+    photosCreated: 0,
+    wbsNodesUpdated: 0,
+    villaMilestonesUpdated: 0,
+    contractorsCreated: [],
+    elapsedMs: 0,
+  };
+  const seenSections = new Set<string>();
+  const seenVillas = new Set<string>();
+  const seenContractors = new Set<string>();
+  for (const s of all) {
+    out.totalRows += s.totalRows;
+    out.matchedRows += s.matchedRows;
+    out.matchedActivityRows += s.matchedActivityRows;
+    out.unmatchedRows += s.unmatchedRows;
+    out.progressEntriesCreated += s.progressEntriesCreated;
+    out.progressEntriesUpdated += s.progressEntriesUpdated;
+    out.photosCreated += s.photosCreated;
+    out.wbsNodesUpdated += s.wbsNodesUpdated;
+    out.villaMilestonesUpdated += s.villaMilestonesUpdated;
+    out.elapsedMs += s.elapsedMs;
+    for (const v of s.villasNotFound) if (!seenVillas.has(v)) { seenVillas.add(v); out.villasNotFound.push(v); }
+    for (const x of s.sectionsUnmatched) if (!seenSections.has(x)) { seenSections.add(x); out.sectionsUnmatched.push(x); }
+    for (const c of s.contractorsCreated) if (!seenContractors.has(c)) { seenContractors.add(c); out.contractorsCreated.push(c); }
+    for (const u of s.unmatchedSamples) if (out.unmatchedSamples.length < 30) out.unmatchedSamples.push(u);
+  }
+  return out;
+}
+
 export default function ColabProgressImportForm({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
@@ -40,6 +118,7 @@ export default function ColabProgressImportForm({ projectId }: { projectId: stri
   const [defaultContractor, setDefaultContractor] = useState("Abraham Thomas");
   const [dryRun, setDryRun] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [result, setResult] = useState<Result | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
@@ -47,26 +126,43 @@ export default function ColabProgressImportForm({ projectId }: { projectId: stri
     if (!file) return;
     setSubmitting(true);
     setResult(null);
+    setProgress(null);
     try {
       const csv = await file.text();
-      const res = await fetch("/api/admin/import-colab-progress", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          csv,
-          projectId,
-          dryRun,
-          projectName: projectFilter.trim() || undefined,
-          defaultContractorName: defaultContractor.trim() || undefined,
-        }),
-      });
-      const body = await res.json();
-      if (!res.ok || !body.ok) {
-        setResult({ ok: false, error: body.error ?? `HTTP ${res.status}`, dryRun });
-      } else {
-        setResult({ ok: true, stats: body.stats, dryRun });
-        if (!dryRun) router.refresh();
+      const chunks = splitByVilla(csv);
+      setProgress({ done: 0, total: chunks.length });
+      const collected: Stats[] = [];
+      for (let i = 0; i < chunks.length; i++) {
+        const res = await fetch("/api/admin/import-colab-progress", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            csv: chunks[i],
+            projectId,
+            dryRun,
+            projectName: projectFilter.trim() || undefined,
+            defaultContractorName: defaultContractor.trim() || undefined,
+          }),
+        });
+        const raw = await res.text();
+        let body: { ok?: boolean; stats?: Stats; error?: string };
+        try {
+          body = JSON.parse(raw);
+        } catch {
+          throw new Error(
+            `Chunk ${i + 1}/${chunks.length} returned non-JSON (HTTP ${res.status}): ${raw.slice(0, 200)}`,
+          );
+        }
+        if (!res.ok || !body.ok) {
+          throw new Error(
+            `Chunk ${i + 1}/${chunks.length} failed: ${body.error ?? `HTTP ${res.status}`}`,
+          );
+        }
+        if (body.stats) collected.push(body.stats);
+        setProgress({ done: i + 1, total: chunks.length });
       }
+      setResult({ ok: true, stats: mergeStats(collected), dryRun });
+      if (!dryRun) router.refresh();
     } catch (err) {
       setResult({
         ok: false,
@@ -153,6 +249,12 @@ export default function ColabProgressImportForm({ projectId }: { projectId: stri
         >
           {submitting ? (dryRun ? "Running dry-run…" : "Importing…") : dryRun ? "Run dry-run" : "Import to database"}
         </button>
+        {progress && (
+          <span className="text-sm text-stone-600">
+            Chunk {progress.done} / {progress.total}
+            {progress.done < progress.total && " …"}
+          </span>
+        )}
       </div>
 
       {result && (
