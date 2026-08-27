@@ -216,8 +216,11 @@ export async function importColabProgress(
   const rows = parsed.data;
   stats.totalRows = rows.length;
 
-  // Pre-load lookup tables so we don't hit the DB per-row.
-  const [villas, sections, contractors] = await Promise.all([
+  // Pre-load every lookup table upfront so the per-row hot loop never hits
+  // the DB. The previous villaMilestone.findUnique per row (7,525 round-trips
+  // × ~50ms) blew past Vercel's 5-min function limit on the first dry-run —
+  // all of these fit in ~4 batched queries now.
+  const [villas, sections, contractors, allVillaMilestones] = await Promise.all([
     prisma.villa.findMany({
       where: { projectId },
       select: { id: true, number: true, label: true },
@@ -230,12 +233,17 @@ export async function importColabProgress(
       where: { projectId },
       select: { id: true, name: true },
     }),
+    prisma.villaMilestone.findMany({
+      where: { villa: { projectId } },
+      select: { id: true, villaId: true, sectionId: true },
+    }),
   ]);
 
   // Types are widened to any because PrismaLike smokes the row types.
   type VillaRow = { id: string; number: number; label: string | null };
   type SectionRow = { id: string; name: string };
   type ContractorRow = { id: string; name: string };
+  type VmRow = { id: string; villaId: string; sectionId: string };
   const villaByNumber = new Map<number, VillaRow>(
     (villas as VillaRow[]).map((v) => [v.number, v]),
   );
@@ -244,6 +252,9 @@ export async function importColabProgress(
   );
   const contractorByName = new Map<string, ContractorRow>(
     (contractors as ContractorRow[]).map((c) => [c.name.toLowerCase(), c]),
+  );
+  const villaMilestoneByPair = new Map<string, string>(
+    (allVillaMilestones as VmRow[]).map((m) => [`${m.villaId}::${m.sectionId}`, m.id]),
   );
 
   // Ensure the two Amanvana contractors exist so Colab's "NA-Abraham Thomas"
@@ -352,20 +363,17 @@ export async function importColabProgress(
       continue;
     }
 
-    // ----- 3. VillaMilestone
-    const villaMilestone = await prisma.villaMilestone.findUnique({
-      where: { villaId_sectionId: { villaId: villa.id, sectionId: section.id } },
-      select: { id: true, actualStart: true, actualFinish: true, pctComplete: true },
-    });
-    if (!villaMilestone) {
+    // ----- 3. VillaMilestone (in-memory lookup — see preload above)
+    const villaMilestoneId = villaMilestoneByPair.get(`${villa.id}::${section.id}`);
+    if (!villaMilestoneId) {
       recordUnmatched(stats, i + 2, r, `villaMilestone-not-found-v${villaNum}-${sectionName}`);
       continue;
     }
     stats.matchedRows++;
-    touchedVillaMilestones.add(villaMilestone.id);
+    touchedVillaMilestones.add(villaMilestoneId);
 
     // ----- 4. Activity (best-effort)
-    const candidates = wbsByMilestone.get(villaMilestone.id) ?? [];
+    const candidates = wbsByMilestone.get(villaMilestoneId) ?? [];
     const descriptor = colabActivityDescriptor(r);
     let bestWbs = null as (typeof candidates)[number] | null;
     let bestScore = 0;
