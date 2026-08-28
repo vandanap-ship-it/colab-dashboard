@@ -34,11 +34,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   let body: unknown;
   try { body = await req.json(); } catch { return badRequest("Invalid JSON"); }
 
-  const { contractorId, scope, blockCode, villaNumber, override } = (body ?? {}) as {
+  const { contractorId, scope, blockCode, villaNumber, villaNumbers, override } = (body ?? {}) as {
     contractorId?: string;
-    scope?: "untagged" | "block" | "villa" | "all";
+    scope?: "untagged" | "block" | "villa" | "villa-list" | "all";
     blockCode?: string;
     villaNumber?: number;
+    /** For scope=villa-list — batch reassign every activity across a set of
+     *  villa numbers in one call. Skips the null-filter (implicit override)
+     *  so Elegant can be assigned to villas Abraham currently owns. */
+    villaNumbers?: number[];
     override?: boolean;
   };
 
@@ -49,23 +53,35 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
   if (!contractor) return badRequest("Contractor not found on this project");
 
-  if (!scope) return badRequest("scope required (untagged | block | villa | all)");
+  if (!scope) return badRequest("scope required (untagged | block | villa | villa-list | all)");
   if (scope === "all" && !override) {
     return badRequest("scope=all overrides existing contractor tags — pass override:true to confirm");
   }
   if (scope === "block" && !blockCode) return badRequest("blockCode required for scope=block");
   if (scope === "villa" && villaNumber == null) return badRequest("villaNumber required for scope=villa");
+  if (scope === "villa-list") {
+    if (!Array.isArray(villaNumbers) || villaNumbers.length === 0) {
+      return badRequest("villaNumbers (non-empty array) required for scope=villa-list");
+    }
+    if (!override) {
+      return badRequest("scope=villa-list overrides existing contractor tags — pass override:true to confirm");
+    }
+  }
 
   // Build the where clause based on scope. Every scope narrows to this project.
+  // scope=all and scope=villa-list both override existing tags (their own gate
+  // above already required override:true), so we skip the null-filter for
+  // both. Everything else stays untagged-only.
   const baseWhere: {
     projectId: string;
     contractorId?: null;
   } = { projectId };
-  if (scope !== "all") baseWhere.contractorId = null;
+  if (scope !== "all" && scope !== "villa-list") baseWhere.contractorId = null;
 
   let villaFilter:
     | { villaMilestone: { villa: { blockId: string } } }
     | { villaMilestone: { villa: { number: number } } }
+    | { villaMilestone: { villa: { number: { in: number[] } } } }
     | undefined = undefined;
 
   if (scope === "block") {
@@ -77,6 +93,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     villaFilter = { villaMilestone: { villa: { blockId: block.id } } };
   } else if (scope === "villa") {
     villaFilter = { villaMilestone: { villa: { number: villaNumber! } } };
+  } else if (scope === "villa-list") {
+    villaFilter = { villaMilestone: { villa: { number: { in: villaNumbers! } } } };
   }
 
   const where = villaFilter ? { ...baseWhere, ...villaFilter } : baseWhere;
@@ -97,7 +115,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     action: "UPDATE",
     entityType: "WBSNode",
     entityId: "bulk",
-    summary: `Bulk assigned ${result.count} WBS activities to ${contractor.name} (scope=${scope}${scope === "block" ? ` block=${blockCode}` : ""}${scope === "villa" ? ` villa=${villaNumber}` : ""})`,
+    summary: `Bulk assigned ${result.count} WBS activities to ${contractor.name} (scope=${scope}${scope === "block" ? ` block=${blockCode}` : ""}${scope === "villa" ? ` villa=${villaNumber}` : ""}${scope === "villa-list" ? ` villas=${villaNumbers!.length}` : ""})`,
   });
 
   return NextResponse.json({
@@ -106,6 +124,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     scope,
     ...(scope === "block" ? { blockCode } : {}),
     ...(scope === "villa" ? { villaNumber } : {}),
+    ...(scope === "villa-list" ? { villaNumbers } : {}),
   });
 }
 
