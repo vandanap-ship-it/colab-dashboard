@@ -174,39 +174,31 @@ async function computeDailySnapshotAndMovement(
     contractorVillaIds = (contractorVillas as Array<{ villaId: string }>).map((v) => v.villaId);
   }
 
-  // Fetch ALL milestones for every villa in scope so we can compute
-  // "current stage per villa" in-memory (Colab convention — see
-  // src/lib/currentStage.ts). A villa is "planned today" if its
-  // current stage's baseline window covers today OR is overdue.
+  // "Planned today" = at the ACTIVITY level, per Shraddha's scorecard-logic
+  // note: "An activity counts as planned for the day if the report date
+  // falls inside its planned window, OR if it is past its planned end and
+  // still unfinished. A villa is 'planned' if it has at least one such
+  // activity." Query WBSNodes directly, distinct by villaId, then join to
+  // villa/block metadata.
   const [
-    allMilestonesForScope,
+    plannedActivityVillas,
     entriesToday,
     contractors,
     blocks,
     villas,
   ] = await Promise.all([
-    prisma.villaMilestone.findMany({
+    prisma.wBSNode.findMany({
       where: {
-        villa: contractorVillaIds
-          ? { projectId, id: { in: contractorVillaIds } }
-          : { projectId },
+        projectId,
+        villaId: { not: null },
+        ...(contractorFilterId ? { contractorId: contractorFilterId } : {}),
+        OR: [
+          { baselineStart: { lte: dayStart }, baselineFinish: { gte: dayStart } },
+          { baselineFinish: { lt: dayStart }, actualFinish: null },
+        ],
       },
-      select: {
-        id: true,
-        villaId: true,
-        baselineStart: true,
-        baselineFinish: true,
-        actualStart: true,
-        actualFinish: true,
-        section: { select: { orderIndex: true } },
-        villa: {
-          select: {
-            number: true,
-            label: true,
-            block: { select: { code: true } },
-          },
-        },
-      },
+      select: { villaId: true },
+      distinct: ["villaId"],
     }),
     prisma.progressEntry.findMany({
       where: {
@@ -262,47 +254,29 @@ async function computeDailySnapshotAndMovement(
     }),
   ]);
 
-  // Expected sets — computed via Colab's current-stage rule (RUNBOOK). A
-  // villa is "planned today" if its FIRST-open milestone (lowest orderIndex
-  // with actualFinish=null) has its baseline window straddle today OR is
-  // overdue. Group all milestones by villa, then apply the rule per villa.
-  const milestonesByVillaLocal = new Map<string, {
-    milestones: VillaMilestoneForStage[];
-    villaMeta: { number: number; label: string | null; blockCode: string };
-  }>();
-  for (const vm of allMilestonesForScope) {
-    const entry = milestonesByVillaLocal.get(vm.villaId) ?? {
-      milestones: [],
-      villaMeta: {
-        number: vm.villa.number,
-        label: vm.villa.label,
-        blockCode: vm.villa.block.code,
-      },
-    };
-    entry.milestones.push({
-      id: vm.id,
-      villaId: vm.villaId,
-      sectionOrderIndex: vm.section?.orderIndex ?? 999,
-      baselineStart: vm.baselineStart,
-      baselineFinish: vm.baselineFinish,
-      actualStart: vm.actualStart,
-      actualFinish: vm.actualFinish,
-    });
-    milestonesByVillaLocal.set(vm.villaId, entry);
-  }
-
+  // Expected sets — from the activity-level query above (distinct villaIds
+  // with at least one WBS activity planned for the day per Colab's rule).
+  // Look up villa metadata (number, label, block code) from the villas
+  // list we already loaded.
+  const villaMetaById = new Map<string, { number: number; label: string | null; blockCode: string }>(
+    (villas as Array<{ id: string; number: number; label: string | null; block: { code: string } }>).map(
+      (v) => [v.id, { number: v.number, label: v.label, blockCode: v.block.code }],
+    ),
+  );
   const expectedVillaIds = new Set<string>();
   const expectedBlockCodes = new Set<string>();
   const expectedByBlock = new Map<string, Map<string, { villaId: string; villaNumber: number; villaLabel: string }>>();
-  for (const [villaId, { milestones, villaMeta }] of milestonesByVillaLocal) {
-    if (!isVillaPlannedToday(milestones, dayStart)) continue;
-    expectedVillaIds.add(villaId);
-    expectedBlockCodes.add(villaMeta.blockCode);
-    if (!expectedByBlock.has(villaMeta.blockCode)) expectedByBlock.set(villaMeta.blockCode, new Map());
-    expectedByBlock.get(villaMeta.blockCode)!.set(villaId, {
-      villaId,
-      villaNumber: villaMeta.number,
-      villaLabel: villaMeta.label ?? `Villa ${villaMeta.number}`,
+  for (const row of plannedActivityVillas) {
+    if (!row.villaId) continue;
+    const meta = villaMetaById.get(row.villaId);
+    if (!meta) continue;
+    expectedVillaIds.add(row.villaId);
+    expectedBlockCodes.add(meta.blockCode);
+    if (!expectedByBlock.has(meta.blockCode)) expectedByBlock.set(meta.blockCode, new Map());
+    expectedByBlock.get(meta.blockCode)!.set(row.villaId, {
+      villaId: row.villaId,
+      villaNumber: meta.number,
+      villaLabel: meta.label ?? `Villa ${meta.number}`,
     });
   }
 
