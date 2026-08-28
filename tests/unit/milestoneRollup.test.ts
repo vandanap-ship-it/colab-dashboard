@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mirrorStar, aggregateChildren, type WbsChild } from "@/lib/milestoneRollup";
+import { aggregateChildren, type WbsChild } from "@/lib/milestoneRollup";
 
 const d = (iso: string) => new Date(iso + "T00:00:00Z");
 
@@ -16,33 +16,17 @@ function child(overrides: Partial<WbsChild> = {}): WbsChild {
   };
 }
 
-describe("mirrorStar", () => {
-  it("uses star percentComplete when set", () => {
-    const star = child({ isSubMilestone: true, percentComplete: 45 });
-    const r = mirrorStar(star);
-    expect(r.pctComplete).toBe(45);
-  });
-
-  it("infers 100% from actualFinish when percentComplete is null", () => {
-    const star = child({ isSubMilestone: true, percentComplete: null, actualFinish: d("2026-08-20") });
-    expect(mirrorStar(star).pctComplete).toBe(100);
-  });
-
-  it("infers 0% from null percentComplete and null actualFinish", () => {
-    expect(mirrorStar(child({ isSubMilestone: true })).pctComplete).toBe(0);
-  });
-
-  it("clamps out-of-range pct values", () => {
-    expect(mirrorStar(child({ isSubMilestone: true, percentComplete: 150 })).pctComplete).toBe(100);
-    expect(mirrorStar(child({ isSubMilestone: true, percentComplete: -10 })).pctComplete).toBe(0);
-  });
-
-  it("passes actualStart + actualFinish through unchanged", () => {
-    const start = d("2026-07-01");
-    const finish = d("2026-08-20");
-    const r = mirrorStar(child({ isSubMilestone: true, actualStart: start, actualFinish: finish }));
-    expect(r.actualStart).toBe(start);
-    expect(r.actualFinish).toBe(finish);
+// The RUNBOOK point 3 says the ★ END-marker's own date is unreliable —
+// the milestone must always aggregate. Confirm the star doesn't dominate.
+describe("aggregate treats ★ END-marker like any other child (RUNBOOK point 3)", () => {
+  it("does NOT let a done star short-circuit an unfinished sibling", () => {
+    const star = child({ id: "star", isSubMilestone: true, percentComplete: 100, actualFinish: d("2026-08-20"), baselineStart: d("2026-08-01"), baselineFinish: d("2026-08-20") });
+    const sib  = child({ id: "sib",  isSubMilestone: false, percentComplete: 50,  actualFinish: null,          baselineStart: d("2026-08-01"), baselineFinish: d("2026-08-20") });
+    const r = aggregateChildren([star, sib]);
+    // Weighted avg of 100 + 50 across equal durations = 75, not 100.
+    expect(r.pctComplete).toBe(75);
+    // And since the sibling isn't done, milestone isn't closed.
+    expect(r.actualFinish).toBeNull();
   });
 });
 

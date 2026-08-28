@@ -235,7 +235,12 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
       </Section>
 
       {/* §3 Daily Manpower */}
-      <Section num="03" title="Daily Manpower" meta={`present vs planned · ${asOfLabel}`}>
+      <Section num="03" title="Daily Manpower" meta={`present vs planned · ${asOfLabel}${s.manpower.isHoliday ? " · HOLIDAY" : ""}`}>
+        {s.manpower.isHoliday && (
+          <div className={styles.holidayBanner}>
+            <strong>HOLIDAY</strong> — {asOfLabel} is a scheduled holiday. Planned headcount is zero; any workers present are extra coverage.
+          </div>
+        )}
         {s.manpower.trades.length === 0 && s.manpower.plannedTotal === 0 && s.manpower.actualTotal === 0 ? (
           <div className={styles.empty}>
             No planned or actual manpower recorded for {asOfLabel}.

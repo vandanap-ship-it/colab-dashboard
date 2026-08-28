@@ -15,6 +15,7 @@ import { rangeSummary, type DaySummary, type ManpowerEntryRow, type TradePlanRow
 import { reasonLabel } from "@/lib/hindranceReasons";
 import { mitigationFor } from "@/lib/reasonMitigations";
 import { istDayStart } from "@/lib/istDay";
+import { isHoliday } from "@/lib/holidays";
 
 // ---------------------------------------------------------------------------
 // Shapes
@@ -476,6 +477,17 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     const contractorPlanCount = planRows.filter((p) => p.contractorId === c.id).length;
     const hasPlan = contractorPlanCount > 0;
     const perDay = rangeSummary(planRows, entryRows, weekStart, weekEnd, c.id);
+    // Holiday post-processing per RUNBOOK point 4 — holiday days contribute
+    // zero to the weekly planned denominator (no work expected), keep the
+    // actualTotal as-is (workers may have shown up), and are flagged so the
+    // view can shade them.
+    for (const d of perDay) {
+      if (isHoliday(d.date)) {
+        d.isHoliday = true;
+        d.plannedTotal = 0;
+        for (const t of d.trades) { t.planned = 0; t.pctOfPlan = null; t.variance = t.actual; }
+      }
+    }
     const weeklyPlanned = perDay.reduce((n, d) => n + d.plannedTotal, 0);
     const weeklyActual  = perDay.reduce((n, d) => n + d.actualTotal, 0);
     let bestDayActual = 0;

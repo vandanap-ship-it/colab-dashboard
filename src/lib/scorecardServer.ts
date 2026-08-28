@@ -23,6 +23,7 @@ import {
   type SiteActivityBlockGroup,
 } from "@/lib/dashboardSectionsServer";
 import { istDayStart } from "@/lib/istDay";
+import { isHoliday } from "@/lib/holidays";
 
 export interface ScorecardProject {
   id: string;
@@ -409,6 +410,16 @@ async function computeManpower(projectId: string, day: Date): Promise<DaySummary
     actualCount: e.actualCount,
   }));
   const summary = daySummary(plans, entries, day);
+  // RUNBOOK point 4 — holiday days get plannedTotal zeroed so we don't
+  // count them against the working-day denominator, and the view can
+  // render a "HOLIDAY" badge instead of a chart bar.
+  if (isHoliday(day)) {
+    summary.isHoliday = true;
+    summary.plannedTotal = 0;
+    summary.variance = summary.actualTotal;
+    summary.pctOfPlan = null;
+    for (const t of summary.trades) { t.planned = 0; t.pctOfPlan = null; t.variance = t.actual; }
+  }
   const nameById = new Map(contractors.map((c) => [c.id, c.name]));
   summary.trades = summary.trades
     .map((t) => ({ ...t, contractorName: nameById.get(t.contractorId) ?? "Unknown" }))

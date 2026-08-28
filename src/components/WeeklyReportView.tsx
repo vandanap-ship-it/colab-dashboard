@@ -273,22 +273,31 @@ function ManpowerChart({ perDay }: { perDay: WeeklyReport["manpowerByContractor"
     <div className={weekly.chart}>
       {perDay.map((d) => (
         <div key={d.date.toISOString()} className={weekly.chartCell}>
-          <div className={weekly.chartBars}>
-            <div
-              className={`${weekly.chartBar} ${weekly.chartBarPlanned}`}
-              style={{ height: `${(d.plannedTotal / max) * 100}%` }}
-              title={`Planned: ${d.plannedTotal}`}
-            >
-              {d.plannedTotal > 0 && <span className={weekly.chartValue}>{d.plannedTotal}</span>}
+          {d.isHoliday ? (
+            <div className={weekly.chartHoliday}>
+              <span className={weekly.chartHolidayLabel}>HOLIDAY</span>
+              {d.actualTotal > 0 && (
+                <span className={weekly.chartHolidayActual}>+{d.actualTotal}</span>
+              )}
             </div>
-            <div
-              className={`${weekly.chartBar} ${weekly.chartBarActual}`}
-              style={{ height: `${(d.actualTotal / max) * 100}%` }}
-              title={`Actual: ${d.actualTotal}`}
-            >
-              {d.actualTotal > 0 && <span className={weekly.chartValue}>{d.actualTotal}</span>}
+          ) : (
+            <div className={weekly.chartBars}>
+              <div
+                className={`${weekly.chartBar} ${weekly.chartBarPlanned}`}
+                style={{ height: `${(d.plannedTotal / max) * 100}%` }}
+                title={`Planned: ${d.plannedTotal}`}
+              >
+                {d.plannedTotal > 0 && <span className={weekly.chartValue}>{d.plannedTotal}</span>}
+              </div>
+              <div
+                className={`${weekly.chartBar} ${weekly.chartBarActual}`}
+                style={{ height: `${(d.actualTotal / max) * 100}%` }}
+                title={`Actual: ${d.actualTotal}`}
+              >
+                {d.actualTotal > 0 && <span className={weekly.chartValue}>{d.actualTotal}</span>}
+              </div>
             </div>
-          </div>
+          )}
           <div className={weekly.chartDay}>{fmtDayShort(d.date)}</div>
         </div>
       ))}
@@ -307,7 +316,12 @@ function ManpowerTradeTable({ perDay }: { perDay: WeeklyReport["manpowerByContra
         <tr>
           <th>Trade</th>
           {perDay.map((d) => (
-            <th key={d.date.toISOString()} className={weekly.tradeTblRight}>{fmtDayShort(d.date)}</th>
+            <th
+              key={d.date.toISOString()}
+              className={`${weekly.tradeTblRight} ${d.isHoliday ? weekly.tradeTblHolCell : ""}`}
+            >
+              {fmtDayShort(d.date)}
+            </th>
           ))}
         </tr>
       </thead>
@@ -317,6 +331,13 @@ function ManpowerTradeTable({ perDay }: { perDay: WeeklyReport["manpowerByContra
             <td>{trade}</td>
             {perDay.map((d) => {
               const cell = d.trades.find((t) => t.trade === trade);
+              if (d.isHoliday) {
+                return (
+                  <td key={d.date.toISOString()} className={`${weekly.tradeTblRight} ${weekly.tradeTblHolCell}`}>
+                    Hol
+                  </td>
+                );
+              }
               return (
                 <td key={d.date.toISOString()} className={weekly.tradeTblRight}>
                   {cell ? `${cell.actual}/${cell.planned}` : "—"}

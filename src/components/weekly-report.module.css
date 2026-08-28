@@ -138,6 +138,48 @@
   margin-left: 2px;
 }
 
+/* -------------- Holiday shading (RUNBOOK point 4) -------------- */
+.chartHoliday {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: repeating-linear-gradient(
+    45deg,
+    #F3EFE8,
+    #F3EFE8 4px,
+    #E7DFC9 4px,
+    #E7DFC9 8px
+  );
+  border: 1px dashed #CA9F49;
+  border-radius: 3px;
+  padding: 6px 2px;
+}
+.chartHolidayLabel {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #7A5A00;
+}
+.chartHolidayActual {
+  font-size: 10px;
+  color: #2E7D5B;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.tradeTblHolCell {
+  background: repeating-linear-gradient(
+    45deg,
+    #F3EFE8,
+    #F3EFE8 3px,
+    #E7DFC9 3px,
+    #E7DFC9 6px
+  );
+  color: #7A5A00;
+  font-weight: 600;
+}
+
 /* Manpower headline */
 .mpHead {
   display: grid;

@@ -6,17 +6,18 @@
 // Milestone Progress table, Block-wise Progress and Weekly report
 // Milestone Plan all read stale data at runtime.
 //
-// Rule (confirmed with Shraddha, matches Colab):
-//   - If the VillaMilestone has a **star sub-milestone** child (isSubMilestone=true),
-//     mirror that star's pctComplete + actualStart + actualFinish onto the
-//     VillaMilestone. In MSP terms, "Footing RCC — Concreting ★" closes ⇒
-//     Foundation milestone closes.
-//   - If no star child exists (some sections don't have a star gate),
-//     fall back to a weighted-duration aggregation:
-//       * pctComplete = duration-weighted avg of children
-//       * actualStart = earliest of children
-//       * actualFinish = latest of children ONLY IF every child with a
-//         baselineFinish also has an actualFinish (otherwise null)
+// Rule (per Amanvana RUNBOOK section 3, point 3 — the Colab convention):
+//   Stage dates are built from **all activities up to the stage's END-marker
+//   (★)**, NEVER from the END-marker row's own date — the END-marker's date
+//   is unreliable in MSP schedules because it's often a nominal same-day
+//   marker rather than a real workday. So we ALWAYS aggregate across all
+//   children (the ★ is included in the aggregate like any other child):
+//     * pctComplete = duration-weighted avg of children
+//     * actualStart = earliest of children with an actualStart
+//     * actualFinish = latest of children ONLY IF every baselined child also
+//       has an actualFinish (otherwise null)
+//   The ★ flag on children stays useful for UI badges + other reports; it
+//   just doesn't drive the milestone's date calc anymore.
 //
 // Idempotent — safe to call repeatedly; skips update when nothing changed.
 
@@ -102,8 +103,7 @@ export async function syncVillaMilestoneFromChildren(
   });
   if (children.length === 0) return null;
 
-  const star = children.find((c) => c.isSubMilestone);
-  const rolled = star ? mirrorStar(star) : aggregateChildren(children);
+  const rolled = aggregateChildren(children);
 
   // Only write when something actually changed — avoids audit noise and
   // needless index writes.
@@ -139,16 +139,9 @@ export async function syncVillaMilestoneFromChildren(
   return { pctComplete: rolled.pctComplete, actualStart: rolled.actualStart, actualFinish: rolled.actualFinish };
 }
 
-/** Star strategy: mirror the single sub-milestone child. */
-export function mirrorStar(star: WbsChild): { pctComplete: number; actualStart: Date | null; actualFinish: Date | null } {
-  return {
-    pctComplete: Math.max(0, Math.min(100, star.percentComplete ?? (star.actualFinish ? 100 : 0))),
-    actualStart: star.actualStart,
-    actualFinish: star.actualFinish,
-  };
-}
-
-/** Fallback: duration-weighted aggregate across all children. */
+/** Duration-weighted aggregate across all children (including the ★ END-marker).
+ *  Kept exported for its unit tests + for other callers that need the pure math.
+ *  See RUNBOOK section 3 point 3 for why we no longer mirror the ★ directly. */
 export function aggregateChildren(children: WbsChild[]): { pctComplete: number; actualStart: Date | null; actualFinish: Date | null } {
   // pctComplete: duration-weighted avg. Missing durations default to 1 day
   // so unset baselines don't crash the ratio.

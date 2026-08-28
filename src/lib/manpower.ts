@@ -82,6 +82,11 @@ export interface DaySummary {
   trades: TradeCell[];
   /** True if any entries were logged this day (even if 0 counts). */
   hasEntries: boolean;
+  /** True if this date is on the holiday roster — reports zero out the
+   *  planned side and render a "HOL" cell / shaded HOLIDAY bar per the
+   *  RUNBOOK section 3 point 4 convention. Set by the caller (server code)
+   *  after daySummary/rangeSummary returns; pure logic has no calendar. */
+  isHoliday?: boolean;
 }
 
 // ---------------------------------------------------------------------------
