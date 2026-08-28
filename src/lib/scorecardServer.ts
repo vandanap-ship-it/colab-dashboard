@@ -24,6 +24,7 @@ import {
 } from "@/lib/dashboardSectionsServer";
 import { istDayStart } from "@/lib/istDay";
 import { isHoliday } from "@/lib/holidays";
+import { isVillaPlannedToday, type VillaMilestoneForStage } from "@/lib/currentStage";
 
 export interface ScorecardProject {
   id: string;
@@ -173,8 +174,12 @@ async function computeDailySnapshotAndMovement(
     contractorVillaIds = (contractorVillas as Array<{ villaId: string }>).map((v) => v.villaId);
   }
 
+  // Fetch ALL milestones for every villa in scope so we can compute
+  // "current stage per villa" in-memory (Colab convention — see
+  // src/lib/currentStage.ts). A villa is "planned today" if its
+  // current stage's baseline window covers today OR is overdue.
   const [
-    plannedMilestonesToday,
+    allMilestonesForScope,
     entriesToday,
     contractors,
     blocks,
@@ -185,13 +190,14 @@ async function computeDailySnapshotAndMovement(
         villa: contractorVillaIds
           ? { projectId, id: { in: contractorVillaIds } }
           : { projectId },
-        OR: [
-          { baselineStart: { lte: dayStart }, baselineFinish: { gte: dayStart } },
-          { baselineFinish: { lt: dayStart }, actualFinish: null },
-        ],
       },
       select: {
+        id: true,
         villaId: true,
+        baselineStart: true,
+        baselineFinish: true,
+        actualFinish: true,
+        section: { select: { orderIndex: true } },
         villa: {
           select: {
             number: true,
@@ -255,20 +261,46 @@ async function computeDailySnapshotAndMovement(
     }),
   ]);
 
-  // Expected sets
+  // Expected sets — computed via Colab's current-stage rule (RUNBOOK). A
+  // villa is "planned today" if its FIRST-open milestone (lowest orderIndex
+  // with actualFinish=null) has its baseline window straddle today OR is
+  // overdue. Group all milestones by villa, then apply the rule per villa.
+  const milestonesByVillaLocal = new Map<string, {
+    milestones: VillaMilestoneForStage[];
+    villaMeta: { number: number; label: string | null; blockCode: string };
+  }>();
+  for (const vm of allMilestonesForScope) {
+    const entry = milestonesByVillaLocal.get(vm.villaId) ?? {
+      milestones: [],
+      villaMeta: {
+        number: vm.villa.number,
+        label: vm.villa.label,
+        blockCode: vm.villa.block.code,
+      },
+    };
+    entry.milestones.push({
+      id: vm.id,
+      villaId: vm.villaId,
+      sectionOrderIndex: vm.section?.orderIndex ?? 999,
+      baselineStart: vm.baselineStart,
+      baselineFinish: vm.baselineFinish,
+      actualFinish: vm.actualFinish,
+    });
+    milestonesByVillaLocal.set(vm.villaId, entry);
+  }
+
   const expectedVillaIds = new Set<string>();
   const expectedBlockCodes = new Set<string>();
-  // Map by villaId (unique) to avoid grouped-villa number collisions.
   const expectedByBlock = new Map<string, Map<string, { villaId: string; villaNumber: number; villaLabel: string }>>();
-  for (const vm of plannedMilestonesToday) {
-    expectedVillaIds.add(vm.villaId);
-    const bcode = vm.villa.block.code;
-    expectedBlockCodes.add(bcode);
-    if (!expectedByBlock.has(bcode)) expectedByBlock.set(bcode, new Map());
-    expectedByBlock.get(bcode)!.set(vm.villaId, {
-      villaId: vm.villaId,
-      villaNumber: vm.villa.number,
-      villaLabel: vm.villa.label ?? `Villa ${vm.villa.number}`,
+  for (const [villaId, { milestones, villaMeta }] of milestonesByVillaLocal) {
+    if (!isVillaPlannedToday(milestones, dayStart)) continue;
+    expectedVillaIds.add(villaId);
+    expectedBlockCodes.add(villaMeta.blockCode);
+    if (!expectedByBlock.has(villaMeta.blockCode)) expectedByBlock.set(villaMeta.blockCode, new Map());
+    expectedByBlock.get(villaMeta.blockCode)!.set(villaId, {
+      villaId,
+      villaNumber: villaMeta.number,
+      villaLabel: villaMeta.label ?? `Villa ${villaMeta.number}`,
     });
   }
 
