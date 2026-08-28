@@ -252,9 +252,11 @@ export default function ScorecardView({
                         ? "Updated completely"
                         : b.status === "partially"
                         ? (() => {
-                            // Ahead-of-plan villas count in the numerator per Colab's convention.
+                            // "N of M updated" — numerator is planned + ahead;
+                            // denominator is the full chip strip (planned + ahead).
                             const done = b.updatedCount + b.aheadCount;
-                            return `${done} of ${b.totalCount} updated`;
+                            const total = b.totalCount + b.aheadCount;
+                            return `${done} of ${total} updated`;
                           })()
                         : "None updated"}
                     </div>
