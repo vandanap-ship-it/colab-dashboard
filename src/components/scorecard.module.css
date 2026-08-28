@@ -4,35 +4,56 @@
    2. Print: A4-safe with @page rules; strips app chrome, keeps section
       breaks clean, uses black-on-white typography.
 
-   All colours use a scoped palette so it can't drift with app theme changes.
+   Colour + typography tokens copied from the Amanvana RUNBOOK section 6 —
+   the goal is 1:1 visual parity with Shraddha's Colab-generated PDFs so
+   management sees the same look-and-feel after the CollabTools cutover.
 */
+@import url("https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Open+Sans:wght@400;600;700&display=swap");
 
 .wrap {
-  --sc-ink: #16202F;
-  --sc-ink-2: #4E5866;
-  --sc-ink-3: #8B93A0;
-  --sc-ink-4: #B8BCC4;
-  --sc-paper: #FFFFFF;
-  --sc-ground: #F7F5EF;
-  --sc-border: #E2DDD0;
-  --sc-rule: #EDE9DD;
-  --sc-rule-soft: #F1EEE4;
-  --sc-good: #2E7D5B;
-  --sc-good-tint: #E4EFE8;
-  --sc-warn: #C77A2A;
-  --sc-warn-tint: #F7EAD5;
-  --sc-bad: #B33A3A;
-  --sc-bad-tint: #F3DFDF;
-  --sc-deep: #16202F;
-  --sc-accent: #2F5D8A;
+  /* Neutrals */
+  --sc-ink:     #161926; /* charcoal (RUNBOOK) */
+  --sc-ink-2:   #4E5866;
+  --sc-ink-3:   #A0A09B; /* cement (RUNBOOK) */
+  --sc-ink-4:   #B8BCC4;
+  --sc-paper:   #FFFAF0; /* ivory card */
+  --sc-ground:  #F3EFE8; /* cream ground (RUNBOOK) */
+  --sc-border:  #E7DFC9;
+  --sc-rule:    #ECE7D6;
+  --sc-rule-soft: #F5F0E0;
+
+  /* Accents */
+  --sc-good:      #73823C; /* green (RUNBOOK) */
+  --sc-good-2:    #5A6730;
+  --sc-good-tint: #EEF0E2;
+  --sc-warn:      #9A6A1F;
+  --sc-warn-tint: #F6E9CF;
+  --sc-bad:       #8E2D1E; /* red (RUNBOOK) */
+  --sc-bad-2:     #C9756A;
+  --sc-bad-tint:  #F3DED9;
+  --sc-deep:      #161926;
+  --sc-gold:      #CA9F49; /* gold (RUNBOOK) */
+  --sc-gold-2:    #A9762A;
+  --sc-sandstone: #FAE1C8;
+  --sc-ferrous:   #965532;
+
+  /* Chart bars */
+  --sc-chart-planned: #9CC9E0; /* blue (RUNBOOK) */
+  --sc-chart-actual:  #A7D98C; /* green (RUNBOOK) */
 
   color: var(--sc-ink);
+  font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   font-size: 12.5px;
-  line-height: 1.45;
+  line-height: 1.5;
   max-width: 820px;
   margin: 0 auto;
   padding: 24px 16px 48px;
   -webkit-font-smoothing: antialiased;
+}
+.wrap h1, .wrap h2, .wrap h3, .wrap h4 {
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  letter-spacing: 0.005em;
 }
 .wrap * { box-sizing: border-box; }
 
@@ -100,12 +121,14 @@
   margin-bottom: 6px;
 }
 .headerTitle {
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 34px;
+  font-weight: 400;
+  letter-spacing: 0.005em;
   margin: 0;
+  line-height: 1.1;
 }
-.headerTitle em { color: #E0BC5E; font-style: normal; font-weight: 700; }
+.headerTitle em { color: var(--sc-gold); font-style: normal; font-weight: 400; }
 .headerDate {
   margin-top: 6px;
   font-size: 13px;
@@ -151,11 +174,13 @@
   vertical-align: middle;
 }
 .sectionTitle {
-  font-size: 13px;
-  font-weight: 700;
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  font-weight: 400;
   color: var(--sc-ink);
   display: inline-block;
   vertical-align: middle;
+  letter-spacing: 0.002em;
 }
 .sectionMeta {
   display: block;
@@ -188,14 +213,15 @@
   margin-bottom: 4px;
 }
 .snapValue {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--sc-ink);
-  letter-spacing: -0.02em;
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 30px;
+  font-weight: 400;
+  color: var(--sc-gold);
+  letter-spacing: 0.005em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-.snapValue .of { font-size: 14px; color: var(--sc-ink-3); font-weight: 500; margin-left: 4px; }
+.snapValue .of { font-family: "Open Sans", sans-serif; font-size: 14px; color: var(--sc-ink-3); font-weight: 500; margin-left: 4px; }
 .snapFoot {
   margin-top: 10px;
   font-size: 10.5px;
@@ -260,14 +286,22 @@
   border: 1px solid;
 }
 .bcChipUpdated {
-  background: var(--sc-good-tint);
-  color: var(--sc-good);
-  border-color: rgba(46, 125, 91, 0.4);
+  background: #F2F5E9;
+  color: #5A6730;
+  border-color: #C7D0A6;
 }
 .bcChipNotUpdated {
-  background: var(--sc-bad-tint);
+  background: #FFFFFF;
   color: var(--sc-bad);
-  border-color: rgba(179, 58, 58, 0.35);
+  border-color: #E3C58A;
+}
+/* Gold-edged chip — villa progressed AHEAD of the planned window
+   (not scheduled for the day). Per RUNBOOK / Colab reference. */
+.bcChipAhead {
+  background: #F2F5E9;
+  color: #5A6730;
+  border-color: var(--sc-gold);
+  border-width: 1.5px;
 }
 
 /* -------------- §4 Manpower -------------- */
@@ -280,13 +314,14 @@
   border-bottom: 1px dashed var(--sc-rule);
 }
 .mpBigNum {
-  font-size: 26px;
-  font-weight: 700;
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 30px;
+  font-weight: 400;
   color: var(--sc-ink);
-  letter-spacing: -0.02em;
+  letter-spacing: 0.005em;
   font-variant-numeric: tabular-nums;
 }
-.mpBigNum .of { font-size: 16px; color: var(--sc-ink-3); font-weight: 500; margin-left: 4px; }
+.mpBigNum .of { font-family: "Open Sans", sans-serif; font-size: 16px; color: var(--sc-ink-3); font-weight: 500; margin-left: 4px; }
 .mpVariance {
   font-size: 12px;
   font-weight: 600;
@@ -353,7 +388,15 @@
   color: var(--sc-ink-3);
   font-weight: 700;
 }
-.actName { font-size: 12px; font-weight: 700; color: var(--sc-ink); margin-top: 1px; }
+.actName {
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--sc-ink);
+  margin-top: 1px;
+  line-height: 1.25;
+  letter-spacing: 0.002em;
+}
 .actMeta { margin-top: 3px; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
 .actPct { font-size: 11.5px; font-weight: 700; color: var(--sc-good); font-variant-numeric: tabular-nums; }
 .actOverdue {
@@ -470,14 +513,16 @@
 
 /* -------------- Movement headline + section explanation (Colab reference match) -------------- */
 .movementHeadline {
-  font-size: 13px;
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 22px;
   color: var(--sc-ink);
-  padding: 6px 0 10px;
+  padding: 6px 0 12px;
   border-bottom: 1px solid var(--sc-rule);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
-.movementHeadline strong { color: var(--sc-deep); font-weight: 700; }
+.movementHeadline strong { color: var(--sc-gold); font-weight: 400; }
 
 .sectionExplain {
   margin: 10px 0 0;
@@ -491,9 +536,9 @@
 /* -------------- §2 sub-panel: Planned coverage by block -------------- */
 .subPanel {
   margin-top: 16px;
-  padding: 12px 14px;
-  background: var(--sc-rule-soft);
-  border: 1px solid var(--sc-rule);
+  padding: 14px 16px;
+  background: #FCF6EA;
+  border: 1px solid var(--sc-border);
   border-radius: 6px;
 }
 .subPanelHd {

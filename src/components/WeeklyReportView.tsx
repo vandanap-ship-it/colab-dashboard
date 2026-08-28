@@ -73,22 +73,17 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
         <div className={styles.headerTagline}>week ending {fmtLong(report.weekEnd)}</div>
       </div>
 
-      {/* §1 Overall Progress */}
-      <Section num="01" title="Overall Progress" meta={`planned vs actual at ${fmtLong(report.weekEnd)}`}>
+      {/* §1 Overall Progress — Target & Actual only per RUNBOOK.
+          No variance, no explanation paragraph. Two big numbers side by side. */}
+      <Section num="01" title="Overall Progress" meta={`week ending ${fmtLong(report.weekEnd)}`}>
         <div className={weekly.overallRow}>
           <div className={`${weekly.overallCell} ${weekly.overallPlanned}`}>
-            <div className={weekly.overallLbl}>Planned</div>
+            <div className={weekly.overallLbl}>Target · by {fmtDayShort(report.weekEnd)}</div>
             <div className={weekly.overallVal}>{fmtPct(report.overall.plannedPct)}</div>
           </div>
           <div className={`${weekly.overallCell} ${weekly.overallActual}`}>
             <div className={weekly.overallLbl}>Actual</div>
             <div className={weekly.overallVal}>{fmtPct(report.overall.actualPct)}</div>
-          </div>
-          <div className={`${weekly.overallCell} ${report.overall.variancePct >= 0 ? weekly.overallVarGood : weekly.overallVarBad}`}>
-            <div className={weekly.overallLbl}>Variance</div>
-            <div className={weekly.overallVal}>
-              {report.overall.variancePct >= 0 ? "+" : ""}{fmtPct(report.overall.variancePct)}
-            </div>
           </div>
         </div>
       </Section>

@@ -1,39 +1,45 @@
-/* Weekly report — piggybacks on scorecard.module.css palette but with
-   its own local vars so tokens don't need to be duplicated. Reuses
-   .wrap, .header, .section, .empty from scorecard.module.css. */
+/* Weekly report — inherits .wrap tokens from scorecard.module.css
+   (charcoal / cream / gold / green / red palette, serif + sans stack).
+   Additional weekly-only components below. */
 
+/* -------------- §1 Overall Progress — Target & Actual only (RUNBOOK) -------------- */
 .overallRow {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
 }
 .overallCell {
-  padding: 14px 16px;
+  padding: 18px 20px;
   border-radius: 6px;
-  border: 1px solid #EDE9DD;
-  text-align: center;
+  border: 1px solid #E7DFC9;
+  text-align: left;
+  background: #FCF6EA;
 }
 .overallLbl {
   font-size: 10px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #8B93A0;
+  color: #A0A09B;
   font-weight: 700;
+  margin-bottom: 6px;
+}
+.overallSubLbl {
+  font-size: 10px;
+  color: #A0A09B;
+  margin-top: 4px;
+  font-style: italic;
 }
 .overallVal {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: #16202F;
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 42px;
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  color: #161926;
   font-variant-numeric: tabular-nums;
-  margin-top: 4px;
+  line-height: 1;
 }
-.overallPlanned { background: #E9F0F7; border-color: rgba(47, 93, 138, 0.35); }
-.overallActual { background: #E4EFE8; border-color: rgba(46, 125, 91, 0.35); }
-.overallVarGood { background: #E4EFE8; border-color: rgba(46, 125, 91, 0.35); }
-.overallVarGood .overallVal { color: #2E7D5B; }
-.overallVarBad { background: #F3DFDF; border-color: rgba(179, 58, 58, 0.35); }
-.overallVarBad .overallVal { color: #B33A3A; }
+.overallPlanned .overallVal { color: #161926; }
+.overallActual .overallVal { color: #CA9F49; /* gold — the actual number */ }
 
 /* Contractor block */
 .contractorBlock {
