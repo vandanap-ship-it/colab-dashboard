@@ -218,6 +218,7 @@ async function computeDailySnapshotAndMovement(
     }),
     prisma.contractor.findMany({
       where: { projectId, active: true },
+      orderBy: { createdAt: "asc" }, // Abraham was seeded first → renders as "A · …"
       select: {
         id: true,
         name: true,
