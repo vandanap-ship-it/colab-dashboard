@@ -115,7 +115,8 @@ export async function POST(req: Request) {
       const created = await prisma.wBSNode.create({
         data: {
           projectId,
-          taskCode: w.taskCode,
+          // Unique(projectId, taskCode) — namespace the clone by target villa.
+          taskCode: `V${target.number.toString().padStart(2, "0")}-${w.taskCode}`,
           name: w.name,
           level: w.level,
           orderIndex: w.orderIndex,
