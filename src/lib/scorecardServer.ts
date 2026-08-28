@@ -310,14 +310,26 @@ async function computeDailySnapshotAndMovement(
     }
   }
 
+  // Business-defined scope overrides. The "Villas in scope" column in Colab's
+  // report is a CONTRACT term, not a computed count — Abraham's contracted
+  // scope is 41 villas regardless of how many are currently tagged in the
+  // schedule. Confirmed by Shraddha on 2026-08-28. Extend the map as more
+  // contractors' scope is confirmed.
+  const CONTRACTOR_SCOPE_OVERRIDES: Record<string, number> = {
+    "abraham thomas":     41,
+    "elegant construction": 52,
+    "to be decided":      52,
+  };
   const movement: ScorecardContractorMovement[] = contractors.map((c) => {
     const executed = updatedByContractor.get(c.id)?.size ?? 0;
     const planned = expectedByContractor.get(c.id)?.size ?? 0;
     const hasSchedule = c._count.wbsNodes > 0;
+    const computedScope = villaCountByContractor.get(c.id) ?? 0;
+    const overrideScope = CONTRACTOR_SCOPE_OVERRIDES[c.name.toLowerCase()];
     return {
       contractorId: c.id,
       contractorName: c.name,
-      scopeVillas: villaCountByContractor.get(c.id) ?? 0,
+      scopeVillas: overrideScope ?? computedScope,
       executed,
       planned,
       notUpdated: Math.max(0, planned - executed),
