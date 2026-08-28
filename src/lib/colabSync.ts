@@ -322,6 +322,11 @@ export async function importColabProgress(
   // Track which VillaMilestones we touched so we can rollup at the end.
   const touchedVillaMilestones = new Set<string>();
   const touchedWbsNodes = new Set<string>();
+  // Villas that Colab had ANY progress for — used to bulk-tag every WBS node
+  // under those villas to the default contractor at the end. Fixes the
+  // §2 "villas in scope" undercount (was ~13 because only activity-matched
+  // WBS nodes got tagged; should be all 41 for Abraham).
+  const touchedVillaIds = new Set<string>();
 
   // ---------- Main per-row loop ----------
   for (let i = 0; i < rows.length; i++) {
@@ -371,6 +376,7 @@ export async function importColabProgress(
     }
     stats.matchedRows++;
     touchedVillaMilestones.add(villaMilestoneId);
+    touchedVillaIds.add(villa.id);
 
     // ----- 4. Activity (best-effort)
     const candidates = wbsByMilestone.get(villaMilestoneId) ?? [];
@@ -484,7 +490,28 @@ export async function importColabProgress(
     }
   }
 
-  // ---------- 8. Roll up every touched VillaMilestone ----------
+  // ---------- 8. Bulk-tag every WBS node under the touched villas ----------
+  // If a default contractor was named (Amanvana → Abraham), stamp every
+  // wbsNode under any villa Colab has data for. Fixes the §2 "villas in
+  // scope" undercount that came from only activity-matched (~20%) nodes
+  // getting the tag.
+  if (!options.dryRun && options.defaultContractorName && touchedVillaIds.size > 0) {
+    const cleaned = options.defaultContractorName.replace(/^NA-/, "").trim();
+    const contractor = contractorByName.get(cleaned.toLowerCase());
+    if (contractor) {
+      const result = await prisma.wBSNode.updateMany({
+        where: {
+          projectId,
+          villaId: { in: [...touchedVillaIds] },
+          contractorId: null, // don't clobber activities already tagged with a different contractor
+        },
+        data: { contractorId: contractor.id },
+      });
+      stats.wbsNodesUpdated += result.count ?? 0;
+    }
+  }
+
+  // ---------- 9. Roll up every touched VillaMilestone ----------
   if (!options.dryRun) {
     for (const villaMilestoneId of touchedVillaMilestones) {
       try {

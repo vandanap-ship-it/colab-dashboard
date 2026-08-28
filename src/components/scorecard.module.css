@@ -468,6 +468,97 @@
   font-style: italic;
 }
 
+/* -------------- Movement headline + section explanation (Colab reference match) -------------- */
+.movementHeadline {
+  font-size: 13px;
+  color: var(--sc-ink);
+  padding: 6px 0 10px;
+  border-bottom: 1px solid var(--sc-rule);
+  margin-bottom: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.movementHeadline strong { color: var(--sc-deep); font-weight: 700; }
+
+.sectionExplain {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--sc-rule);
+  font-size: 11px;
+  color: var(--sc-ink-2);
+  line-height: 1.55;
+}
+
+/* -------------- §2 sub-panel: Planned coverage by block -------------- */
+.subPanel {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: var(--sc-rule-soft);
+  border: 1px solid var(--sc-rule);
+  border-radius: 6px;
+}
+.subPanelHd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.subPanelTitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sc-ink);
+}
+.subPanelBadge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: var(--sc-bad);
+  color: #FFFFFF;
+  letter-spacing: 0.06em;
+}
+
+/* -------------- Activity card enhancements (Colab reference match) -------------- */
+.actStatus {
+  color: var(--sc-ink-3);
+  font-size: 11.5px;
+  margin-left: 4px;
+}
+.actDelta {
+  font-size: 11.5px;
+  color: var(--sc-good);
+  font-weight: 600;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.actPlanned {
+  font-size: 11.5px;
+  color: var(--sc-ink-2);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.actAhead {
+  color: var(--sc-good);
+  font-weight: 600;
+}
+.actBlock {
+  margin-top: 8px;
+}
+.actBlockLbl {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sc-ink-3);
+  margin-bottom: 2px;
+}
+.actBlockVal {
+  font-size: 12px;
+  color: var(--sc-ink);
+  line-height: 1.4;
+}
+
 /* -------------- Print rules -------------- */
 @page { size: A4; margin: 14mm; }
 @media print {

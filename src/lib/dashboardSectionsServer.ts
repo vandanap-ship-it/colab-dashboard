@@ -91,9 +91,13 @@ export interface SiteActivity {
   blockCode: string;
   villaLabel: string;   // "Villa 12" or the overridden label
   villaNumber: number;
-  milestoneName: string; // section name
-  activityName: string;  // wbs node name
+  milestoneName: string; // section name — used as first part of the card title
+  activityName: string;  // wbs node name — second part of the card title
   achievedPct: number | null; // pctComplete on the villa milestone at time of entry
+  dailyDeltaPct: number | null; // % completed on THIS day only (achievedQty / totalQty × 100)
+  entryDate: string; // ISO — the date the site engineer marked progress on
+  plannedEndDate: string | null; // ISO of the linked villaMilestone's baselineFinish
+  daysToPlannedEnd: number | null; // positive = ahead, negative = overdue
   loggedAt: string;
   loggedByName: string;
   contractorName: string | null;
@@ -101,7 +105,7 @@ export interface SiteActivity {
   notes: string | null;
   reasonLabel: string | null;
   reasonNote: string | null;
-  overdueDays: number | null; // days past baselineFinish for the linked villaMilestone
+  overdueDays: number | null; // legacy alias for -daysToPlannedEnd when positive
 }
 
 export interface SiteActivityBlockGroup {
@@ -137,6 +141,7 @@ export async function getSiteActivityHighlights(
         select: {
           name: true,
           taskCode: true,
+          totalQuantity: true,
           villaMilestoneId: true,
           villaMilestone: {
             select: {
@@ -160,13 +165,16 @@ export async function getSiteActivityHighlights(
     },
   }) as unknown as Array<{
     id: string;
+    date: Date;
     createdAt: Date;
+    achievedQuantity: number | null;
     notes: string | null;
     reasonCode: string | null;
     reasonNote: string | null;
     wbsNodeId: string;
     wbsNode: {
       name: string;
+      totalQuantity: number | null;
       villaMilestone: {
         pctComplete: number | null;
         baselineFinish: Date | null;
@@ -203,8 +211,19 @@ export async function getSiteActivityHighlights(
     const villaNumber = vm.villa.number;
     const villaLabel = vm.villa.label ?? `Villa ${villaNumber}`;
 
-    const overdueDays = vm.baselineFinish
-      ? Math.max(0, Math.round((dayStart.getTime() - vm.baselineFinish.getTime()) / 86400000))
+    // Days-to-planned-end — signed: negative = overdue, positive = ahead.
+    // Colab's PDF phrases this two ways: "55 days overdue" vs
+    // "42 days to planned end". We keep the sign so the view can pick text.
+    const daysToPlannedEnd = vm.baselineFinish
+      ? Math.round((vm.baselineFinish.getTime() - dayStart.getTime()) / 86400000)
+      : null;
+    const overdueDays = daysToPlannedEnd != null && daysToPlannedEnd < 0
+      ? Math.abs(daysToPlannedEnd)
+      : null;
+
+    // Daily % delta: this row's achieved qty as a fraction of the WBS total.
+    const dailyDeltaPct = e.achievedQuantity != null && e.wbsNode.totalQuantity && e.wbsNode.totalQuantity > 0
+      ? Math.round((e.achievedQuantity / e.wbsNode.totalQuantity) * 1000) / 10
       : null;
 
     // Resolve the delay reason with a two-source lookup:
@@ -224,6 +243,10 @@ export async function getSiteActivityHighlights(
       milestoneName: vm.section?.name ?? "—",
       activityName: e.wbsNode.name,
       achievedPct: vm.pctComplete ?? null,
+      dailyDeltaPct,
+      entryDate: e.date.toISOString(),
+      plannedEndDate: vm.baselineFinish ? vm.baselineFinish.toISOString() : null,
+      daysToPlannedEnd,
       loggedAt: e.createdAt.toISOString(),
       loggedByName: e.createdBy.name,
       contractorName: e.contractor?.name ?? null,
@@ -231,7 +254,7 @@ export async function getSiteActivityHighlights(
       notes: e.notes,
       reasonLabel: effectiveReasonCode ? reasonLabel(effectiveReasonCode) : null,
       reasonNote: effectiveReasonNote,
-      overdueDays: overdueDays && overdueDays > 0 ? overdueDays : null,
+      overdueDays,
     };
 
     if (!byBlock.has(blockCode)) byBlock.set(blockCode, new Map());

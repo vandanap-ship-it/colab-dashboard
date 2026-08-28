@@ -98,9 +98,13 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
         <div className={styles.headerTagline}>Daily analytics report</div>
       </div>
 
-      {/* §1 Daily Site Snapshot */}
-      <Section num="01" title="Daily Site Snapshot" meta={`reporting cadence · ${asOfLabel}`}>
+      {/* §1 Daily Site Snapshot — matches Colab reference: 4 tiles */}
+      <Section num="01" title="Daily Site Snapshot" meta={`reporting coverage · ${asOfLabel}`}>
         <div className={styles.snap}>
+          <div className={styles.snapCell}>
+            <div className={styles.snapKey}>Site progress updated</div>
+            <div className={styles.snapValue}>{s.dailySnapshot.progressUpdatedToday ? "Yes" : "No"}</div>
+          </div>
           <div className={styles.snapCell}>
             <div className={styles.snapKey}>Contractors updated</div>
             <div className={styles.snapValue}>
@@ -130,8 +134,13 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
         </div>
       </Section>
 
-      {/* §2 Daily Movement — Contractor-wise Progress */}
-      <Section num="02" title="Daily Movement — Contractor-wise Progress" meta={`progressed on the day · ${asOfLabel}`}>
+      {/* §2 Daily Movement — Contractor-wise Progress + Planned Coverage (sub-panel) */}
+      <Section num="02" title="Daily Movement — Contractor-wise Progress" meta={`progressed vs planned for ${asOfLabel}`}>
+        <div className={styles.movementHeadline}>
+          <strong>{s.dailySnapshot.villasUpdated} / {s.dailySnapshot.villasExpected}</strong> villas executed vs planned
+          <span className={styles.of}> · </span>
+          <strong>{s.dailySnapshot.blocksUpdated} / {s.dailySnapshot.blocksExpected}</strong> blocks
+        </div>
         <table className={styles.tbl}>
           <thead>
             <tr>
@@ -142,10 +151,13 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
             </tr>
           </thead>
           <tbody>
-            {s.movement.map((row) => (
+            {s.movement.map((row, i) => (
               <tr key={row.contractorId ?? "__untagged__"}>
                 <td>
-                  <div className={styles.tblName}>{row.contractorName}</div>
+                  <div className={styles.tblName}>
+                    {row.contractorId !== null && `${String.fromCharCode(65 + i)} · `}
+                    {row.contractorName}
+                  </div>
                   {!row.hasSchedule && (
                     <div className={styles.tblSub}>schedule yet to be received</div>
                   )}
@@ -165,58 +177,65 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
             )}
           </tbody>
         </table>
-      </Section>
+        <p className={styles.sectionExplain}>
+          Planned for the day = villas whose work was scheduled for {asOfLabel}. Progressed = of those, how many logged an update. &quot;Untagged&quot; activities are ones without an assigned contractor yet — bulk-assign them via Admin → Contractor Assign.
+        </p>
 
-      {/* §3 Planned coverage by block */}
-      <Section
-        num="03"
-        title="Planned coverage by block"
-        meta={
-          s.blockCoverage.length === 0
-            ? "no work planned today"
-            : `coverage of the ${s.blockCoverage.length} block${s.blockCoverage.length === 1 ? "" : "s"} with work planned for ${asOfLabel}`
-        }
-      >
-        {s.blockCoverage.length === 0 ? (
-          <div className={styles.empty}>No planned coverage for this day.</div>
-        ) : (
-          s.blockCoverage.map((b) => (
-            <div key={b.blockCode} className={styles.blockCoverageRow}>
-              <div className={styles.bcLabel}>
-                <div className={styles.bcName}>Block {b.blockCode}</div>
-                <div
-                  className={`${styles.bcStatus} ${
-                    b.status === "all-updated"
-                      ? styles.bcStatusAll
-                      : b.status === "partially"
-                      ? styles.bcStatusPartial
-                      : styles.bcStatusNone
-                  }`}
-                >
-                  {b.status === "all-updated"
-                    ? "Updated completely"
-                    : b.status === "partially"
-                    ? `${b.updatedCount} of ${b.totalCount} updated`
-                    : "None updated"}
+        {/* Coverage sub-panel — inline per Colab reference format */}
+        <div className={styles.subPanel}>
+          <div className={styles.subPanelHd}>
+            <span className={styles.subPanelTitle}>Planned coverage by block</span>
+            {(() => {
+              const pending = s.blockCoverage.reduce((n, b) => n + (b.totalCount - b.updatedCount), 0);
+              return pending > 0 ? <span className={styles.subPanelBadge}>{pending} VILLAS PENDING</span> : null;
+            })()}
+          </div>
+          {s.blockCoverage.length === 0 ? (
+            <div className={styles.empty}>No planned coverage for this day.</div>
+          ) : (
+            <>
+              <p className={styles.sectionExplain}>
+                Coverage of the {s.blockCoverage.length} block{s.blockCoverage.length === 1 ? "" : "s"} with work planned for {asOfLabel}. Green chips are villas that logged progress; plain chips are still pending.
+              </p>
+              {s.blockCoverage.map((b) => (
+                <div key={b.blockCode} className={styles.blockCoverageRow}>
+                  <div className={styles.bcLabel}>
+                    <div className={styles.bcName}>Block {b.blockCode}</div>
+                    <div
+                      className={`${styles.bcStatus} ${
+                        b.status === "all-updated"
+                          ? styles.bcStatusAll
+                          : b.status === "partially"
+                          ? styles.bcStatusPartial
+                          : styles.bcStatusNone
+                      }`}
+                    >
+                      {b.status === "all-updated"
+                        ? "Updated completely"
+                        : b.status === "partially"
+                        ? `${b.updatedCount} of ${b.totalCount} updated`
+                        : "None updated"}
+                    </div>
+                  </div>
+                  <div className={styles.bcVillas}>
+                    {b.villas.map((v) => (
+                      <span
+                        key={`${v.villaNumber}-${v.villaLabel}`}
+                        className={`${styles.bcChip} ${v.updated ? styles.bcChipUpdated : styles.bcChipNotUpdated}`}
+                      >
+                        {v.villaLabel.replace(/^Villa\s+/i, "V")}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div className={styles.bcVillas}>
-                {b.villas.map((v) => (
-                  <span
-                    key={`${v.villaNumber}-${v.villaLabel}`}
-                    className={`${styles.bcChip} ${v.updated ? styles.bcChipUpdated : styles.bcChipNotUpdated}`}
-                  >
-                    {v.villaLabel.replace(/^Villa\s+/i, "V")}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))
-        )}
+              ))}
+            </>
+          )}
+        </div>
       </Section>
 
-      {/* §4 Daily Manpower */}
-      <Section num="04" title="Daily Manpower" meta={`present vs planned · ${asOfLabel}`}>
+      {/* §3 Daily Manpower */}
+      <Section num="03" title="Daily Manpower" meta={`present vs planned · ${asOfLabel}`}>
         {s.manpower.trades.length === 0 && s.manpower.plannedTotal === 0 && s.manpower.actualTotal === 0 ? (
           <div className={styles.empty}>
             No planned or actual manpower recorded for {asOfLabel}.
@@ -271,13 +290,19 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
                 ))}
               </tbody>
             </table>
+            <p className={styles.sectionExplain}>
+              Present vs planned headcount for {asOfLabel}, with % of plan per trade.
+              {s.manpower.variance > 0 && ` ${s.manpower.variance} above plan.`}
+              {s.manpower.variance < 0 && ` ${Math.abs(s.manpower.variance)} below plan.`}
+              {s.manpower.variance === 0 && ` On plan.`}
+            </p>
           </>
         )}
       </Section>
 
-      {/* §5 Site Activity Highlights */}
+      {/* §4 Site Activity Highlights */}
       <Section
-        num="05"
+        num="04"
         title="Site Activity Highlights"
         meta={`activities logged on ${asOfLabel} · grouped block then villa`}
       >
@@ -303,27 +328,62 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={a.photoUrl} alt="" className={styles.actPhoto} />
                       ) : (
-                        <div className={styles.actPhotoStub}>No photo</div>
+                        <div className={styles.actPhotoStub}>📷 Photo not uploaded</div>
                       )}
                       <div className={styles.actInfo}>
-                        <div className={styles.actEyebrow}>{a.milestoneName}</div>
-                        <div className={styles.actName}>{a.activityName}</div>
-                        <div className={styles.actMeta}>
-                          {a.achievedPct != null && <span className={styles.actPct}>{Math.round(a.achievedPct)}%</span>}
-                          {a.overdueDays != null && <span className={styles.actOverdue}>{a.overdueDays}d overdue</span>}
+                        {/* Title: "MilestoneSection · Activity" — matches Colab's 3-part format
+                            (as close as we can get; Colab's raw Sub_Location/Head/Name aren't stored). */}
+                        <div className={styles.actName}>
+                          {a.milestoneName} · {a.activityName}
                         </div>
-                        {a.notes && <div className={styles.actRemark}>“{a.notes}”</div>}
-                        {(a.reasonLabel || a.reasonNote) && (
-                          <div className={styles.actReason}>
-                            <strong>Delay reason: </strong>
-                            {[a.reasonLabel, a.reasonNote].filter(Boolean).join(" · ")}
+                        {/* Cumulative status */}
+                        <div className={styles.actMeta}>
+                          {a.achievedPct != null && (
+                            <span className={styles.actPct}>{Math.round(a.achievedPct)}% complete</span>
+                          )}
+                          <span className={styles.actStatus}>
+                            {a.achievedPct != null && a.achievedPct >= 100 ? "· done" : "· in progress"}
+                          </span>
+                        </div>
+                        {/* Daily delta */}
+                        {a.dailyDeltaPct != null && a.dailyDeltaPct > 0 && (
+                          <div className={styles.actDelta}>
+                            +{a.dailyDeltaPct}% completed on {new Date(a.entryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
                           </div>
                         )}
+                        {/* Planned end + overdue/ahead */}
+                        {a.plannedEndDate && (
+                          <div className={styles.actPlanned}>
+                            Planned end {new Date(a.plannedEndDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                            {a.daysToPlannedEnd != null && a.daysToPlannedEnd < 0 && (
+                              <span className={styles.actOverdue}> · {Math.abs(a.daysToPlannedEnd)} days overdue</span>
+                            )}
+                            {a.daysToPlannedEnd != null && a.daysToPlannedEnd > 0 && (
+                              <span className={styles.actAhead}> · {a.daysToPlannedEnd} days to planned end</span>
+                            )}
+                            {a.daysToPlannedEnd === 0 && (
+                              <span className={styles.actOverdue}> · due today</span>
+                            )}
+                          </div>
+                        )}
+                        {/* REMARK block (labeled per Colab format) */}
+                        {a.notes && (
+                          <div className={styles.actBlock}>
+                            <div className={styles.actBlockLbl}>REMARK</div>
+                            <div className={styles.actBlockVal}>{a.notes}</div>
+                          </div>
+                        )}
+                        {/* DELAY REASON block (always labeled — dash if none) */}
+                        <div className={styles.actBlock}>
+                          <div className={styles.actBlockLbl}>DELAY REASON</div>
+                          <div className={styles.actBlockVal}>
+                            {(a.reasonLabel || a.reasonNote)
+                              ? [a.reasonLabel, a.reasonNote].filter(Boolean).join(" · ")
+                              : "—"}
+                          </div>
+                        </div>
                         <div className={styles.actFoot}>
-                          {a.contractorName ?? "Untagged"} · {a.loggedByName}
-                          {a.loggedAt && (
-                            <span className={styles.of}> · logged {new Date(a.loggedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>
-                          )}
+                          {a.contractorName ?? "Untagged"} · {new Date(a.entryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                         </div>
                       </div>
                     </div>
@@ -335,9 +395,9 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
         )}
       </Section>
 
-      {/* §6 Milestone Progress */}
+      {/* §5 Milestone Progress */}
       <Section
-        num="06"
+        num="05"
         title="Milestone Progress"
         meta={`line items whose planned finish is on or before ${asOfLabel}`}
       >
@@ -376,9 +436,9 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
         </table>
       </Section>
 
-      {/* §7 Block-wise Progress */}
+      {/* §6 Block-wise Progress */}
       <Section
-        num="07"
+        num="06"
         title="Block-wise Progress"
         meta="planned vs actual dates + delta per block"
       >
@@ -439,8 +499,8 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
         )}
       </Section>
 
-      {/* §8 Project Health footer */}
-      <Section num="08" title="Project Health" meta={`as of ${asOfLabel}`}>
+      {/* §7 Project Health footer */}
+      <Section num="07" title="Project Health" meta={`as of ${asOfLabel}`}>
         <table className={styles.phTbl}>
           <thead>
             <tr>
