@@ -196,6 +196,7 @@ async function computeDailySnapshotAndMovement(
         villaId: true,
         baselineStart: true,
         baselineFinish: true,
+        actualStart: true,
         actualFinish: true,
         section: { select: { orderIndex: true } },
         villa: {
@@ -284,6 +285,7 @@ async function computeDailySnapshotAndMovement(
       sectionOrderIndex: vm.section?.orderIndex ?? 999,
       baselineStart: vm.baselineStart,
       baselineFinish: vm.baselineFinish,
+      actualStart: vm.actualStart,
       actualFinish: vm.actualFinish,
     });
     milestonesByVillaLocal.set(vm.villaId, entry);

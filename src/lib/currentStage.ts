@@ -23,6 +23,7 @@ export interface VillaMilestoneForStage {
   sectionOrderIndex: number;
   baselineStart: Date | null;
   baselineFinish: Date | null;
+  actualStart: Date | null;
   actualFinish: Date | null;
 }
 
@@ -45,25 +46,44 @@ export function currentStageMilestoneId(
 
 /**
  * Is this villa "planned today" per Colab's rule?
- *   - Villa's current stage exists
- *   - Today falls inside current stage's baseline window, OR
- *   - Current stage is overdue-still-open (baselineFinish < today,
- *     actualFinish null — implicit from currentStageMilestoneId).
+ *
+ * Colab's caption on the coverage panel: "villa in its window, or overdue".
+ * Empirically Colab counts a villa on the report date if ANY of these holds:
+ *   1. Its current stage's baseline window covers today (in-window)
+ *   2. Its current stage's baselineFinish < today (overdue-still-open)
+ *   3. It has ANY started-and-open milestone (actualStart set, actualFinish
+ *      null) — villa is actively under construction even if the current
+ *      stage's baseline is in the future
+ *   4. It has ANY overdue milestone anywhere (baselineFinish < today AND
+ *      not closed) — spilled-over work still to catch up
+ *
+ * The looser (3) + (4) branches close the gap with Colab's Aug 25 numbers,
+ * which count every villa Abraham has active work on regardless of whether
+ * today falls exactly in the current stage's planned window.
  */
 export function isVillaPlannedToday(
   milestones: VillaMilestoneForStage[],
   today: Date,
 ): boolean {
-  const currentId = currentStageMilestoneId(milestones);
-  if (!currentId) return false;
-  const current = milestones.find((m) => m.id === currentId);
-  if (!current) return false;
-  if (!current.baselineStart || !current.baselineFinish) return false;
   const t = today.getTime();
-  const s = current.baselineStart.getTime();
-  const f = current.baselineFinish.getTime();
-  if (t >= s && t <= f) return true;   // in-window
-  if (t > f) return true;              // overdue-still-open (currentStage already implies not-closed)
+  const currentId = currentStageMilestoneId(milestones);
+  if (currentId) {
+    const current = milestones.find((m) => m.id === currentId);
+    if (current?.baselineStart && current?.baselineFinish) {
+      const s = current.baselineStart.getTime();
+      const f = current.baselineFinish.getTime();
+      if (t >= s && t <= f) return true;   // (1) in-window
+      if (t > f) return true;              // (2) overdue-still-open
+    }
+  }
+  // (3) any actively-under-construction milestone
+  for (const m of milestones) {
+    if (m.actualStart && m.actualFinish == null) return true;
+  }
+  // (4) any overdue still-open milestone anywhere
+  for (const m of milestones) {
+    if (m.actualFinish == null && m.baselineFinish && m.baselineFinish.getTime() < t) return true;
+  }
   return false;
 }
 
