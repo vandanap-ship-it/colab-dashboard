@@ -39,17 +39,18 @@ import { isVillaPlannedToday, type VillaMilestoneForStage } from "@/lib/currentS
  *   - Includes V41..V46 (Block 12 + 13) but NOT V47..V50 (Block 14)
  */
 const COLAB_ABRAHAM_VILLA_TO_BLOCK: Record<number, string> = {
-  3:  "Block 02", 4:  "Block 02", 5:  "Block 02", 6:  "Block 02", 7:  "Block 02", 8:  "Block 02",
-  9:  "Block 03", 10: "Block 03", 11: "Block 03",
-  12: "Block 04", 13: "Block 04", 14: "Block 04",
-  15: "Block 05", 16: "Block 05",
-  17: "Block 06", 18: "Block 06", 19: "Block 06",
-  20: "Block 07", 21: "Block 07", 22: "Block 07",
-  23: "Block 08", 24: "Block 08",
-  25: "Block 09", 26: "Block 09", 27: "Block 09", 28: "Block 09", 29: "Block 09", 30: "Block 09", 31: "Block 09",
-  32: "Block 10", 33: "Block 10", 34: "Block 10", 35: "Block 10", 36: "Block 10", 37: "Block 10",
-  41: "Block 12", 42: "Block 12", 43: "Block 12",
-  44: "Block 13", 45: "Block 13", 46: "Block 13",
+  // View renders "Block {code}", so values here are the CODE only (no "Block " prefix).
+  3:  "02", 4:  "02", 5:  "02", 6:  "02", 7:  "02", 8:  "02",
+  9:  "03", 10: "03", 11: "03",
+  12: "04", 13: "04", 14: "04",
+  15: "05", 16: "05",
+  17: "06", 18: "06", 19: "06",
+  20: "07", 21: "07", 22: "07",
+  23: "08", 24: "08",
+  25: "09", 26: "09", 27: "09", 28: "09", 29: "09", 30: "09", 31: "09",
+  32: "10", 33: "10", 34: "10", 35: "10", 36: "10", 37: "10",
+  41: "12", 42: "12", 43: "12",
+  44: "13", 45: "13", 46: "13",
 };
 
 export interface ScorecardProject {

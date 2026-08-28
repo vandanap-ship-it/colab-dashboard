@@ -417,6 +417,8 @@ export async function importColabProgress(
     // ----- 6. Parse row fields
     const actualStart = parseColabDate(r.Actual_Start);
     const actualEnd   = parseColabDate(r.Actual_End_Date);
+    const plannedStart = parseColabDate(r.Planned_Start_Date);
+    const plannedEnd   = parseColabDate(r.Planned_End_Date);
     const progressAt  = parseColabDate(r.Progress_Date) ?? actualStart ?? actualEnd;
     const cumulative  = toFloat(r.Cumulative__achieved_Qty) ?? 0;
     const achieved    = toFloat(r.Achieved_Qty) ?? 0;
@@ -439,6 +441,12 @@ export async function importColabProgress(
       await prisma.wBSNode.update({
         where: { id: bestWbs.id },
         data: {
+          // Overwrite baselines from Colab CSV — the source of truth for
+          // "planned today" checks. Without this, WBSNode dates stay at MSP
+          // values which can differ from Colab's tracker and cause
+          // day-of-report counts to disagree with the Colab-branded PDFs.
+          baselineStart: plannedStart ?? undefined,
+          baselineFinish: plannedEnd ?? undefined,
           actualStart: actualStart ?? undefined,
           actualFinish: actualEnd ?? undefined,
           percentComplete: Math.min(100, Math.max(0, pct)),
