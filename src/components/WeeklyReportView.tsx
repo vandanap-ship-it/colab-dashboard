@@ -145,25 +145,40 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
               <div className={styles.empty}>No manpower plan set.</div>
             ) : (
               <>
-                <div className={weekly.mpHead}>
-                  <div className={weekly.mpHeadCell}>
-                    <div className={weekly.mpHeadLbl}>Weekly total</div>
-                    <div className={weekly.mpHeadVal}>{c.weeklyActual} / {c.weeklyPlanned}</div>
-                  </div>
-                  <div className={weekly.mpHeadCell}>
-                    <div className={weekly.mpHeadLbl}>Week vs plan</div>
-                    <div className={weekly.mpHeadVal}>{c.pctOfPlan == null ? "—" : `${c.pctOfPlan}%`}</div>
-                  </div>
-                  <div className={weekly.mpHeadCell}>
-                    <div className={weekly.mpHeadLbl}>Best day</div>
-                    <div className={weekly.mpHeadVal}>
-                      {c.bestDayActual}
-                      {c.bestDayDate && (
-                        <span className={styles.of}> on {new Date(c.bestDayDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</span>
-                      )}
+                {/* 4-tile weekly strip per RUNBOOK §4 (no Remark box). */}
+                {(() => {
+                  const workingDays = c.perDay.filter((d) => !d.isHoliday).length;
+                  const loggedDays = c.perDay.filter((d) => d.actualTotal > 0).length;
+                  const avgPerDay = workingDays > 0 ? Math.round(c.weeklyPlanned / workingDays) : 0;
+                  return (
+                    <div className={weekly.mpHead4}>
+                      <div className={weekly.mpHeadCell}>
+                        <div className={weekly.mpHeadLbl}>Weekly target</div>
+                        <div className={weekly.mpHeadVal}>{c.weeklyPlanned}</div>
+                        <div className={weekly.mpHeadSub}>{avgPerDay}/DAY × {workingDays}D</div>
+                      </div>
+                      <div className={weekly.mpHeadCell}>
+                        <div className={weekly.mpHeadLbl}>Achieved</div>
+                        <div className={weekly.mpHeadVal}>{c.weeklyActual}</div>
+                        <div className={weekly.mpHeadSub}>{loggedDays}/{workingDays} DAYS LOGGED</div>
+                      </div>
+                      <div className={weekly.mpHeadCell}>
+                        <div className={weekly.mpHeadLbl}>Week vs target</div>
+                        <div className={weekly.mpHeadVal}>{c.pctOfPlan == null ? "—" : `${c.pctOfPlan}%`}</div>
+                        <div className={weekly.mpHeadSub}>AVG {avgPerDay}/DAY</div>
+                      </div>
+                      <div className={weekly.mpHeadCell}>
+                        <div className={weekly.mpHeadLbl}>Best day</div>
+                        <div className={weekly.mpHeadVal}>{c.bestDayActual}</div>
+                        <div className={weekly.mpHeadSub}>
+                          {c.bestDayDate
+                            ? `${new Date(c.bestDayDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }).toUpperCase()} · VS ${avgPerDay}`
+                            : "—"}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  );
+                })()}
                 <ManpowerChart perDay={c.perDay} />
                 <ManpowerTradeTable perDay={c.perDay} />
               </>

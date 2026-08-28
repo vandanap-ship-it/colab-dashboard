@@ -186,6 +186,21 @@
   font-weight: 600;
 }
 
+/* -------------- Manpower 4-tile weekly strip (RUNBOOK §4) -------------- */
+.mpHead4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.mpHeadSub {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #A0A09B;
+  margin-top: 4px;
+}
+
 /* -------------- Stalled · needs a push (RUNBOOK weekly §3) -------------- */
 .stalledPanel {
   margin-top: 14px;
@@ -273,8 +288,17 @@
   background: #F1EEE4;
   border-radius: 5px;
 }
-.mpHeadLbl { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8B93A0; font-weight: 700; }
-.mpHeadVal { font-size: 18px; font-weight: 700; color: #16202F; font-variant-numeric: tabular-nums; margin-top: 3px; letter-spacing: -0.02em; }
+.mpHeadLbl { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #A0A09B; font-weight: 700; }
+.mpHeadVal {
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 28px;
+  font-weight: 400;
+  color: #161926;
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+  letter-spacing: 0.005em;
+  line-height: 1;
+}
 
 /* Manpower chart */
 .chart {
