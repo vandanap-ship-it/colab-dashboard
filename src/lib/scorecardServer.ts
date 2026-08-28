@@ -189,16 +189,33 @@ async function computeDailySnapshotAndMovement(
   const dayEnd = new Date(dayStart.getTime() + 86400000);
 
   // When a contractor filter is on, narrow "planned for the day" to villas
-  // that contractor actually owns WBS on. Otherwise every villa in scope
-  // shows up regardless of contractor.
+  // that contractor actually owns. For Abraham specifically, use the
+  // authoritative BLOCKS map (Shraddha's Python defines Abraham as the
+  // 41 hardcoded villas — NOT by wbsNode.contractorId tagging, which is
+  // incomplete for villas Colab hasn't touched yet). For other contractors,
+  // fall back to villaId derived from wbsNode.contractorId.
   let contractorVillaIds: string[] | null = null;
   if (contractorFilterId) {
-    const contractorVillas = await prisma.wBSNode.findMany({
-      where: { projectId, contractorId: contractorFilterId, villaId: { not: null } },
-      select: { villaId: true },
-      distinct: ["villaId"],
+    const contractorInfo = await prisma.contractor.findUnique({
+      where: { id: contractorFilterId },
+      select: { name: true },
     });
-    contractorVillaIds = (contractorVillas as Array<{ villaId: string }>).map((v) => v.villaId);
+    const isAbraham = (contractorInfo?.name ?? "").trim().toLowerCase() === "abraham thomas";
+    if (isAbraham) {
+      const abrahamNumbers = Object.keys(COLAB_ABRAHAM_VILLA_TO_BLOCK).map(Number);
+      const villaRows = await prisma.villa.findMany({
+        where: { projectId, inScope: true, number: { in: abrahamNumbers } },
+        select: { id: true },
+      });
+      contractorVillaIds = (villaRows as Array<{ id: string }>).map((v) => v.id);
+    } else {
+      const contractorVillas = await prisma.wBSNode.findMany({
+        where: { projectId, contractorId: contractorFilterId, villaId: { not: null } },
+        select: { villaId: true },
+        distinct: ["villaId"],
+      });
+      contractorVillaIds = (contractorVillas as Array<{ villaId: string }>).map((v) => v.villaId);
+    }
   }
 
   // "Planned today" = at the ACTIVITY level, per Shraddha's scorecard-logic
@@ -217,8 +234,7 @@ async function computeDailySnapshotAndMovement(
     prisma.wBSNode.findMany({
       where: {
         projectId,
-        villaId: { not: null },
-        ...(contractorFilterId ? { contractorId: contractorFilterId } : {}),
+        villaId: contractorFilterId ? { in: contractorVillaIds ?? [] } : { not: null },
         OR: [
           { baselineStart: { lte: dayStart }, baselineFinish: { gte: dayStart } },
           { baselineFinish: { lt: dayStart }, actualFinish: null },
@@ -232,7 +248,9 @@ async function computeDailySnapshotAndMovement(
         projectId,
         deletedAt: null,
         date: { gte: dayStart, lt: dayEnd },
-        ...(contractorFilterId ? { contractorId: contractorFilterId } : {}),
+        ...(contractorFilterId
+          ? { wbsNode: { villaId: { in: contractorVillaIds ?? [] } } }
+          : {}),
       },
       select: {
         contractorId: true,
