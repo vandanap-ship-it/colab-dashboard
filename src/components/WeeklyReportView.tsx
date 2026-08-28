@@ -183,8 +183,13 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
                 <div className={weekly.reasonHead}>
                   <div className={weekly.reasonName}>{r.label}</div>
                   <div className={weekly.reasonStat}>
-                    {r.daysImpact > 0 && <span className={weekly.reasonDays}>+{r.daysImpact}d</span>}
-                    <span className={weekly.reasonCount}>{r.count} record{r.count === 1 ? "" : "s"}</span>
+                    {r.avgDaysImpact > 0 && (
+                      <span className={weekly.reasonDays}>avg {r.avgDaysImpact}d</span>
+                    )}
+                    {r.maxDaysImpact > 0 && (
+                      <span className={weekly.reasonDays}>worst {r.maxDaysImpact}d</span>
+                    )}
+                    <span className={weekly.reasonCount}>{r.activityCount} act{r.activityCount === 1 ? "" : "s"}</span>
                     <span className={weekly.reasonVillas}>
                       {r.affectedVillas.length} villa{r.affectedVillas.length === 1 ? "" : "s"}
                       {r.hasProjectLevel && " · +project-level"}

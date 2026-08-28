@@ -168,11 +168,17 @@ async function computeDailySnapshotAndMovement(
     blocks,
     villas,
   ] = await Promise.all([
+    // "Planned for the day" per RUNBOOK: villas whose work was scheduled
+    // for the date (in their planned window) OR were overdue and still open.
+    // This is the definition Colab uses — expected covers both in-window and
+    // spilled-past milestones.
     prisma.villaMilestone.findMany({
       where: {
         villa: { projectId },
-        baselineStart: { lte: dayStart },
-        baselineFinish: { gte: dayStart },
+        OR: [
+          { baselineStart: { lte: dayStart }, baselineFinish: { gte: dayStart } },
+          { baselineFinish: { lt: dayStart }, actualFinish: null },
+        ],
       },
       select: {
         villaId: true,

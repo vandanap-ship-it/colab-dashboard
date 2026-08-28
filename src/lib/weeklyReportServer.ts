@@ -67,11 +67,16 @@ export interface WeeklyManpowerRow {
 export interface DelayReasonWithMitigation {
   code: string;
   label: string;
-  count: number;         // # of hindrance / progress-reason rows contributing
-  daysImpact: number;    // sum of daysImpact from hindrances
+  count: number;              // # of hindrance / progress-reason rows contributing
+  daysImpact: number;         // sum of daysImpact from hindrances
+  /** Avg days late per activity — daysImpact / count, rounded. Colab §5
+   *  headline is "avg Xd · worst Yd · N acts · M villas". */
+  avgDaysImpact: number;
+  /** Worst (max) days late seen in this reason bucket. */
+  maxDaysImpact: number;
   affectedVillas: number[];
-  activityCount: number; // distinct wbsNodes involved
-  hasProjectLevel: boolean; // true if any project-level (no wbsNode) row
+  activityCount: number;      // distinct wbsNodes involved
+  hasProjectLevel: boolean;   // true if any project-level (no wbsNode) row
   mitigation: string;
 }
 
@@ -525,6 +530,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     label: string;
     count: number;
     daysImpact: number;
+    maxDaysImpact: number;
     villas: Set<number>;
     activityIds: Set<string>;
     hasProjectLevel: boolean;
@@ -541,12 +547,14 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
       label: reasonLabel(code),
       count: 0,
       daysImpact: 0,
+      maxDaysImpact: 0,
       villas: new Set<number>(),
       activityIds: new Set<string>(),
       hasProjectLevel: false,
     };
     entry.count++;
     entry.daysImpact += daysImpact;
+    if (daysImpact > entry.maxDaysImpact) entry.maxDaysImpact = daysImpact;
     if (villaId) {
       const num = villaIdToNumber.get(villaId);
       if (num != null) entry.villas.add(num);
@@ -572,6 +580,8 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
       label: v.label,
       count: v.count,
       daysImpact: v.daysImpact,
+      avgDaysImpact: v.count > 0 ? Math.round(v.daysImpact / v.count) : 0,
+      maxDaysImpact: v.maxDaysImpact,
       affectedVillas: [...v.villas].sort((a, b) => a - b),
       activityCount: v.activityIds.size,
       hasProjectLevel: v.hasProjectLevel,
