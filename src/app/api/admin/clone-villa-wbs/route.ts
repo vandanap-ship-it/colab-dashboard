@@ -14,6 +14,7 @@ import { recordAudit } from "@/lib/audit";
 //     body: { projectId, templateVillaNumber, targetVillaNumbers: number[] }
 
 export async function POST(req: Request) {
+  try {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -166,4 +167,9 @@ export async function POST(req: Request) {
   });
 
   return NextResponse.json({ ok: true, template: templateVillaNumber, results });
+  } catch (err) {
+    const msg = err instanceof Error ? `${err.name}: ${err.message}\n${err.stack ?? ""}` : String(err);
+    console.error("clone-villa-wbs failed", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
