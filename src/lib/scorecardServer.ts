@@ -399,6 +399,11 @@ async function computeDailySnapshotAndMovement(
       return a.villaNumber - b.villaNumber;
     });
     const scopeCount = villaList.length;
+    // Colab counts a villa as "updated" for the block-status label if it
+    // logged progress that day, regardless of whether it was in the planned
+    // window (ahead-of-plan villas count too). So the status ratio uses
+    // (updatedCount + aheadCount) not just updatedCount.
+    const anyUpdated = updatedCount + aheadCount;
     blockCoverage.push({
       blockCode: bcode,
       villas,
@@ -406,11 +411,9 @@ async function computeDailySnapshotAndMovement(
       aheadCount,
       totalCount: scopeCount,
       status:
-        scopeCount === 0
-          ? "none-updated" // only ahead-of-plan moves in this block
-          : updatedCount === 0
+        anyUpdated === 0
           ? "none-updated"
-          : updatedCount === scopeCount
+          : scopeCount > 0 && updatedCount === scopeCount
           ? "all-updated"
           : "partially",
     });

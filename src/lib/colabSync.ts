@@ -284,10 +284,12 @@ export async function importColabProgress(
   };
 
   // Preload the WBS-nodes-per-villa-milestone map for fast activity fuzzy match.
-  // Only load leaf nodes (level 5) tied to a villaMilestone.
+  // Only load leaf nodes (level 5) tied to a villaMilestone. Include isStar
+  // (isSubMilestone in schema) so the fallback path can prefer the ★
+  // END-marker as the canonical activity to attach unmatched Colab rows to.
   const wbsByMilestone = new Map<
     string, // villaMilestoneId
-    Array<{ id: string; name: string; totalQuantity: number | null; unit: string | null }>
+    Array<{ id: string; name: string; totalQuantity: number | null; unit: string | null; isStar: boolean }>
   >();
   const wbsBatch = 5000;
   let cursor: string | undefined;
@@ -303,6 +305,7 @@ export async function importColabProgress(
         totalQuantity: true,
         unit: true,
         villaMilestoneId: true,
+        isSubMilestone: true,
       },
       take: wbsBatch,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
@@ -312,7 +315,7 @@ export async function importColabProgress(
     for (const n of batch) {
       if (!n.villaMilestoneId) continue;
       const arr = wbsByMilestone.get(n.villaMilestoneId) ?? [];
-      arr.push({ id: n.id, name: n.name, totalQuantity: n.totalQuantity, unit: n.unit });
+      arr.push({ id: n.id, name: n.name, totalQuantity: n.totalQuantity, unit: n.unit, isStar: !!n.isSubMilestone });
       wbsByMilestone.set(n.villaMilestoneId, arr);
     }
     if (batch.length < wbsBatch) break;
@@ -378,7 +381,12 @@ export async function importColabProgress(
     touchedVillaMilestones.add(villaMilestoneId);
     touchedVillaIds.add(villa.id);
 
-    // ----- 4. Activity (best-effort)
+    // ----- 4. Activity (best-effort). Try fuzzy match first, then fall
+    //   back to the first candidate under the villaMilestone so every
+    //   Colab row still gets a ProgressEntry attached (RUNBOOK §4
+    //   Activity Highlights would otherwise silently drop ~80% of rows
+    //   when activity naming doesn't match tokens 1:1 — e.g. Colab's
+    //   "Pedastal" typo vs MSP's "Pedestal RCC — Concreting ★").
     const candidates = wbsByMilestone.get(villaMilestoneId) ?? [];
     const descriptor = colabActivityDescriptor(r);
     let bestWbs = null as (typeof candidates)[number] | null;
@@ -390,9 +398,16 @@ export async function importColabProgress(
         bestWbs = c;
       }
     }
-    // Threshold: require at least 1 real token overlap.
-    if (bestScore < 1) bestWbs = null;
-    if (bestWbs) stats.matchedActivityRows++;
+    if (bestScore >= 1 && bestWbs) {
+      stats.matchedActivityRows++;
+    } else if (candidates.length > 0) {
+      // Fallback — attach to the milestone's ★ END-marker if present, else
+      // the first candidate. Prefer the star because reports treat it as
+      // the section's canonical activity.
+      bestWbs = candidates.find((c) => c.isStar) ?? candidates[0];
+    } else {
+      bestWbs = null;
+    }
 
     // ----- 5. Contractor. If the row is blank, fall back to the
     //          project's default (Amanvana = Abraham Thomas per Shraddha).

@@ -221,7 +221,11 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
                       {b.status === "all-updated"
                         ? "Updated completely"
                         : b.status === "partially"
-                        ? `${b.updatedCount} of ${b.totalCount} updated`
+                        ? (() => {
+                            // Ahead-of-plan villas count in the numerator per Colab's convention.
+                            const done = b.updatedCount + b.aheadCount;
+                            return `${done} of ${b.totalCount} updated`;
+                          })()
                         : "None updated"}
                     </div>
                   </div>
