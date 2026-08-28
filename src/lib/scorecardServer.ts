@@ -68,8 +68,13 @@ export interface ScorecardBlockCoverage {
     villaNumber: number;
     villaLabel: string;
     updated: boolean;
+    /** True when the villa logged progress today but WASN'T in the planned
+     *  window — a bonus/ahead-of-plan move. RUNBOOK renders these as
+     *  gold-edged chips + adds a caption line in the sub-panel. */
+    aheadOfPlan?: boolean;
   }>;
   updatedCount: number;
+  aheadCount: number;
   totalCount: number;
   status: "none-updated" | "partially" | "all-updated";
 }
@@ -330,36 +335,76 @@ async function computeDailySnapshotAndMovement(
     });
   }
 
-  // §3 block coverage — only blocks that had scope today
+  // §3 block coverage — every block that had EITHER planned scope today OR
+  // a villa that moved today (bonus "ahead of plan" moves).
+  //
+  // Build the ahead-of-plan set: villas that logged progress today but
+  // whose milestone wasn't in the planned-today window. Each row carries
+  // { villaId, villaNumber, villaLabel, blockCode } so we can slot it into
+  // the right block strip with the gold-edged chip variant.
+  interface AheadVilla { villaId: string; villaNumber: number; villaLabel: string; blockCode: string }
+  const aheadByBlock = new Map<string, Map<string, AheadVilla>>();
+  for (const e of entriesToday) {
+    const villaId = e.wbsNode.villaId;
+    const vm = e.wbsNode.villaMilestone;
+    if (!villaId || !vm) continue;
+    if (expectedVillaIds.has(villaId)) continue; // already in planned scope — not ahead
+    const blockCode = vm.villa.block.code;
+    const villaNumber = vm.villa.number;
+    const villa = villas.find((v) => v.id === villaId);
+    const villaLabel = villa?.label ?? `Villa ${villaNumber}`;
+    if (!aheadByBlock.has(blockCode)) aheadByBlock.set(blockCode, new Map());
+    aheadByBlock.get(blockCode)!.set(villaId, { villaId, villaNumber, villaLabel, blockCode });
+  }
+
   const blockCoverage: ScorecardBlockCoverage[] = [];
-  const orderedBlocks = [...expectedByBlock.keys()].sort((a, b) => {
+  const orderedBlocks = [
+    ...new Set([...expectedByBlock.keys(), ...aheadByBlock.keys()]),
+  ].sort((a, b) => {
     const na = parseInt(a, 10);
     const nb = parseInt(b, 10);
     if (!isNaN(na) && !isNaN(nb)) return na - nb;
     return a.localeCompare(b);
   });
-  // We need villaId in the per-block map so §3 matches by unique villa id
-  // (not villa number, which can collide with grouped villas).
   for (const bcode of orderedBlocks) {
-    const villaMap = expectedByBlock.get(bcode)!;
+    const villaMap = expectedByBlock.get(bcode) ?? new Map();
+    const aheadMap = aheadByBlock.get(bcode) ?? new Map<string, AheadVilla>();
     const villaList = [...villaMap.values()].sort((a, b) => a.villaNumber - b.villaNumber);
     let updatedCount = 0;
+    let aheadCount = 0;
     const villas = villaList.map((v) => {
-      // Look up the villaId via number+block — but we have it directly in
-      // expectedByBlock population; extend that map to carry villaId (below).
       const upd = updatedVillaIds.has(v.villaId);
       if (upd) updatedCount++;
-      return { villaNumber: v.villaNumber, villaLabel: v.villaLabel, updated: upd };
+      return { villaNumber: v.villaNumber, villaLabel: v.villaLabel, updated: upd, aheadOfPlan: false };
     });
+    // Append gold-edged ahead villas below the planned ones.
+    for (const ah of aheadMap.values()) {
+      villas.push({
+        villaNumber: ah.villaNumber,
+        villaLabel: ah.villaLabel,
+        updated: true,
+        aheadOfPlan: true,
+      });
+      aheadCount++;
+    }
+    // Sort so all planned come first (in villaNumber order), then ahead in villaNumber order.
+    villas.sort((a, b) => {
+      if (a.aheadOfPlan !== b.aheadOfPlan) return a.aheadOfPlan ? 1 : -1;
+      return a.villaNumber - b.villaNumber;
+    });
+    const scopeCount = villaList.length;
     blockCoverage.push({
       blockCode: bcode,
       villas,
       updatedCount,
-      totalCount: villas.length,
+      aheadCount,
+      totalCount: scopeCount,
       status:
-        updatedCount === 0
+        scopeCount === 0
+          ? "none-updated" // only ahead-of-plan moves in this block
+          : updatedCount === 0
           ? "none-updated"
-          : updatedCount === villas.length
+          : updatedCount === scopeCount
           ? "all-updated"
           : "partially",
     });

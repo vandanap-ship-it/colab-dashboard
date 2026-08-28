@@ -194,9 +194,17 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
             <div className={styles.empty}>No planned coverage for this day.</div>
           ) : (
             <>
-              <p className={styles.sectionExplain}>
-                Coverage of the {s.blockCoverage.length} block{s.blockCoverage.length === 1 ? "" : "s"} with work planned for {asOfLabel}. Green chips are villas that logged progress; plain chips are still pending.
-              </p>
+              {(() => {
+                const totalAhead = s.blockCoverage.reduce((n, b) => n + b.aheadCount, 0);
+                return (
+                  <p className={styles.sectionExplain}>
+                    Coverage of the {s.blockCoverage.length} block{s.blockCoverage.length === 1 ? "" : "s"} with work planned for {asOfLabel}. Green chips are villas that logged progress; plain chips are still pending.
+                    {totalAhead > 0 && (
+                      <> Gold-edged chips are the {totalAhead} villa{totalAhead === 1 ? "" : "s"} that progressed ahead of plan (not scheduled for the day).</>
+                    )}
+                  </p>
+                );
+              })()}
               {s.blockCoverage.map((b) => (
                 <div key={b.blockCode} className={styles.blockCoverageRow}>
                   <div className={styles.bcLabel}>
@@ -220,8 +228,14 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
                   <div className={styles.bcVillas}>
                     {b.villas.map((v) => (
                       <span
-                        key={`${v.villaNumber}-${v.villaLabel}`}
-                        className={`${styles.bcChip} ${v.updated ? styles.bcChipUpdated : styles.bcChipNotUpdated}`}
+                        key={`${v.villaNumber}-${v.villaLabel}-${v.aheadOfPlan ? "a" : "p"}`}
+                        className={`${styles.bcChip} ${
+                          v.aheadOfPlan
+                            ? styles.bcChipAhead
+                            : v.updated
+                            ? styles.bcChipUpdated
+                            : styles.bcChipNotUpdated
+                        }`}
                       >
                         {v.villaLabel.replace(/^Villa\s+/i, "V")}
                       </span>

@@ -36,6 +36,10 @@ export interface WeeklyMilestoneItem {
   movedThisWeek?: boolean;
   daysIdle?: number;
   reason?: string;
+  /** ISO of milestone actualStart — used by the Stalled aging-bar panel's
+   *  "since DD MMM" caption (RUNBOOK weekly §3). Only populated for the
+   *  inProgressStalled items to keep other buckets lean. */
+  sinceDate?: string;
 }
 
 export interface WeeklyMilestonePlan {
@@ -403,7 +407,12 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
           if (moved) {
             b.inProgressMoving.push({ ...baseItem, movedThisWeek: true });
           } else {
-            b.inProgressStalled.push({ ...baseItem, movedThisWeek: false, daysIdle });
+            b.inProgressStalled.push({
+              ...baseItem,
+              movedThisWeek: false,
+              daysIdle,
+              sinceDate: m.actualStart.toISOString(),
+            });
           }
         }
         // OVERDUE: baselineFinish already passed AND not closed AND not

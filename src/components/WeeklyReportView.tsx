@@ -117,6 +117,8 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
                   items={[...plan.inProgress.movingItems, ...plan.inProgress.stalledItems]}
                   variant="in-progress"
                 />
+                {/* Stalled — needs a push aging-bar panel (RUNBOOK weekly §3) */}
+                <StalledPanel items={plan.inProgress.stalledItems} />
                 {plan.overdue.total > 0 && (
                   <MilestoneBucket
                     label="Overdue (still open, from earlier weeks)"
@@ -366,5 +368,63 @@ function Section({
       </div>
       <div className={styles.sectionBody}>{children}</div>
     </section>
+  );
+}
+
+/**
+ * Stalled — needs a push aging-bar panel. Per RUNBOOK weekly §3, this
+ * lives at the bottom of the In-Progress bucket. For each stalled villa
+ * we render a horizontal bar sized by days_idle vs the worst-idled item
+ * this week, coloured red (≥14d), amber (≥7d), or gold (<7d). Empty
+ * state: "Nothing stalled — every planned milestone is moving on site."
+ */
+function StalledPanel({ items }: { items: WeeklyMilestoneItem[] }) {
+  const stalled = items.filter((it) => it.movedThisWeek === false && it.daysIdle != null);
+  const maxIdle = Math.max(1, ...stalled.map((it) => it.daysIdle ?? 0));
+  return (
+    <div className={weekly.stalledPanel}>
+      <div className={weekly.stalledHd}>
+        <div className={weekly.stalledTitle}>Stalled · needs a push</div>
+        <div className={weekly.stalledCaption}>
+          Planned to be under way but zero progress this week. Bar = days idle.
+        </div>
+      </div>
+      {stalled.length === 0 ? (
+        <div className={weekly.stalledEmpty}>
+          Nothing stalled — every planned milestone is moving on site.
+        </div>
+      ) : (
+        <ul className={weekly.stalledList}>
+          {stalled.slice(0, 12).map((it, i) => {
+            const idle = it.daysIdle ?? 0;
+            const widthPct = Math.max(4, Math.round((idle / maxIdle) * 100));
+            const tone = idle >= 14 ? weekly.stalledBarRed : idle >= 7 ? weekly.stalledBarAmber : weekly.stalledBarGold;
+            const sinceStr = it.sinceDate
+              ? new Date(it.sinceDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
+              : null;
+            return (
+              <li key={i} className={weekly.stalledRow}>
+                <div className={weekly.stalledLbl}>
+                  <span className={weekly.stalledVilla}>{it.villaLabel ?? `V${it.villaNumber}`}</span>
+                  <span className={weekly.stalledMs}>{it.milestoneName}</span>
+                  <span className={weekly.stalledBlock}>· Block {it.blockCode}</span>
+                </div>
+                <div className={weekly.stalledBarWrap}>
+                  <div className={`${weekly.stalledBar} ${tone}`} style={{ width: `${widthPct}%` }} />
+                </div>
+                <div className={weekly.stalledIdle}>{idle}d idle</div>
+                <div className={weekly.stalledReason}>
+                  {it.reason ?? "no cause logged"}
+                  {sinceStr && <span className={weekly.stalledSince}> · since {sinceStr}</span>}
+                </div>
+              </li>
+            );
+          })}
+          {stalled.length > 12 && (
+            <li className={weekly.stalledMore}>+{stalled.length - 12} more stalled</li>
+          )}
+        </ul>
+      )}
+    </div>
   );
 }

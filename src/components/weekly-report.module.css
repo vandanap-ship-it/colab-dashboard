@@ -186,6 +186,81 @@
   font-weight: 600;
 }
 
+/* -------------- Stalled · needs a push (RUNBOOK weekly §3) -------------- */
+.stalledPanel {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: #FCF6EA;
+  border: 1px solid #E7DFC9;
+  border-radius: 6px;
+}
+.stalledHd { margin-bottom: 10px; }
+.stalledTitle {
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 16px;
+  color: #161926;
+  letter-spacing: 0.002em;
+}
+.stalledCaption {
+  font-size: 10.5px;
+  color: #A0A09B;
+  font-style: italic;
+  margin-top: 2px;
+}
+.stalledEmpty {
+  padding: 8px 0;
+  font-size: 11.5px;
+  color: #73823C;
+  font-style: italic;
+}
+.stalledList { list-style: none; padding: 0; margin: 0; }
+.stalledRow {
+  display: grid;
+  grid-template-columns: 1fr 100px 60px 1fr;
+  gap: 8px 10px;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px dashed #E7DFC9;
+  font-size: 11px;
+}
+.stalledRow:last-child { border-bottom: 0; }
+.stalledLbl { display: flex; gap: 6px; align-items: baseline; overflow: hidden; }
+.stalledVilla { font-weight: 700; color: #161926; }
+.stalledMs { color: #4E5866; }
+.stalledBlock { color: #A0A09B; font-size: 10px; }
+.stalledBarWrap {
+  height: 8px;
+  background: #EDE7D2;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.stalledBar { height: 100%; border-radius: 4px; }
+.stalledBarRed   { background: #8E2D1E; }
+.stalledBarAmber { background: #9A6A1F; }
+.stalledBarGold  { background: #CA9F49; }
+.stalledIdle {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #161926;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.stalledReason {
+  font-size: 10.5px;
+  color: #4E5866;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stalledSince { color: #A0A09B; font-style: normal; }
+.stalledMore {
+  padding: 5px 0;
+  font-size: 10.5px;
+  color: #A0A09B;
+  font-style: italic;
+}
+
 /* Manpower headline */
 .mpHead {
   display: grid;
