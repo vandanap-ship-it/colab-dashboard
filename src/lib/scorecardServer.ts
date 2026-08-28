@@ -151,6 +151,7 @@ function daysBetween(a: Date | null, b: Date | null): number | null {
 async function computeDailySnapshotAndMovement(
   projectId: string,
   day: Date,
+  contractorFilterId: string | null = null,
 ): Promise<{
   snapshot: ScorecardDailySnapshot;
   movement: ScorecardContractorMovement[];
@@ -159,8 +160,19 @@ async function computeDailySnapshotAndMovement(
   const dayStart = toDay(day);
   const dayEnd = new Date(dayStart.getTime() + 86400000);
 
-  // What was planned for the day: any villa milestone whose baseline window
-  // straddles the day. This is the "expected" set for updates.
+  // When a contractor filter is on, narrow "planned for the day" to villas
+  // that contractor actually owns WBS on. Otherwise every villa in scope
+  // shows up regardless of contractor.
+  let contractorVillaIds: string[] | null = null;
+  if (contractorFilterId) {
+    const contractorVillas = await prisma.wBSNode.findMany({
+      where: { projectId, contractorId: contractorFilterId, villaId: { not: null } },
+      select: { villaId: true },
+      distinct: ["villaId"],
+    });
+    contractorVillaIds = (contractorVillas as Array<{ villaId: string }>).map((v) => v.villaId);
+  }
+
   const [
     plannedMilestonesToday,
     entriesToday,
@@ -168,13 +180,11 @@ async function computeDailySnapshotAndMovement(
     blocks,
     villas,
   ] = await Promise.all([
-    // "Planned for the day" per RUNBOOK: villas whose work was scheduled
-    // for the date (in their planned window) OR were overdue and still open.
-    // This is the definition Colab uses — expected covers both in-window and
-    // spilled-past milestones.
     prisma.villaMilestone.findMany({
       where: {
-        villa: { projectId },
+        villa: contractorVillaIds
+          ? { projectId, id: { in: contractorVillaIds } }
+          : { projectId },
         OR: [
           { baselineStart: { lte: dayStart }, baselineFinish: { gte: dayStart } },
           { baselineFinish: { lt: dayStart }, actualFinish: null },
@@ -196,6 +206,7 @@ async function computeDailySnapshotAndMovement(
         projectId,
         deletedAt: null,
         date: { gte: dayStart, lt: dayEnd },
+        ...(contractorFilterId ? { contractorId: contractorFilterId } : {}),
       },
       select: {
         contractorId: true,
@@ -217,7 +228,11 @@ async function computeDailySnapshotAndMovement(
       },
     }),
     prisma.contractor.findMany({
-      where: { projectId, active: true },
+      where: {
+        projectId,
+        active: true,
+        ...(contractorFilterId ? { id: contractorFilterId } : {}),
+      },
       orderBy: { createdAt: "asc" }, // Abraham was seeded first → renders as "A · …"
       select: {
         id: true,
@@ -436,7 +451,11 @@ async function computeDailySnapshotAndMovement(
 }
 
 /** §4 — manpower day summary. */
-async function computeManpower(projectId: string, day: Date): Promise<DaySummary> {
+async function computeManpower(
+  projectId: string,
+  day: Date,
+  contractorFilterId: string | null = null,
+): Promise<DaySummary> {
   const dayStart = toDay(day);
   const [rawPlans, rawEntries, contractors] = await Promise.all([
     prisma.tradePlan.findMany({
@@ -445,6 +464,7 @@ async function computeManpower(projectId: string, day: Date): Promise<DaySummary
         deletedAt: null,
         startDate: { lte: dayStart },
         OR: [{ endDate: null }, { endDate: { gt: dayStart } }],
+        ...(contractorFilterId ? { contractorId: contractorFilterId } : {}),
       },
       select: {
         contractorId: true,
@@ -455,7 +475,12 @@ async function computeManpower(projectId: string, day: Date): Promise<DaySummary
       },
     }),
     prisma.manpowerEntry.findMany({
-      where: { projectId, deletedAt: null, entryDate: dayStart },
+      where: {
+        projectId,
+        deletedAt: null,
+        entryDate: dayStart,
+        ...(contractorFilterId ? { contractorId: contractorFilterId } : {}),
+      },
       select: { contractorId: true, trade: true, entryDate: true, actualCount: true },
     }),
     prisma.contractor.findMany({
@@ -499,7 +524,12 @@ async function computeManpower(projectId: string, day: Date): Promise<DaySummary
 }
 
 /** §7 — per-block progress. */
-async function computeBlockProgress(projectId: string, asOf: Date): Promise<ScorecardBlockProgress[]> {
+async function computeBlockProgress(
+  projectId: string,
+  asOf: Date,
+  contractorFilterId: string | null = null,
+): Promise<ScorecardBlockProgress[]> {
+  void contractorFilterId; // TODO: filter by contractor once block-progress query supports it
   const blocks = await prisma.block.findMany({
     where: { projectId },
     orderBy: { orderIndex: "asc" },
@@ -631,7 +661,11 @@ async function computeProjectHealth(projectId: string, asOf: Date): Promise<Scor
 // Public API — one call, all sections, parallelised.
 // ---------------------------------------------------------------------------
 
-export async function getScorecard(projectId: string, day: Date = new Date()): Promise<Scorecard | null> {
+export async function getScorecard(
+  projectId: string,
+  day: Date = new Date(),
+  contractorFilterId: string | null = null,
+): Promise<Scorecard | null> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: {
@@ -656,11 +690,11 @@ export async function getScorecard(projectId: string, day: Date = new Date()): P
     blockProgress,
     projectHealth,
   ] = await Promise.all([
-    computeDailySnapshotAndMovement(projectId, day),
-    computeManpower(projectId, day),
-    getMilestoneProgress(projectId, day),
-    getSiteActivityHighlights(projectId, day),
-    computeBlockProgress(projectId, day),
+    computeDailySnapshotAndMovement(projectId, day, contractorFilterId),
+    computeManpower(projectId, day, contractorFilterId),
+    getMilestoneProgress(projectId, day, contractorFilterId),
+    getSiteActivityHighlights(projectId, day, contractorFilterId),
+    computeBlockProgress(projectId, day, contractorFilterId),
     computeProjectHealth(projectId, day),
   ]);
 

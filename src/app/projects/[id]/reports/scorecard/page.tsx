@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { canSeeDesktop } from "@/lib/roles";
 import { getScorecard } from "@/lib/scorecardServer";
 import ScorecardView from "@/components/ScorecardView";
@@ -21,14 +22,14 @@ export default async function ScorecardPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; contractor?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
 
   const { id: projectId } = await params;
-  const { date: dateParam } = await searchParams;
+  const { date: dateParam, contractor: contractorParam } = await searchParams;
 
   const day = (() => {
     if (dateParam) {
@@ -37,12 +38,24 @@ export default async function ScorecardPage({
     }
     return istDayStart();
   })();
-
   const dateStr = day.toISOString().slice(0, 10);
+
+  // Available contractors for the filter dropdown, and the resolved id
+  // for the selected filter (if any). Contractor filter narrows every
+  // section to that contractor's activities — enables apples-to-apples
+  // comparison with Colab's Abraham-only PDFs.
+  const contractorOptions = await prisma.contractor.findMany({
+    where: { projectId, active: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true },
+  });
+  const contractorFilterId = contractorParam && contractorOptions.some((c) => c.id === contractorParam)
+    ? contractorParam
+    : null;
 
   let scorecard;
   try {
-    scorecard = await getScorecard(projectId, day);
+    scorecard = await getScorecard(projectId, day, contractorFilterId);
   } catch (err) {
     console.error("[scorecard] failed", err);
     return (
@@ -56,6 +69,12 @@ export default async function ScorecardPage({
   if (!scorecard) notFound();
 
   return (
-    <ScorecardView scorecard={scorecard} projectId={projectId} dateStr={dateStr} />
+    <ScorecardView
+      scorecard={scorecard}
+      projectId={projectId}
+      dateStr={dateStr}
+      contractorOptions={contractorOptions}
+      contractorFilterId={contractorFilterId}
+    />
   );
 }

@@ -31,12 +31,25 @@ export interface MilestoneProgressRow {
 export async function getMilestoneProgress(
   projectId: string,
   asOf: Date = new Date(),
+  contractorFilterId: string | null = null,
 ): Promise<MilestoneProgressRow[]> {
   const sections = await prisma.milestoneSection.findMany({
     where: { projectId },
     orderBy: { orderIndex: "asc" },
     select: { id: true, code: true, name: true, orderIndex: true },
   });
+
+  // When contractor filter is on, narrow to villaIds that contractor owns.
+  let contractorVillaIds: string[] | null = null;
+  if (contractorFilterId) {
+    const owned = await prisma.wBSNode.findMany({
+      where: { projectId, contractorId: contractorFilterId, villaId: { not: null } },
+      select: { villaId: true },
+      distinct: ["villaId"],
+    });
+    contractorVillaIds = (owned as Array<{ villaId: string }>).map((v) => v.villaId);
+  }
+  const villaFilter = contractorVillaIds ? { villaId: { in: contractorVillaIds } } : {};
 
   // One aggregate per section — count total villa milestones with a planned
   // finish on or before asOf, and separately how many of those closed.
@@ -47,6 +60,7 @@ export async function getMilestoneProgress(
         where: {
           sectionId: section.id,
           baselineFinish: { lte: asOf, not: null },
+          ...villaFilter,
         },
       }),
       prisma.villaMilestone.count({
@@ -54,12 +68,14 @@ export async function getMilestoneProgress(
           sectionId: section.id,
           baselineFinish: { lte: asOf, not: null },
           actualFinish: { not: null },
+          ...villaFilter,
         },
       }),
       prisma.villaMilestone.findFirst({
         where: {
           sectionId: section.id,
           actualFinish: { not: null, lte: asOf },
+          ...villaFilter,
         },
         orderBy: { actualFinish: "desc" },
         select: { actualFinish: true },
@@ -125,6 +141,7 @@ export interface SiteActivityBlockGroup {
 export async function getSiteActivityHighlights(
   projectId: string,
   forDate: Date = new Date(),
+  contractorFilterId: string | null = null,
 ): Promise<SiteActivityBlockGroup[]> {
   const dayStart = istDayStart(forDate);
   const dayEnd = new Date(dayStart.getTime() + 86400000);
@@ -134,6 +151,7 @@ export async function getSiteActivityHighlights(
       projectId,
       deletedAt: null,
       date: { gte: dayStart, lt: dayEnd },
+      ...(contractorFilterId ? { contractorId: contractorFilterId } : {}),
     },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     include: {

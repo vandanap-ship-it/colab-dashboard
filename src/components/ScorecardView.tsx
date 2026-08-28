@@ -10,6 +10,8 @@ export interface ScorecardViewProps {
   scorecard: Scorecard;
   projectId: string;
   dateStr: string; // "YYYY-MM-DD" — drives the date picker
+  contractorOptions: Array<{ id: string; name: string }>;
+  contractorFilterId: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -42,12 +44,29 @@ function fmtPct(n: number | null | undefined): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function ScorecardView({ scorecard: s, projectId, dateStr }: ScorecardViewProps) {
+export default function ScorecardView({
+  scorecard: s,
+  projectId,
+  dateStr,
+  contractorOptions,
+  contractorFilterId,
+}: ScorecardViewProps) {
   const router = useRouter();
 
+  const buildHref = useCallback((next: { date?: string; contractor?: string | null }) => {
+    const qs = new URLSearchParams();
+    qs.set("date", next.date ?? dateStr);
+    const c = next.contractor === undefined ? contractorFilterId : next.contractor;
+    if (c) qs.set("contractor", c);
+    return `/projects/${projectId}/reports/scorecard?${qs.toString()}`;
+  }, [projectId, dateStr, contractorFilterId]);
+
   const onDateChange = useCallback((v: string) => {
-    if (v) router.push(`/projects/${projectId}/reports/scorecard?date=${v}`);
-  }, [router, projectId]);
+    if (v) router.push(buildHref({ date: v }));
+  }, [router, buildHref]);
+  const onContractorChange = useCallback((v: string) => {
+    router.push(buildHref({ contractor: v || null }));
+  }, [router, buildHref]);
 
   // Set document.title so the browser's Print → Save-as-PDF flow proposes a
   // meaningful default filename (e.g. "Amanvana Daily Scorecard 2026-08-27.pdf")
@@ -79,6 +98,17 @@ export default function ScorecardView({ scorecard: s, projectId, dateStr }: Scor
             onChange={(e) => onDateChange(e.target.value)}
             className={styles.toolbarDate}
           />
+          <span className={styles.toolbarLbl} style={{ marginLeft: 14 }}>Contractor</span>
+          <select
+            value={contractorFilterId ?? ""}
+            onChange={(e) => onContractorChange(e.target.value)}
+            className={styles.toolbarDate}
+          >
+            <option value="">All contractors</option>
+            {contractorOptions.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
         </div>
         <button type="button" onClick={onDownload} className={styles.toolbarBtn}>
           <Download size={14} aria-hidden />
