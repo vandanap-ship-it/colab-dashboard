@@ -87,17 +87,20 @@ export async function POST(req: Request) {
       continue;
     }
 
-    // 1. Create the villa's milestones — one per template milestone.
+    // 1. Upsert the villa's milestones — one per template section. Some target
+    //    villas already have milestones auto-seeded by MSP; skip-or-reuse them.
     const oldToNewMilestone = new Map<string, string>();
     for (const tm of templateMilestones) {
-      const newMs = await prisma.villaMilestone.create({
-        data: {
+      const newMs = await prisma.villaMilestone.upsert({
+        where: { villaId_sectionId: { villaId: target.id, sectionId: tm.sectionId } },
+        create: {
           villaId: target.id,
           sectionId: tm.sectionId,
           baselineStart: tm.baselineStart,
           baselineFinish: tm.baselineFinish,
           pctComplete: 0,
         },
+        update: {}, // keep whatever's there
         select: { id: true },
       });
       oldToNewMilestone.set(tm.id, newMs.id);
