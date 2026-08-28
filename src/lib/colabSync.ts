@@ -325,6 +325,19 @@ export async function importColabProgress(
   // Track which VillaMilestones we touched so we can rollup at the end.
   const touchedVillaMilestones = new Set<string>();
   const touchedWbsNodes = new Set<string>();
+  // Per-villaMilestone Colab-CSV aggregate: min planned start, max planned
+  // end, whether any row was still open (no Actual_End_Date). After the
+  // per-row loop we apply the aggregate to EVERY wbsNode in the milestone
+  // so the scorecard's activity-level "planned today" check reflects the
+  // CSV — not the MSP baseline dates that only ~20% of wbsNodes overwrite.
+  interface MilestoneAgg {
+    minPlannedStart: Date | null;
+    maxPlannedEnd: Date | null;
+    minActualStart: Date | null;
+    maxActualEnd: Date | null;
+    anyOpen: boolean;
+  }
+  const milestoneAgg = new Map<string, MilestoneAgg>();
   // Villas that Colab had ANY progress for — used to bulk-tag every WBS node
   // under those villas to the default contractor at the end. Fixes the
   // §2 "villas in scope" undercount (was ~13 because only activity-matched
@@ -380,6 +393,28 @@ export async function importColabProgress(
     stats.matchedRows++;
     touchedVillaMilestones.add(villaMilestoneId);
     touchedVillaIds.add(villa.id);
+
+    // Update per-milestone Colab aggregate — used at end of loop to overwrite
+    // baselines across every wbsNode in the milestone. Parsed from the row
+    // below (dates are also parsed later for the per-row update, but we need
+    // them here first).
+    const _plannedStart = parseColabDate(r.Planned_Start_Date);
+    const _plannedEnd   = parseColabDate(r.Planned_End_Date);
+    const _actualStart  = parseColabDate(r.Actual_Start);
+    const _actualEnd    = parseColabDate(r.Actual_End_Date);
+    const agg = milestoneAgg.get(villaMilestoneId) ?? {
+      minPlannedStart: null,
+      maxPlannedEnd: null,
+      minActualStart: null,
+      maxActualEnd: null,
+      anyOpen: false,
+    };
+    if (_plannedStart && (!agg.minPlannedStart || _plannedStart < agg.minPlannedStart)) agg.minPlannedStart = _plannedStart;
+    if (_plannedEnd   && (!agg.maxPlannedEnd   || _plannedEnd   > agg.maxPlannedEnd  )) agg.maxPlannedEnd   = _plannedEnd;
+    if (_actualStart  && (!agg.minActualStart  || _actualStart  < agg.minActualStart )) agg.minActualStart  = _actualStart;
+    if (_actualEnd    && (!agg.maxActualEnd    || _actualEnd    > agg.maxActualEnd   )) agg.maxActualEnd    = _actualEnd;
+    if (!_actualEnd) agg.anyOpen = true;
+    milestoneAgg.set(villaMilestoneId, agg);
 
     // ----- 4. Activity (best-effort). Try fuzzy match first, then fall
     //   back to the first candidate under the villaMilestone so every
@@ -508,6 +543,43 @@ export async function importColabProgress(
             data: { progressEntryId: created.id, url: imageUrl },
           });
           stats.photosCreated++;
+        }
+      }
+    }
+  }
+
+  // ---------- 7b. Apply Colab-aggregate baselines across every wbsNode ----------
+  // Fuzzy-matching only lands data on ~20% of wbsNodes; the rest keep MSP
+  // baselines that don't match Colab's queries. Overwrite baselineStart /
+  // baselineFinish uniformly per villaMilestone so the scorecard's
+  // activity-level "planned today" check hits the same set as Colab.
+  if (!options.dryRun) {
+    for (const [vmId, agg] of milestoneAgg) {
+      if (!agg.minPlannedStart && !agg.maxPlannedEnd) continue;
+      await prisma.wBSNode.updateMany({
+        where: { villaMilestoneId: vmId },
+        data: {
+          baselineStart: agg.minPlannedStart ?? undefined,
+          baselineFinish: agg.maxPlannedEnd ?? undefined,
+        },
+      });
+      // If Colab has any still-open activity in this milestone, ensure
+      // at least one wbsNode has actualFinish=null so the overdue-open
+      // branch of the scorecard query can fire. Target the ★ END-marker
+      // when present, otherwise the first non-star wbsNode.
+      if (agg.anyOpen) {
+        const target = await prisma.wBSNode.findFirst({
+          where: { villaMilestoneId: vmId, isSubMilestone: true },
+          select: { id: true },
+        }) ?? await prisma.wBSNode.findFirst({
+          where: { villaMilestoneId: vmId },
+          select: { id: true },
+        });
+        if (target) {
+          await prisma.wBSNode.update({
+            where: { id: target.id },
+            data: { actualFinish: null },
+          });
         }
       }
     }
