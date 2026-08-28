@@ -16,17 +16,37 @@ function child(overrides: Partial<WbsChild> = {}): WbsChild {
   };
 }
 
-// The RUNBOOK point 3 says the ★ END-marker's own date is unreliable —
-// the milestone must always aggregate. Confirm the star doesn't dominate.
-describe("aggregate treats ★ END-marker like any other child (RUNBOOK point 3)", () => {
-  it("does NOT let a done star short-circuit an unfinished sibling", () => {
+// Colab convention: pctComplete + actualStart aggregate across all children,
+// but actualFinish is driven by the ★ END-marker's own closure. This
+// matches how Colab keeps Foundation as a villa's current stage until the
+// Footing RCC — Concreting ★ row is signed off.
+describe("aggregate closure driven by ★ END-marker", () => {
+  it("aggregates pctComplete across every child (star doesn't dominate the %)", () => {
     const star = child({ id: "star", isSubMilestone: true, percentComplete: 100, actualFinish: d("2026-08-20"), baselineStart: d("2026-08-01"), baselineFinish: d("2026-08-20") });
     const sib  = child({ id: "sib",  isSubMilestone: false, percentComplete: 50,  actualFinish: null,          baselineStart: d("2026-08-01"), baselineFinish: d("2026-08-20") });
     const r = aggregateChildren([star, sib]);
-    // Weighted avg of 100 + 50 across equal durations = 75, not 100.
-    expect(r.pctComplete).toBe(75);
-    // And since the sibling isn't done, milestone isn't closed.
+    expect(r.pctComplete).toBe(75); // weighted avg 75, not the star's 100
+  });
+
+  it("closes the milestone when the ★ closes, even if a sibling is still open", () => {
+    const star = child({ id: "star", isSubMilestone: true, percentComplete: 100, actualFinish: d("2026-08-20"), baselineStart: d("2026-08-01"), baselineFinish: d("2026-08-20") });
+    const sib  = child({ id: "sib",  isSubMilestone: false, percentComplete: 50,  actualFinish: null,          baselineStart: d("2026-08-01"), baselineFinish: d("2026-08-20") });
+    const r = aggregateChildren([star, sib]);
+    expect(r.actualFinish?.toISOString()).toBe("2026-08-20T00:00:00.000Z");
+  });
+
+  it("keeps the milestone open if the ★ isn't done — sibling completeness doesn't matter", () => {
+    const star = child({ id: "star", isSubMilestone: true, percentComplete: 50, actualFinish: null,           baselineStart: d("2026-08-01"), baselineFinish: d("2026-08-20") });
+    const sib  = child({ id: "sib",  isSubMilestone: false, percentComplete: 100, actualFinish: d("2026-08-05"), baselineStart: d("2026-08-01"), baselineFinish: d("2026-08-05") });
+    const r = aggregateChildren([star, sib]);
     expect(r.actualFinish).toBeNull();
+  });
+
+  it("falls back to 'all baselined children done' when no ★ exists", () => {
+    const a = child({ id: "a", percentComplete: 100, actualFinish: d("2026-08-15"), baselineStart: d("2026-08-01"), baselineFinish: d("2026-08-15") });
+    const b = child({ id: "b", percentComplete: 100, actualFinish: d("2026-08-20"), baselineStart: d("2026-08-01"), baselineFinish: d("2026-08-20") });
+    const r = aggregateChildren([a, b]);
+    expect(r.actualFinish?.toISOString()).toBe("2026-08-20T00:00:00.000Z");
   });
 });
 

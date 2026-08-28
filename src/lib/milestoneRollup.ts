@@ -141,7 +141,17 @@ export async function syncVillaMilestoneFromChildren(
 
 /** Duration-weighted aggregate across all children (including the ★ END-marker).
  *  Kept exported for its unit tests + for other callers that need the pure math.
- *  See RUNBOOK section 3 point 3 for why we no longer mirror the ★ directly. */
+ *
+ *  Closure rule (RUNBOOK + Colab behaviour):
+ *    - pctComplete = duration-weighted avg of all children (RUNBOOK point 3)
+ *    - actualStart = earliest actualStart across children
+ *    - actualFinish = the ★ END-marker's actualFinish IF the ★ has one;
+ *      otherwise NULL — a milestone doesn't close until the END-marker
+ *      concreting step is done, even if surrounding activities are done.
+ *      This matches how Colab keeps "Foundation" as a villa's current
+ *      stage until the "Footing RCC — Concreting ★" row is signed off.
+ *      Fall back to "all baselined children done" only when no ★ exists
+ *      under the milestone (some sections lack a star gate). */
 export function aggregateChildren(children: WbsChild[]): { pctComplete: number; actualStart: Date | null; actualFinish: Date | null } {
   // pctComplete: duration-weighted avg. Missing durations default to 1 day
   // so unset baselines don't crash the ratio.
@@ -166,16 +176,31 @@ export function aggregateChildren(children: WbsChild[]): { pctComplete: number; 
     }
   }
 
-  // actualFinish: only set when every baselined child is also actually finished.
-  // Children without a baseline are treated as decorative — they don't gate
-  // milestone closure.
-  const baselined = children.filter((c) => c.baselineFinish !== null);
-  const allDone = baselined.length > 0 && baselined.every((c) => c.actualFinish !== null);
+  // actualFinish: driven by the ★ END-marker's own closure. If a star
+  // exists, the milestone closes exactly when the star closes. If no
+  // star exists (some sections don't have a gate), fall back to
+  // "all baselined children done".
+  const stars = children.filter((c) => c.isSubMilestone);
   let latestFinish: Date | null = null;
-  if (allDone) {
-    for (const c of baselined) {
-      if (c.actualFinish && (!latestFinish || c.actualFinish > latestFinish)) {
-        latestFinish = c.actualFinish;
+  if (stars.length > 0) {
+    // If any star is still open, milestone stays open; otherwise take
+    // the latest star finish as the milestone's finish.
+    const allStarsClosed = stars.every((s) => s.actualFinish !== null);
+    if (allStarsClosed) {
+      for (const s of stars) {
+        if (s.actualFinish && (!latestFinish || s.actualFinish > latestFinish)) {
+          latestFinish = s.actualFinish;
+        }
+      }
+    }
+  } else {
+    const baselined = children.filter((c) => c.baselineFinish !== null);
+    const allDone = baselined.length > 0 && baselined.every((c) => c.actualFinish !== null);
+    if (allDone) {
+      for (const c of baselined) {
+        if (c.actualFinish && (!latestFinish || c.actualFinish > latestFinish)) {
+          latestFinish = c.actualFinish;
+        }
       }
     }
   }
