@@ -26,6 +26,32 @@ import { istDayStart } from "@/lib/istDay";
 import { isHoliday } from "@/lib/holidays";
 import { isVillaPlannedToday, type VillaMilestoneForStage } from "@/lib/currentStage";
 
+/**
+ * Colab-style block partitioning for Abraham Thomas — hardcoded to match
+ * Shraddha's Python reporting toolkit (`build_data.py` BLOCKS dict) so the
+ * §2 Movement + Planned Coverage panel numbers align 1:1 with the Colab-
+ * branded PDFs. Applies only when a contractor filter narrows the report
+ * to Abraham; unfiltered/Elegant views use the raw MSP schedule blocks.
+ *
+ * Key differences vs my MSP schedule:
+ *   - Her Block 02 = my Block 2 + Block 3A (V03..V08 merged)
+ *   - Her Block 03 = my Block 3B (V09, V10 & V11)
+ *   - Includes V41..V46 (Block 12 + 13) but NOT V47..V50 (Block 14)
+ */
+const COLAB_ABRAHAM_VILLA_TO_BLOCK: Record<number, string> = {
+  3:  "Block 02", 4:  "Block 02", 5:  "Block 02", 6:  "Block 02", 7:  "Block 02", 8:  "Block 02",
+  9:  "Block 03", 10: "Block 03", 11: "Block 03",
+  12: "Block 04", 13: "Block 04", 14: "Block 04",
+  15: "Block 05", 16: "Block 05",
+  17: "Block 06", 18: "Block 06", 19: "Block 06",
+  20: "Block 07", 21: "Block 07", 22: "Block 07",
+  23: "Block 08", 24: "Block 08",
+  25: "Block 09", 26: "Block 09", 27: "Block 09", 28: "Block 09", 29: "Block 09", 30: "Block 09", 31: "Block 09",
+  32: "Block 10", 33: "Block 10", 34: "Block 10", 35: "Block 10", 36: "Block 10", 37: "Block 10",
+  41: "Block 12", 42: "Block 12", 43: "Block 12",
+  44: "Block 13", 45: "Block 13", 46: "Block 13",
+};
+
 export interface ScorecardProject {
   id: string;
   name: string;
@@ -263,6 +289,18 @@ async function computeDailySnapshotAndMovement(
       (v) => [v.id, { number: v.number, label: v.label, blockCode: v.block.code }],
     ),
   );
+  // When Abraham is the active filter, override the block partitioning +
+  // exclude villas outside Shraddha's Python BLOCKS scope so §2 matches
+  // the Colab-branded PDFs exactly.
+  const abrahamOverrideActive =
+    !!contractorFilterId &&
+    contractors.length === 1 &&
+    contractors[0].name.trim().toLowerCase() === "abraham thomas";
+  const displayBlockFor = (villaNum: number, rawBlock: string): string | null => {
+    if (!abrahamOverrideActive) return rawBlock;
+    return COLAB_ABRAHAM_VILLA_TO_BLOCK[villaNum] ?? null;
+  };
+
   const expectedVillaIds = new Set<string>();
   const expectedBlockCodes = new Set<string>();
   const expectedByBlock = new Map<string, Map<string, { villaId: string; villaNumber: number; villaLabel: string }>>();
@@ -270,10 +308,12 @@ async function computeDailySnapshotAndMovement(
     if (!row.villaId) continue;
     const meta = villaMetaById.get(row.villaId);
     if (!meta) continue;
+    const displayBlock = displayBlockFor(meta.number, meta.blockCode);
+    if (!displayBlock) continue; // Abraham filter + villa outside her BLOCKS scope
     expectedVillaIds.add(row.villaId);
-    expectedBlockCodes.add(meta.blockCode);
-    if (!expectedByBlock.has(meta.blockCode)) expectedByBlock.set(meta.blockCode, new Map());
-    expectedByBlock.get(meta.blockCode)!.set(row.villaId, {
+    expectedBlockCodes.add(displayBlock);
+    if (!expectedByBlock.has(displayBlock)) expectedByBlock.set(displayBlock, new Map());
+    expectedByBlock.get(displayBlock)!.set(row.villaId, {
       villaId: row.villaId,
       villaNumber: meta.number,
       villaLabel: meta.label ?? `Villa ${meta.number}`,
@@ -282,20 +322,23 @@ async function computeDailySnapshotAndMovement(
 
   // Updated sets — anyone that logged today. Uses villaId (unique) as the
   // set identity so villas that share a number (grouped villas) don't collide.
+  // When the Abraham override is active, filter to villas inside her BLOCKS
+  // scope and remap to her display block name so §1 tile block-count aligns.
   const updatedVillaIds = new Set<string>();
   const updatedBlockCodes = new Set<string>();
-  // contractorId=null bucket = untagged progress entries.
   const updatedByContractor = new Map<string | null, Set<string>>();
   for (const e of entriesToday) {
-    const blockCode = e.wbsNode.villaMilestone?.villa.block.code;
+    const rawBlockCode = e.wbsNode.villaMilestone?.villa.block.code;
+    const villaNumber = e.wbsNode.villaMilestone?.villa.number;
     const villaId = e.wbsNode.villaId;
-    if (villaId) updatedVillaIds.add(villaId);
-    if (blockCode) updatedBlockCodes.add(blockCode);
-    if (villaId) {
-      const key = e.contractorId ?? null;
-      if (!updatedByContractor.has(key)) updatedByContractor.set(key, new Set());
-      updatedByContractor.get(key)!.add(villaId);
-    }
+    if (!villaId || !rawBlockCode || villaNumber == null) continue;
+    const displayBlock = displayBlockFor(villaNumber, rawBlockCode);
+    if (!displayBlock) continue; // Abraham filter + villa outside her scope
+    updatedVillaIds.add(villaId);
+    updatedBlockCodes.add(displayBlock);
+    const key = e.contractorId ?? null;
+    if (!updatedByContractor.has(key)) updatedByContractor.set(key, new Set());
+    updatedByContractor.get(key)!.add(villaId);
   }
 
   // §1 counts
@@ -391,12 +434,14 @@ async function computeDailySnapshotAndMovement(
     const vm = e.wbsNode.villaMilestone;
     if (!villaId || !vm) continue;
     if (expectedVillaIds.has(villaId)) continue; // already in planned scope — not ahead
-    const blockCode = vm.villa.block.code;
+    const rawBlockCode = vm.villa.block.code;
     const villaNumber = vm.villa.number;
+    const displayBlock = displayBlockFor(villaNumber, rawBlockCode);
+    if (!displayBlock) continue; // Abraham filter + villa outside her scope
     const villa = villas.find((v) => v.id === villaId);
     const villaLabel = villa?.label ?? `Villa ${villaNumber}`;
-    if (!aheadByBlock.has(blockCode)) aheadByBlock.set(blockCode, new Map());
-    aheadByBlock.get(blockCode)!.set(villaId, { villaId, villaNumber, villaLabel, blockCode });
+    if (!aheadByBlock.has(displayBlock)) aheadByBlock.set(displayBlock, new Map());
+    aheadByBlock.get(displayBlock)!.set(villaId, { villaId, villaNumber, villaLabel, blockCode: displayBlock });
   }
 
   const blockCoverage: ScorecardBlockCoverage[] = [];
