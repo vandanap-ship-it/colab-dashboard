@@ -464,6 +464,7 @@ export async function importColabProgress(
     const reasonCode  = mapColabReasonToCode(r.Reason_for_Delay ?? "");
     const reasonNote  = r.Reason_for_Delay?.trim() || null;
     const notes       = r.Remark?.trim() || null;
+    const weightPct   = toFloat(r.Physical_Progress) ?? null;
     const imageUrl    = r.Image_Link && r.Image_Link.includes("/uploads/") ? r.Image_Link.trim() : null;
     const activityId  = r.Activity_ID?.trim();
 
@@ -485,6 +486,7 @@ export async function importColabProgress(
           actualStart: actualStart ?? undefined,
           actualFinish: actualEnd ?? undefined,
           percentComplete: Math.min(100, Math.max(0, pct)),
+          weightPct: weightPct ?? undefined,
           totalQuantity: totalQty ?? bestWbs.totalQuantity ?? undefined,
           progressEntered: (achieved > 0 || cumulative > 0) ? true : undefined,
           contractorId: contractorId ?? undefined,

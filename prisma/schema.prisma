@@ -245,6 +245,12 @@ model WBSNode {
   delayReason     String?
   progressEntered Boolean @default(false)
 
+  // Colab CSV "Physical_Progress" — the activity's WEIGHT contribution to
+  // overall project completion (0-100, all rows sum to ~100). Used by the
+  // Weekly Report §1 formula: target = sum where baselineFinish <= weekEnd,
+  // actual = sum where any progress logged with entryDate <= weekEnd.
+  weightPct       Float?
+
   // Executive rollup: which villa + milestone section this activity feeds into.
   // Set on leaf activities; null on structural / parent nodes.
   villaId          String?

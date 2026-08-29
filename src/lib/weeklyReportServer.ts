@@ -268,19 +268,34 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
   const villaIdToNumber = new Map(villas.map((v) => [v.id, v.number]));
 
   // ------- §1 Overall Progress at week end -------
-  // Denominator = milestones that have a baseline plan. Un-baselined ones
-  // can't dilute the %.
+  // Python-parity (build_wk23.py L12-14): use the Colab CSV "Physical_Progress"
+  // per-activity weight column (mirrored into WBSNode.weightPct at sync).
+  //   target = sum(weightPct) where baselineFinish <= weekEnd
+  //   actual = sum(weightPct) where activity has any ProgressEntry with date <= weekEnd
+  // Sums are project-completion % (all rows sum to ~100).
+  const [tgtAgg, actAgg] = await Promise.all([
+    prisma.wBSNode.aggregate({
+      where: {
+        projectId,
+        weightPct: { not: null },
+        baselineFinish: { lte: weekEnd },
+      },
+      _sum: { weightPct: true },
+    }),
+    prisma.wBSNode.aggregate({
+      where: {
+        projectId,
+        weightPct: { not: null },
+        progressEntries: {
+          some: { date: { lte: weekEnd }, deletedAt: null },
+        },
+      },
+      _sum: { weightPct: true },
+    }),
+  ]);
   const overall: WeeklyOverallProgress = (() => {
-    const baselined = projectMilestones.filter((m) => m.baselineFinish);
-    const total = baselined.length;
-    const plannedThroughWeek = baselined.filter(
-      (m) => m.baselineFinish && m.baselineFinish <= weekEnd,
-    ).length;
-    const actualThroughWeek = baselined.filter(
-      (m) => m.actualFinish && m.actualFinish <= weekEnd,
-    ).length;
-    const p = total > 0 ? Math.round((plannedThroughWeek / total) * 10000) / 100 : 0;
-    const a = total > 0 ? Math.round((actualThroughWeek / total) * 10000) / 100 : 0;
+    const p = Math.round((tgtAgg._sum.weightPct ?? 0) * 100) / 100;
+    const a = Math.round((actAgg._sum.weightPct ?? 0) * 100) / 100;
     return { plannedPct: p, actualPct: a, variancePct: Math.round((a - p) * 100) / 100 };
   })();
 
@@ -359,8 +374,17 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
   const untaggedBucket: Bucket = emptyBucket();
   let untaggedHasAny = false;
 
+  // Python-parity: bucket by the villa's CURRENT stage (earliest not-done
+  // milestone by section orderIndex), not every milestone. Otherwise a villa
+  // with V15 Foundation active + V15 Plinth planned counts in both "in
+  // progress" and "to start", double-inflating the weekly buckets.
   for (const v of villas) {
-    for (const m of v.milestones) {
+    const sortedMs = [...v.milestones].sort(
+      (a, b) => (a.section?.orderIndex ?? 0) - (b.section?.orderIndex ?? 0),
+    );
+    const currentStage = sortedMs.find((m) => m.actualFinish == null);
+    if (!currentStage) continue; // villa fully closed — nothing to bucket this week
+    for (const m of [currentStage]) {
       // Which contractor(s) claim this milestone? A milestone with no
       // wbsNodes, or wbsNodes with all-null contractorId, is "untagged".
       const contractorIds = [...new Set(
@@ -392,41 +416,48 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
       };
 
       for (const b of buckets) {
-        // TO COMPLETE: baselineFinish falls inside this week.
+        // Python parity (build_wk23.py lines 71-80):
+        //   tc_wk   = pe in [WKS, WKE] AND NOT done                   → toComplete "this week"
+        //   tc_done = pe in [WKS, WKE] AND     done                   → toComplete closed counter
+        //   tc_sp   = pe < WKS AND NOT done                           → overdue (spill)
+        //   ts_wk   = ps in [WKS, WKE] AND NOT done                   → toStart "this week" (regardless of started)
+        //   ts_started = ts_wk AND started                            → toStart started counter
+        //   ts_sp   = ps < WKS AND NOT started AND NOT done           → toStart spill (rendered as overdue-to-start)
+        //   ip_plan = ps <= WKE AND pe >= WKS AND NOT done            → inProgress "planned this week"
+        //   ip_actual = ip_plan AND started                           → moving; the rest = stalled
+
+        // TO COMPLETE
         if (m.baselineFinish && m.baselineFinish >= weekStart && m.baselineFinish <= weekEnd) {
-          b.toComplete.push(baseItem);
-          if (closedThisWeekMilestones.has(m.id)) b.closedCount++;
+          if (!m.actualFinish) b.toComplete.push(baseItem);
+          if (m.actualFinish) b.closedCount++;
         }
-        // TO START: baselineStart falls inside this week AND not yet started.
-        if (m.baselineStart && m.baselineStart >= weekStart && m.baselineStart <= weekEnd && !m.actualStart) {
+        // TO START (this week bucket includes both started + not-started)
+        if (m.baselineStart && m.baselineStart >= weekStart && m.baselineStart <= weekEnd && !m.actualFinish) {
           b.toStart.push(baseItem);
+          if (m.actualStart) b.startedCount++;
         }
-        // Started this week counts even if the plan said start earlier.
-        if (m.baselineStart && m.baselineStart >= weekStart && m.baselineStart <= weekEnd && startedThisWeekMilestones.has(m.id)) {
-          b.startedCount++;
-        }
-        // IN PROGRESS: has actualStart, no actualFinish yet.
-        if (m.actualStart && !m.actualFinish) {
-          const moved = movedMilestoneIds.has(m.id);
-          const daysIdle = moved ? 0 : Math.max(0, daysBetween(m.actualStart, weekEnd));
-          if (moved) {
-            b.inProgressMoving.push({ ...baseItem, movedThisWeek: true });
+        // IN PROGRESS = span overlaps week AND not done. Regardless of actualStart —
+        // that's what Python's `ip_plan` captures. `moving` = has actualStart,
+        // `stalled` = no actualStart yet even though the plan says we should be in it.
+        if (
+          m.baselineStart && m.baselineFinish &&
+          m.baselineStart <= weekEnd && m.baselineFinish >= weekStart &&
+          !m.actualFinish
+        ) {
+          if (m.actualStart) {
+            b.inProgressMoving.push({ ...baseItem, movedThisWeek: movedMilestoneIds.has(m.id) });
           } else {
             b.inProgressStalled.push({
               ...baseItem,
               movedThisWeek: false,
-              daysIdle,
-              sinceDate: m.actualStart.toISOString(),
+              daysIdle: Math.max(0, daysBetween(m.baselineStart, weekEnd)),
             });
           }
         }
-        // OVERDUE: baselineFinish already passed AND not closed AND not
-        // caught by TO COMPLETE (i.e. spilled from before this week).
-        if (
-          m.baselineFinish &&
-          m.baselineFinish < weekStart &&
-          !m.actualFinish
-        ) {
+        // SPILL — items whose scheduled window is behind us:
+        //   overdue = to_complete spill (pe < weekStart, still open)
+        //   toStartSpill = to_start spill (ps < weekStart, still not started, still open)
+        if (m.baselineFinish && m.baselineFinish < weekStart && !m.actualFinish) {
           b.overdue.push(baseItem);
         }
       }

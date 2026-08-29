@@ -32,6 +32,8 @@ CREATE TABLE "Project" (
     "address" TEXT,
     "tagline" TEXT,
     "logoUrl" TEXT,
+    "projectType" TEXT,
+    "masterPlanUrl" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "createdById" TEXT NOT NULL,
@@ -139,6 +141,7 @@ CREATE TABLE "WBSNode" (
     "contractorId" TEXT,
     "delayReason" TEXT,
     "progressEntered" BOOLEAN NOT NULL DEFAULT false,
+    "weightPct" DOUBLE PRECISION,
     "villaId" TEXT,
     "sectionId" TEXT,
     "villaMilestoneId" TEXT,
@@ -160,6 +163,8 @@ CREATE TABLE "ProgressEntry" (
     "cumulativeQuantity" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "contractorId" TEXT,
     "notes" TEXT,
+    "reasonCode" TEXT,
+    "reasonNote" TEXT,
     "createdById" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -199,6 +204,8 @@ CREATE TABLE "Hindrance" (
     "resolvedDate" TIMESTAMP(3),
     "daysImpact" INTEGER,
     "status" TEXT NOT NULL DEFAULT 'OPEN',
+    "reasonCode" TEXT,
+    "reasonNote" TEXT,
     "createdById" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -533,6 +540,42 @@ CREATE TABLE "DesignDrawingRevision" (
     CONSTRAINT "DesignDrawingRevision_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "TradePlan" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "contractorId" TEXT NOT NULL,
+    "trade" TEXT NOT NULL,
+    "plannedCount" INTEGER NOT NULL,
+    "startDate" TIMESTAMP(3) NOT NULL,
+    "endDate" TIMESTAMP(3),
+    "notes" TEXT,
+    "createdById" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
+
+    CONSTRAINT "TradePlan_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ManpowerEntry" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "contractorId" TEXT NOT NULL,
+    "trade" TEXT NOT NULL,
+    "entryDate" TIMESTAMP(3) NOT NULL,
+    "actualCount" INTEGER NOT NULL,
+    "notes" TEXT,
+    "idempotencyKey" TEXT,
+    "createdById" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
+
+    CONSTRAINT "ManpowerEntry_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
 
@@ -740,6 +783,24 @@ CREATE UNIQUE INDEX "DesignDrawing_projectId_drawingNumber_key" ON "DesignDrawin
 -- CreateIndex
 CREATE INDEX "DesignDrawingRevision_drawingId_idx" ON "DesignDrawingRevision"("drawingId");
 
+-- CreateIndex
+CREATE INDEX "TradePlan_projectId_contractorId_idx" ON "TradePlan"("projectId", "contractorId");
+
+-- CreateIndex
+CREATE INDEX "TradePlan_projectId_startDate_idx" ON "TradePlan"("projectId", "startDate");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ManpowerEntry_idempotencyKey_key" ON "ManpowerEntry"("idempotencyKey");
+
+-- CreateIndex
+CREATE INDEX "ManpowerEntry_projectId_entryDate_idx" ON "ManpowerEntry"("projectId", "entryDate");
+
+-- CreateIndex
+CREATE INDEX "ManpowerEntry_contractorId_entryDate_idx" ON "ManpowerEntry"("contractorId", "entryDate");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ManpowerEntry_projectId_contractorId_trade_entryDate_key" ON "ManpowerEntry"("projectId", "contractorId", "trade", "entryDate");
+
 -- AddForeignKey
 ALTER TABLE "Project" ADD CONSTRAINT "Project_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -928,4 +989,22 @@ ALTER TABLE "DesignDrawingRevision" ADD CONSTRAINT "DesignDrawingRevision_drawin
 
 -- AddForeignKey
 ALTER TABLE "DesignDrawingRevision" ADD CONSTRAINT "DesignDrawingRevision_uploadedById_fkey" FOREIGN KEY ("uploadedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "TradePlan" ADD CONSTRAINT "TradePlan_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "TradePlan" ADD CONSTRAINT "TradePlan_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "TradePlan" ADD CONSTRAINT "TradePlan_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ManpowerEntry" ADD CONSTRAINT "ManpowerEntry_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ManpowerEntry" ADD CONSTRAINT "ManpowerEntry_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ManpowerEntry" ADD CONSTRAINT "ManpowerEntry_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 

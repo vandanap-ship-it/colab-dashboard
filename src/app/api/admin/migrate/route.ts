@@ -379,6 +379,15 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add ProgressEntry.reasonCode + reasonNote so site engineers can tag a delay reason on a progress row without opening a Hindrance.",
   },
+  {
+    key: "2026-08-29_wbsnode_weight_pct",
+    sql: [
+      // Colab CSV "Physical_Progress" — activity weight (0-100, all rows sum
+      // to ~100). Used by the Weekly Report §1 formula (Python-parity).
+      `ALTER TABLE "WBSNode" ADD COLUMN IF NOT EXISTS "weightPct" DOUBLE PRECISION`,
+    ],
+    describe: "Add WBSNode.weightPct (Colab Physical_Progress) so Weekly Report §1 can compute target/actual as weighted sums matching the Python reference.",
+  },
 ];
 
 async function ensureLedger() {
