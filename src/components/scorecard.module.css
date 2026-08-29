@@ -628,19 +628,22 @@
 @media print {
   /* Force browsers to preserve backgrounds + text colors — without this
      Chrome/Safari drop the navy hero, cream cards, gold accents. */
-  *, *::before, *::after {
+  :global(*), :global(*::before), :global(*::after) {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
   }
-  html, body { background: #FFFFFF !important; margin: 0; }
+  :global(html), :global(body) { background: #FFFFFF !important; margin: 0; }
   /* Strip app chrome (navbar, sidebar, tabs, toolbar) — leave only the report. */
   :global(nav),
   :global(header),
   :global(aside),
   :global([role="navigation"]),
   :global([data-print="hide"]),
-  .toolbar {
+  :global(button),
+  .toolbar,
+  .toolbarBtn,
+  .toolbarLeft {
     display: none !important;
   }
   .wrap { max-width: none; padding: 0; margin: 0; }
@@ -655,12 +658,8 @@
     page-break-inside: avoid;
     break-inside: avoid;
   }
-  /* Hide any action buttons that shouldn't be in the PDF */
-  button, .toolbarBtn, .toolbarLeft {
-    display: none !important;
-  }
   /* Give the hero its full-bleed navy background */
-  .hero, [class*="hero"] {
+  .hero {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }

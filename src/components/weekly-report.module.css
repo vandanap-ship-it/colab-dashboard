@@ -420,20 +420,20 @@
 /* -------------- Print rules (mirror scorecard) -------------- */
 @page { size: A4; margin: 12mm; }
 @media print {
-  *, *::before, *::after {
+  :global(*), :global(*::before), :global(*::after) {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
   }
-  html, body { background: #FFFFFF !important; margin: 0; }
+  :global(html), :global(body) { background: #FFFFFF !important; margin: 0; }
   :global(nav),
   :global(header),
   :global(aside),
   :global([role="navigation"]),
-  :global([data-print="hide"]) {
+  :global([data-print="hide"]),
+  :global(button) {
     display: none !important;
   }
-  button { display: none !important; }
   .bucketCard, .overallCell, .stalledRow, .reasonCard, .tradeTbl, .manpowerBox {
     page-break-inside: avoid;
     break-inside: avoid;
