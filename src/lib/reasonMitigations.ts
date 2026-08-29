@@ -29,6 +29,8 @@ export const REASON_MITIGATIONS: Record<HindranceReasonCode | "UNSPECIFIED", str
     "Run a coordination huddle between the affected trades; document the sequenced hand-off and enforce with the daily checklist.",
   WEATHER:
     "Add weather contingency to the affected activity; protect the works and resequence indoor tasks on wet days.",
+  DELAYED_ENTRY:
+    "Clear the access / handover blocker so the crew can start; confirm the entry date in writing.",
   OTHER:
     "Log a specific cause under the correct reason code so the right mitigation can be applied.",
   UNSPECIFIED:

@@ -149,13 +149,19 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
                 {(() => {
                   const workingDays = c.perDay.filter((d) => !d.isHoliday).length;
                   const loggedDays = c.perDay.filter((d) => d.actualTotal > 0).length;
-                  const avgPerDay = workingDays > 0 ? Math.round(c.weeklyPlanned / workingDays) : 0;
+                  const planPerDay = workingDays > 0 ? Math.round(c.weeklyPlanned / workingDays) : 0;
+                  // Python parity (build_wk23.py L190): avg = actual / 7 (per week
+                  // day, incl. holidays if any) — the "how many workers actually
+                  // showed up on an average day". Not planned/day.
+                  const avgActualPerDay = c.perDay.length > 0
+                    ? Math.round(c.weeklyActual / c.perDay.length)
+                    : 0;
                   return (
                     <div className={weekly.mpHead4}>
                       <div className={weekly.mpHeadCell}>
                         <div className={weekly.mpHeadLbl}>Weekly target</div>
                         <div className={weekly.mpHeadVal}>{c.weeklyPlanned}</div>
-                        <div className={weekly.mpHeadSub}>{avgPerDay}/DAY × {workingDays}D</div>
+                        <div className={weekly.mpHeadSub}>{planPerDay}/DAY × {workingDays}D</div>
                       </div>
                       <div className={weekly.mpHeadCell}>
                         <div className={weekly.mpHeadLbl}>Achieved</div>
@@ -165,14 +171,14 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
                       <div className={weekly.mpHeadCell}>
                         <div className={weekly.mpHeadLbl}>Week vs target</div>
                         <div className={weekly.mpHeadVal}>{c.pctOfPlan == null ? "—" : `${c.pctOfPlan}%`}</div>
-                        <div className={weekly.mpHeadSub}>AVG {avgPerDay}/DAY</div>
+                        <div className={weekly.mpHeadSub}>AVG {avgActualPerDay}/DAY ACTUAL</div>
                       </div>
                       <div className={weekly.mpHeadCell}>
                         <div className={weekly.mpHeadLbl}>Best day</div>
                         <div className={weekly.mpHeadVal}>{c.bestDayActual}</div>
                         <div className={weekly.mpHeadSub}>
                           {c.bestDayDate
-                            ? `${new Date(c.bestDayDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }).toUpperCase()} · VS ${avgPerDay}`
+                            ? `${new Date(c.bestDayDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }).toUpperCase()} · VS ${avgActualPerDay}`
                             : "—"}
                         </div>
                       </div>

@@ -47,7 +47,7 @@ export interface WeeklyMilestonePlan {
   contractorName: string;
   hasSchedule: boolean;
   toComplete: { total: number; closed: number; items: WeeklyMilestoneItem[] };
-  toStart:    { total: number; started: number; items: WeeklyMilestoneItem[] };
+  toStart:    { total: number; started: number; items: WeeklyMilestoneItem[]; spill: number; spillItems: WeeklyMilestoneItem[] };
   inProgress: { total: number; moving: number; stalled: number; movingItems: WeeklyMilestoneItem[]; stalledItems: WeeklyMilestoneItem[] };
   overdue:    { total: number; items: WeeklyMilestoneItem[] };
 }
@@ -356,6 +356,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
   type Bucket = {
     toComplete: WeeklyMilestoneItem[];
     toStart: WeeklyMilestoneItem[];
+    toStartSpill: WeeklyMilestoneItem[];
     inProgressMoving: WeeklyMilestoneItem[];
     inProgressStalled: WeeklyMilestoneItem[];
     overdue: WeeklyMilestoneItem[];
@@ -363,7 +364,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     startedCount: number;
   };
   const emptyBucket = (): Bucket => ({
-    toComplete: [], toStart: [], inProgressMoving: [], inProgressStalled: [], overdue: [],
+    toComplete: [], toStart: [], toStartSpill: [], inProgressMoving: [], inProgressStalled: [], overdue: [],
     closedCount: 0, startedCount: 0,
   });
 
@@ -415,6 +416,11 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
         reason,
       };
 
+      // Python-parity "closed / started" — bounded by weekEnd (historical
+      // weeks must not count milestones that closed AFTER the reporting week).
+      const notDoneByWeekEnd = !m.actualFinish || m.actualFinish > weekEnd;
+      const startedByWeekEnd = !!m.actualStart && m.actualStart <= weekEnd;
+
       for (const b of buckets) {
         // Python parity (build_wk23.py lines 71-80):
         //   tc_wk   = pe in [WKS, WKE] AND NOT done                   → toComplete "this week"
@@ -428,23 +434,23 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
 
         // TO COMPLETE
         if (m.baselineFinish && m.baselineFinish >= weekStart && m.baselineFinish <= weekEnd) {
-          if (!m.actualFinish) b.toComplete.push(baseItem);
-          if (m.actualFinish) b.closedCount++;
+          if (notDoneByWeekEnd) b.toComplete.push(baseItem);
+          else b.closedCount++;
         }
         // TO START (this week bucket includes both started + not-started)
-        if (m.baselineStart && m.baselineStart >= weekStart && m.baselineStart <= weekEnd && !m.actualFinish) {
+        if (m.baselineStart && m.baselineStart >= weekStart && m.baselineStart <= weekEnd && notDoneByWeekEnd) {
           b.toStart.push(baseItem);
-          if (m.actualStart) b.startedCount++;
+          if (startedByWeekEnd) b.startedCount++;
         }
         // IN PROGRESS = span overlaps week AND not done. Regardless of actualStart —
-        // that's what Python's `ip_plan` captures. `moving` = has actualStart,
+        // that's what Python's `ip_plan` captures. `moving` = started,
         // `stalled` = no actualStart yet even though the plan says we should be in it.
         if (
           m.baselineStart && m.baselineFinish &&
           m.baselineStart <= weekEnd && m.baselineFinish >= weekStart &&
-          !m.actualFinish
+          notDoneByWeekEnd
         ) {
-          if (m.actualStart) {
+          if (startedByWeekEnd) {
             b.inProgressMoving.push({ ...baseItem, movedThisWeek: movedMilestoneIds.has(m.id) });
           } else {
             b.inProgressStalled.push({
@@ -457,8 +463,11 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
         // SPILL — items whose scheduled window is behind us:
         //   overdue = to_complete spill (pe < weekStart, still open)
         //   toStartSpill = to_start spill (ps < weekStart, still not started, still open)
-        if (m.baselineFinish && m.baselineFinish < weekStart && !m.actualFinish) {
+        if (m.baselineFinish && m.baselineFinish < weekStart && notDoneByWeekEnd) {
           b.overdue.push(baseItem);
+        }
+        if (m.baselineStart && m.baselineStart < weekStart && !startedByWeekEnd && notDoneByWeekEnd) {
+          b.toStartSpill.push(baseItem);
         }
       }
     }
@@ -474,7 +483,8 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     contractorName,
     hasSchedule,
     toComplete: {
-      total: b.toComplete.length,
+      // Python parity (build_wk23.py L114): wk_plan = open + closed.
+      total: b.toComplete.length + b.closedCount,
       closed: b.closedCount,
       items: b.toComplete,
     },
@@ -482,6 +492,8 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
       total: b.toStart.length,
       started: b.startedCount,
       items: b.toStart,
+      spill: b.toStartSpill.length,
+      spillItems: b.toStartSpill.slice(0, 12),
     },
     inProgress: {
       total: b.inProgressMoving.length + b.inProgressStalled.length,

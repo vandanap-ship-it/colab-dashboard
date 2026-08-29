@@ -116,17 +116,26 @@ const REASON_KEYWORDS: Array<[RegExp, string]> = [
   [/priority/i,                                     "PRIORITY_CHANGE"],
   [/vendor/i,                                       "VENDOR_CHANGE"],
   [/mep\s*(drawing|dwg)/i,                          "MEP_DRAWING"],
+  [/drawing/i,                                      "MEP_DRAWING"],  // Python folds "drawings" → MEP_DRAWING
   [/design/i,                                       "DESIGN"],
-  [/material|shortage|steel|cement|brick/i,         "MATERIAL"],
-  [/labou?r|manpower|skilled|worker/i,              "LABOUR"],
+  [/matr?ial|shortage|steel|cement|brick/i,         "MATERIAL"],  // "matrial" is a common Colab typo
+  [/labou?r|manpower|skilled|worker|shortage of man/i, "LABOUR"],
   [/rmc|concrete|truck/i,                           "RMC"],
   [/weather|rain|climate/i,                         "WEATHER"],
   [/approv|permit|nod/i,                            "APPROVAL"],
   [/coord|sequenc/i,                                "COORDINATION"],
+  [/delayed?\s*entry|access|handover/i,             "DELAYED_ENTRY"],
 ];
+
+// Meta / noise strings that aren't real delay causes — Python drops these
+// (build_wk23.py L26-27, L196). We treat them as null so they don't inflate
+// the Weekly §5 reason clusters.
+const REASON_NOISE = /^(work in progress|none|nan|\.)$|update in|delayed update|late update|collab|colab/i;
+
 export function mapColabReasonToCode(freeText: string): string | null {
   const t = (freeText ?? "").trim();
   if (!t) return null;
+  if (REASON_NOISE.test(t.toLowerCase())) return null;
   for (const [re, code] of REASON_KEYWORDS) {
     if (re.test(t)) return code;
   }
