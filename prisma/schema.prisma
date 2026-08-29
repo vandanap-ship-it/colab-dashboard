@@ -246,9 +246,10 @@ model WBSNode {
   progressEntered Boolean @default(false)
 
   // Colab CSV "Physical_Progress" — the activity's WEIGHT contribution to
-  // overall project completion (0-100, all rows sum to ~100). Used by the
-  // Weekly Report §1 formula: target = sum where baselineFinish <= weekEnd,
-  // actual = sum where any progress logged with entryDate <= weekEnd.
+  // overall project completion (0-100, all rows sum to ~100). Kept per
+  // matched wbsNode for legacy queries. The authoritative sum for §1 lives
+  // in the ColabActivity table below (one row per Colab CSV row — MSP and
+  // Colab activities don't 1:1 map, so wbsNode-only sums undercount).
   weightPct       Float?
 
   // Executive rollup: which villa + milestone section this activity feeds into.
@@ -909,4 +910,38 @@ model ManpowerEntry {
   @@unique([projectId, contractorId, trade, entryDate])
   @@index([projectId, entryDate])
   @@index([contractorId, entryDate])
+}
+
+// One row per Colab CSV activity — mirrors the raw CSV so Weekly Report §1
+// (and any future report that needs Colab-native aggregation) can compute
+// Python-parity numbers directly instead of relying on the lossy fuzzy
+// match to WBSNode. Physical_Progress = per-activity weight (0-100, all
+// rows sum to ~100 for a full project).
+model ColabActivity {
+  id              String    @id @default(cuid())
+  projectId       String
+  activityId      String   // Colab CSV Activity_ID (unique per project)
+
+  villaId         String?  // resolved from Location_Name
+  sectionId       String?  // resolved from Sub_Location via colabSyncMapping
+
+  plannedStart    DateTime?
+  plannedEnd      DateTime?
+  actualStart     DateTime?
+  actualEnd       DateTime?
+  progressDate    DateTime?
+
+  physicalProgress Float   // Physical_Progress column (the weight)
+  totalPct         Float?  // Total__Progress_% column (activity completion %)
+
+  reasonCode      String?
+  reasonNote      String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([projectId, activityId])
+  @@index([projectId])
+  @@index([projectId, plannedEnd])
+  @@index([projectId, progressDate])
 }

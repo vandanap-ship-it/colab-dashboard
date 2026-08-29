@@ -388,6 +388,34 @@ const MIGRATIONS: Migration[] = [
     ],
     describe: "Add WBSNode.weightPct (Colab Physical_Progress) so Weekly Report §1 can compute target/actual as weighted sums matching the Python reference.",
   },
+  {
+    key: "2026-08-29_colab_activity_table",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS "ColabActivity" (
+        "id" TEXT PRIMARY KEY,
+        "projectId" TEXT NOT NULL,
+        "activityId" TEXT NOT NULL,
+        "villaId" TEXT,
+        "sectionId" TEXT,
+        "plannedStart" TIMESTAMP(3),
+        "plannedEnd" TIMESTAMP(3),
+        "actualStart" TIMESTAMP(3),
+        "actualEnd" TIMESTAMP(3),
+        "progressDate" TIMESTAMP(3),
+        "physicalProgress" DOUBLE PRECISION NOT NULL,
+        "totalPct" DOUBLE PRECISION,
+        "reasonCode" TEXT,
+        "reasonNote" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "ColabActivity_projectId_activityId_key" ON "ColabActivity"("projectId","activityId")`,
+      `CREATE INDEX IF NOT EXISTS "ColabActivity_projectId_idx" ON "ColabActivity"("projectId")`,
+      `CREATE INDEX IF NOT EXISTS "ColabActivity_projectId_plannedEnd_idx" ON "ColabActivity"("projectId","plannedEnd")`,
+      `CREATE INDEX IF NOT EXISTS "ColabActivity_projectId_progressDate_idx" ON "ColabActivity"("projectId","progressDate")`,
+    ],
+    describe: "Create ColabActivity table — one row per Colab CSV activity, mirrors raw CSV. Weekly Report §1 aggregates target/actual from here so Python-parity math doesn't depend on the lossy MSP→Colab fuzzy match.",
+  },
 ];
 
 async function ensureLedger() {

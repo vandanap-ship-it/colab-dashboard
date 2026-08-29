@@ -268,34 +268,26 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
   const villaIdToNumber = new Map(villas.map((v) => [v.id, v.number]));
 
   // ------- §1 Overall Progress at week end -------
-  // Python-parity (build_wk23.py L12-14): use the Colab CSV "Physical_Progress"
-  // per-activity weight column (mirrored into WBSNode.weightPct at sync).
-  //   target = sum(weightPct) where baselineFinish <= weekEnd
-  //   actual = sum(weightPct) where activity has any ProgressEntry with date <= weekEnd
-  // Sums are project-completion % (all rows sum to ~100).
+  // Python-parity (build_wk23.py L12-14): sum Physical_Progress directly from
+  // the raw Colab CSV mirror (ColabActivity), NOT from wbsNode.weightPct.
+  // wbsNodes and Colab activities don't map 1:1 (fuzzy matching lands on
+  // ~20 %), so wbsNode-based sums undercount by ~4×. Reading from
+  // ColabActivity gives us the exact same 100-% universe Python sees.
+  //   target = sum(physicalProgress) where plannedEnd <= weekEnd
+  //   actual = sum(physicalProgress) where progressDate NOT NULL and <= weekEnd
   const [tgtAgg, actAgg] = await Promise.all([
-    prisma.wBSNode.aggregate({
-      where: {
-        projectId,
-        weightPct: { not: null },
-        baselineFinish: { lte: weekEnd },
-      },
-      _sum: { weightPct: true },
+    prisma.colabActivity.aggregate({
+      where: { projectId, plannedEnd: { lte: weekEnd } },
+      _sum: { physicalProgress: true },
     }),
-    prisma.wBSNode.aggregate({
-      where: {
-        projectId,
-        weightPct: { not: null },
-        progressEntries: {
-          some: { date: { lte: weekEnd }, deletedAt: null },
-        },
-      },
-      _sum: { weightPct: true },
+    prisma.colabActivity.aggregate({
+      where: { projectId, progressDate: { not: null, lte: weekEnd } },
+      _sum: { physicalProgress: true },
     }),
   ]);
   const overall: WeeklyOverallProgress = (() => {
-    const p = Math.round((tgtAgg._sum.weightPct ?? 0) * 100) / 100;
-    const a = Math.round((actAgg._sum.weightPct ?? 0) * 100) / 100;
+    const p = Math.round((tgtAgg._sum.physicalProgress ?? 0) * 100) / 100;
+    const a = Math.round((actAgg._sum.physicalProgress ?? 0) * 100) / 100;
     return { plannedPct: p, actualPct: a, variancePct: Math.round((a - p) * 100) / 100 };
   })();
 

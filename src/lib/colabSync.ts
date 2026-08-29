@@ -468,6 +468,43 @@ export async function importColabProgress(
     const imageUrl    = r.Image_Link && r.Image_Link.includes("/uploads/") ? r.Image_Link.trim() : null;
     const activityId  = r.Activity_ID?.trim();
 
+    // Mirror the Colab row into ColabActivity — Python-parity aggregations
+    // (Weekly §1 target/actual) read from here rather than from the lossy
+    // MSP→Colab fuzzy match on wbsNode. Idempotent via (projectId, activityId).
+    if (!options.dryRun && activityId && weightPct != null) {
+      await prisma.colabActivity.upsert({
+        where: { projectId_activityId: { projectId, activityId } },
+        create: {
+          projectId,
+          activityId,
+          villaId: villa.id,
+          sectionId: section.id,
+          plannedStart: plannedStart ?? undefined,
+          plannedEnd: plannedEnd ?? undefined,
+          actualStart: actualStart ?? undefined,
+          actualEnd: actualEnd ?? undefined,
+          progressDate: progressAt ?? undefined,
+          physicalProgress: weightPct,
+          totalPct: pct,
+          reasonCode: reasonCode ?? undefined,
+          reasonNote: reasonNote ?? undefined,
+        },
+        update: {
+          villaId: villa.id,
+          sectionId: section.id,
+          plannedStart: plannedStart ?? undefined,
+          plannedEnd: plannedEnd ?? undefined,
+          actualStart: actualStart ?? undefined,
+          actualEnd: actualEnd ?? undefined,
+          progressDate: progressAt ?? undefined,
+          physicalProgress: weightPct,
+          totalPct: pct,
+          reasonCode: reasonCode ?? undefined,
+          reasonNote: reasonNote ?? undefined,
+        },
+      });
+    }
+
     // ----- 7. Write (skip in dry-run)
     if (options.dryRun) continue;
 

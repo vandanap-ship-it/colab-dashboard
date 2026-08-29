@@ -576,6 +576,28 @@ CREATE TABLE "ManpowerEntry" (
     CONSTRAINT "ManpowerEntry_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "ColabActivity" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "activityId" TEXT NOT NULL,
+    "villaId" TEXT,
+    "sectionId" TEXT,
+    "plannedStart" TIMESTAMP(3),
+    "plannedEnd" TIMESTAMP(3),
+    "actualStart" TIMESTAMP(3),
+    "actualEnd" TIMESTAMP(3),
+    "progressDate" TIMESTAMP(3),
+    "physicalProgress" DOUBLE PRECISION NOT NULL,
+    "totalPct" DOUBLE PRECISION,
+    "reasonCode" TEXT,
+    "reasonNote" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ColabActivity_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
 
@@ -800,6 +822,18 @@ CREATE INDEX "ManpowerEntry_contractorId_entryDate_idx" ON "ManpowerEntry"("cont
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ManpowerEntry_projectId_contractorId_trade_entryDate_key" ON "ManpowerEntry"("projectId", "contractorId", "trade", "entryDate");
+
+-- CreateIndex
+CREATE INDEX "ColabActivity_projectId_idx" ON "ColabActivity"("projectId");
+
+-- CreateIndex
+CREATE INDEX "ColabActivity_projectId_plannedEnd_idx" ON "ColabActivity"("projectId", "plannedEnd");
+
+-- CreateIndex
+CREATE INDEX "ColabActivity_projectId_progressDate_idx" ON "ColabActivity"("projectId", "progressDate");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ColabActivity_projectId_activityId_key" ON "ColabActivity"("projectId", "activityId");
 
 -- AddForeignKey
 ALTER TABLE "Project" ADD CONSTRAINT "Project_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
