@@ -129,13 +129,18 @@ const REASON_KEYWORDS: Array<[RegExp, string]> = [
 
 // Meta / noise strings that aren't real delay causes — Python drops these
 // (build_wk23.py L26-27, L196). We treat them as null so they don't inflate
-// the Weekly §5 reason clusters.
-const REASON_NOISE = /^(work in progress|none|nan|\.)$|update in|delayed update|late update|collab|colab/i;
+// the Weekly §5 reason clusters. Each alternation is anchored to whole
+// strings / clear meta-phrases so genuine reasons that happen to contain
+// the word "collab" (e.g. "coordination with Collab team") aren't nulled.
+const REASON_NOISE_STRINGS = /^(work in progress|none|nan|\.|delayed update|delayed update in collab|late update|late update in colab tools?)$/i;
+const REASON_NOISE_PHRASES = /^(update in |delayed update |late update )/i;
 
 export function mapColabReasonToCode(freeText: string): string | null {
   const t = (freeText ?? "").trim();
   if (!t) return null;
-  if (REASON_NOISE.test(t.toLowerCase())) return null;
+  const low = t.toLowerCase();
+  if (REASON_NOISE_STRINGS.test(low)) return null;
+  if (REASON_NOISE_PHRASES.test(low)) return null;
   for (const [re, code] of REASON_KEYWORDS) {
     if (re.test(t)) return code;
   }

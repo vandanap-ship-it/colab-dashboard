@@ -110,6 +110,15 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
                   metricLbl="started of planned"
                   items={plan.toStart.items}
                 />
+                {plan.toStart.spill > 0 && (
+                  <MilestoneBucket
+                    label="Should have started earlier — still not started"
+                    metric={`${plan.toStart.spill}`}
+                    metricLbl="milestone(s) past baseline start"
+                    items={plan.toStart.spillItems}
+                    variant="overdue"
+                  />
+                )}
                 <MilestoneBucket
                   label="In progress"
                   metric={`${plan.inProgress.moving} moving · ${plan.inProgress.stalled} stalled`}
