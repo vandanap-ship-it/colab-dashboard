@@ -335,7 +335,9 @@ export async function importColabProgress(
     maxPlannedEnd: Date | null;
     minActualStart: Date | null;
     maxActualEnd: Date | null;
-    anyOpen: boolean;
+    anyOpen: boolean;               // legacy — unused after Python-parity switch
+    endMarkerClose: Date | null;    // Actual_End_Date of the CSV row marked as this stage's END-marker
+    endMarkerSeen: boolean;         // did we see a Milestone-column row for this stage?
   }
   const milestoneAgg = new Map<string, MilestoneAgg>();
   // Queue for the per-chunk bulk ColabActivity upsert.
@@ -425,12 +427,25 @@ export async function importColabProgress(
       minActualStart: null,
       maxActualEnd: null,
       anyOpen: false,
+      endMarkerClose: null,   // Actual_End_Date of the row that IS the stage END-marker
+      endMarkerSeen: false,   // did we see a Milestone-column row for this stage yet?
     };
     if (_plannedStart && (!agg.minPlannedStart || _plannedStart < agg.minPlannedStart)) agg.minPlannedStart = _plannedStart;
     if (_plannedEnd   && (!agg.maxPlannedEnd   || _plannedEnd   > agg.maxPlannedEnd  )) agg.maxPlannedEnd   = _plannedEnd;
     if (_actualStart  && (!agg.minActualStart  || _actualStart  < agg.minActualStart )) agg.minActualStart  = _actualStart;
     if (_actualEnd    && (!agg.maxActualEnd    || _actualEnd    > agg.maxActualEnd   )) agg.maxActualEnd    = _actualEnd;
-    if (!_actualEnd) agg.anyOpen = true;
+    // Python parity (build_wk23.py L38-45): a stage is "done" only when its
+    // END-marker row's own Actual_End_Date is set. The END-marker row is
+    // identified by a non-empty CSV `Milestone` column. Ignore other rows
+    // (Retaining Wall, PCC etc.) for closure — they can still be open while
+    // the ★ marker is closed.
+    const milestoneLabel = r.Milestone?.trim();
+    if (milestoneLabel) {
+      agg.endMarkerSeen = true;
+      if (_actualEnd) {
+        if (!agg.endMarkerClose || _actualEnd > agg.endMarkerClose) agg.endMarkerClose = _actualEnd;
+      }
+    }
     milestoneAgg.set(villaMilestoneId, agg);
 
     // ----- 4. Activity (best-effort). Try fuzzy match first, then fall
@@ -650,24 +665,25 @@ export async function importColabProgress(
           baselineFinish: agg.maxPlannedEnd ?? undefined,
         },
       });
-      // If Colab has any still-open activity in this milestone, ensure
-      // at least one wbsNode has actualFinish=null so the overdue-open
-      // branch of the scorecard query can fire. Target the ★ END-marker
-      // when present, otherwise the first non-star wbsNode.
-      if (agg.anyOpen) {
-        const target = await prisma.wBSNode.findFirst({
-          where: { villaMilestoneId: vmId, isSubMilestone: true },
-          select: { id: true },
-        }) ?? await prisma.wBSNode.findFirst({
-          where: { villaMilestoneId: vmId },
-          select: { id: true },
+      // Python parity (build_wk23.py L38-45): stage closes when its
+      // END-marker row is closed. We saw the END-marker if endMarkerSeen
+      // is true. If endMarkerClose is set, stamp it on the ★ wbsNode as
+      // actualFinish; otherwise (END-marker still open, or no END-marker
+      // row present) leave ★ open. This drives currentStage picker + §2
+      // buckets correctly — other open activities under the stage don't
+      // hold it open once the ★ is signed off.
+      const star = await prisma.wBSNode.findFirst({
+        where: { villaMilestoneId: vmId, isSubMilestone: true },
+        select: { id: true },
+      }) ?? await prisma.wBSNode.findFirst({
+        where: { villaMilestoneId: vmId },
+        select: { id: true },
+      });
+      if (star) {
+        await prisma.wBSNode.update({
+          where: { id: star.id },
+          data: { actualFinish: agg.endMarkerClose ?? null },
         });
-        if (target) {
-          await prisma.wBSNode.update({
-            where: { id: target.id },
-            data: { actualFinish: null },
-          });
-        }
       }
     }
   }
