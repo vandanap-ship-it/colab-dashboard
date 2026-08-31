@@ -338,6 +338,23 @@ export async function importColabProgress(
     anyOpen: boolean;
   }
   const milestoneAgg = new Map<string, MilestoneAgg>();
+  // Queue for the per-chunk bulk ColabActivity upsert.
+  interface ColabActivityQueue {
+    projectId: string;
+    activityId: string;
+    villaId: string;
+    sectionId: string;
+    plannedStart: Date | null;
+    plannedEnd: Date | null;
+    actualStart: Date | null;
+    actualEnd: Date | null;
+    progressDate: Date | null;
+    physicalProgress: number;
+    totalPct: number | null;
+    reasonCode: string | null;
+    reasonNote: string | null;
+  }
+  const pendingColabActivities: ColabActivityQueue[] = [];
   // Villas that Colab had ANY progress for — used to bulk-tag every WBS node
   // under those villas to the default contractor at the end. Fixes the
   // §2 "villas in scope" undercount (was ~13 because only activity-matched
@@ -468,40 +485,24 @@ export async function importColabProgress(
     const imageUrl    = r.Image_Link && r.Image_Link.includes("/uploads/") ? r.Image_Link.trim() : null;
     const activityId  = r.Activity_ID?.trim();
 
-    // Mirror the Colab row into ColabActivity — Python-parity aggregations
-    // (Weekly §1 target/actual) read from here rather than from the lossy
-    // MSP→Colab fuzzy match on wbsNode. Idempotent via (projectId, activityId).
+    // Queue the Colab row for bulk ColabActivity write at end of chunk —
+    // avoids ~18s of sequential upsert latency inside the per-row loop that
+    // was pushing chunks past the client's fetch timeout.
     if (!options.dryRun && activityId && weightPct != null) {
-      await prisma.colabActivity.upsert({
-        where: { projectId_activityId: { projectId, activityId } },
-        create: {
-          projectId,
-          activityId,
-          villaId: villa.id,
-          sectionId: section.id,
-          plannedStart: plannedStart ?? undefined,
-          plannedEnd: plannedEnd ?? undefined,
-          actualStart: actualStart ?? undefined,
-          actualEnd: actualEnd ?? undefined,
-          progressDate: progressAt ?? undefined,
-          physicalProgress: weightPct,
-          totalPct: pct,
-          reasonCode: reasonCode ?? undefined,
-          reasonNote: reasonNote ?? undefined,
-        },
-        update: {
-          villaId: villa.id,
-          sectionId: section.id,
-          plannedStart: plannedStart ?? undefined,
-          plannedEnd: plannedEnd ?? undefined,
-          actualStart: actualStart ?? undefined,
-          actualEnd: actualEnd ?? undefined,
-          progressDate: progressAt ?? undefined,
-          physicalProgress: weightPct,
-          totalPct: pct,
-          reasonCode: reasonCode ?? undefined,
-          reasonNote: reasonNote ?? undefined,
-        },
+      pendingColabActivities.push({
+        projectId,
+        activityId,
+        villaId: villa.id,
+        sectionId: section.id,
+        plannedStart,
+        plannedEnd,
+        actualStart,
+        actualEnd,
+        progressDate: progressAt ?? null,
+        physicalProgress: weightPct,
+        totalPct: pct,
+        reasonCode: reasonCode ?? null,
+        reasonNote: reasonNote ?? null,
       });
     }
 
@@ -584,6 +585,53 @@ export async function importColabProgress(
           stats.photosCreated++;
         }
       }
+    }
+  }
+
+  // ---------- 7a-bulk. Bulk-write ColabActivity queue via raw ON CONFLICT ----------
+  // 175 sequential upserts add ~18s per chunk; a single INSERT ... ON CONFLICT
+  // DO UPDATE with all rows completes in ~1s. Using $executeRawUnsafe with a
+  // parameterised VALUES list is the fastest cross-DB path.
+  if (!options.dryRun && pendingColabActivities.length > 0) {
+    const now = new Date();
+    // Chunk into 200-row batches so a single Postgres statement doesn't
+    // exceed the parameter cap (65k) or Neon's statement length limit.
+    for (let i = 0; i < pendingColabActivities.length; i += 200) {
+      const batch = pendingColabActivities.slice(i, i + 200);
+      const values: unknown[] = [];
+      const rowsSql: string[] = [];
+      batch.forEach((r, j) => {
+        const base = j * 15;
+        rowsSql.push(
+          `(gen_random_uuid()::text, $${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5}, $${base+6}, $${base+7}, $${base+8}, $${base+9}, $${base+10}, $${base+11}, $${base+12}, $${base+13}, $${base+14}, $${base+15})`
+        );
+        values.push(
+          r.projectId, r.activityId, r.villaId, r.sectionId,
+          r.plannedStart, r.plannedEnd, r.actualStart, r.actualEnd, r.progressDate,
+          r.physicalProgress, r.totalPct, r.reasonCode, r.reasonNote, now, now,
+        );
+      });
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "ColabActivity" (
+           "id","projectId","activityId","villaId","sectionId",
+           "plannedStart","plannedEnd","actualStart","actualEnd","progressDate",
+           "physicalProgress","totalPct","reasonCode","reasonNote","createdAt","updatedAt"
+         ) VALUES ${rowsSql.join(",")}
+         ON CONFLICT ("projectId","activityId") DO UPDATE SET
+           "villaId"          = EXCLUDED."villaId",
+           "sectionId"        = EXCLUDED."sectionId",
+           "plannedStart"     = EXCLUDED."plannedStart",
+           "plannedEnd"       = EXCLUDED."plannedEnd",
+           "actualStart"      = EXCLUDED."actualStart",
+           "actualEnd"        = EXCLUDED."actualEnd",
+           "progressDate"     = EXCLUDED."progressDate",
+           "physicalProgress" = EXCLUDED."physicalProgress",
+           "totalPct"         = EXCLUDED."totalPct",
+           "reasonCode"       = EXCLUDED."reasonCode",
+           "reasonNote"       = EXCLUDED."reasonNote",
+           "updatedAt"        = EXCLUDED."updatedAt"`,
+        ...values,
+      );
     }
   }
 
