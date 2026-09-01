@@ -29,7 +29,23 @@ export async function GET(req: Request) {
 
   const villas = await prisma.villa.findMany({
     where: { projectId, number: { in: nums } },
-    select: { id: true, number: true, inScope: true, block: { select: { code: true } } },
+    select: {
+      id: true, number: true, inScope: true,
+      block: { select: { code: true } },
+      milestones: {
+        orderBy: { section: { orderIndex: "asc" } },
+        select: {
+          actualFinish: true,
+          baselineStart: true,
+          baselineFinish: true,
+          section: { select: { name: true, orderIndex: true } },
+          wbsNodes: {
+            where: { isSubMilestone: true },
+            select: { actualFinish: true },
+          },
+        },
+      },
+    },
   });
 
   const villaIds = villas.map((v) => v.id);
@@ -91,6 +107,15 @@ export async function GET(req: Request) {
       minBaselineStart: minBs?.toISOString() ?? null,
       maxBaselineFinish: maxBf?.toISOString() ?? null,
       sampleMilestones: Array.from(ms).slice(0, 5),
+      // Full milestone chain — ordered by section orderIndex, actualFinish
+      // per milestone plus per-★ actualFinish. Used to diagnose current-
+      // stage advancement.
+      milestoneChain: v.milestones.map((m) => ({
+        s: m.section?.name ?? "?",
+        idx: m.section?.orderIndex ?? -1,
+        mAF: m.actualFinish?.toISOString().slice(0, 10) ?? null,
+        stars: m.wbsNodes.map((w) => w.actualFinish?.toISOString().slice(0, 10) ?? null),
+      })),
     };
   }
 
