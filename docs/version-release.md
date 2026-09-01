@@ -87,6 +87,20 @@ Tracks what's in each release, what's planned next, and what's deferred.
 
 ---
 
+## V1.5 — Tech-debt cleanup (first 2 weeks post-launch)
+
+From the code review on 2026-08-29, take these before scaling to more projects:
+
+1. **Split `src/lib/colabSync.ts` (~875 lines) into named phases** — parse → resolve → per-row match → bulk ColabActivity write → milestone-agg apply → rollup → post-rollup override. The "override after rollup" section is a smell — the rollup semantics themselves need reconciling.
+
+2. **Unify the migration story.** Currently `schema.prisma` + `schema.sql` + in-app `MIGRATIONS[]` are three sources of truth kept in sync by hand. Lock the in-app route after cutover and rely on Prisma Migrate for future changes.
+
+3. **Extract hardcoded 41/52 villa scope map from `src/lib/scorecardServer.ts:41,404`** into project-level config (JSON on Project, or a `contractor_scope_override` table). Hardcoding guarantees a bug when the next project needs the same pattern.
+
+4. **Add zod for API request-body validation.** Each route hand-narrows types (~30 lines each). One shared `parseBody(schema, req)` deletes half of every route.
+
+5. **Gate or replace `src/lib/executiveMockData.ts` fallback content.** Overview / Snapshot / Layout tabs use it as filler; either wire the real feeds or hide those tabs completely (currently hidden from V1 nav but reachable by URL).
+
 ## V2 — First quarter after launch (Sept–Nov 2026)
 
 ### QA/QC team
