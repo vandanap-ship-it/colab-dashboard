@@ -335,7 +335,6 @@ export async function importColabProgress(
     maxPlannedEnd: Date | null;
     minActualStart: Date | null;
     maxActualEnd: Date | null;
-    anyOpen: boolean;               // legacy — unused after Python-parity switch
     endMarkerClose: Date | null;    // Actual_End_Date of the CSV row marked as this stage's END-marker
     endMarkerSeen: boolean;         // did we see a Milestone-column row for this stage?
   }
@@ -426,7 +425,6 @@ export async function importColabProgress(
       maxPlannedEnd: null,
       minActualStart: null,
       maxActualEnd: null,
-      anyOpen: false,
       endMarkerClose: null,   // Actual_End_Date of the row that IS the stage END-marker
       endMarkerSeen: false,   // did we see a Milestone-column row for this stage yet?
     };
