@@ -666,24 +666,34 @@ export async function importColabProgress(
         },
       });
       // Python parity (build_wk23.py L38-45): stage closes when its
-      // END-marker row is closed. We saw the END-marker if endMarkerSeen
-      // is true. If endMarkerClose is set, stamp it on the ★ wbsNode as
-      // actualFinish; otherwise (END-marker still open, or no END-marker
-      // row present) leave ★ open. This drives currentStage picker + §2
-      // buckets correctly — other open activities under the stage don't
-      // hold it open once the ★ is signed off.
-      const star = await prisma.wBSNode.findFirst({
-        where: { villaMilestoneId: vmId, isSubMilestone: true },
-        select: { id: true },
-      }) ?? await prisma.wBSNode.findFirst({
-        where: { villaMilestoneId: vmId },
-        select: { id: true },
-      });
-      if (star) {
-        await prisma.wBSNode.update({
-          where: { id: star.id },
+      // END-marker row is closed. Two writes to keep both the milestone
+      // rollup and any wbsNode-driven query in agreement:
+      //
+      // (a) Set VillaMilestone.actualFinish directly from the CSV END-marker's
+      //     close date. Authoritative. Independent of ★ presence / rollup
+      //     firing — the currentStage picker (uses milestone.actualFinish)
+      //     advances the same way Python does.
+      // (b) Also stamp the ★ wbsNode (if one exists) so wbsNode-level checks
+      //     stay consistent. If no ★, fall back to any wbsNode under the
+      //     milestone so at least one row reflects the close.
+      if (agg.endMarkerSeen) {
+        await prisma.villaMilestone.update({
+          where: { id: vmId },
           data: { actualFinish: agg.endMarkerClose ?? null },
         });
+        const star = await prisma.wBSNode.findFirst({
+          where: { villaMilestoneId: vmId, isSubMilestone: true },
+          select: { id: true },
+        }) ?? await prisma.wBSNode.findFirst({
+          where: { villaMilestoneId: vmId },
+          select: { id: true },
+        });
+        if (star) {
+          await prisma.wBSNode.update({
+            where: { id: star.id },
+            data: { actualFinish: agg.endMarkerClose ?? null },
+          });
+        }
       }
     }
   }
@@ -721,6 +731,21 @@ export async function importColabProgress(
     }
   } else {
     stats.villaMilestonesUpdated = touchedVillaMilestones.size;
+  }
+
+  // ---------- 10. Colab-authoritative override for milestone actualFinish ----------
+  // Rollup (§9) overwrites VillaMilestone.actualFinish based on the ★ +
+  // baselined-children rule, which may clear our Colab END-marker close.
+  // Re-apply the authoritative close AFTER the rollup so §2 buckets +
+  // currentStage picker see Python-parity data.
+  if (!options.dryRun) {
+    for (const [vmId, agg] of milestoneAgg) {
+      if (!agg.endMarkerSeen) continue;
+      await prisma.villaMilestone.update({
+        where: { id: vmId },
+        data: { actualFinish: agg.endMarkerClose ?? null },
+      });
+    }
   }
 
   stats.elapsedMs = Date.now() - t0;

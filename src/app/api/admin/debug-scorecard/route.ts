@@ -76,6 +76,7 @@ export async function GET(req: Request) {
     minBaselineStart: string | null;
     maxBaselineFinish: string | null;
     sampleMilestones: string[];
+    milestoneChain: Array<{ s: string; idx: number; mAF: string | null; stars: Array<string | null> }>;
   }> = {};
 
   for (const v of villas) {
