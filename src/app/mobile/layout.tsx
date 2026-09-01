@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canSeeMobile } from "@/lib/roles";
+import InstallPrompt from "@/components/InstallPrompt";
 
 export default async function MobileLayout({
   children,
@@ -11,5 +12,10 @@ export default async function MobileLayout({
   if (!session?.user) redirect("/login?callbackUrl=/mobile");
   if (!canSeeMobile(session.user.role)) redirect("/");
 
-  return <div className="flex-1 flex flex-col bg-ivory">{children}</div>;
+  return (
+    <div className="flex-1 flex flex-col bg-ivory">
+      {children}
+      <InstallPrompt />
+    </div>
+  );
 }
