@@ -514,9 +514,13 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
   const milestonePlans: WeeklyMilestonePlan[] = contractors.map((c) =>
     buildPlan(c.id, c.name, c._count.wbsNodes > 0, contractorItems.get(c.id)!),
   );
-  if (untaggedHasAny) {
-    milestonePlans.push(buildPlan(null, UNTAGGED_LABEL, true, untaggedBucket));
-  }
+  // Per WEEKLY_HANDOFF.md: only two contractors on Amanvana Phase 1
+  // (Abraham + Elegant). Untagged wbsNodes are data-hygiene work — not a
+  // report bucket. Leave `untaggedHasAny` computed for future diagnostics
+  // but never emit a "Contractor 3 · Untagged" row.
+  void UNTAGGED_LABEL;
+  void untaggedBucket;
+  void untaggedHasAny;
 
   // ------- §3 Manpower -------
   const planRows: TradePlanRow[] = tradePlans.map((p) => ({
