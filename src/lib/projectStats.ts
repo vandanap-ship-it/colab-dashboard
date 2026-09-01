@@ -126,7 +126,7 @@ export function computeProjectStats(
  * instead — it batches everything into 3 queries total regardless of N.
  */
 export async function getProjectStats(projectId: string, today = new Date()): Promise<ProjectStats> {
-  const [nodes, project, hindranceCount] = await Promise.all([
+  const [nodes, project, hindranceCount, colabPlanned, colabActual] = await Promise.all([
     prisma.wBSNode.findMany({
       where: { projectId },
       select: {
@@ -146,9 +146,27 @@ export async function getProjectStats(projectId: string, today = new Date()): Pr
       select: { endDate: true, projectedEndDate: true },
     }),
     prisma.hindrance.count({ where: { projectId, status: "OPEN" } }),
+    // ColabActivity is the authoritative Colab-parity source when present —
+    // Weekly §1 reads from it. Use the same sums here so the landing table
+    // and the Weekly Report agree to the decimal.
+    prisma.colabActivity.aggregate({
+      where: { projectId, plannedEnd: { lte: today } },
+      _sum: { physicalProgress: true },
+    }),
+    prisma.colabActivity.aggregate({
+      where: { projectId, progressDate: { not: null, lte: today } },
+      _sum: { physicalProgress: true },
+    }),
   ]);
 
   const stats = computeProjectStats(nodes, project ?? { endDate: null, projectedEndDate: null }, today);
+  // Override planned/achieved with Colab authoritative sums when available.
+  const colabActualPct = colabActual._sum.physicalProgress ?? 0;
+  const colabPlannedPct = colabPlanned._sum.physicalProgress ?? 0;
+  if (colabActualPct > 0 || colabPlannedPct > 0) {
+    stats.achievedPercent = Math.round(colabActualPct * 100) / 100;
+    stats.plannedPercent = Math.round(colabPlannedPct * 100) / 100;
+  }
   return { ...stats, hindranceCount };
 }
 
@@ -166,7 +184,7 @@ export async function getPortfolioStats(
 ): Promise<Record<string, ProjectStats>> {
   if (projectIds.length === 0) return {};
 
-  const [allNodes, projects, hindranceCounts] = await Promise.all([
+  const [allNodes, projects, hindranceCounts, colabPlannedRows, colabActualRows] = await Promise.all([
     prisma.wBSNode.findMany({
       where: { projectId: { in: projectIds } },
       select: {
@@ -191,6 +209,17 @@ export async function getPortfolioStats(
       where: { projectId: { in: projectIds }, status: "OPEN" },
       _count: { _all: true },
     }),
+    // Colab-parity per-project sums, matches Weekly §1's math.
+    prisma.colabActivity.groupBy({
+      by: ["projectId"],
+      where: { projectId: { in: projectIds }, plannedEnd: { lte: today } },
+      _sum: { physicalProgress: true },
+    }),
+    prisma.colabActivity.groupBy({
+      by: ["projectId"],
+      where: { projectId: { in: projectIds }, progressDate: { not: null, lte: today } },
+      _sum: { physicalProgress: true },
+    }),
   ]);
 
   // Index by projectId for O(1) lookup per project.
@@ -204,12 +233,20 @@ export async function getPortfolioStats(
     projects.map((p) => [p.id, { endDate: p.endDate, projectedEndDate: p.projectedEndDate }]),
   );
   const hindranceById = new Map(hindranceCounts.map((h) => [h.projectId, h._count._all]));
+  const colabPlannedById = new Map(colabPlannedRows.map((r) => [r.projectId, r._sum.physicalProgress ?? 0]));
+  const colabActualById  = new Map(colabActualRows .map((r) => [r.projectId, r._sum.physicalProgress ?? 0]));
 
   const result: Record<string, ProjectStats> = {};
   for (const pid of projectIds) {
     const nodes = nodesByProject.get(pid) ?? [];
     const meta = metaById.get(pid) ?? { endDate: null, projectedEndDate: null };
     const stats = computeProjectStats(nodes, meta, today);
+    const cAct = colabActualById.get(pid) ?? 0;
+    const cPln = colabPlannedById.get(pid) ?? 0;
+    if (cAct > 0 || cPln > 0) {
+      stats.achievedPercent = Math.round(cAct * 100) / 100;
+      stats.plannedPercent = Math.round(cPln * 100) / 100;
+    }
     result[pid] = { ...stats, hindranceCount: hindranceById.get(pid) ?? 0 };
   }
   return result;
