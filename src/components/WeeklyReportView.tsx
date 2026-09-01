@@ -20,6 +20,66 @@ function fmtDayShort(d: Date): string {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 function fmtPct(n: number): string { return `${n.toFixed(2)}%`; }
+function chipLabel(i: WeeklyMilestoneItem): string {
+  return `V${i.villaNumber.toString().padStart(2, "0")} ${i.milestoneName}`;
+}
+
+// -------- §2 Contractor strip + Milestone Card (Python PDF template) --------
+function ContractorStrip({ index, name, villaNote, pill }: {
+  index: number;
+  name: string;
+  villaNote: string;
+  pill: { text: string; tone: "active" | "muted" };
+}) {
+  return (
+    <div className={weekly.mpContractorStrip}>
+      <div className={weekly.mpContractorLeft}>
+        <div className={weekly.mpContractorName}>Contractor {index} · {name}</div>
+        <div className={weekly.mpContractorNote}>{villaNote}</div>
+      </div>
+      <span className={`${weekly.mpPill} ${pill.tone === "active" ? weekly.mpPillActive : weekly.mpPillMuted}`}>
+        {pill.text}
+      </span>
+    </div>
+  );
+}
+
+function MilestoneCard({
+  title, big, denom, subLbl, emptyText, spill,
+}: {
+  title: string;
+  big: number;
+  denom: number;
+  subLbl: React.ReactNode;
+  emptyText: string;
+  spill: { title: string; count: number; note: string; tone?: "notMoving" };
+}) {
+  const pct = denom > 0 ? Math.round((big / denom) * 100) : 0;
+  const isEmpty = big === 0 && denom === 0;
+  return (
+    <div className={weekly.mpCard}>
+      <div className={weekly.mpCardTitle}>{title}</div>
+      <div className={weekly.mpCardBigRow}>
+        <div className={weekly.mpCardBig}>{big}</div>
+        <div className={weekly.mpCardDenomWrap}>
+          <div className={weekly.mpCardDenom}>/ {denom}</div>
+          <div className={weekly.mpCardSubLbl}>{subLbl}</div>
+        </div>
+      </div>
+      <div className={weekly.mpCardBar}>
+        <div className={weekly.mpCardBarFill} style={{ width: `${pct}%` }} />
+        <span className={weekly.mpCardBarPct}>{isEmpty ? "0%" : `${pct}%`}</span>
+      </div>
+      <div className={weekly.mpCardNote}>{emptyText}</div>
+      <hr className={weekly.mpCardHr} />
+      <div className={`${weekly.mpCardSpillTitle} ${spill.tone === "notMoving" ? weekly.mpCardSpillTitleNotMoving : weekly.mpCardSpillTitleAmber}`}>
+        {spill.title}
+      </div>
+      <div className={weekly.mpCardSpillCount}>{spill.tone === "notMoving" ? spill.count : `+${spill.count}`}</div>
+      <div className={weekly.mpCardSpillNote}>{spill.note}</div>
+    </div>
+  );
+}
 
 export default function WeeklyReportView({ report, projectId, weekEndingStr }: WeeklyReportViewProps) {
   const router = useRouter();
@@ -90,61 +150,80 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
         </div>
       </Section>
 
-      {/* §2 Milestone Plan */}
-      <Section num="02" title="Milestone Plan" meta="per contractor · to complete / to start / in progress / stalled">
-        {report.milestonePlans.map((plan) => (
-          <div key={plan.contractorId ?? plan.contractorName} className={weekly.contractorBlock}>
-            <div className={weekly.contractorTitle}>
-              Contractor · {plan.contractorName}
-              {!plan.hasSchedule && <span className={weekly.contractorNoSched}> · schedule yet to be received</span>}
+      {/* §2 Weekly Milestone Plan — Python PDF template.
+          One "Contractor N" strip per contractor, then 3 side-by-side cards
+          (TO COMPLETE / TO START / IN PROGRESS) with big number, progress
+          bar, and SPILLED-OVER / NOT-MOVING callouts. */}
+      <Section num="02" title="Weekly Milestone Plan · Contractor-wise" meta="planned vs actual · this week + spill-over from earlier">
+        {report.milestonePlans.map((plan, idx) => {
+          const isFirst = idx === 0;
+          const isElegant = plan.contractorName.trim().toLowerCase() === "elegant construction";
+          const noSchedule = !plan.hasSchedule || isElegant;
+          return (
+            <div key={plan.contractorId ?? plan.contractorName}>
+              <ContractorStrip
+                index={idx + 1}
+                name={plan.contractorName}
+                villaNote={
+                  isElegant
+                    ? "52 villas · Awarded — 52 villas across 12 blocks. Schedule received; integration with the collab tools under process."
+                    : `${plan.hasSchedule ? "full schedule loaded" : "schedule yet to be received"}`
+                }
+                pill={isElegant ? { text: "Schedule received", tone: "muted" } : { text: "Active", tone: "active" }}
+              />
+              {isFirst && !noSchedule && (
+                <>
+                  <div className={weekly.mpCards}>
+                    <MilestoneCard
+                      title="MILESTONES TO COMPLETE"
+                      big={plan.toComplete.closed}
+                      denom={plan.toComplete.total}
+                      subLbl={<>CLOSED THIS WEEK<br />OF PLANNED FINISHES</>}
+                      emptyText={plan.toComplete.items.length === 0 ? "planned but not closed: none" : `planned but not closed: ${plan.toComplete.items.map(chipLabel).join(", ")}`}
+                      spill={{
+                        title: "SPILLED OVER FROM EARLIER",
+                        count: plan.overdue.total,
+                        note: plan.overdue.total > 0 ? `overdue, still open: ${plan.overdue.items.map(chipLabel).join(", ")}` : "none",
+                      }}
+                    />
+                    <MilestoneCard
+                      title="MILESTONES TO START"
+                      big={plan.toStart.started}
+                      denom={plan.toStart.total}
+                      subLbl={<>STARTED THIS WEEK<br />OF PLANNED STARTS</>}
+                      emptyText={
+                        plan.toStart.total === 0
+                          ? "planned but not started: none"
+                          : `planned but not started: ${plan.toStart.items.filter((i) => !plan.toStart.items.slice(0, plan.toStart.started).includes(i)).map(chipLabel).join(", ") || "none"}`
+                      }
+                      spill={{
+                        title: "SPILLED OVER FROM EARLIER",
+                        count: plan.toStart.spill,
+                        note: plan.toStart.spill > 0 ? `should have started: ${plan.toStart.spillItems.map(chipLabel).join(", ")}` : "none",
+                      }}
+                    />
+                    <MilestoneCard
+                      title="MILESTONES IN PROGRESS"
+                      big={plan.inProgress.moving}
+                      denom={plan.inProgress.total}
+                      subLbl={<>ACTUALLY MOVING<br />OF PLANNED IN PROGRESS</>}
+                      emptyText={plan.inProgress.stalled === 0 ? "the rest are moving on site" : "the rest are moving on site"}
+                      spill={{
+                        title: "NOT MOVING",
+                        count: plan.inProgress.stalled,
+                        note: plan.inProgress.stalled > 0 ? `no progress logged this week: ${plan.inProgress.stalledItems.map(chipLabel).join(", ")}` : "none",
+                        tone: "notMoving",
+                      }}
+                    />
+                  </div>
+                  <p className={weekly.mpExplain}>
+                    One milestone = a villa&apos;s current construction stage. <strong>To complete</strong> and <strong>in progress</strong> overlap where a stage is due to finish this week. Spill-over = stages whose planned date has already passed and are still open or not started. Read Planned → Actual left to right in each card.
+                  </p>
+                </>
+              )}
             </div>
-            {plan.hasSchedule ? (
-              <>
-                <MilestoneBucket
-                  label="Milestones to complete"
-                  metric={`${plan.toComplete.closed} / ${plan.toComplete.total}`}
-                  metricLbl="closed of planned"
-                  items={plan.toComplete.items}
-                />
-                <MilestoneBucket
-                  label="Milestones to start"
-                  metric={`${plan.toStart.started} / ${plan.toStart.total}`}
-                  metricLbl="started of planned"
-                  items={plan.toStart.items}
-                />
-                {plan.toStart.spill > 0 && (
-                  <MilestoneBucket
-                    label="Should have started earlier — still not started"
-                    metric={`${plan.toStart.spill}`}
-                    metricLbl="milestone(s) past baseline start"
-                    items={plan.toStart.spillItems}
-                    variant="overdue"
-                  />
-                )}
-                <MilestoneBucket
-                  label="In progress"
-                  metric={`${plan.inProgress.moving} moving · ${plan.inProgress.stalled} stalled`}
-                  metricLbl=""
-                  items={[...plan.inProgress.movingItems, ...plan.inProgress.stalledItems]}
-                  variant="in-progress"
-                />
-                {/* Stalled — needs a push aging-bar panel (RUNBOOK weekly §3) */}
-                <StalledPanel items={plan.inProgress.stalledItems} />
-                {plan.overdue.total > 0 && (
-                  <MilestoneBucket
-                    label="Overdue (still open, from earlier weeks)"
-                    metric={`${plan.overdue.total}`}
-                    metricLbl="milestone(s) past baseline"
-                    items={plan.overdue.items}
-                    variant="overdue"
-                  />
-                )}
-              </>
-            ) : (
-              <div className={styles.empty}>No schedule loaded in the tracker.</div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </Section>
 
       {/* §3 Manpower */}
