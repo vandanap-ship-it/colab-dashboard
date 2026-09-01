@@ -337,6 +337,81 @@
   margin: 4px 0 16px;
 }
 
+/* -------------- §5 Delay Reason cards (PDF style) -------------- */
+.reasonCard {
+  position: relative;
+  padding: 12px 16px 14px 22px;
+  border: 1px solid #E7DFC9;
+  border-radius: 6px;
+  background: #FCFAF3;
+  margin-bottom: 10px;
+}
+.reasonBullet {
+  position: absolute;
+  left: 10px;
+  top: 18px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #965532;
+}
+.reasonHead {
+  margin-bottom: 8px;
+}
+.reasonName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #161926;
+  margin-bottom: 3px;
+}
+.reasonStatLine {
+  font-size: 11.5px;
+  color: #706C61;
+  line-height: 1.5;
+}
+.reasonStatLine strong {
+  color: #161926;
+  font-weight: 700;
+}
+
+/* -------------- §5 Mitigation & recovery table -------------- */
+.mitTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #161926;
+  margin: 18px 0 8px;
+}
+.mitTable {
+  width: 100%;
+  border-collapse: collapse;
+  background: #FCFAF3;
+  border: 1px solid #E7DFC9;
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: 11.5px;
+  color: #161926;
+}
+.mitTable thead th {
+  text-align: left;
+  padding: 10px 12px;
+  background: #F3EFE2;
+  color: #7A5A00;
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  font-weight: 700;
+  border-bottom: 1px solid #E7DFC9;
+}
+.mitTable tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #F3EFE2;
+  vertical-align: top;
+  line-height: 1.5;
+}
+.mitTable tbody tr:last-child td { border-bottom: 0; }
+.mitReason { font-weight: 600; color: #161926; white-space: nowrap; }
+.mitAction { color: #16202F; }
+.mitBlank  { color: #B7AF95; font-size: 12px; }
+
 /* -------------- §1 Overall Progress — Target & Actual only (RUNBOOK) -------------- */
 .overallRow {
   display: grid;

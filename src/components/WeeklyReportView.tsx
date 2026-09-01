@@ -328,56 +328,17 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
         );
       })()}
 
-      {/* §4 Manpower */}
+      {/* §4 Manpower — Python PDF template: per-contractor strip + tiles + chart + table. */}
       <Section num="04" title="Manpower" meta="planned vs actual · trade breakdown">
-        {/* Site-total roll-up tile — Python parity header block. */}
-        {report.manpowerSiteTotal.weeklyPlanned > 0 && (
-          <div className={weekly.contractorBlock}>
-            <div className={weekly.contractorTitle}>Site total · all contractors</div>
-            <div className={weekly.mpHead4}>
-              <div className={weekly.mpHeadCell}>
-                <div className={weekly.mpHeadLbl}>Weekly target</div>
-                <div className={weekly.mpHeadVal}>{report.manpowerSiteTotal.weeklyPlanned}</div>
-                <div className={weekly.mpHeadSub}>
-                  {report.manpowerSiteTotal.workingDays > 0
-                    ? `${Math.round(report.manpowerSiteTotal.weeklyPlanned / report.manpowerSiteTotal.workingDays)}/DAY × ${report.manpowerSiteTotal.workingDays}D`
-                    : "—"}
-                </div>
-              </div>
-              <div className={weekly.mpHeadCell}>
-                <div className={weekly.mpHeadLbl}>Achieved</div>
-                <div className={weekly.mpHeadVal}>{report.manpowerSiteTotal.weeklyActual}</div>
-                <div className={weekly.mpHeadSub}>{report.manpowerSiteTotal.loggedDays}/{report.manpowerSiteTotal.workingDays} DAYS LOGGED</div>
-              </div>
-              <div className={weekly.mpHeadCell}>
-                <div className={weekly.mpHeadLbl}>Week vs target</div>
-                <div className={weekly.mpHeadVal}>
-                  {report.manpowerSiteTotal.pctOfPlan == null ? "—" : `${report.manpowerSiteTotal.pctOfPlan}%`}
-                </div>
-                <div className={weekly.mpHeadSub}>
-                  {report.manpowerSiteTotal.workingDays > 0
-                    ? `AVG ${Math.round(report.manpowerSiteTotal.weeklyActual / report.manpowerSiteTotal.workingDays)}/DAY ACTUAL`
-                    : "—"}
-                </div>
-              </div>
-              <div className={weekly.mpHeadCell}>
-                <div className={weekly.mpHeadLbl}>Best day</div>
-                <div className={weekly.mpHeadVal}>{report.manpowerSiteTotal.bestDayActual}</div>
-                <div className={weekly.mpHeadSub}>
-                  {report.manpowerSiteTotal.bestDayDate
-                    ? new Date(report.manpowerSiteTotal.bestDayDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }).toUpperCase()
-                    : "—"}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        {report.manpowerByContractor.map((c) => (
-          <div key={c.contractorId} className={weekly.contractorBlock}>
-            <div className={weekly.contractorTitle}>Contractor · {c.contractorName}</div>
-            {!c.hasPlan ? (
-              <div className={styles.empty}>No manpower plan set.</div>
-            ) : (
+        {report.manpowerByContractor.map((c, idx) => (
+          <div key={c.contractorId}>
+            <ContractorStrip
+              index={idx + 1}
+              name={c.contractorName}
+              villaNote={c.hasPlan ? "full manpower plan loaded" : "no plan set"}
+              pill={c.hasPlan ? { text: "Active", tone: "active" } : { text: "No plan", tone: "muted" }}
+            />
+            {!c.hasPlan ? null : (
               <>
                 {/* 4-tile weekly strip per RUNBOOK §4 (no Remark box). */}
                 {(() => {
@@ -427,45 +388,60 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
         ))}
       </Section>
 
-      {/* §5 Delay Reasons & Mitigation */}
+      {/* §5 Delay Reasons & Mitigation — Python PDF template. */}
       <Section num="05" title="Delay Reasons & Mitigation" meta="ranked by activity count · avg days late across the reason bucket">
         {report.delayReasons.length === 0 ? (
           <div className={styles.empty}>No open hindrances tagged this week. Excellent.</div>
         ) : (
-          <div className={weekly.reasonList}>
-            {report.delayReasons.map((r) => (
-              <div key={r.code} className={weekly.reasonCard}>
-                <div className={weekly.reasonHead}>
-                  <div className={weekly.reasonName}>{r.label}</div>
-                  <div className={weekly.reasonStat}>
-                    {r.avgDaysImpact > 0 && (
-                      <span className={weekly.reasonDays}>avg {r.avgDaysImpact}d</span>
-                    )}
-                    {r.maxDaysImpact > 0 && (
-                      <span className={weekly.reasonDays}>worst {r.maxDaysImpact}d</span>
-                    )}
-                    <span className={weekly.reasonCount}>{r.activityCount} act{r.activityCount === 1 ? "" : "s"}</span>
-                    <span className={weekly.reasonVillas}>
-                      {r.affectedVillas.length} villa{r.affectedVillas.length === 1 ? "" : "s"}
+          <>
+            <div className={weekly.reasonList}>
+              {report.delayReasons.map((r) => (
+                <div key={r.code} className={weekly.reasonCard}>
+                  <div className={weekly.reasonBullet} />
+                  <div className={weekly.reasonHead}>
+                    <div className={weekly.reasonName}>{r.label}</div>
+                    <div className={weekly.reasonStatLine}>
+                      {r.avgDaysImpact > 0 && <>avg <strong>{r.avgDaysImpact}d</strong> · </>}
+                      {r.maxDaysImpact > 0 && <>worst <strong>{r.maxDaysImpact}d</strong> · </>}
+                      <strong>{r.activityCount}</strong> act{r.activityCount === 1 ? "" : "s"} · <strong>{r.affectedVillas.length}</strong> villa{r.affectedVillas.length === 1 ? "" : "s"}
                       {r.hasProjectLevel && " · +project-level"}
-                    </span>
+                    </div>
                   </div>
+                  {r.affectedVillas.length > 0 && (
+                    <div className={weekly.reasonVillasList}>
+                      {r.affectedVillas.slice(0, 24).map((n) => (
+                        <span key={n} className={weekly.reasonVillaChip}>V{n.toString().padStart(2, "0")}</span>
+                      ))}
+                      {r.affectedVillas.length > 24 && <span className={weekly.reasonMoreChip}>+{r.affectedVillas.length - 24}</span>}
+                    </div>
+                  )}
                 </div>
-                {r.affectedVillas.length > 0 && (
-                  <div className={weekly.reasonVillasList}>
-                    {r.affectedVillas.slice(0, 20).map((n) => (
-                      <span key={n} className={weekly.reasonVillaChip}>V{n}</span>
-                    ))}
-                    {r.affectedVillas.length > 20 && <span className={weekly.reasonMoreChip}>+{r.affectedVillas.length - 20}</span>}
-                  </div>
-                )}
-                <div className={weekly.reasonMitigation}>
-                  <span className={weekly.reasonMitigationLbl}>Mitigation</span>
-                  {r.mitigation}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+
+            {/* Mitigation & recovery — table below all reason cards. */}
+            <div className={weekly.mitTitle}>Mitigation &amp; recovery</div>
+            <table className={weekly.mitTable}>
+              <thead>
+                <tr>
+                  <th>REASON</th>
+                  <th>SUGGESTED ACTION</th>
+                  <th>OWNER</th>
+                  <th>TARGET</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.delayReasons.map((r) => (
+                  <tr key={r.code}>
+                    <td className={weekly.mitReason}>{r.label}</td>
+                    <td className={weekly.mitAction}>{r.mitigation}</td>
+                    <td className={weekly.mitBlank}>—</td>
+                    <td className={weekly.mitBlank}>—</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </Section>
     </div>
