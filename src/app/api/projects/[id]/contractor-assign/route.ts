@@ -81,7 +81,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   let villaFilter:
     | { villaMilestone: { villa: { blockId: string } } }
     | { villaMilestone: { villa: { number: number } } }
-    | { villaMilestone: { villa: { number: { in: number[] } } } }
+    | { OR: [
+        { villaMilestone: { villa: { number: { in: number[] } } } },
+        { villaId: { in: string[] } },
+      ] }
     | undefined = undefined;
 
   if (scope === "block") {
@@ -94,7 +97,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   } else if (scope === "villa") {
     villaFilter = { villaMilestone: { villa: { number: villaNumber! } } };
   } else if (scope === "villa-list") {
-    villaFilter = { villaMilestone: { villa: { number: { in: villaNumbers! } } } };
+    // Match wbsNodes via EITHER the villaMilestone chain (leaf activities with
+    // a milestone tied to one of the target villas) OR by wbsNode.villaId
+    // directly (covers structural / non-milestone rows that only carry the
+    // villaId — e.g. cloned villas whose structural nodes have no
+    // villaMilestoneId).
+    const villas = await prisma.villa.findMany({
+      where: { projectId, number: { in: villaNumbers! } },
+      select: { id: true },
+    });
+    const villaIds = villas.map((v) => v.id);
+    villaFilter = {
+      OR: [
+        { villaMilestone: { villa: { number: { in: villaNumbers! } } } },
+        { villaId: { in: villaIds } },
+      ],
+    };
   }
 
   const where = villaFilter ? { ...baseWhere, ...villaFilter } : baseWhere;
