@@ -81,6 +81,71 @@ function MilestoneCard({
   );
 }
 
+// -------- §3 Milestone drill-down table (Python PDF style) --------
+type MilestoneTableRow = WeeklyMilestoneItem & { tag: "SPILLED" | "THIS WEEK" | "MOVING" | "STALLED" };
+function MilestoneTable({
+  kind, title, rows,
+}: {
+  kind: "complete" | "start" | "in-progress";
+  title: string;
+  rows: MilestoneTableRow[];
+}) {
+  const dateHeader = kind === "complete" ? "PLANNED FINISH" : kind === "start" ? "PLANNED START" : "PLANNED WINDOW";
+  const dateBucketHeader = kind === "complete" ? "DAYS PAST" : "DAYS IDLE";
+  return (
+    <div className={weekly.mbSection}>
+      <div className={`${weekly.mbBanner} ${kind === "complete" ? weekly.mbBannerComplete : kind === "start" ? weekly.mbBannerStart : weekly.mbBannerInProgress}`}>{title}</div>
+      {rows.length === 0 ? (
+        <div className={weekly.mbEmpty}>Nothing in this bucket this week.</div>
+      ) : (
+        <table className={weekly.mbTable}>
+          <thead>
+            <tr>
+              <th>VILLA</th>
+              <th>BLOCK</th>
+              <th>MILESTONE</th>
+              <th>{dateHeader}</th>
+              <th>{dateBucketHeader}</th>
+              <th>WHEN</th>
+              <th>ON SITE?</th>
+              <th>DELAY REASON</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const daysPast = r.daysLate ?? 0;
+              const dateStr = kind === "complete"
+                ? "—"
+                : kind === "start" && r.sinceDate
+                ? new Date(r.sinceDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
+                : "—";
+              const onSite = r.movedThisWeek ? "moved this week" : r.tag === "STALLED" ? "no progress logged" : r.daysIdle != null ? "being worked" : "not started";
+              return (
+                <tr key={`${r.villaNumber}-${r.milestoneName}-${i}`}>
+                  <td className={weekly.mbVilla}>V{r.villaNumber.toString().padStart(2, "0")}</td>
+                  <td>Block {r.blockCode}</td>
+                  <td>{r.milestoneName}</td>
+                  <td>{dateStr}</td>
+                  <td className={daysPast > 0 ? weekly.mbLate : ""}>{daysPast > 0 ? `${daysPast}d` : "—"}</td>
+                  <td>
+                    <span className={`${weekly.mbTag} ${r.tag === "SPILLED" ? weekly.mbTagSpilled : r.tag === "THIS WEEK" ? weekly.mbTagWeek : r.tag === "MOVING" ? weekly.mbTagMoving : weekly.mbTagStalled}`}>
+                      {r.tag}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={weekly.mbSitePill}>{onSite}</span>
+                  </td>
+                  <td className={weekly.mbReason}>{r.reason ?? "not recorded"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 export default function WeeklyReportView({ report, projectId, weekEndingStr }: WeeklyReportViewProps) {
   const router = useRouter();
 
@@ -226,8 +291,45 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
         })}
       </Section>
 
-      {/* §3 Manpower */}
-      <Section num="03" title="Manpower" meta="planned vs actual · trade breakdown">
+      {/* §3 Milestone Breakdown — three drill-down tables per PDF. */}
+      {(() => {
+        // Just the Abraham plan (Contractor 1) — Elegant is name-only.
+        const p1 = report.milestonePlans.find((m) => m.contractorName.trim().toLowerCase() !== "elegant construction" && m.hasSchedule);
+        if (!p1) return null;
+        return (
+          <Section num="03" title="Milestone breakdown" meta="the villas inside each of the three metrics above">
+            <MilestoneTable
+              kind="complete"
+              title={`TO COMPLETE — ${p1.toComplete.total} MILESTONES DUE, ${p1.toComplete.closed} CLOSED`}
+              rows={[
+                ...p1.overdue.items.map((it) => ({ ...it, tag: "SPILLED" as const })),
+                ...p1.toComplete.items.map((it) => ({ ...it, tag: "THIS WEEK" as const })),
+              ].sort((a, b) => (b.daysLate ?? 0) - (a.daysLate ?? 0))}
+            />
+            <MilestoneTable
+              kind="start"
+              title={`TO START — ${p1.toStart.total} THIS WEEK, ${p1.toStart.started} STARTED`}
+              rows={[
+                ...p1.toStart.spillItems.map((it) => ({ ...it, tag: "SPILLED" as const })),
+                ...p1.toStart.items.map((it) => ({ ...it, tag: "THIS WEEK" as const })),
+              ].sort((a, b) => (b.daysLate ?? 0) - (a.daysLate ?? 0))}
+            />
+            <MilestoneTable
+              kind="in-progress"
+              title={`IN PROGRESS — ${p1.inProgress.total} MILESTONES · ${p1.inProgress.moving} MOVING · ${p1.inProgress.stalled} STALLED`}
+              rows={[
+                ...p1.inProgress.movingItems.map((it) => ({ ...it, tag: "MOVING" as const })),
+                ...p1.inProgress.stalledItems.map((it) => ({ ...it, tag: "STALLED" as const })),
+              ]}
+            />
+            {/* Stalled aging bar panel — RUNBOOK weekly §3 add-on. */}
+            <StalledPanel items={p1.inProgress.stalledItems} />
+          </Section>
+        );
+      })()}
+
+      {/* §4 Manpower */}
+      <Section num="04" title="Manpower" meta="planned vs actual · trade breakdown">
         {/* Site-total roll-up tile — Python parity header block. */}
         {report.manpowerSiteTotal.weeklyPlanned > 0 && (
           <div className={weekly.contractorBlock}>
@@ -325,8 +427,8 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
         ))}
       </Section>
 
-      {/* §4 Delay Reasons & Mitigation */}
-      <Section num="04" title="Delay Reasons & Mitigation" meta="ranked by days impact this week">
+      {/* §5 Delay Reasons & Mitigation */}
+      <Section num="05" title="Delay Reasons & Mitigation" meta="ranked by activity count · avg days late across the reason bucket">
         {report.delayReasons.length === 0 ? (
           <div className={styles.empty}>No open hindrances tagged this week. Excellent.</div>
         ) : (
