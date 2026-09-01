@@ -556,6 +556,13 @@ export async function importColabProgress(
     // Queue the Colab row for bulk ColabActivity write at end of chunk —
     // avoids ~18s of sequential upsert latency inside the per-row loop that
     // was pushing chunks past the client's fetch timeout.
+    //
+    // Python-parity: ColabActivity.progressDate = Colab CSV Progress_Date
+    // ONLY. NO fallback to Actual_Start/Actual_End. Python's Weekly §1
+    // filter uses Progress_Date; falling back inflates the "actual" %
+    // count by activities that started/finished without a formal progress
+    // log (27 extra rows in the current Amanvana CSV — +0.10% actual).
+    const progressDateOnly = parseColabDate(r.Progress_Date);
     if (!options.dryRun && activityId && weightPct != null) {
       pendingColabActivities.push({
         projectId,
@@ -566,7 +573,7 @@ export async function importColabProgress(
         plannedEnd,
         actualStart,
         actualEnd,
-        progressDate: progressAt ?? null,
+        progressDate: progressDateOnly,
         physicalProgress: weightPct,
         totalPct: pct,
         reasonCode: reasonCode ?? null,
