@@ -354,10 +354,11 @@ export async function importColabProgress(
     pe: Date | null;
     endMarkerActualEnd: Date | null;
     endMarkerSeen: boolean;
+    earliestProgress: Date | null;    // min Progress_Date / Actual_Start across block
   }
   const stageAgg = new Map<string, StageAgg>();
   let lastVillaId: string | null = null;
-  let stageBuffer: Array<{ ps: Date | null; pe: Date | null }> = [];
+  let stageBuffer: Array<{ ps: Date | null; pe: Date | null; progress: Date | null }> = [];
 
   // Queue for the per-chunk bulk ColabActivity upsert.
   interface ColabActivityQueue {
@@ -474,7 +475,8 @@ export async function importColabProgress(
       lastVillaId = villa.id;
       stageBuffer = [];
     }
-    stageBuffer.push({ ps: _plannedStart, pe: _plannedEnd });
+    const _progressDate = parseColabDate(r.Progress_Date) ?? _actualStart;
+    stageBuffer.push({ ps: _plannedStart, pe: _plannedEnd, progress: _progressDate });
     if (milestoneLabel && Object.prototype.hasOwnProperty.call(COLAB_MILESTONE_LABEL_TO_SECTION, milestoneLabel)) {
       const stageSectionName = COLAB_MILESTONE_LABEL_TO_SECTION[milestoneLabel];
       const stageSection = sectionByName.get(stageSectionName);
@@ -482,13 +484,16 @@ export async function importColabProgress(
       if (stageVmId) {
         let stagePs: Date | null = null;
         let stagePe: Date | null = null;
+        let stageEarliestProgress: Date | null = null;
         for (const b of stageBuffer) {
           if (b.ps && (!stagePs || b.ps < stagePs)) stagePs = b.ps;
           if (b.pe && (!stagePe || b.pe > stagePe)) stagePe = b.pe;
+          if (b.progress && (!stageEarliestProgress || b.progress < stageEarliestProgress)) stageEarliestProgress = b.progress;
         }
-        const existing = stageAgg.get(stageVmId) ?? { ps: null, pe: null, endMarkerActualEnd: null, endMarkerSeen: false };
+        const existing = stageAgg.get(stageVmId) ?? { ps: null, pe: null, endMarkerActualEnd: null, endMarkerSeen: false, earliestProgress: null };
         if (stagePs && (!existing.ps || stagePs < existing.ps)) existing.ps = stagePs;
         if (stagePe && (!existing.pe || stagePe > existing.pe)) existing.pe = stagePe;
+        if (stageEarliestProgress && (!existing.earliestProgress || stageEarliestProgress < existing.earliestProgress)) existing.earliestProgress = stageEarliestProgress;
         existing.endMarkerActualEnd = _actualEnd ?? existing.endMarkerActualEnd;
         existing.endMarkerSeen = true;
         stageAgg.set(stageVmId, existing);
@@ -706,12 +711,17 @@ export async function importColabProgress(
   if (!options.dryRun) {
     // First: stage-walker windows (authoritative for MORDER sections).
     for (const [vmId, sagg] of stageAgg) {
-      if (!sagg.ps && !sagg.pe) continue;
+      if (!sagg.ps && !sagg.pe && !sagg.earliestProgress) continue;
       await prisma.villaMilestone.update({
         where: { id: vmId },
         data: {
           baselineStart: sagg.ps ?? undefined,
           baselineFinish: sagg.pe ?? undefined,
+          // Python-parity "started" (build_wk23.py L42): any Progress_Date
+          // logged in the stage means the stage has started. Stamp
+          // VillaMilestone.actualStart from the earliest such date so
+          // weekly §2 "started" counts + spill logic match.
+          actualStart: sagg.earliestProgress ?? undefined,
         },
       });
       await prisma.wBSNode.updateMany({
@@ -815,7 +825,11 @@ export async function importColabProgress(
       seen.add(vmId);
       await prisma.villaMilestone.update({
         where: { id: vmId },
-        data: { actualFinish: sagg.endMarkerActualEnd ?? null },
+        data: {
+          actualFinish: sagg.endMarkerActualEnd ?? null,
+          // Re-apply actualStart in case the rollup at §9 cleared it.
+          actualStart: sagg.earliestProgress ?? undefined,
+        },
       });
     }
     for (const [vmId, agg] of milestoneAgg) {
