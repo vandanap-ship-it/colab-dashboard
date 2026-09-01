@@ -20,6 +20,7 @@ function leaf(overrides: Partial<StatsNode> = {}): StatsNode {
     projectedFinish: null,
     percentComplete: 0,
     progressEntered: false,
+    weightPct: null,
     ...overrides,
   };
 }
@@ -55,7 +56,7 @@ describe("computeProjectStats — empty / zero cases", () => {
     expect(result.achievedPercent).toBe(0);
   });
 
-  it("returns zeros for tracked % when no leaves have progressEntered", () => {
+  it("averages across all leaves regardless of progressEntered flag", () => {
     const result = computeProjectStats(
       [
         parent("p"),
@@ -65,19 +66,22 @@ describe("computeProjectStats — empty / zero cases", () => {
       NO_OVERRIDE,
       TODAY,
     );
-    // Tracked-only: 0 tracked → denom falls back to leaves.length (2), but
-    // the SUMS are over `tracked` (which is empty), so both percents are 0.
+    // Post-Python-parity fix (2026-08-29): compute uses ALL leaves as denom,
+    // not just progressEntered ones. percentComplete carries the real state
+    // even for leaves that weren't logged via the mobile path (e.g. MSP or
+    // Colab import). Avg: (50 + 75) / 2 = 62.5.
     expect(result.totalActivities).toBe(2);
-    expect(result.achievedPercent).toBe(0);
+    expect(result.achievedPercent).toBe(62.5);
     expect(result.plannedPercent).toBe(0);
   });
 });
 
-describe("computeProjectStats — achievement math (the trust-breaker fix)", () => {
-  it("averages percentComplete across tracked leaves only", () => {
-    // 4 tracked leaves with values 100/60/30/0; 6 untracked leaves.
-    // Tracked-only: (100+60+30+0) / 4 = 47.5
-    // Pre-Tier-2-fix Master-Report-style: 190/10 = 19 (the rejected path)
+describe("computeProjectStats — achievement math (Python-parity)", () => {
+  it("averages percentComplete across ALL leaves (correct denom)", () => {
+    // 4 tracked leaves with values 100/60/30/0; 6 untracked leaves (all 0%).
+    // Correct project-wide %: (100+60+30+0+0+0+0+0+0+0) / 10 = 19
+    // Old biased "tracked only" formula: 190/4 = 47.5 (rejected — biased HIGH
+    // whenever a partial subset was logged).
     const nodes = [
       parent("p"),
       leaf({ id: "a", parentId: "p", progressEntered: true, percentComplete: 100 }),
@@ -90,11 +94,11 @@ describe("computeProjectStats — achievement math (the trust-breaker fix)", () 
     ];
     const result = computeProjectStats(nodes, NO_OVERRIDE, TODAY);
     expect(result.totalActivities).toBe(10);
-    expect(result.achievedPercent).toBe(47.5);
+    expect(result.achievedPercent).toBe(19);
   });
 
   it("rounds achieved% to 2 decimals", () => {
-    // 3 tracked leaves at 33% each → exactly 33.
+    // 3 tracked leaves at 33% each, no untracked → 99/3 = 33.
     const nodes = [
       parent("p"),
       leaf({ id: "a", parentId: "p", progressEntered: true, percentComplete: 33 }),
@@ -110,6 +114,17 @@ describe("computeProjectStats — achievement math (the trust-breaker fix)", () 
       leaf({ id: "a", parentId: "p", progressEntered: true, percentComplete: 80 }),
     ];
     expect(computeProjectStats(nodes, NO_OVERRIDE, TODAY).achievedPercent).toBe(80);
+  });
+
+  it("uses weightPct-weighted math when Colab weights are available", () => {
+    // Two leaves — one weighted 90%, one weighted 10%. Only the small one
+    // is 100% complete. Correct: 0.10 × 100 / 100 = 0.10 (project %).
+    const nodes = [
+      parent("p"),
+      leaf({ id: "big", parentId: "p", weightPct: 90, percentComplete: 0, progressEntered: false }),
+      leaf({ id: "sml", parentId: "p", weightPct: 10, percentComplete: 100, progressEntered: true }),
+    ];
+    expect(computeProjectStats(nodes, NO_OVERRIDE, TODAY).achievedPercent).toBe(10);
   });
 });
 

@@ -22,6 +22,10 @@ export type StatsNode = {
   projectedFinish: Date | null;
   percentComplete: number;
   progressEntered: boolean;
+  /** Colab CSV Physical_Progress — the activity's weight contribution to
+   *  overall project completion. Set by Colab progress sync; null for
+   *  projects that only came from MSP. */
+  weightPct: number | null;
 };
 
 export type ProjectMeta = {
@@ -52,39 +56,58 @@ export function computeProjectStats(
     return { totalActivities: 0, plannedPercent: 0, achievedPercent: 0, totalDelayDays: 0 };
   }
 
-  const tracked = leaves.filter((l) => l.progressEntered);
-  const denom = tracked.length || leaves.length;
-
-  let plannedSum = 0;
-  let achievedSum = 0;
-  for (const a of tracked) {
-    achievedSum += a.percentComplete ?? 0;
-    // plannedPercentFor returns 0 for activities without baselines, so adding
-    // unconditionally matches the old "only count leaves with baselines" logic.
-    plannedSum += plannedPercentFor(a.baselineStart, a.baselineFinish, today);
+  // Colab-parity project completion %:
+  //   achieved = Σ(weightPct × percentComplete / 100) across weighted leaves
+  //   planned  = Σ(weightPct × plannedPercentFor(...) / 100) across weighted leaves
+  // Both sum to a project-completion percentage on the same 0-100 scale as
+  // Weekly §1. Falls back to the equal-weighted average with denominator =
+  // ALL leaves (NOT just tracked — the old "tracked only" denom biased the
+  // number wildly high on partially-imported projects) when no weightPct
+  // data is available (e.g. MSP-only projects that never got Colab sync).
+  const weighted = leaves.filter((l) => l.weightPct != null);
+  let plannedPercent: number;
+  let achievedPercent: number;
+  if (weighted.length > 0) {
+    let wPlanned = 0, wAchieved = 0;
+    for (const a of weighted) {
+      const w = a.weightPct ?? 0;
+      wAchieved += (w * (a.percentComplete ?? 0)) / 100;
+      wPlanned  += (w * plannedPercentFor(a.baselineStart, a.baselineFinish, today)) / 100;
+    }
+    plannedPercent = wPlanned;
+    achievedPercent = wAchieved;
+  } else {
+    let plannedSum = 0, achievedSum = 0;
+    for (const a of leaves) {
+      achievedSum += a.percentComplete ?? 0;
+      plannedSum  += plannedPercentFor(a.baselineStart, a.baselineFinish, today);
+    }
+    plannedPercent = plannedSum / leaves.length;
+    achievedPercent = achievedSum / leaves.length;
   }
 
-  const plannedPercent = denom > 0 ? plannedSum / denom : 0;
-  const achievedPercent = denom > 0 ? achievedSum / denom : 0;
-
-  // Total delay: project-level override (projectedEndDate vs endDate) wins.
-  // Falls back to per-leaf rollup when no override is set.
+  // Total delay: prefer live-computed slippage from the leaves — Project.
+  // projectedEndDate goes stale unless someone manually updates it. Take the
+  // max slip across leaves (projected/actual finish − baseline finish).
+  // Falls back to the project-level override only when no leaves have both
+  // baseline + projected/actual.
   let totalDelayDays = 0;
-  if (meta.endDate && meta.projectedEndDate) {
+  let anyLeafDelay = false;
+  for (const a of leaves) {
+    if (a.baselineFinish) {
+      const finish = a.projectedFinish ?? a.actualFinish ?? null;
+      if (finish) {
+        anyLeafDelay = true;
+        const d = Math.round((finish.getTime() - a.baselineFinish.getTime()) / 86400000);
+        if (d > totalDelayDays) totalDelayDays = d;
+      }
+    }
+  }
+  if (!anyLeafDelay && meta.endDate && meta.projectedEndDate) {
     totalDelayDays = Math.max(
       0,
       Math.round((meta.projectedEndDate.getTime() - meta.endDate.getTime()) / 86400000),
     );
-  } else {
-    for (const a of leaves) {
-      if (a.baselineFinish) {
-        const finish = a.projectedFinish ?? a.actualFinish ?? null;
-        if (finish) {
-          const d = Math.round((finish.getTime() - a.baselineFinish.getTime()) / 86400000);
-          if (d > totalDelayDays) totalDelayDays = d;
-        }
-      }
-    }
   }
 
   return {
@@ -115,6 +138,7 @@ export async function getProjectStats(projectId: string, today = new Date()): Pr
         projectedFinish: true,
         percentComplete: true,
         progressEntered: true,
+        weightPct: true,
       },
     }),
     prisma.project.findUnique({
@@ -155,6 +179,7 @@ export async function getPortfolioStats(
         projectedFinish: true,
         percentComplete: true,
         progressEntered: true,
+        weightPct: true,
       },
     }),
     prisma.project.findMany({
