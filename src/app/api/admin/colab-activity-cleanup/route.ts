@@ -23,12 +23,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "projectId required" }, { status: 400 });
   }
 
+  // Fallback-inflated rows are ColabActivity rows with progressDate set but
+  // no corresponding ProgressEntry (the sync's ProgressEntry gate requires a
+  // meaningful signal — achieved qty, cumulative, actualEnd, notes, or
+  // image — none of which fire for pure Actual_Start fallback rows).
   const affected = await prisma.$executeRawUnsafe(
-    `UPDATE "ColabActivity"
+    `UPDATE "ColabActivity" ca
      SET "progressDate" = NULL
-     WHERE "projectId" = $1
-       AND "progressDate" IS NOT NULL
-       AND "totalPct" IS NULL`,
+     WHERE ca."projectId" = $1
+       AND ca."progressDate" IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1
+         FROM "ProgressEntry" pe
+         WHERE pe."projectId" = ca."projectId"
+           AND pe."idempotencyKey" LIKE ('colab:' || ca."activityId" || ':%')
+           AND pe."deletedAt" IS NULL
+       )`,
     body.projectId,
   );
 
