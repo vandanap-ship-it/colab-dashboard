@@ -85,6 +85,25 @@ const ALL_FLOORS_RULES: AllFloorsRule[] = [
  * Return the MSP section name a Colab row should land under, or null if the
  * mapping can't be resolved. Caller should log unmatched rows for review.
  */
+/**
+ * Colab CSV `Milestone` column — non-empty on rows that ARE the END-marker
+ * for a stage. Python's build_wk23.py MORDER list, mapped to our
+ * MilestoneSection.name values. Used by the stage-walker in colabSync to
+ * reconstruct stages the same way Python does (row-order + Milestone-column
+ * boundaries), independent of Sub_Location mapping.
+ */
+export const COLAB_MILESTONE_LABEL_TO_SECTION: Record<string, string> = {
+  "Footing":            "Foundation / Substructure",
+  "Plinth Beam":        "Plinth Level",
+  "Gr Floor Slab":      "Ground Floor Structure",
+  "Gr Floor Blockwork": "GF — Masonry & MEP Rough In",
+  "1st Floor Slab":     "First Floor Structure",
+  "1st Floor Blockwork":"FF — Masonry & MEP Rough In",
+  "2nd Floor Slab":     "Second Floor Structure",
+  "2nd Floor Blockwork":"SF — Masonry & MEP Rough In",
+  "Villa Handover":     "Commissioning & Handover",
+};
+
 export function mapColabToMspSection(
   subLocation: string,
   activityType: string,

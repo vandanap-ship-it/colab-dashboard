@@ -19,7 +19,7 @@
 //                    just no activity-level ProgressEntry gets a wbsNodeId.
 
 import Papa from "papaparse";
-import { mapColabToMspSection, mapColabReasonToCode } from "@/lib/colabSyncMapping";
+import { mapColabToMspSection, mapColabReasonToCode, COLAB_MILESTONE_LABEL_TO_SECTION } from "@/lib/colabSyncMapping";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 
 // Extended Prisma client with the pg adapter doesn't line up with the vanilla
@@ -339,6 +339,26 @@ export async function importColabProgress(
     endMarkerSeen: boolean;         // did we see a Milestone-column row for this stage?
   }
   const milestoneAgg = new Map<string, MilestoneAgg>();
+
+  // Python-parity stage reconstruction (build_wk23.py L32-54): walk each
+  // villa's rows in CSV order, accumulating into a stageBuffer. When we hit
+  // a row whose CSV `Milestone` column is a MORDER label, that row IS the
+  // stage's END-marker. The stage's ps = min(buffer plannedStarts),
+  // pe = max(buffer plannedEnds), done = END-marker's Actual_End_Date.
+  // stageAgg is keyed by the villaMilestoneId derived from the Milestone
+  // label (NOT the Sub_Location mapping), so sections with clean MORDER
+  // labels (Footing → Foundation, Plinth Beam → Plinth Level, etc.) get
+  // stage-scoped windows that match Python's block-based aggregation.
+  interface StageAgg {
+    ps: Date | null;
+    pe: Date | null;
+    endMarkerActualEnd: Date | null;
+    endMarkerSeen: boolean;
+  }
+  const stageAgg = new Map<string, StageAgg>();
+  let lastVillaId: string | null = null;
+  let stageBuffer: Array<{ ps: Date | null; pe: Date | null }> = [];
+
   // Queue for the per-chunk bulk ColabActivity upsert.
   interface ColabActivityQueue {
     projectId: string;
@@ -445,6 +465,36 @@ export async function importColabProgress(
       }
     }
     milestoneAgg.set(villaMilestoneId, agg);
+
+    // Python-parity stage-walker: accumulate rows into stageBuffer until we
+    // hit an END-marker (Milestone column set to a MORDER label). Reset the
+    // buffer when the villa changes so a new villa's rows don't get mixed
+    // into the previous villa's dangling stage buffer.
+    if (villa.id !== lastVillaId) {
+      lastVillaId = villa.id;
+      stageBuffer = [];
+    }
+    stageBuffer.push({ ps: _plannedStart, pe: _plannedEnd });
+    if (milestoneLabel && Object.prototype.hasOwnProperty.call(COLAB_MILESTONE_LABEL_TO_SECTION, milestoneLabel)) {
+      const stageSectionName = COLAB_MILESTONE_LABEL_TO_SECTION[milestoneLabel];
+      const stageSection = sectionByName.get(stageSectionName);
+      const stageVmId = stageSection ? villaMilestoneByPair.get(`${villa.id}::${stageSection.id}`) : undefined;
+      if (stageVmId) {
+        let stagePs: Date | null = null;
+        let stagePe: Date | null = null;
+        for (const b of stageBuffer) {
+          if (b.ps && (!stagePs || b.ps < stagePs)) stagePs = b.ps;
+          if (b.pe && (!stagePe || b.pe > stagePe)) stagePe = b.pe;
+        }
+        const existing = stageAgg.get(stageVmId) ?? { ps: null, pe: null, endMarkerActualEnd: null, endMarkerSeen: false };
+        if (stagePs && (!existing.ps || stagePs < existing.ps)) existing.ps = stagePs;
+        if (stagePe && (!existing.pe || stagePe > existing.pe)) existing.pe = stagePe;
+        existing.endMarkerActualEnd = _actualEnd ?? existing.endMarkerActualEnd;
+        existing.endMarkerSeen = true;
+        stageAgg.set(stageVmId, existing);
+      }
+      stageBuffer = [];
+    }
 
     // ----- 4. Activity (best-effort). Try fuzzy match first, then fall
     //   back to the first candidate under the villaMilestone so every
@@ -649,12 +699,33 @@ export async function importColabProgress(
   }
 
   // ---------- 7b. Apply Colab-aggregate baselines across every wbsNode ----------
-  // Fuzzy-matching only lands data on ~20% of wbsNodes; the rest keep MSP
-  // baselines that don't match Colab's queries. Overwrite baselineStart /
-  // baselineFinish uniformly per villaMilestone so the scorecard's
-  // activity-level "planned today" check hits the same set as Colab.
+  // Python parity: use stageAgg (row-order + Milestone-column boundaries)
+  // when available — this matches Python's block-based ps/pe. Fall back to
+  // milestoneAgg (Sub_Location grouping) for milestones that never had a
+  // MORDER Milestone-column row (some MEP / interior sections).
   if (!options.dryRun) {
+    // First: stage-walker windows (authoritative for MORDER sections).
+    for (const [vmId, sagg] of stageAgg) {
+      if (!sagg.ps && !sagg.pe) continue;
+      await prisma.villaMilestone.update({
+        where: { id: vmId },
+        data: {
+          baselineStart: sagg.ps ?? undefined,
+          baselineFinish: sagg.pe ?? undefined,
+        },
+      });
+      await prisma.wBSNode.updateMany({
+        where: { villaMilestoneId: vmId },
+        data: {
+          baselineStart: sagg.ps ?? undefined,
+          baselineFinish: sagg.pe ?? undefined,
+        },
+      });
+    }
+    // Fallback: milestoneAgg for VillaMilestones NOT touched by stageAgg
+    // (e.g. sections without a MORDER row like MEP Service Works).
     for (const [vmId, agg] of milestoneAgg) {
+      if (stageAgg.has(vmId)) continue;
       if (!agg.minPlannedStart && !agg.maxPlannedEnd) continue;
       await prisma.wBSNode.updateMany({
         where: { villaMilestoneId: vmId },
@@ -736,9 +807,19 @@ export async function importColabProgress(
   // baselined-children rule, which may clear our Colab END-marker close.
   // Re-apply the authoritative close AFTER the rollup so §2 buckets +
   // currentStage picker see Python-parity data.
+  // stageAgg wins over milestoneAgg — stage-walker is Python-parity source.
   if (!options.dryRun) {
+    const seen = new Set<string>();
+    for (const [vmId, sagg] of stageAgg) {
+      if (!sagg.endMarkerSeen) continue;
+      seen.add(vmId);
+      await prisma.villaMilestone.update({
+        where: { id: vmId },
+        data: { actualFinish: sagg.endMarkerActualEnd ?? null },
+      });
+    }
     for (const [vmId, agg] of milestoneAgg) {
-      if (!agg.endMarkerSeen) continue;
+      if (seen.has(vmId) || !agg.endMarkerSeen) continue;
       await prisma.villaMilestone.update({
         where: { id: vmId },
         data: { actualFinish: agg.endMarkerClose ?? null },
