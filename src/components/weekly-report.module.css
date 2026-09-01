@@ -2,6 +2,89 @@
    (charcoal / cream / gold / green / red palette, serif + sans stack).
    Additional weekly-only components below. */
 
+/* -------------- Hero (dark navy, matches Python PDF exactly) -------------- */
+.hero {
+  background: #161926;
+  color: #F7EDD9;
+  padding: 22px 26px 24px;
+  border-radius: 10px;
+  margin-bottom: 18px;
+}
+.heroCrumb {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: #C7BFA7;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.heroCrumbDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #CA9F49;
+  display: inline-block;
+}
+.heroBody {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.heroTitle {
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 40px;
+  font-weight: 400;
+  color: #F7EDD9;
+  line-height: 1.05;
+  margin: 0;
+  letter-spacing: 0.005em;
+}
+.heroTitle em {
+  color: #CA9F49;
+  font-style: normal;
+}
+.heroDate {
+  font-size: 13px;
+  color: #E7DEC7;
+  letter-spacing: 0.02em;
+  padding-bottom: 6px;
+  white-space: nowrap;
+}
+
+/* -------------- §1 Overall Project Progress — dark navy card, two panels -------------- */
+.overallHeroCard {
+  background: #161926;
+  color: #F7EDD9;
+  padding: 22px 26px;
+  border-radius: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+.overallHeroPanel {
+  text-align: left;
+}
+.overallHeroLbl {
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: #C7BFA7;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.overallHeroVal {
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 46px;
+  font-weight: 400;
+  color: #F7EDD9;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.overallHeroValGold { color: #CA9F49; }
+
 /* -------------- §1 Overall Progress — Target & Actual only (RUNBOOK) -------------- */
 .overallRow {
   display: grid;

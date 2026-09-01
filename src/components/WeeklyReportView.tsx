@@ -61,29 +61,31 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
         </button>
       </div>
 
-      {/* Header */}
-      <div className={styles.header}>
-        <div className={styles.headerCrumb}>
-          {report.project.tagline ?? "White Lotus Group"} · {report.project.name} {report.project.code ? `· ${report.project.code}` : ""}
+      {/* Header — dark navy hero. Date range right-aligned per Python PDF. */}
+      <div className={weekly.hero}>
+        <div className={weekly.heroCrumb}>
+          <span className={weekly.heroCrumbDot} />
+          {(report.project.tagline ?? "White Lotus Group").toUpperCase()} · {report.project.name.toUpperCase()} {report.project.code ? `· ${report.project.code.toUpperCase()}` : ""}
         </div>
-        <h1 className={styles.headerTitle}>
-          Weekly Progress <em>Report</em>
-        </h1>
-        <div className={styles.headerDate}>{asOfLabel}</div>
-        <div className={styles.headerTagline}>week ending {fmtLong(report.weekEnd)}</div>
+        <div className={weekly.heroBody}>
+          <h1 className={weekly.heroTitle}>
+            Weekly Progress <em>Report</em>
+          </h1>
+          <div className={weekly.heroDate}>{fmtDayShort(report.weekStart)}–{fmtDayShort(report.weekEnd)} {report.weekEnd.getFullYear()}</div>
+        </div>
       </div>
 
-      {/* §1 Overall Progress — Target & Actual only per RUNBOOK.
-          No variance, no explanation paragraph. Two big numbers side by side. */}
-      <Section num="01" title="Overall Progress" meta={`week ending ${fmtLong(report.weekEnd)}`}>
-        <div className={weekly.overallRow}>
-          <div className={`${weekly.overallCell} ${weekly.overallPlanned}`}>
-            <div className={weekly.overallLbl}>Target · by {fmtDayShort(report.weekEnd)}</div>
-            <div className={weekly.overallVal}>{fmtPct(report.overall.plannedPct)}</div>
+      {/* §1 Overall Project Progress — Target & Actual only, panels inside a
+          dark navy card (Python PDF style). */}
+      <Section num="01" title="Overall Project Progress" meta={`progress required by Sun ${fmtDayShort(report.weekEnd)} vs achieved`}>
+        <div className={weekly.overallHeroCard}>
+          <div className={weekly.overallHeroPanel}>
+            <div className={weekly.overallHeroLbl}>TARGET · DUE BY {fmtDayShort(report.weekEnd).toUpperCase()}</div>
+            <div className={weekly.overallHeroVal}>{fmtPct(report.overall.plannedPct)}</div>
           </div>
-          <div className={`${weekly.overallCell} ${weekly.overallActual}`}>
-            <div className={weekly.overallLbl}>Actual</div>
-            <div className={weekly.overallVal}>{fmtPct(report.overall.actualPct)}</div>
+          <div className={weekly.overallHeroPanel}>
+            <div className={weekly.overallHeroLbl}>ACTUAL · ACHIEVED</div>
+            <div className={`${weekly.overallHeroVal} ${weekly.overallHeroValGold}`}>{fmtPct(report.overall.actualPct)}</div>
           </div>
         </div>
       </Section>
