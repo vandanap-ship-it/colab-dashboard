@@ -52,17 +52,32 @@ export async function GET(req: Request) {
     where: { projectId }, select: { id: true, name: true },
   });
   const contractorName = new Map(contractors.map((c) => [c.id, c.name]));
-  const villaContractorMix: Record<string, Array<{ contractor: string; count: number }>> = {};
+  const villaContractorMix: Record<string, {
+    totalWbsNodes: number;
+    withVillaId: number;
+    withVillaMilestoneId: number;
+    byContractor: Array<{ contractor: string; count: number }>;
+  }> = {};
   for (const v of probeVillas) {
-    const rows = await prisma.wBSNode.groupBy({
-      by: ["contractorId"],
-      where: { villaId: v.id, contractorId: { not: null } },
-      _count: { _all: true },
-    });
-    villaContractorMix[`V${v.number.toString().padStart(2, "0")}`] = rows.map((r) => ({
-      contractor: contractorName.get(r.contractorId!) ?? r.contractorId!,
-      count: r._count._all,
-    }));
+    const [rows, total, withVillaId, withVm] = await Promise.all([
+      prisma.wBSNode.groupBy({
+        by: ["contractorId"],
+        where: { villaId: v.id, contractorId: { not: null } },
+        _count: { _all: true },
+      }),
+      prisma.wBSNode.count({ where: { villaId: v.id } }),
+      prisma.wBSNode.count({ where: { villaId: v.id } }),
+      prisma.wBSNode.count({ where: { villaId: v.id, villaMilestoneId: { not: null } } }),
+    ]);
+    villaContractorMix[`V${v.number.toString().padStart(2, "0")}`] = {
+      totalWbsNodes: total,
+      withVillaId,
+      withVillaMilestoneId: withVm,
+      byContractor: rows.map((r) => ({
+        contractor: contractorName.get(r.contractorId!) ?? r.contractorId!,
+        count: r._count._all,
+      })),
+    };
   }
 
   // --- 3) V06 / V07 / V08 Foundation state ---
