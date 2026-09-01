@@ -80,6 +80,16 @@ export interface DelayReasonWithMitigation {
   mitigation: string;
 }
 
+export interface WeeklyManpowerSiteTotal {
+  weeklyPlanned: number;
+  weeklyActual: number;
+  pctOfPlan: number | null;
+  bestDayActual: number;
+  bestDayDate: string | null;
+  workingDays: number;
+  loggedDays: number;
+}
+
 export interface WeeklyReport {
   project: {
     id: string;
@@ -92,6 +102,7 @@ export interface WeeklyReport {
   weekEnd: Date;
   overall: WeeklyOverallProgress;
   milestonePlans: WeeklyMilestonePlan[];
+  manpowerSiteTotal: WeeklyManpowerSiteTotal;
   manpowerByContractor: WeeklyManpowerRow[];
   delayReasons: DelayReasonWithMitigation[];
 }
@@ -560,6 +571,48 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     };
   });
 
+  // Site-total roll-up for the §4 header tile (Python parity — build_wk23.py
+  // L179-191). Sums across all contractors so the report opens with one
+  // clear "how did the whole site do this week" number before the per-
+  // contractor breakdown.
+  const manpowerSiteTotal: WeeklyManpowerSiteTotal = (() => {
+    let plan = 0, actual = 0, bestActual = 0;
+    let bestDate: string | null = null;
+    let workingDays = 7, loggedDays = 0;
+    if (manpowerByContractor.length > 0) {
+      // Sum per-day totals across contractors — one loggedDays / workingDays
+      // per DATE (union across contractors).
+      const first = manpowerByContractor[0].perDay;
+      workingDays = first.filter((d) => !d.isHoliday).length;
+      for (let i = 0; i < first.length; i++) {
+        let dayPlan = 0, dayActual = 0, anyLogged = false;
+        for (const c of manpowerByContractor) {
+          const d = c.perDay[i];
+          if (!d) continue;
+          dayPlan += d.plannedTotal;
+          dayActual += d.actualTotal;
+          if (d.actualTotal > 0) anyLogged = true;
+        }
+        plan += dayPlan;
+        actual += dayActual;
+        if (anyLogged) loggedDays++;
+        if (dayActual > bestActual) {
+          bestActual = dayActual;
+          bestDate = first[i].date.toISOString().slice(0, 10);
+        }
+      }
+    }
+    return {
+      weeklyPlanned: plan,
+      weeklyActual: actual,
+      pctOfPlan: plan > 0 ? Math.round((actual / plan) * 100) : null,
+      bestDayActual: bestActual,
+      bestDayDate: bestDate,
+      workingDays,
+      loggedDays,
+    };
+  })();
+
   // ------- §4 Delay Reasons & Mitigation -------
   const reasonMap = new Map<string, {
     label: string;
@@ -630,6 +683,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     weekEnd,
     overall,
     milestonePlans,
+    manpowerSiteTotal,
     manpowerByContractor,
     delayReasons,
   };

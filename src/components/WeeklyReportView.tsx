@@ -147,6 +147,48 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
 
       {/* §3 Manpower */}
       <Section num="03" title="Manpower" meta="planned vs actual · trade breakdown">
+        {/* Site-total roll-up tile — Python parity header block. */}
+        {report.manpowerSiteTotal.weeklyPlanned > 0 && (
+          <div className={weekly.contractorBlock}>
+            <div className={weekly.contractorTitle}>Site total · all contractors</div>
+            <div className={weekly.mpHead4}>
+              <div className={weekly.mpHeadCell}>
+                <div className={weekly.mpHeadLbl}>Weekly target</div>
+                <div className={weekly.mpHeadVal}>{report.manpowerSiteTotal.weeklyPlanned}</div>
+                <div className={weekly.mpHeadSub}>
+                  {report.manpowerSiteTotal.workingDays > 0
+                    ? `${Math.round(report.manpowerSiteTotal.weeklyPlanned / report.manpowerSiteTotal.workingDays)}/DAY × ${report.manpowerSiteTotal.workingDays}D`
+                    : "—"}
+                </div>
+              </div>
+              <div className={weekly.mpHeadCell}>
+                <div className={weekly.mpHeadLbl}>Achieved</div>
+                <div className={weekly.mpHeadVal}>{report.manpowerSiteTotal.weeklyActual}</div>
+                <div className={weekly.mpHeadSub}>{report.manpowerSiteTotal.loggedDays}/{report.manpowerSiteTotal.workingDays} DAYS LOGGED</div>
+              </div>
+              <div className={weekly.mpHeadCell}>
+                <div className={weekly.mpHeadLbl}>Week vs target</div>
+                <div className={weekly.mpHeadVal}>
+                  {report.manpowerSiteTotal.pctOfPlan == null ? "—" : `${report.manpowerSiteTotal.pctOfPlan}%`}
+                </div>
+                <div className={weekly.mpHeadSub}>
+                  {report.manpowerSiteTotal.workingDays > 0
+                    ? `AVG ${Math.round(report.manpowerSiteTotal.weeklyActual / report.manpowerSiteTotal.workingDays)}/DAY ACTUAL`
+                    : "—"}
+                </div>
+              </div>
+              <div className={weekly.mpHeadCell}>
+                <div className={weekly.mpHeadLbl}>Best day</div>
+                <div className={weekly.mpHeadVal}>{report.manpowerSiteTotal.bestDayActual}</div>
+                <div className={weekly.mpHeadSub}>
+                  {report.manpowerSiteTotal.bestDayDate
+                    ? new Date(report.manpowerSiteTotal.bestDayDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }).toUpperCase()
+                    : "—"}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {report.manpowerByContractor.map((c) => (
           <div key={c.contractorId} className={weekly.contractorBlock}>
             <div className={weekly.contractorTitle}>Contractor · {c.contractorName}</div>
