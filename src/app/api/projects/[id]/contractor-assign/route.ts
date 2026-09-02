@@ -144,7 +144,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
 /** GET returns a summary of how many activities would be affected per scope,
  *  so the UI can show "X untagged activities" before the admin confirms. */
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return unauthorized();
   if (!canCreateProject(session.user.role)) return forbidden();

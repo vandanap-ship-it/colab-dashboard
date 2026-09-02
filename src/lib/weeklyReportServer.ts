@@ -139,7 +139,6 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     manpower,
     weekHindrances,
     weekProgressReasons,
-    projectMilestones,
   ] = await Promise.all([
     prisma.project.findUnique({
       where: { id: projectId },
@@ -267,10 +266,6 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
           },
         },
       },
-    }),
-    prisma.villaMilestone.findMany({
-      where: { villa: { projectId } },
-      select: { baselineFinish: true, actualFinish: true },
     }),
   ]);
 

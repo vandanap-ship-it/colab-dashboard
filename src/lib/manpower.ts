@@ -21,9 +21,11 @@
  * TradePlan with a new `trade` string and it just appears in reports.
  * Ordering here also drives the report display order.
  */
+// Order matches Python's TRADE_ORDER (build_wk30.py L150) and Shraddha's
+// WEEKLY_HANDOFF.md §4. "Bar Bender Helper" is aliased to "Helper" at import
+// time via ColabManpowerImportOptions.tradeAliases — not a distinct trade.
 export const TRADES = [
   "Bar Bender",
-  "Bar Bender Helper",
   "Carpenter",
   "Helper",
   "Mason",

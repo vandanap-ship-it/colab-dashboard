@@ -79,7 +79,7 @@ export interface VillaProgressRow {
 
 export async function getVillaProgressRows(
   projectId: string,
-  asOf: Date = new Date(),
+  _asOf: Date = new Date(),
 ): Promise<VillaProgressRow[]> {
   const villas = await prisma.villa.findMany({
     where: { projectId, inScope: true },
@@ -270,12 +270,8 @@ export async function getInteractiveDrawingData(
       };
     });
 
-    // Preserve section order across the cells array so the client can index by sectionIndex.
-    cells.sort((a, b) => {
-      // no-op — sections were already iterated in order
-      return 0;
-    });
-    void sectionOrder; // suppress unused warning; kept for future indexing
+    // cells were already built in section order — no explicit sort needed.
+    void sectionOrder; // kept for future per-section indexing on the client
 
     return {
       villaId: v.id,

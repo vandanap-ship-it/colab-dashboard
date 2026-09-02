@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
  * gate task at the top; typical result is 5-15 nodes.
  */
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string; villaMilestoneId: string }> },
 ) {
   const session = await auth();

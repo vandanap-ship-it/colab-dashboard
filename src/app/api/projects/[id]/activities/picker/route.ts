@@ -14,7 +14,7 @@ import { isScopedUser } from "@/lib/modules";
  * drops from ~500KB (loading all 7,000 activities) to ~50KB total.
  */
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();

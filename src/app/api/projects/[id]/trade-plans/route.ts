@@ -19,7 +19,7 @@ const TRADE_PLAN_INCLUDE = {
 
 /** GET /api/projects/[id]/trade-plans — current effective plans per contractor × trade. */
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
@@ -42,7 +42,7 @@ export async function GET(
  * concern for now — we keep history intact by default).
  */
 export async function POST(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
@@ -145,7 +145,7 @@ export async function POST(
 
 /** DELETE /api/projects/[id]/trade-plans?planId=… — soft-delete a plan. */
 export async function DELETE(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();

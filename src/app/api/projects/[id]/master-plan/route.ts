@@ -14,7 +14,7 @@ function canEdit(role: string): boolean {
 
 /** POST /api/projects/[id]/master-plan — upload + save URL on Project. */
 export async function POST(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
@@ -68,7 +68,7 @@ export async function POST(
 /** DELETE /api/projects/[id]/master-plan — clear the URL (the blob itself
  *  stays on Vercel Blob for now; explicit purge is a follow-up). */
 export async function DELETE(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();

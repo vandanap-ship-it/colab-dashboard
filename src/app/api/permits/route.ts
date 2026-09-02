@@ -4,8 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import {
-  PERMIT_CATEGORIES,
-  PERMIT_STATUSES,
   effectivePermitStatus,
   validateCreatePermit,
   type PermitCategory,
