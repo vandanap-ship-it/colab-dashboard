@@ -96,6 +96,198 @@ export function computeOverall(rows: ColabCsvRow[], weekEnd: Date): OverallProgr
 }
 
 // ---------------------------------------------------------------------------
+// Stage reconstruction — Python parity (build_wk23.py L32-54)
+//
+// Per WEEKLY_HANDOFF.md §3: walk each villa's rows in CSV order, accumulate
+// into a `block` until a row's Milestone column is a MORDER label. That row
+// closes the block. The block IS the stage: ps=min(planned starts),
+// pe=max(planned ends), started=any Progress_Date ≤ WKE, done=END-marker's
+// Actual_End_Date ≤ WKE.
+// ---------------------------------------------------------------------------
+
+/** Python MORDER — ordered list of stage END-marker labels used by the
+ *  Amanvana schedule. Rows whose CSV Milestone column matches one of these
+ *  values are stage END-markers. */
+export const MORDER: readonly string[] = [
+  "Footing", "Plinth Beam",
+  "Gr Floor Slab", "Gr Floor Blockwork",
+  "1st Floor Slab", "1st Floor Blockwork",
+  "2nd Floor Slab", "2nd Floor Blockwork",
+  "Villa Handover",
+];
+const MORDER_INDEX = new Map(MORDER.map((m, i) => [m, i]));
+
+/** BLOCKS map — Abraham Thomas's 41 villa scope, keyed by block name.
+ *  Matches build_data.py BLOCKS exactly. Villas OUTSIDE this map are
+ *  Contractor 2 (Elegant) or unassigned; they never enter the weekly's
+ *  milestone maths per WEEKLY_HANDOFF.md rule 2. */
+export const ABRAHAM_BLOCKS: Record<string, string[]> = {
+  "Block 02": ["Villa 03","Villa 04","Villa 05","Villa 06","Villa 07","Villa 08"],
+  "Block 03": ["Villa 09","Villa 10 & 11"],
+  "Block 04": ["Villa 12","Villa 13","Villa 14"],
+  "Block 05": ["Villa 15","Villa 16"],
+  "Block 06": ["Villa 17","Villa 18","Villa 19"],
+  "Block 07": ["Villa 20","Villa 21","Villa 22"],
+  "Block 08": ["Villa 23 & 24"],
+  "Block 09": ["Villa 25","Villa 26","Villa 27","Villa 28","Villa 29","Villa 30","Villa 31"],
+  "Block 10": ["Villa 32","Villa 33","Villa 34","Villa 35","Villa 36","Villa 37"],
+  "Block 12": ["Villa 41","Villa 42","Villa 43"],
+  "Block 13": ["Villa 44","Villa 45","Villa 46"],
+};
+const ABRAHAM_ALL_VILLAS: string[] = Object.values(ABRAHAM_BLOCKS).flat();
+
+export interface Stage {
+  v: string;         // villa short label, e.g. "V05" or "V10 & 11"
+  b: string;         // block name, e.g. "Block 02"
+  m: string;         // MORDER label (Footing, Plinth Beam, ...)
+  ps: Date | null;   // min planned start across block rows
+  pe: Date | null;   // max planned end across block rows
+  started: boolean;  // any row had Progress_Date ≤ weekEnd
+  done: boolean;     // END-marker row's Actual_End_Date ≤ weekEnd
+}
+
+/** Reconstruct all stages across Abraham's 41 villas. */
+export function reconstructStages(rows: ColabCsvRow[], weekEnd: Date): Stage[] {
+  const villaToBlock = new Map<string, string>();
+  for (const [b, vs] of Object.entries(ABRAHAM_BLOCKS)) {
+    for (const v of vs) villaToBlock.set(v, b);
+  }
+  const rowsByVilla = new Map<string, ColabCsvRow[]>();
+  for (const r of rows) {
+    const v = r.Location_Name?.trim();
+    if (!v || !villaToBlock.has(v)) continue;
+    (rowsByVilla.get(v) ?? rowsByVilla.set(v, []).get(v)!).push(r);
+  }
+  const stages: Stage[] = [];
+  for (const villa of ABRAHAM_ALL_VILLAS) {
+    const list = rowsByVilla.get(villa) ?? [];
+    let block: ColabCsvRow[] = [];
+    for (const r of list) {
+      block.push(r);
+      const label = r.Milestone?.trim();
+      if (!label || label === "nan" || !MORDER_INDEX.has(label)) continue;
+      let ps: Date | null = null;
+      let pe: Date | null = null;
+      let started = false;
+      for (const br of block) {
+        const bps = parseColabDate(br.Planned_Start_Date);
+        const bpe = parseColabDate(br.Planned_End_Date);
+        const bpd = parseColabDate(br.Progress_Date);
+        if (bps && (!ps || bps < ps)) ps = bps;
+        if (bpe && (!pe || bpe > pe)) pe = bpe;
+        if (bpd && bpd <= weekEnd) started = true;
+      }
+      const endActualEnd = parseColabDate(r.Actual_End_Date);
+      const done = !!(endActualEnd && endActualEnd <= weekEnd);
+      stages.push({
+        v: villa.replace("Villa ", "V"),
+        b: villaToBlock.get(villa)!,
+        m: label,
+        ps, pe, started, done,
+      });
+      block = [];
+    }
+  }
+  return stages;
+}
+
+/** Current milestone per villa = earliest MORDER stage not done.
+ *  Returns one Stage per villa (or none if the villa is fully closed). */
+export function currentByVilla(stages: Stage[]): Map<string, Stage | null> {
+  const byV = new Map<string, Stage[]>();
+  for (const s of stages) {
+    (byV.get(s.v) ?? byV.set(s.v, []).get(s.v)!).push(s);
+  }
+  const out = new Map<string, Stage | null>();
+  for (const villa of ABRAHAM_ALL_VILLAS) {
+    const key = villa.replace("Villa ", "V");
+    const list = (byV.get(key) ?? []).filter((s) => !s.done);
+    list.sort((a, b) => (MORDER_INDEX.get(a.m) ?? 99) - (MORDER_INDEX.get(b.m) ?? 99));
+    out.set(key, list[0] ?? null);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// §2 Milestone Plan buckets (build_wk23.py L69-82)
+// ---------------------------------------------------------------------------
+export interface MilestoneBuckets {
+  toComplete: {
+    wkPlan: number;         // open + done that week (Python's wk_plan = len(tc_wk)+len(tc_wk_done))
+    wkDone: number;
+    wkItems: string[];      // "V25 Plinth Beam" chip labels, open only
+    spill: number;
+    spillItems: string[];
+  };
+  toStart: {
+    wkPlan: number;         // len(ts_wk)
+    wkStarted: number;
+    wkItems: string[];
+    notStartedItems: string[];
+    spill: number;
+    spillItems: string[];
+  };
+  inProgress: {
+    plan: number;           // len(ip_plan)
+    actual: number;         // len(ip_actual)
+    planItems: string[];
+    notMovingItems: string[];
+  };
+}
+
+function stageLbl(s: Stage): string { return `${s.v} ${s.m}`; }
+function sortByVillaNum(items: string[]): string[] {
+  return [...items].sort((a, b) => {
+    const na = parseInt(a.match(/\d+/)?.[0] ?? "0", 10);
+    const nb = parseInt(b.match(/\d+/)?.[0] ?? "0", 10);
+    return na - nb;
+  });
+}
+
+export function computeMilestoneBuckets(
+  stages: Stage[], weekStart: Date, weekEnd: Date,
+): MilestoneBuckets {
+  const cur = [...currentByVilla(stages).values()].filter((s): s is Stage => s !== null);
+
+  const tcWk = cur.filter((s) => s.pe && s.pe >= weekStart && s.pe <= weekEnd && !s.done);
+  const tcWkDone = cur.filter((s) => s.pe && s.pe >= weekStart && s.pe <= weekEnd && s.done);
+  const tcSp = cur.filter((s) => s.pe && s.pe < weekStart && !s.done);
+
+  const tsWk = cur.filter((s) => s.ps && s.ps >= weekStart && s.ps <= weekEnd && !s.done);
+  const tsWkStarted = tsWk.filter((s) => s.started);
+  const tsWkNotStarted = tsWk.filter((s) => !s.started);
+  const tsSp = cur.filter((s) => s.ps && s.ps < weekStart && !s.started && !s.done);
+
+  const ipPlan = cur.filter((s) => s.ps && s.pe && s.ps <= weekEnd && s.pe >= weekStart && !s.done);
+  const ipActual = ipPlan.filter((s) => s.started);
+  const ipNotMoving = ipPlan.filter((s) => !s.started);
+
+  return {
+    toComplete: {
+      wkPlan: tcWk.length + tcWkDone.length,
+      wkDone: tcWkDone.length,
+      wkItems: sortByVillaNum(tcWk.map(stageLbl)),
+      spill: tcSp.length,
+      spillItems: sortByVillaNum(tcSp.map(stageLbl)),
+    },
+    toStart: {
+      wkPlan: tsWk.length,
+      wkStarted: tsWkStarted.length,
+      wkItems: sortByVillaNum(tsWk.map(stageLbl)),
+      notStartedItems: sortByVillaNum(tsWkNotStarted.map(stageLbl)),
+      spill: tsSp.length,
+      spillItems: sortByVillaNum(tsSp.map(stageLbl)),
+    },
+    inProgress: {
+      plan: ipPlan.length,
+      actual: ipActual.length,
+      planItems: sortByVillaNum(ipPlan.map(stageLbl)),
+      notMovingItems: sortByVillaNum(ipNotMoving.map(stageLbl)),
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
 function round(n: number, digits: number): number {

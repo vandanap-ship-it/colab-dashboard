@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
 import Papa from "papaparse";
-import { computeOverall, type ColabCsvRow } from "@/lib/rules/weeklyRules";
+import {
+  computeOverall,
+  reconstructStages,
+  computeMilestoneBuckets,
+  type ColabCsvRow,
+} from "@/lib/rules/weeklyRules";
 
 // Fixtures directory — Python-generated JSON outputs from the Amanvana
 // Reporting Toolkit v14 (scripts/build_wk23.py, build_wk30.py). Every new
@@ -27,7 +32,49 @@ function loadPython(name: string): unknown {
 
 interface PythonWeekly {
   overall: { target: number; actual: number; var: number; ratio: number };
+  milestone: {
+    to_complete: { wk_plan: number; wk_done: number; wk_items: string[]; wk_open_items: string[]; spill: number; spill_items: string[] };
+    to_start:    { wk_plan: number; wk_started: number; wk_items: string[]; notstarted_items: string[]; spill: number; spill_items: string[] };
+    in_progress: { plan: number; actual: number; plan_items: string[]; notmoving_items: string[] };
+  };
 }
+
+describe("computeMilestoneBuckets — §2 buckets vs Python", () => {
+  function runWeek(csvName: string, jsonName: string, wks: Date, wke: Date, label: string) {
+    it(`matches ${label}`, () => {
+      const rows = loadCsv(csvName);
+      const py = loadPython(jsonName) as PythonWeekly;
+      const stages = reconstructStages(rows, wke);
+      const b = computeMilestoneBuckets(stages, wks, wke);
+      // TO COMPLETE
+      expect(b.toComplete.wkPlan).toBe(py.milestone.to_complete.wk_plan);
+      expect(b.toComplete.wkDone).toBe(py.milestone.to_complete.wk_done);
+      expect(b.toComplete.spill).toBe(py.milestone.to_complete.spill);
+      expect(b.toComplete.spillItems).toEqual(py.milestone.to_complete.spill_items);
+      // TO START
+      expect(b.toStart.wkPlan).toBe(py.milestone.to_start.wk_plan);
+      expect(b.toStart.wkStarted).toBe(py.milestone.to_start.wk_started);
+      expect(b.toStart.spill).toBe(py.milestone.to_start.spill);
+      expect(b.toStart.spillItems).toEqual(py.milestone.to_start.spill_items);
+      expect(b.toStart.notStartedItems).toEqual(py.milestone.to_start.notstarted_items);
+      // IN PROGRESS
+      expect(b.inProgress.plan).toBe(py.milestone.in_progress.plan);
+      expect(b.inProgress.actual).toBe(py.milestone.in_progress.actual);
+      expect(b.inProgress.planItems).toEqual(py.milestone.in_progress.plan_items);
+      expect(b.inProgress.notMovingItems).toEqual(py.milestone.in_progress.notmoving_items);
+    });
+  }
+  runWeek(
+    "wk23_input.csv", "wk23_python.json",
+    new Date(Date.UTC(2026, 7, 17)), new Date(Date.UTC(2026, 7, 23)),
+    "wk23 (17-23 Aug 2026)",
+  );
+  runWeek(
+    "wk30_input.csv", "wk30_python.json",
+    new Date(Date.UTC(2026, 7, 24)), new Date(Date.UTC(2026, 7, 30)),
+    "wk30 (24-30 Aug 2026)",
+  );
+});
 
 describe("computeOverall — §1 Overall Project Progress vs Python", () => {
   it("matches wk23 (17-23 Aug 2026)", () => {
