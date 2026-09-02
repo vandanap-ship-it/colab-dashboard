@@ -130,6 +130,16 @@ From the code review on 2026-08-29, take these before scaling to more projects:
 
 5. **Gate or replace `src/lib/executiveMockData.ts` fallback content.** Overview / Snapshot / Layout tabs use it as filler; either wire the real feeds or hide those tabs completely (currently hidden from V1 nav but reachable by URL).
 
+### Weekly Report Python-parity — remaining structural gaps (found on 2026-09-02)
+
+Compared the deploy vs a live render of `scripts/gen_wk23.py` on the same fixture. Cosmetic four (em-dashes, hero label, block padding, dot separator) are landed. Three deeper gaps still open:
+
+6. **Milestone stage taxonomy diverges.** Python's MORDER is 9 stages — `Footing`, `Plinth Beam`, `Gr Floor Slab`, `Gr Floor Blockwork`, `1st Floor Slab`, `1st Floor Blockwork`, `2nd Floor Slab`, `2nd Floor Blockwork`, `Villa Handover`. Our DB has the MSP-imported 21-section names — `Foundation / Substructure`, `Plinth Level`, `Ground Floor Structure`, etc. So the same villa shows "V26 Plinth Beam" in Python and "V26 Plinth Level" in the deploy. Decide: (a) rename our sections to Python's 9 stages, (b) add a display-name alias so the UI shows Python names but the DB stays MSP-native, or (c) accept the drift.
+
+7. **Historical contractor state not snapshotted.** For wk23 (Aug 17–23), Python shows "Contractor 2 — To Be Decided / Award pending" because Elegant hadn't been awarded yet. Our deploy shows "Contractor 2 — Elegant Construction" for every historical week because we render today's contractor state. Fix: snapshot contractor name + status per week (a `contractor_history` table or `awardedAt`/`retiredAt` timestamps on `Contractor`).
+
+8. **§3 per-item Delay reason column blank on the deploy.** Python shows "Change orders" per row for the villas where a reason is logged; ours shows "not recorded" on every row. The `reasonByMilestone` lookup in `weeklyReportServer.ts` isn't finding matches — likely a small server-side fix (wbsNode → villaMilestone join not populating), separate from the §5 aggregation fix that just landed.
+
 ## V2 — First quarter after launch (Sept–Nov 2026)
 
 ### QA/QC team

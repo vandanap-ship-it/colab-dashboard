@@ -71,9 +71,18 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
     if (typeof window !== "undefined") window.print();
   }, []);
 
-  const wkLabel = `${fmtDayShort(report.weekStart)}–${fmtDayShort(report.weekEnd)} ${report.weekEnd.getFullYear()}`;
+  // Python-parity: "17–23 Aug 2026" when the month is the same on both sides,
+  // otherwise "27 Aug – 2 Sep 2026" style. Second hero line always renders
+  // "Week ending Sun 23 Aug".
+  const sameMonth = report.weekStart.getUTCMonth() === report.weekEnd.getUTCMonth();
+  const wkLabel = sameMonth
+    ? `${report.weekStart.getUTCDate()}–${report.weekEnd.getUTCDate()} ${report.weekEnd.toLocaleDateString("en-GB", { month: "short" })} ${report.weekEnd.getFullYear()}`
+    : `${fmtDayShort(report.weekStart)} – ${fmtDayShort(report.weekEnd)} ${report.weekEnd.getFullYear()}`;
   const wkEndStr = fmtDayShort(report.weekEnd);
   const wkEndStrFull = fmtDayFull(report.weekEnd); // "Sun 23 Aug" — narrative form
+  // Project display name: DB stores "Amanvana - Phase 1" but Python's PDF
+  // uses "Amanvana · Phase 1" (interpunct) in the header eyebrow.
+  const projectDisplay = report.project.name.replace(/\s+-\s+/g, " · ");
 
   // Abraham (Contractor 1) is the only party in the milestone maths per spec.
   // Elegant renders as a name-only strip. Untagged bucket already dropped
@@ -93,6 +102,10 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
             onChange={(e) => onDateChange(e.target.value)}
             className={styles.toolbarDate}
           />
+          <span className={styles.toolbarLbl} style={{ marginLeft: 14 }}>Range</span>
+          <span className={styles.toolbarDate} style={{ fontVariantNumeric: "tabular-nums" }}>
+            {fmtDayFull(report.weekStart)} – {fmtDayFull(report.weekEnd)} {report.weekEnd.getFullYear()}
+          </span>
         </div>
         <button type="button" onClick={onDownload} className={styles.toolbarBtn}>
           <Download size={14} aria-hidden />
@@ -106,12 +119,13 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
           <div className={weekly.heroLeft}>
             <div className={weekly.heroCrumb}>
               <span className={weekly.heroCrumbDot} />
-              White Lotus Group · {report.project.name}
+              White Lotus Group · {projectDisplay}
             </div>
             <div className={weekly.heroTitle}>Weekly Progress <span>Report</span></div>
           </div>
           <div className={weekly.heroDate}>
             <div className={weekly.heroDateVal}>{wkLabel}</div>
+            <div className={weekly.heroDateSub}>Week ending {wkEndStrFull}</div>
           </div>
         </div>
 
@@ -125,11 +139,11 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
           <div className={weekly.snap}>
             <div className={weekly.snapRow}>
               <div className={weekly.snapCell}>
-                <div className={weekly.snapLbl}>Target - due by {wkEndStr}</div>
+                <div className={weekly.snapLbl}>Target — due by {wkEndStr}</div>
                 <div className={weekly.snapVal}>{fmtPct(report.overall.plannedPct)}</div>
               </div>
               <div className={weekly.snapCell}>
-                <div className={weekly.snapLbl}>Actual - achieved</div>
+                <div className={weekly.snapLbl}>Actual — achieved</div>
                 <div className={`${weekly.snapVal} ${weekly.snapValAct}`}>{fmtPct(report.overall.actualPct)}</div>
               </div>
             </div>
@@ -140,14 +154,14 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
         <div className={weekly.sec}>
           <div className={weekly.sechd}>
             <div className={weekly.secNum}>02</div>
-            <h2 className={weekly.secTitle}>Weekly Milestone Plan - Contractor-wise</h2>
+            <h2 className={weekly.secTitle}>Weekly Milestone Plan — Contractor-wise</h2>
             <div className={weekly.secNote}>planned vs actual · this week + spill-over from earlier</div>
           </div>
 
           {p1 && (
             <>
               <div className={weekly.cbar}>
-                <span className={weekly.cbarName}>Contractor 1 - {p1.contractorName}</span>
+                <span className={weekly.cbarName}>Contractor 1 — {p1.contractorName}</span>
                 <span className={weekly.cbarNote}>41 villas · full schedule loaded</span>
                 <span className={`${weekly.cbarPill} ${weekly.cbarPillActive}`}>Active</span>
               </div>
@@ -201,8 +215,8 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
 
           {elegant && (
             <div className={weekly.c2}>
-              <span className={weekly.c2N}>Contractor 2 - {elegant.contractorName}</span>
-              <span className={weekly.c2T}>52 villas · Awarded - 52 villas across 12 blocks. Schedule received; integration with the collab tools under process.</span>
+              <span className={weekly.c2N}>Contractor 2 — {elegant.contractorName}</span>
+              <span className={weekly.c2T}>52 villas · Awarded — 52 villas across 12 blocks. Schedule received; integration with the collab tools under process.</span>
               <span className={weekly.c2P}>Schedule received</span>
             </div>
           )}
@@ -220,7 +234,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
             {/* To complete */}
             <div className={weekly.dtable}>
               <div className={`${weekly.dgrp} ${weekly.dgrpA}`}>
-                ① To complete - {p1.toComplete.total + p1.overdue.total} milestones due, {p1.toComplete.closed} closed
+                ① To complete — {p1.toComplete.total + p1.overdue.total} milestones due, {p1.toComplete.closed} closed
               </div>
               <BreakdownTable
                 mode="complete"
@@ -234,7 +248,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
             {/* To start */}
             <div className={weekly.dtable}>
               <div className={`${weekly.dgrp} ${weekly.dgrpB}`}>
-                ② To start - {p1.toStart.total + p1.toStart.spill} milestones due, {p1.toStart.started} started
+                ② To start — {p1.toStart.total + p1.toStart.spill} milestones due, {p1.toStart.started} started
               </div>
               <BreakdownTable
                 mode="start"
@@ -248,7 +262,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
             {/* In progress (dark navy panel) */}
             <div className={weekly.ipwrap}>
               <div className={weekly.ipbar}>
-                <span className={weekly.ipt}>③ In progress - {p1.inProgress.total} milestones</span>
+                <span className={weekly.ipt}>③ In progress — {p1.inProgress.total} milestones</span>
                 <span className={weekly.ipsplit}>
                   <span className={weekly.ipMoving}>{p1.inProgress.moving} moving</span> · <span className={weekly.ipStalled}>{p1.inProgress.stalled} stalled</span>
                 </span>
@@ -263,13 +277,13 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
               </div>
               <div className={weekly.nmhd} style={{ marginTop: 16 }}>
                 <div className={weekly.nmt2}>Stalled <span>· needs a push</span></div>
-                <div className={weekly.nms2}>Planned to be under way but <b>zero progress logged</b> - stalled, not slow. Bar length = days idle.</div>
+                <div className={weekly.nms2}>Planned to be under way but <b>zero progress logged</b> — stalled, not slow. Bar length = days idle.</div>
               </div>
               <StalledPanelV2 items={p1.inProgress.stalledItems} weekEnd={report.weekEnd} />
             </div>
 
             <div className={weekly.mnote}>
-              A milestone can appear in more than one metric - a stage due to finish this week is also in progress this week. &quot;Days past&quot; counts from the planned finish; &quot;days idle&quot; from the planned start; both to {wkEndStrFull}. <b>Delay reason</b>{" "}is pulled from the sub-task rows (tracker-update notes filtered out). &quot;This week&quot; vs &quot;spilled&quot; tells you whether the milestone belongs to this week&apos;s plan or carried over from an earlier week.
+              A milestone can appear in more than one metric — a stage due to finish this week is also in progress this week. &quot;Days past&quot; counts from the planned finish; &quot;days idle&quot; from the planned start; both to {wkEndStrFull}. <b>Delay reason</b>{" "}is pulled from the sub-task rows (tracker-update notes filtered out). &quot;This week&quot; vs &quot;spilled&quot; tells you whether the milestone belongs to this week&apos;s plan or carried over from an earlier week.
             </div>
           </div>
         )}
@@ -278,7 +292,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
         <div className={weekly.sec}>
           <div className={weekly.sechd}>
             <div className={weekly.secNum}>04</div>
-            <h2 className={weekly.secTitle}>Manpower - target vs achieved</h2>
+            <h2 className={weekly.secTitle}>Manpower — target vs achieved</h2>
             <div className={weekly.secNote}>headcount planned vs on site · contractor-wise · numbers and %</div>
           </div>
 
@@ -293,7 +307,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
             return (
               <div key={c.contractorId}>
                 <div className={weekly.cbar}>
-                  <span className={weekly.cbarName}>Contractor 1 - {c.contractorName}</span>
+                  <span className={weekly.cbarName}>Contractor 1 — {c.contractorName}</span>
                   <span className={weekly.cbarNote}>all site labour is under Contractor 1</span>
                   <span className={`${weekly.cbarPill} ${weekly.cbarPillActive}`}>Active</span>
                 </div>
@@ -316,7 +330,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
                     </div>
                   </div>
                   <div className={weekly.mpchart}>
-                    <div className={weekly.mpctH}>Total labour - planned vs actual by day</div>
+                    <div className={weekly.mpctH}>Total labour — planned vs actual by day</div>
                     <ManpowerChart perDay={c.perDay} />
                   </div>
                   <div className={weekly.mpday}>
@@ -332,7 +346,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
 
           {elegant && (
             <div className={weekly.c2}>
-              <span className={weekly.c2N}>Contractor 2 - {elegant.contractorName}</span>
+              <span className={weekly.c2N}>Contractor 2 — {elegant.contractorName}</span>
               <span className={weekly.c2T}>52 villas · schedule received; collab-tool integration under process, so no manpower feed yet.</span>
               <span className={weekly.c2P}>Schedule received</span>
             </div>

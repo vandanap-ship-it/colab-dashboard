@@ -439,10 +439,13 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
       }
 
       const reason = reasonByMilestone.get(m.id);
+      // Python parity: block codes render zero-padded to width 2 ("Block 09",
+      // "Block 02"). Non-numeric codes ("3A", "12") pass through unchanged.
+      const paddedBlock = /^\d$/.test(v.block.code) ? v.block.code.padStart(2, "0") : v.block.code;
       const baseItem: WeeklyMilestoneItem = {
         villaNumber: v.number,
         villaLabel: v.label ?? `Villa ${v.number}`,
-        blockCode: v.block.code,
+        blockCode: paddedBlock,
         milestoneName: m.section?.name ?? "—",
         daysLate: daysLatePos(m.baselineFinish, weekEnd),
         plannedStart: m.baselineStart?.toISOString(),
