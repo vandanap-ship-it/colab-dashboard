@@ -288,9 +288,99 @@ export function computeMilestoneBuckets(
 }
 
 // ---------------------------------------------------------------------------
+// §5 Delay Reasons — normalisation + aggregation (build_wk23.py L194-232)
+// ---------------------------------------------------------------------------
+
+/** Normalise a Colab free-text delay reason to the standard bucket label.
+ *  Returns null for meta / hygiene notes that should be dropped (per Python
+ *  L26-27, L196). */
+export function normalizeReason(freeText: string | undefined | null): string | null {
+  if (freeText == null) return null;
+  const k = String(freeText).trim().toLowerCase();
+  if (!k) return null;
+  if (k === "nan" || k === "." || k === "work in progress" || k === "delayed update" || k === "late update in collab tools") return null;
+  if (k.includes("collab") || k.includes("colab")) return null;
+  if (k.includes("change") && k.includes("order")) return "Change orders (design / scope)";
+  if (k.includes("drawing")) return "MEP drawing delay";
+  if (k.includes("vendor")) return "Vendor change";
+  if (k.includes("priorit")) return "Priority change";
+  if (k.includes("material") || k.includes("matrial")) return "Materials";
+  if (k.includes("manpower") || k.includes("labour") || k.includes("labor") || k.includes("worker") || k.includes("shortage of man")) return "Manpower / labour shortage";
+  if (k.includes("climate") || k.includes("weather") || k.includes("rain")) return "Weather / climate";
+  if (k.includes("delayed entry") || k.includes("entry")) return "Delayed entry";
+  // Python fallback: title-case the raw text.
+  return String(freeText).trim().replace(/\w\S*/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase());
+}
+
+export interface DelayReasonRow {
+  reason: string;
+  acts: number;        // raw row count (Python's len(g))
+  nvillas: number;
+  villas: string[];    // "V05" format, sorted by number
+  avgDelay: number | null;   // avg (WKE - Planned_End_Date) days across LATE rows only
+  maxDelay: number | null;   // max ditto
+}
+
+/** Group by normalised reason across Abraham villa rows only. Matches
+ *  build_wk23.py L207-232. */
+export function computeDelayReasons(rows: ColabCsvRow[], weekEnd: Date): DelayReasonRow[] {
+  const abrahamVillas = new Set(Object.values(ABRAHAM_BLOCKS).flat());
+  const byReason = new Map<string, { rowCount: number; villas: Set<string>; delays: number[] }>();
+  for (const r of rows) {
+    const villa = r.Location_Name?.trim();
+    if (!villa || !abrahamVillas.has(villa)) continue;
+    const reason = normalizeReason(r.Reason_for_Delay);
+    if (!reason) continue;
+    const entry = byReason.get(reason) ?? { rowCount: 0, villas: new Set<string>(), delays: [] };
+    entry.rowCount++;
+    entry.villas.add(villa);
+    const pe = parseColabDate(r.Planned_End_Date);
+    if (pe) {
+      const days = Math.round((weekEnd.getTime() - pe.getTime()) / 86400000);
+      if (days > 0) entry.delays.push(days);
+    }
+    byReason.set(reason, entry);
+  }
+  const out: DelayReasonRow[] = [];
+  for (const [reason, entry] of byReason) {
+    const villas = [...entry.villas]
+      .map((v) => v.replace("Villa ", "V"))
+      .sort((a, b) => (parseInt(a.match(/\d+/)?.[0] ?? "0") - parseInt(b.match(/\d+/)?.[0] ?? "0")));
+    const avg = entry.delays.length > 0
+      ? roundHalfToEven(entry.delays.reduce((n, d) => n + d, 0) / entry.delays.length)
+      : null;
+    const max = entry.delays.length > 0 ? Math.max(...entry.delays) : null;
+    out.push({
+      reason,
+      acts: entry.rowCount,
+      nvillas: villas.length,
+      villas,
+      avgDelay: avg,
+      maxDelay: max,
+    });
+  }
+  // Python: sort by acts desc, tie-break alphabetically (pandas groupby's
+  // default sort=True yields alpha group order, then reasons.sort is stable
+  // on that base ordering).
+  out.sort((a, b) => (b.acts - a.acts) || a.reason.localeCompare(b.reason));
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
 function round(n: number, digits: number): number {
   const p = Math.pow(10, digits);
   return Math.round(n * p) / p;
+}
+
+/** Python 3's `round(x)` — banker's rounding, half-to-even. Matches
+ *  Python 3 for integer rounding of a real number. */
+export function roundHalfToEven(x: number): number {
+  const floor = Math.floor(x);
+  const frac = x - floor;
+  if (frac < 0.5) return floor;
+  if (frac > 0.5) return floor + 1;
+  // Exactly .5 → round to even.
+  return floor % 2 === 0 ? floor : floor + 1;
 }

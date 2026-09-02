@@ -6,6 +6,7 @@ import {
   computeOverall,
   reconstructStages,
   computeMilestoneBuckets,
+  computeDelayReasons,
   type ColabCsvRow,
 } from "@/lib/rules/weeklyRules";
 
@@ -36,6 +37,16 @@ interface PythonWeekly {
     to_complete: { wk_plan: number; wk_done: number; wk_items: string[]; wk_open_items: string[]; spill: number; spill_items: string[] };
     to_start:    { wk_plan: number; wk_started: number; wk_items: string[]; notstarted_items: string[]; spill: number; spill_items: string[] };
     in_progress: { plan: number; actual: number; plan_items: string[]; notmoving_items: string[] };
+  };
+  reasons_meta: {
+    items: Array<{
+      reason: string;
+      acts: number;
+      nvillas: number;
+      villas: string[];
+      avg_delay: number | null;
+      max_delay: number | null;
+    }>;
   };
 }
 
@@ -74,6 +85,29 @@ describe("computeMilestoneBuckets — §2 buckets vs Python", () => {
     new Date(Date.UTC(2026, 7, 24)), new Date(Date.UTC(2026, 7, 30)),
     "wk30 (24-30 Aug 2026)",
   );
+});
+
+describe("computeDelayReasons — §5 reason clusters vs Python", () => {
+  function runWeek(csvName: string, jsonName: string, wke: Date, label: string) {
+    it(`matches ${label}`, () => {
+      const rows = loadCsv(csvName);
+      const py = loadPython(jsonName) as PythonWeekly;
+      const mine = computeDelayReasons(rows, wke);
+      // Compare bucket-by-bucket. Python's sort order (acts desc) must match.
+      expect(mine.map((r) => r.reason)).toEqual(py.reasons_meta.items.map((r) => r.reason));
+      for (let i = 0; i < py.reasons_meta.items.length; i++) {
+        const p = py.reasons_meta.items[i];
+        const m = mine[i];
+        expect(m.acts).toBe(p.acts);
+        expect(m.nvillas).toBe(p.nvillas);
+        expect(m.villas).toEqual(p.villas);
+        expect(m.avgDelay).toBe(p.avg_delay);
+        expect(m.maxDelay).toBe(p.max_delay);
+      }
+    });
+  }
+  runWeek("wk23_input.csv", "wk23_python.json", new Date(Date.UTC(2026, 7, 23)), "wk23");
+  runWeek("wk30_input.csv", "wk30_python.json", new Date(Date.UTC(2026, 7, 30)), "wk30");
 });
 
 describe("computeOverall — §1 Overall Project Progress vs Python", () => {
