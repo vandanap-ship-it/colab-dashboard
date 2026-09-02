@@ -1,0 +1,753 @@
+{
+  "wk_label": "17\u201323 Aug 2026",
+  "wk_start": "Mon 17 Aug",
+  "wk_end": "Sun 23 Aug",
+  "overall": {
+    "target": 1.35,
+    "actual": 1.07,
+    "var": -0.28,
+    "ratio": 79
+  },
+  "milestone": {
+    "to_complete": {
+      "wk_plan": 0,
+      "wk_done": 0,
+      "wk_items": [],
+      "wk_open_items": [],
+      "spill": 5,
+      "spill_items": [
+        "V25 Plinth Beam",
+        "V26 Plinth Beam",
+        "V27 Plinth Beam",
+        "V28 Plinth Beam",
+        "V35 Plinth Beam"
+      ]
+    },
+    "to_start": {
+      "wk_plan": 4,
+      "wk_started": 1,
+      "wk_items": [
+        "V05 Plinth Beam",
+        "V06 Footing",
+        "V07 Footing",
+        "V08 Footing"
+      ],
+      "notstarted_items": [
+        "V06 Footing",
+        "V07 Footing",
+        "V08 Footing"
+      ],
+      "spill": 2,
+      "spill_items": [
+        "V18 Plinth Beam",
+        "V19 Plinth Beam"
+      ]
+    },
+    "in_progress": {
+      "plan": 20,
+      "actual": 15,
+      "plan_items": [
+        "V03 Plinth Beam",
+        "V04 Plinth Beam",
+        "V05 Plinth Beam",
+        "V06 Footing",
+        "V07 Footing",
+        "V08 Footing",
+        "V12 Plinth Beam",
+        "V13 Plinth Beam",
+        "V14 Plinth Beam",
+        "V15 Footing",
+        "V16 Footing",
+        "V17 Plinth Beam",
+        "V18 Plinth Beam",
+        "V19 Plinth Beam",
+        "V30 Gr Floor Slab",
+        "V31 Gr Floor Slab",
+        "V33 Plinth Beam",
+        "V34 Plinth Beam",
+        "V36 Plinth Beam",
+        "V37 Plinth Beam"
+      ],
+      "notmoving_items": [
+        "V06 Footing",
+        "V07 Footing",
+        "V08 Footing",
+        "V18 Plinth Beam",
+        "V19 Plinth Beam"
+      ]
+    }
+  },
+  "c1_name": "Abraham Thomas",
+  "c1_villas": 41,
+  "c2": {
+    "name": "To Be Decided",
+    "villas": 52,
+    "note": "Award pending \u2014 no schedule loaded in the tracker."
+  },
+  "detail": {
+    "complete": [
+      {
+        "v": "V26",
+        "b": "Block 09",
+        "m": "Plinth Beam",
+        "date": "28 Jul",
+        "days": 26,
+        "started": true,
+        "reason": "Change orders",
+        "src": "spilled"
+      },
+      {
+        "v": "V25",
+        "b": "Block 09",
+        "m": "Plinth Beam",
+        "date": "29 Jul",
+        "days": 25,
+        "started": true,
+        "reason": null,
+        "src": "spilled"
+      },
+      {
+        "v": "V35",
+        "b": "Block 10",
+        "m": "Plinth Beam",
+        "date": "05 Aug",
+        "days": 18,
+        "started": true,
+        "reason": null,
+        "src": "spilled"
+      },
+      {
+        "v": "V27",
+        "b": "Block 09",
+        "m": "Plinth Beam",
+        "date": "11 Aug",
+        "days": 12,
+        "started": true,
+        "reason": "Change orders; Workers Shortage; Shortage Of Manpower (Lift Pit)",
+        "src": "spilled"
+      },
+      {
+        "v": "V28",
+        "b": "Block 09",
+        "m": "Plinth Beam",
+        "date": "11 Aug",
+        "days": 12,
+        "started": true,
+        "reason": "Materials; Change orders",
+        "src": "spilled"
+      }
+    ],
+    "start": [
+      {
+        "v": "V06",
+        "b": "Block 02",
+        "m": "Footing",
+        "date": "18 Aug",
+        "days": 5,
+        "started": false,
+        "reason": null,
+        "src": "this week"
+      },
+      {
+        "v": "V07",
+        "b": "Block 02",
+        "m": "Footing",
+        "date": "20 Aug",
+        "days": 3,
+        "started": false,
+        "reason": null,
+        "src": "this week"
+      },
+      {
+        "v": "V08",
+        "b": "Block 02",
+        "m": "Footing",
+        "date": "22 Aug",
+        "days": 1,
+        "started": false,
+        "reason": null,
+        "src": "this week"
+      },
+      {
+        "v": "V05",
+        "b": "Block 02",
+        "m": "Plinth Beam",
+        "date": "18 Aug",
+        "days": 5,
+        "started": true,
+        "reason": null,
+        "src": "this week"
+      },
+      {
+        "v": "V18",
+        "b": "Block 06",
+        "m": "Plinth Beam",
+        "date": "29 Jul",
+        "days": 25,
+        "started": false,
+        "reason": null,
+        "src": "spilled"
+      },
+      {
+        "v": "V19",
+        "b": "Block 06",
+        "m": "Plinth Beam",
+        "date": "29 Jul",
+        "days": 25,
+        "started": false,
+        "reason": null,
+        "src": "spilled"
+      }
+    ],
+    "in_moving": [
+      {
+        "v": "V03",
+        "b": "Block 02",
+        "m": "Plinth Beam"
+      },
+      {
+        "v": "V04",
+        "b": "Block 02",
+        "m": "Plinth Beam"
+      },
+      {
+        "v": "V05",
+        "b": "Block 02",
+        "m": "Plinth Beam"
+      },
+      {
+        "v": "V12",
+        "b": "Block 04",
+        "m": "Plinth Beam"
+      },
+      {
+        "v": "V13",
+        "b": "Block 04",
+        "m": "Plinth Beam"
+      },
+      {
+        "v": "V14",
+        "b": "Block 04",
+        "m": "Plinth Beam"
+      },
+      {
+        "v": "V15",
+        "b": "Block 05",
+        "m": "Footing"
+      },
+      {
+        "v": "V16",
+        "b": "Block 05",
+        "m": "Footing"
+      },
+      {
+        "v": "V17",
+        "b": "Block 06",
+        "m": "Plinth Beam"
+      },
+      {
+        "v": "V30",
+        "b": "Block 09",
+        "m": "Gr Floor Slab"
+      },
+      {
+        "v": "V31",
+        "b": "Block 09",
+        "m": "Gr Floor Slab"
+      },
+      {
+        "v": "V33",
+        "b": "Block 10",
+        "m": "Plinth Beam"
+      },
+      {
+        "v": "V34",
+        "b": "Block 10",
+        "m": "Plinth Beam"
+      },
+      {
+        "v": "V36",
+        "b": "Block 10",
+        "m": "Plinth Beam"
+      },
+      {
+        "v": "V37",
+        "b": "Block 10",
+        "m": "Plinth Beam"
+      }
+    ],
+    "in_notmoving": [
+      {
+        "v": "V18",
+        "b": "Block 06",
+        "m": "Plinth Beam",
+        "date": "29 Jul",
+        "days": 25,
+        "started": false,
+        "reason": null,
+        "src": "stalled"
+      },
+      {
+        "v": "V19",
+        "b": "Block 06",
+        "m": "Plinth Beam",
+        "date": "29 Jul",
+        "days": 25,
+        "started": false,
+        "reason": null,
+        "src": "stalled"
+      },
+      {
+        "v": "V06",
+        "b": "Block 02",
+        "m": "Footing",
+        "date": "18 Aug",
+        "days": 5,
+        "started": false,
+        "reason": null,
+        "src": "stalled"
+      },
+      {
+        "v": "V07",
+        "b": "Block 02",
+        "m": "Footing",
+        "date": "20 Aug",
+        "days": 3,
+        "started": false,
+        "reason": null,
+        "src": "stalled"
+      },
+      {
+        "v": "V08",
+        "b": "Block 02",
+        "m": "Footing",
+        "date": "22 Aug",
+        "days": 1,
+        "started": false,
+        "reason": null,
+        "src": "stalled"
+      }
+    ],
+    "n_complete": 5,
+    "n_start": 6,
+    "n_inprog": 20,
+    "n_moving": 15,
+    "n_notmoving": 5
+  },
+  "manpower": {
+    "trades": [
+      {
+        "t": "Bar Bender",
+        "p": 84,
+        "a": 65,
+        "pct": 77
+      },
+      {
+        "t": "Carpenter",
+        "p": 84,
+        "a": 132,
+        "pct": 157
+      },
+      {
+        "t": "Helper",
+        "p": 105,
+        "a": 84,
+        "pct": 80
+      },
+      {
+        "t": "Mason",
+        "p": 28,
+        "a": 22,
+        "pct": 79
+      }
+    ],
+    "plan_day": 43,
+    "act_day": 303,
+    "pct_day": 101,
+    "plan_week": 301,
+    "act_week": 303,
+    "pct_week": 101,
+    "dates": [
+      "17 Aug",
+      "18 Aug",
+      "19 Aug",
+      "20 Aug",
+      "21 Aug",
+      "22 Aug",
+      "23 Aug"
+    ],
+    "planned_series": [
+      43,
+      43,
+      43,
+      43,
+      43,
+      43,
+      43
+    ],
+    "actual_series": [
+      0,
+      53,
+      42,
+      54,
+      52,
+      52,
+      50
+    ],
+    "grid": [
+      {
+        "t": "Bar Bender",
+        "cells": [
+          {
+            "a": 0,
+            "p": 12,
+            "hol": false
+          },
+          {
+            "a": 10,
+            "p": 12,
+            "hol": false
+          },
+          {
+            "a": 10,
+            "p": 12,
+            "hol": false
+          },
+          {
+            "a": 10,
+            "p": 12,
+            "hol": false
+          },
+          {
+            "a": 10,
+            "p": 12,
+            "hol": false
+          },
+          {
+            "a": 13,
+            "p": 12,
+            "hol": false
+          },
+          {
+            "a": 12,
+            "p": 12,
+            "hol": false
+          }
+        ]
+      },
+      {
+        "t": "Carpenter",
+        "cells": [
+          {
+            "a": 0,
+            "p": 12,
+            "hol": false
+          },
+          {
+            "a": 25,
+            "p": 12,
+            "hol": false
+          },
+          {
+            "a": 20,
+            "p": 12,
+            "hol": false
+          },
+          {
+            "a": 26,
+            "p": 12,
+            "hol": false
+          },
+          {
+            "a": 23,
+            "p": 12,
+            "hol": false
+          },
+          {
+            "a": 19,
+            "p": 12,
+            "hol": false
+          },
+          {
+            "a": 19,
+            "p": 12,
+            "hol": false
+          }
+        ]
+      },
+      {
+        "t": "Helper",
+        "cells": [
+          {
+            "a": 0,
+            "p": 15,
+            "hol": false
+          },
+          {
+            "a": 15,
+            "p": 15,
+            "hol": false
+          },
+          {
+            "a": 9,
+            "p": 15,
+            "hol": false
+          },
+          {
+            "a": 14,
+            "p": 15,
+            "hol": false
+          },
+          {
+            "a": 15,
+            "p": 15,
+            "hol": false
+          },
+          {
+            "a": 16,
+            "p": 15,
+            "hol": false
+          },
+          {
+            "a": 15,
+            "p": 15,
+            "hol": false
+          }
+        ]
+      },
+      {
+        "t": "Mason",
+        "cells": [
+          {
+            "a": 0,
+            "p": 4,
+            "hol": false
+          },
+          {
+            "a": 3,
+            "p": 4,
+            "hol": false
+          },
+          {
+            "a": 3,
+            "p": 4,
+            "hol": false
+          },
+          {
+            "a": 4,
+            "p": 4,
+            "hol": false
+          },
+          {
+            "a": 4,
+            "p": 4,
+            "hol": false
+          },
+          {
+            "a": 4,
+            "p": 4,
+            "hol": false
+          },
+          {
+            "a": 4,
+            "p": 4,
+            "hol": false
+          }
+        ]
+      }
+    ],
+    "total_cells": [
+      {
+        "a": 0,
+        "p": 43,
+        "hol": false
+      },
+      {
+        "a": 53,
+        "p": 43,
+        "hol": false
+      },
+      {
+        "a": 42,
+        "p": 43,
+        "hol": false
+      },
+      {
+        "a": 54,
+        "p": 43,
+        "hol": false
+      },
+      {
+        "a": 52,
+        "p": 43,
+        "hol": false
+      },
+      {
+        "a": 52,
+        "p": 43,
+        "hol": false
+      },
+      {
+        "a": 50,
+        "p": 43,
+        "hol": false
+      }
+    ],
+    "logged_idx": -1,
+    "holidays": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "working_days": 7,
+    "logged_days": 7,
+    "total_days": 7,
+    "logged_date": "the full week",
+    "all_logged": true,
+    "avg_day": 43,
+    "remark": "Attendance was logged every day this week. Across 7 days the site averaged 43 workers/day against a plan of 43/day \u2014 running at 101% of plan. 17 Aug shows zero on site (no labour logged that day); the rest of the week ran at or above plan, led by carpenters."
+  },
+  "reasons_meta": {
+    "items": [
+      {
+        "reason": "Change orders (design / scope)",
+        "acts": 27,
+        "nvillas": 11,
+        "villas": [
+          "V03",
+          "V04",
+          "V12",
+          "V15",
+          "V16",
+          "V17",
+          "V26",
+          "V27",
+          "V28",
+          "V29",
+          "V30"
+        ],
+        "avg_delay": 28,
+        "max_delay": 78,
+        "mitigation": "Freeze design and close all open change orders before the next structural stage; get client sign-off dated.",
+        "owner": "",
+        "target": ""
+      },
+      {
+        "reason": "Manpower / labour shortage",
+        "acts": 5,
+        "nvillas": 4,
+        "villas": [
+          "V12",
+          "V13",
+          "V15",
+          "V27"
+        ],
+        "avg_delay": 32,
+        "max_delay": 47,
+        "mitigation": "Top up the short trades to planned headcount; hold the contractor to the daily labour histogram.",
+        "owner": "",
+        "target": ""
+      },
+      {
+        "reason": "Materials",
+        "acts": 5,
+        "nvillas": 2,
+        "villas": [
+          "V28",
+          "V29"
+        ],
+        "avg_delay": 48,
+        "max_delay": 60,
+        "mitigation": "Expedite the open PO / procurement; confirm delivery date and pre-stage material at the block.",
+        "owner": "",
+        "target": ""
+      },
+      {
+        "reason": "Priority change",
+        "acts": 4,
+        "nvillas": 3,
+        "villas": [
+          "V03",
+          "V04",
+          "V16"
+        ],
+        "avg_delay": 14,
+        "max_delay": 25,
+        "mitigation": "Re-sequence works and confirm the revised priority in writing so the plan reflects it.",
+        "owner": "",
+        "target": ""
+      },
+      {
+        "reason": "MEP drawing delay",
+        "acts": 2,
+        "nvillas": 1,
+        "villas": [
+          "V31"
+        ],
+        "avg_delay": 15,
+        "max_delay": 19,
+        "mitigation": "Release pending MEP drawings for the affected villa; escalate to the design consultant with a dated commitment.",
+        "owner": "",
+        "target": ""
+      },
+      {
+        "reason": "Delayed entry",
+        "acts": 1,
+        "nvillas": 1,
+        "villas": [
+          "V05"
+        ],
+        "avg_delay": 25,
+        "max_delay": 25,
+        "mitigation": "Clear the access / handover blocker so the crew can start; confirm the entry date in writing.",
+        "owner": "",
+        "target": ""
+      },
+      {
+        "reason": "Vendor change",
+        "acts": 1,
+        "nvillas": 1,
+        "villas": [
+          "V32"
+        ],
+        "avg_delay": null,
+        "max_delay": null,
+        "mitigation": "Complete the new vendor onboarding and issue a revised start date for the affected activity.",
+        "owner": "",
+        "target": ""
+      },
+      {
+        "reason": "Weather / climate",
+        "acts": 1,
+        "nvillas": 1,
+        "villas": [
+          "V16"
+        ],
+        "avg_delay": 6,
+        "max_delay": 6,
+        "mitigation": "Add weather-contingency float to the affected activity; protect the works and resequence indoor tasks on wet days.",
+        "owner": "",
+        "target": ""
+      }
+    ],
+    "design_villas": [
+      "V03",
+      "V04",
+      "V12",
+      "V15",
+      "V16",
+      "V17",
+      "V26",
+      "V27",
+      "V28",
+      "V29",
+      "V30",
+      "V31"
+    ]
+  },
+  "export": "24 Aug export"
+}
