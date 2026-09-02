@@ -153,6 +153,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     manpower,
     weekHindrances,
     weekProgressReasons,
+    reasonActivities,
   ] = await Promise.all([
     prisma.project.findUnique({
       where: { id: projectId },
@@ -279,6 +280,19 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
             villaMilestone: { select: { villaId: true } },
           },
         },
+      },
+    }),
+    // Colab activities carrying a reasonCode — the raw per-activity source
+    // Python's §5 aggregates over (build_wk30.py L207-230). Read the full
+    // reason-tagged set here (not just this-week) because Python's `ab` is
+    // the entire project export, not week-scoped. `plannedEnd` + `weekEnd`
+    // are what drives avg/max delay.
+    prisma.colabActivity.findMany({
+      where: { projectId, reasonCode: { not: null } },
+      select: {
+        villaId: true,
+        plannedEnd: true,
+        reasonCode: true,
       },
     }),
   ]);
@@ -632,69 +646,65 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     };
   })();
 
-  // ------- §4 Delay Reasons & Mitigation -------
-  const reasonMap = new Map<string, {
+  // ------- §5 Delay Reasons & Mitigation (Python parity, build_wk30.py L207-232) -------
+  //   acts       = row count in reason group (raw Colab activity rows)
+  //   nvillas    = distinct villas the reason touches
+  //   avg_delay  = round(mean((weekEnd - plannedEnd).days)) over rows where > 0
+  //   max_delay  = max of same
+  //   sort       = acts desc, tie-break by reason label (Python's groupby yields
+  //                alpha order, then a stable sort on acts preserves it).
+  const reasonAgg = new Map<string, {
     label: string;
-    count: number;
-    daysImpact: number;
-    maxDaysImpact: number;
+    count: number;              // acts
+    delays: number[];           // per-row overdueDays where > 0
     villas: Set<number>;
-    activityIds: Set<string>;
     hasProjectLevel: boolean;
   }>();
-  const upsertReason = (
-    code: string | null,
-    daysImpact: number,
-    villaId: string | null | undefined,
-    activityId: string | null | undefined,
-    isProjectLevel: boolean,
-  ) => {
-    const key = code ?? "UNSPECIFIED";
-    const entry = reasonMap.get(key) ?? {
+  for (const a of reasonActivities) {
+    const code = a.reasonCode;
+    if (!code) continue;
+    const key = code;
+    const entry = reasonAgg.get(key) ?? {
       label: reasonLabel(code),
       count: 0,
-      daysImpact: 0,
-      maxDaysImpact: 0,
+      delays: [],
       villas: new Set<number>(),
-      activityIds: new Set<string>(),
       hasProjectLevel: false,
     };
     entry.count++;
-    entry.daysImpact += daysImpact;
-    if (daysImpact > entry.maxDaysImpact) entry.maxDaysImpact = daysImpact;
-    if (villaId) {
-      const num = villaIdToNumber.get(villaId);
+    if (a.villaId) {
+      const num = villaIdToNumber.get(a.villaId);
       if (num != null) entry.villas.add(num);
+      else entry.hasProjectLevel = true; // villa outside inScope set
+    } else {
+      entry.hasProjectLevel = true;
     }
-    if (activityId) entry.activityIds.add(activityId);
-    if (isProjectLevel) entry.hasProjectLevel = true;
-    reasonMap.set(key, entry);
-  };
-
-  for (const h of weekHindrances) {
-    const villaId = h.wbsNode?.villaMilestone?.villaId ?? null;
-    const activityId = h.wbsNode?.id ?? null;
-    upsertReason(h.reasonCode, h.daysImpact ?? 0, villaId, activityId, !h.wbsNodeId);
+    if (a.plannedEnd) {
+      const days = Math.floor((weekEnd.getTime() - a.plannedEnd.getTime()) / 86400000);
+      if (days > 0) entry.delays.push(days);
+    }
+    reasonAgg.set(key, entry);
   }
-  for (const pe of weekProgressReasons) {
-    // ProgressEntry reasons don't have a daysImpact — count them but don't inflate days.
-    const villaId = pe.wbsNode?.villaMilestone?.villaId ?? null;
-    upsertReason(pe.reasonCode, 0, villaId, pe.wbsNodeId, !pe.wbsNodeId);
-  }
-  const delayReasons: DelayReasonWithMitigation[] = [...reasonMap.entries()]
-    .map(([code, v]) => ({
-      code,
-      label: v.label,
-      count: v.count,
-      daysImpact: v.daysImpact,
-      avgDaysImpact: v.count > 0 ? Math.round(v.daysImpact / v.count) : 0,
-      maxDaysImpact: v.maxDaysImpact,
-      affectedVillas: [...v.villas].sort((a, b) => a - b),
-      activityCount: v.activityIds.size,
-      hasProjectLevel: v.hasProjectLevel,
-      mitigation: mitigationFor(code),
-    }))
-    .sort((a, b) => b.daysImpact - a.daysImpact || b.count - a.count);
+  const delayReasons: DelayReasonWithMitigation[] = [...reasonAgg.entries()]
+    .map(([code, v]) => {
+      const sum = v.delays.reduce((n, d) => n + d, 0);
+      return {
+        code,
+        label: v.label,
+        count: v.count,
+        // `daysImpact` is retained on the shape for backwards compatibility
+        // with any downstream consumer — we now surface the sum of positive
+        // per-activity overdue days (mirrors Python's numerator for avg).
+        daysImpact: sum,
+        avgDaysImpact: v.delays.length > 0 ? Math.round(sum / v.delays.length) : 0,
+        maxDaysImpact: v.delays.length > 0 ? Math.max(...v.delays) : 0,
+        affectedVillas: [...v.villas].sort((a, b) => a - b),
+        activityCount: v.count,
+        hasProjectLevel: v.hasProjectLevel,
+        mitigation: mitigationFor(code),
+      };
+    })
+    .sort((a, b) => (b.count - a.count) || a.label.localeCompare(b.label));
 
   return {
     project,
