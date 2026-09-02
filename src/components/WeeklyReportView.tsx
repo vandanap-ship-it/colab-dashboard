@@ -21,6 +21,11 @@ export interface WeeklyReportViewProps {
 function fmtDayShort(d: Date): string {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
+/** "Sun 23 Aug" — Python's wk_end format for narrative sentences (§1 subtitle,
+ *  §3 footnote, foot). Card labels keep the day-only form. */
+function fmtDayFull(d: Date): string {
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
+}
 function fmtPct(n: number): string { return `${n.toFixed(2)}%`; }
 function itemsLbl(list: string[], n = 8): string {
   if (!list.length) return "none";
@@ -62,6 +67,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
 
   const wkLabel = `${fmtDayShort(report.weekStart)}–${fmtDayShort(report.weekEnd)} ${report.weekEnd.getFullYear()}`;
   const wkEndStr = fmtDayShort(report.weekEnd);
+  const wkEndStrFull = fmtDayFull(report.weekEnd); // "Sun 23 Aug" — narrative form
 
   // Abraham (Contractor 1) is the only party in the milestone maths per spec.
   // Elegant renders as a name-only strip. Untagged bucket already dropped
@@ -108,7 +114,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
           <div className={weekly.sechd}>
             <div className={weekly.secNum}>01</div>
             <h2 className={weekly.secTitle}>Overall Project Progress</h2>
-            <div className={weekly.secNote}>progress required by {wkEndStr} vs achieved</div>
+            <div className={weekly.secNote}>progress required by {wkEndStrFull} vs achieved</div>
           </div>
           <div className={weekly.snap}>
             <div className={weekly.snapRow}>
@@ -257,7 +263,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
             </div>
 
             <div className={weekly.mnote}>
-              A milestone can appear in more than one metric - a stage due to finish this week is also in progress this week. &quot;Days past&quot; counts from the planned finish; &quot;days idle&quot; from the planned start; both to {wkEndStr}. <b>Delay reason</b> is pulled from the sub-task rows (tracker-update notes filtered out). &quot;This week&quot; vs &quot;spilled&quot; tells you whether the milestone belongs to this week&apos;s plan or carried over from an earlier week.
+              A milestone can appear in more than one metric - a stage due to finish this week is also in progress this week. &quot;Days past&quot; counts from the planned finish; &quot;days idle&quot; from the planned start; both to {wkEndStrFull}. <b>Delay reason</b>{" "}is pulled from the sub-task rows (tracker-update notes filtered out). &quot;This week&quot; vs &quot;spilled&quot; tells you whether the milestone belongs to this week&apos;s plan or carried over from an earlier week.
             </div>
           </div>
         )}
@@ -406,7 +412,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
         </div>
 
         <div className={weekly.foot}>
-          Week defined Mon–Sun, ending {wkEndStr} {report.weekEnd.getFullYear()}. Contractor 1 (Abraham Thomas) is the only party with a loaded schedule; Contractor 2 (Elegant Construction) is awarded with 52 villas across 12 blocks; its schedule has been received and integration with the collab tools is under process, so it carries no milestones here yet. Milestone dates are stage-level (all activities in a stage), not the tracker&apos;s single END-marker date, so they reflect true stage finish.
+          Week defined Mon–Sun, ending {wkEndStrFull} {report.weekEnd.getFullYear()}. Contractor 1 (Abraham Thomas) is the only party with a loaded schedule; Contractor 2 (Elegant Construction) is awarded with 52 villas across 12 blocks; its schedule has been received and integration with the collab tools is under process, so it carries no milestones here yet. Milestone dates are stage-level (all activities in a stage), not the tracker&apos;s single END-marker date, so they reflect true stage finish.
         </div>
       </div>
     </>
