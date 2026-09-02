@@ -42,7 +42,7 @@ export async function GET(
  * concern for now — we keep history intact by default).
  */
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
@@ -145,7 +145,7 @@ export async function POST(
 
 /** DELETE /api/projects/[id]/trade-plans?planId=… — soft-delete a plan. */
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();

@@ -14,7 +14,7 @@ function canEdit(role: string): boolean {
 
 /** POST /api/projects/[id]/master-plan — upload + save URL on Project. */
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
