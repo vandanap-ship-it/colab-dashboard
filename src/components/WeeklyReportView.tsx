@@ -165,7 +165,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
                   numer={p1.toStart.started}
                   denom={p1.toStart.total}
                   labelLine={<>started this week<br />of planned starts</>}
-                  postText={<>planned but not started: <b>{p1.toStart.total - p1.toStart.started > 0 ? "some" : "none"}</b></>}
+                  postText={<>planned but not started: <b>{p1.toStart.notStartedItems.length > 0 ? itemsLbl(p1.toStart.notStartedItems.map(chipLabel)) : "none"}</b></>}
                   spill={{
                     title: "Spilled over from earlier",
                     count: p1.toStart.spill,

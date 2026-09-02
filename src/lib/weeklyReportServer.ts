@@ -47,7 +47,14 @@ export interface WeeklyMilestonePlan {
   contractorName: string;
   hasSchedule: boolean;
   toComplete: { total: number; closed: number; items: WeeklyMilestoneItem[] };
-  toStart:    { total: number; started: number; items: WeeklyMilestoneItem[]; spill: number; spillItems: WeeklyMilestoneItem[] };
+  toStart:    {
+    total: number; started: number;
+    items: WeeklyMilestoneItem[];
+    /** Subset of `items` that haven't started yet — Python's `notstarted_items`.
+     *  Rendered under the "planned but not started" line in §2 To-Start card. */
+    notStartedItems: WeeklyMilestoneItem[];
+    spill: number; spillItems: WeeklyMilestoneItem[];
+  };
   inProgress: { total: number; moving: number; stalled: number; movingItems: WeeklyMilestoneItem[]; stalledItems: WeeklyMilestoneItem[] };
   overdue:    { total: number; items: WeeklyMilestoneItem[] };
 }
@@ -354,6 +361,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
   type Bucket = {
     toComplete: WeeklyMilestoneItem[];
     toStart: WeeklyMilestoneItem[];
+    toStartNotStarted: WeeklyMilestoneItem[];
     toStartSpill: WeeklyMilestoneItem[];
     inProgressMoving: WeeklyMilestoneItem[];
     inProgressStalled: WeeklyMilestoneItem[];
@@ -362,7 +370,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     startedCount: number;
   };
   const emptyBucket = (): Bucket => ({
-    toComplete: [], toStart: [], toStartSpill: [], inProgressMoving: [], inProgressStalled: [], overdue: [],
+    toComplete: [], toStart: [], toStartNotStarted: [], toStartSpill: [], inProgressMoving: [], inProgressStalled: [], overdue: [],
     closedCount: 0, startedCount: 0,
   });
 
@@ -439,6 +447,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
         if (m.baselineStart && m.baselineStart >= weekStart && m.baselineStart <= weekEnd && notDoneByWeekEnd) {
           b.toStart.push(baseItem);
           if (startedByWeekEnd) b.startedCount++;
+          else b.toStartNotStarted.push(baseItem);
         }
         // IN PROGRESS = span overlaps week AND not done. Regardless of actualStart —
         // that's what Python's `ip_plan` captures. `moving` = started,
@@ -490,6 +499,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
       total: b.toStart.length,
       started: b.startedCount,
       items: b.toStart,
+      notStartedItems: b.toStartNotStarted,
       spill: b.toStartSpill.length,
       spillItems: b.toStartSpill.slice(0, 12),
     },
