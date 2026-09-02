@@ -117,24 +117,13 @@ export const MORDER: readonly string[] = [
 ];
 const MORDER_INDEX = new Map(MORDER.map((m, i) => [m, i]));
 
-/** BLOCKS map — Abraham Thomas's 41 villa scope, keyed by block name.
- *  Matches build_data.py BLOCKS exactly. Villas OUTSIDE this map are
- *  Contractor 2 (Elegant) or unassigned; they never enter the weekly's
- *  milestone maths per WEEKLY_HANDOFF.md rule 2. */
-export const ABRAHAM_BLOCKS: Record<string, string[]> = {
-  "Block 02": ["Villa 03","Villa 04","Villa 05","Villa 06","Villa 07","Villa 08"],
-  "Block 03": ["Villa 09","Villa 10 & 11"],
-  "Block 04": ["Villa 12","Villa 13","Villa 14"],
-  "Block 05": ["Villa 15","Villa 16"],
-  "Block 06": ["Villa 17","Villa 18","Villa 19"],
-  "Block 07": ["Villa 20","Villa 21","Villa 22"],
-  "Block 08": ["Villa 23 & 24"],
-  "Block 09": ["Villa 25","Villa 26","Villa 27","Villa 28","Villa 29","Villa 30","Villa 31"],
-  "Block 10": ["Villa 32","Villa 33","Villa 34","Villa 35","Villa 36","Villa 37"],
-  "Block 12": ["Villa 41","Villa 42","Villa 43"],
-  "Block 13": ["Villa 44","Villa 45","Villa 46"],
-};
-const ABRAHAM_ALL_VILLAS: string[] = Object.values(ABRAHAM_BLOCKS).flat();
+// BLOCKS map — Abraham Thomas's 41 villa scope. Kept in
+// src/lib/projects/amanvana.ts so scorecardServer + weekly rules read from
+// one authoritative source. Re-exported here so existing callers of
+// ABRAHAM_BLOCKS keep working.
+import { AMANVANA_ABRAHAM_BLOCKS, AMANVANA_ABRAHAM_ALL_VILLAS } from "@/lib/projects/amanvana";
+export const ABRAHAM_BLOCKS = AMANVANA_ABRAHAM_BLOCKS;
+const ABRAHAM_ALL_VILLAS = AMANVANA_ABRAHAM_ALL_VILLAS;
 
 export interface Stage {
   v: string;         // villa short label, e.g. "V05" or "V10 & 11"

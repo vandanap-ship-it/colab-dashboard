@@ -25,33 +25,16 @@ import {
 import { istDayStart } from "@/lib/istDay";
 import { isHoliday } from "@/lib/holidays";
 import { isVillaPlannedToday, type VillaMilestoneForStage } from "@/lib/currentStage";
+import {
+  AMANVANA_VILLA_NUMBER_TO_BLOCK,
+  AMANVANA_CONTRACTOR_SCOPE,
+  AMANVANA_CONTRACTORS,
+} from "@/lib/projects/amanvana";
 
-/**
- * Colab-style block partitioning for Abraham Thomas — hardcoded to match
- * Shraddha's Python reporting toolkit (`build_data.py` BLOCKS dict) so the
- * §2 Movement + Planned Coverage panel numbers align 1:1 with the Colab-
- * branded PDFs. Applies only when a contractor filter narrows the report
- * to Abraham; unfiltered/Elegant views use the raw MSP schedule blocks.
- *
- * Key differences vs my MSP schedule:
- *   - Her Block 02 = my Block 2 + Block 3A (V03..V08 merged)
- *   - Her Block 03 = my Block 3B (V09, V10 & V11)
- *   - Includes V41..V46 (Block 12 + 13) but NOT V47..V50 (Block 14)
- */
-const COLAB_ABRAHAM_VILLA_TO_BLOCK: Record<number, string> = {
-  // View renders "Block {code}", so values here are the CODE only (no "Block " prefix).
-  3:  "02", 4:  "02", 5:  "02", 6:  "02", 7:  "02", 8:  "02",
-  9:  "03", 10: "03", 11: "03",
-  12: "04", 13: "04", 14: "04",
-  15: "05", 16: "05",
-  17: "06", 18: "06", 19: "06",
-  20: "07", 21: "07", 22: "07",
-  23: "08", 24: "08",
-  25: "09", 26: "09", 27: "09", 28: "09", 29: "09", 30: "09", 31: "09",
-  32: "10", 33: "10", 34: "10", 35: "10", 36: "10", 37: "10",
-  41: "12", 42: "12", 43: "12",
-  44: "13", 45: "13", 46: "13",
-};
+// Colab-style block partitioning + contractor scope for Amanvana Phase 1
+// now lives in one file — src/lib/projects/amanvana.ts. When onboarding a
+// second project, add its own config file and gate reads on projectId.
+const COLAB_ABRAHAM_VILLA_TO_BLOCK = AMANVANA_VILLA_NUMBER_TO_BLOCK;
 
 export interface ScorecardProject {
   id: string;
@@ -200,7 +183,7 @@ async function computeDailySnapshotAndMovement(
       where: { id: contractorFilterId },
       select: { name: true },
     });
-    const isAbraham = (contractorInfo?.name ?? "").trim().toLowerCase() === "abraham thomas";
+    const isAbraham = (contractorInfo?.name ?? "").trim().toLowerCase() === AMANVANA_CONTRACTORS.abraham.toLowerCase();
     if (isAbraham) {
       const abrahamNumbers = Object.keys(COLAB_ABRAHAM_VILLA_TO_BLOCK).map(Number);
       const villaRows = await prisma.villa.findMany({
@@ -314,7 +297,7 @@ async function computeDailySnapshotAndMovement(
   const abrahamOverrideActive =
     !!contractorFilterId &&
     contractors.length === 1 &&
-    contractors[0].name.trim().toLowerCase() === "abraham thomas";
+    contractors[0].name.trim().toLowerCase() === AMANVANA_CONTRACTORS.abraham.toLowerCase();
   const displayBlockFor = (villaNum: number, rawBlock: string): string | null => {
     if (!abrahamOverrideActive) return rawBlock;
     return COLAB_ABRAHAM_VILLA_TO_BLOCK[villaNum] ?? null;
@@ -399,19 +382,14 @@ async function computeDailySnapshotAndMovement(
   // Business-defined scope overrides. The "Villas in scope" column in Colab's
   // report is a CONTRACT term, not a computed count — Abraham's contracted
   // scope is 41 villas regardless of how many are currently tagged in the
-  // schedule. Confirmed by Shraddha on 2026-08-28. Extend the map as more
-  // contractors' scope is confirmed.
-  const CONTRACTOR_SCOPE_OVERRIDES: Record<string, number> = {
-    "abraham thomas":     41,
-    "elegant construction": 52,
-    "to be decided":      52,
-  };
+  // schedule. Source of truth: src/lib/projects/amanvana.ts.
   const movement: ScorecardContractorMovement[] = contractors.map((c) => {
     const executed = updatedByContractor.get(c.id)?.size ?? 0;
     const planned = expectedByContractor.get(c.id)?.size ?? 0;
     const hasSchedule = c._count.wbsNodes > 0;
     const computedScope = villaCountByContractor.get(c.id) ?? 0;
-    const overrideScope = CONTRACTOR_SCOPE_OVERRIDES[c.name.toLowerCase()];
+    const overrideScope = AMANVANA_CONTRACTOR_SCOPE[c.name.toLowerCase()]
+      ?? (c.name.trim().toLowerCase() === "to be decided" ? 52 : undefined);
     return {
       contractorId: c.id,
       contractorName: c.name,
