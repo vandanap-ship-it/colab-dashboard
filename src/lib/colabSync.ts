@@ -663,193 +663,235 @@ export async function importColabProgress(
     }
   }
 
-  // ---------- 7a-bulk. Bulk-write ColabActivity queue via raw ON CONFLICT ----------
-  // 175 sequential upserts add ~18s per chunk; a single INSERT ... ON CONFLICT
-  // DO UPDATE with all rows completes in ~1s. Using $executeRawUnsafe with a
-  // parameterised VALUES list is the fastest cross-DB path.
-  if (!options.dryRun && pendingColabActivities.length > 0) {
-    const now = new Date();
-    // Chunk into 200-row batches so a single Postgres statement doesn't
-    // exceed the parameter cap (65k) or Neon's statement length limit.
-    for (let i = 0; i < pendingColabActivities.length; i += 200) {
-      const batch = pendingColabActivities.slice(i, i + 200);
-      const values: unknown[] = [];
-      const rowsSql: string[] = [];
-      batch.forEach((r, j) => {
-        const base = j * 15;
-        rowsSql.push(
-          `(gen_random_uuid()::text, $${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5}, $${base+6}, $${base+7}, $${base+8}, $${base+9}, $${base+10}, $${base+11}, $${base+12}, $${base+13}, $${base+14}, $${base+15})`
-        );
-        values.push(
-          r.projectId, r.activityId, r.villaId, r.sectionId,
-          r.plannedStart, r.plannedEnd, r.actualStart, r.actualEnd, r.progressDate,
-          r.physicalProgress, r.totalPct, r.reasonCode, r.reasonNote, now, now,
-        );
-      });
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO "ColabActivity" (
-           "id","projectId","activityId","villaId","sectionId",
-           "plannedStart","plannedEnd","actualStart","actualEnd","progressDate",
-           "physicalProgress","totalPct","reasonCode","reasonNote","createdAt","updatedAt"
-         ) VALUES ${rowsSql.join(",")}
-         ON CONFLICT ("projectId","activityId") DO UPDATE SET
-           "villaId"          = EXCLUDED."villaId",
-           "sectionId"        = EXCLUDED."sectionId",
-           "plannedStart"     = EXCLUDED."plannedStart",
-           "plannedEnd"       = EXCLUDED."plannedEnd",
-           "actualStart"      = EXCLUDED."actualStart",
-           "actualEnd"        = EXCLUDED."actualEnd",
-           "progressDate"     = EXCLUDED."progressDate",
-           "physicalProgress" = EXCLUDED."physicalProgress",
-           "totalPct"         = EXCLUDED."totalPct",
-           "reasonCode"       = EXCLUDED."reasonCode",
-           "reasonNote"       = EXCLUDED."reasonNote",
-           "updatedAt"        = EXCLUDED."updatedAt"`,
-        ...values,
-      );
-    }
-  }
-
-  // ---------- 7b. Apply Colab-aggregate baselines across every wbsNode ----------
-  // Python parity: use stageAgg (row-order + Milestone-column boundaries)
-  // when available — this matches Python's block-based ps/pe. Fall back to
-  // milestoneAgg (Sub_Location grouping) for milestones that never had a
-  // MORDER Milestone-column row (some MEP / interior sections).
   if (!options.dryRun) {
-    // First: stage-walker windows (authoritative for MORDER sections).
-    for (const [vmId, sagg] of stageAgg) {
-      if (!sagg.ps && !sagg.pe && !sagg.earliestProgress) continue;
-      await prisma.villaMilestone.update({
-        where: { id: vmId },
-        data: {
-          baselineStart: sagg.ps ?? undefined,
-          baselineFinish: sagg.pe ?? undefined,
-          // Python-parity "started" (build_wk23.py L42): any Progress_Date
-          // logged in the stage means the stage has started. Stamp
-          // VillaMilestone.actualStart from the earliest such date so
-          // weekly §2 "started" counts + spill logic match.
-          actualStart: sagg.earliestProgress ?? undefined,
-        },
-      });
-      await prisma.wBSNode.updateMany({
-        where: { villaMilestoneId: vmId },
-        data: {
-          baselineStart: sagg.ps ?? undefined,
-          baselineFinish: sagg.pe ?? undefined,
-        },
-      });
-    }
-    // Fallback: milestoneAgg for VillaMilestones NOT touched by stageAgg
-    // (e.g. sections without a MORDER row like MEP Service Works).
-    for (const [vmId, agg] of milestoneAgg) {
-      if (stageAgg.has(vmId)) continue;
-      if (!agg.minPlannedStart && !agg.maxPlannedEnd) continue;
-      await prisma.wBSNode.updateMany({
-        where: { villaMilestoneId: vmId },
-        data: {
-          baselineStart: agg.minPlannedStart ?? undefined,
-          baselineFinish: agg.maxPlannedEnd ?? undefined,
-        },
-      });
-      // Python parity (build_wk23.py L38-45): stage closes when its
-      // END-marker row is closed. Two writes to keep both the milestone
-      // rollup and any wbsNode-driven query in agreement:
-      //
-      // (a) Set VillaMilestone.actualFinish directly from the CSV END-marker's
-      //     close date. Authoritative. Independent of ★ presence / rollup
-      //     firing — the currentStage picker (uses milestone.actualFinish)
-      //     advances the same way Python does.
-      // (b) Also stamp the ★ wbsNode (if one exists) so wbsNode-level checks
-      //     stay consistent. If no ★, fall back to any wbsNode under the
-      //     milestone so at least one row reflects the close.
-      if (agg.endMarkerSeen) {
-        await prisma.villaMilestone.update({
-          where: { id: vmId },
-          data: { actualFinish: agg.endMarkerClose ?? null },
-        });
-        const star = await prisma.wBSNode.findFirst({
-          where: { villaMilestoneId: vmId, isSubMilestone: true },
-          select: { id: true },
-        }) ?? await prisma.wBSNode.findFirst({
-          where: { villaMilestoneId: vmId },
-          select: { id: true },
-        });
-        if (star) {
-          await prisma.wBSNode.update({
-            where: { id: star.id },
-            data: { actualFinish: agg.endMarkerClose ?? null },
-          });
-        }
-      }
-    }
-  }
-
-  // ---------- 8. Bulk-tag every WBS node under the touched villas ----------
-  // If a default contractor was named (Amanvana → Abraham), stamp every
-  // wbsNode under any villa Colab has data for. Fixes the §2 "villas in
-  // scope" undercount that came from only activity-matched (~20%) nodes
-  // getting the tag.
-  if (!options.dryRun && options.defaultContractorName && touchedVillaIds.size > 0) {
-    const cleaned = options.defaultContractorName.replace(/^NA-/, "").trim();
-    const contractor = contractorByName.get(cleaned.toLowerCase());
-    if (contractor) {
-      const result = await prisma.wBSNode.updateMany({
-        where: {
-          projectId,
-          villaId: { in: [...touchedVillaIds] },
-          contractorId: null, // don't clobber activities already tagged with a different contractor
-        },
-        data: { contractorId: contractor.id },
-      });
-      stats.wbsNodesUpdated += result.count ?? 0;
-    }
-  }
-
-  // ---------- 9. Roll up every touched VillaMilestone ----------
-  if (!options.dryRun) {
-    for (const villaMilestoneId of touchedVillaMilestones) {
-      try {
-        await syncVillaMilestoneFromChildren(prisma, villaMilestoneId);
-        stats.villaMilestonesUpdated++;
-      } catch (err) {
-        console.error(`[colab-sync] rollup failed for ${villaMilestoneId}:`, err);
-      }
-    }
+    await bulkWriteColabActivity(prisma, pendingColabActivities);
+    await applyStageAggregateBaselines(prisma, stageAgg, milestoneAgg);
+    await bulkTagUntaggedWbsNodes(prisma, projectId, touchedVillaIds, options.defaultContractorName, contractorByName, stats);
+    await rollupTouchedMilestones(prisma, touchedVillaMilestones, stats);
+    await overrideAuthoritativeCloseDates(prisma, stageAgg, milestoneAgg);
   } else {
     stats.villaMilestonesUpdated = touchedVillaMilestones.size;
   }
 
-  // ---------- 10. Colab-authoritative override for milestone actualFinish ----------
-  // Rollup (§9) overwrites VillaMilestone.actualFinish based on the ★ +
-  // baselined-children rule, which may clear our Colab END-marker close.
-  // Re-apply the authoritative close AFTER the rollup so §2 buckets +
-  // currentStage picker see Python-parity data.
-  // stageAgg wins over milestoneAgg — stage-walker is Python-parity source.
-  if (!options.dryRun) {
-    const seen = new Set<string>();
-    for (const [vmId, sagg] of stageAgg) {
-      if (!sagg.endMarkerSeen) continue;
-      seen.add(vmId);
-      await prisma.villaMilestone.update({
-        where: { id: vmId },
-        data: {
-          actualFinish: sagg.endMarkerActualEnd ?? null,
-          // Re-apply actualStart in case the rollup at §9 cleared it.
-          actualStart: sagg.earliestProgress ?? undefined,
-        },
-      });
-    }
-    for (const [vmId, agg] of milestoneAgg) {
-      if (seen.has(vmId) || !agg.endMarkerSeen) continue;
+  stats.elapsedMs = Date.now() - t0;
+  return stats;
+}
+
+// ---------------------------------------------------------------------------
+// Phase helpers — each was inline in importColabProgress before. Extracted so
+// the main function reads as a phase list, and each phase is individually
+// diagnosable. Semantics unchanged from the inline versions.
+// ---------------------------------------------------------------------------
+
+interface StageAggState {
+  ps: Date | null;
+  pe: Date | null;
+  endMarkerActualEnd: Date | null;
+  endMarkerSeen: boolean;
+  earliestProgress: Date | null;
+}
+interface MilestoneAggState {
+  minPlannedStart: Date | null;
+  maxPlannedEnd: Date | null;
+  minActualStart: Date | null;
+  maxActualEnd: Date | null;
+  endMarkerClose: Date | null;
+  endMarkerSeen: boolean;
+}
+interface ColabActivityQueueRow {
+  projectId: string;
+  activityId: string;
+  villaId: string;
+  sectionId: string;
+  plannedStart: Date | null;
+  plannedEnd: Date | null;
+  actualStart: Date | null;
+  actualEnd: Date | null;
+  progressDate: Date | null;
+  physicalProgress: number;
+  totalPct: number | null;
+  reasonCode: string | null;
+  reasonNote: string | null;
+}
+interface ContractorLookup { id: string; name: string }
+
+/** §7a — bulk-insert the ColabActivity queue via raw INSERT..ON CONFLICT.
+ *  200-row batches so a single statement stays under Postgres' 65k parameter
+ *  cap. ~1s per chunk vs ~18s for per-row upsert. */
+async function bulkWriteColabActivity(prisma: PrismaLike, pending: ColabActivityQueueRow[]): Promise<void> {
+  if (pending.length === 0) return;
+  const now = new Date();
+  for (let i = 0; i < pending.length; i += 200) {
+    const batch = pending.slice(i, i + 200);
+    const values: unknown[] = [];
+    const rowsSql: string[] = [];
+    batch.forEach((r, j) => {
+      const base = j * 15;
+      rowsSql.push(
+        `(gen_random_uuid()::text, $${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5}, $${base+6}, $${base+7}, $${base+8}, $${base+9}, $${base+10}, $${base+11}, $${base+12}, $${base+13}, $${base+14}, $${base+15})`
+      );
+      values.push(
+        r.projectId, r.activityId, r.villaId, r.sectionId,
+        r.plannedStart, r.plannedEnd, r.actualStart, r.actualEnd, r.progressDate,
+        r.physicalProgress, r.totalPct, r.reasonCode, r.reasonNote, now, now,
+      );
+    });
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "ColabActivity" (
+         "id","projectId","activityId","villaId","sectionId",
+         "plannedStart","plannedEnd","actualStart","actualEnd","progressDate",
+         "physicalProgress","totalPct","reasonCode","reasonNote","createdAt","updatedAt"
+       ) VALUES ${rowsSql.join(",")}
+       ON CONFLICT ("projectId","activityId") DO UPDATE SET
+         "villaId"          = EXCLUDED."villaId",
+         "sectionId"        = EXCLUDED."sectionId",
+         "plannedStart"     = EXCLUDED."plannedStart",
+         "plannedEnd"       = EXCLUDED."plannedEnd",
+         "actualStart"      = EXCLUDED."actualStart",
+         "actualEnd"        = EXCLUDED."actualEnd",
+         "progressDate"     = EXCLUDED."progressDate",
+         "physicalProgress" = EXCLUDED."physicalProgress",
+         "totalPct"         = EXCLUDED."totalPct",
+         "reasonCode"       = EXCLUDED."reasonCode",
+         "reasonNote"       = EXCLUDED."reasonNote",
+         "updatedAt"        = EXCLUDED."updatedAt"`,
+      ...values,
+    );
+  }
+}
+
+/** §7b — apply Python-parity stage baselines to every VillaMilestone + child
+ *  wbsNode. stageAgg (row-order + Milestone-column boundaries) wins where
+ *  present; milestoneAgg (Sub_Location grouping) fills in the gaps for
+ *  sections without a MORDER row. */
+async function applyStageAggregateBaselines(
+  prisma: PrismaLike,
+  stageAgg: Map<string, StageAggState>,
+  milestoneAgg: Map<string, MilestoneAggState>,
+): Promise<void> {
+  for (const [vmId, sagg] of stageAgg) {
+    if (!sagg.ps && !sagg.pe && !sagg.earliestProgress) continue;
+    await prisma.villaMilestone.update({
+      where: { id: vmId },
+      data: {
+        baselineStart: sagg.ps ?? undefined,
+        baselineFinish: sagg.pe ?? undefined,
+        actualStart: sagg.earliestProgress ?? undefined,
+      },
+    });
+    await prisma.wBSNode.updateMany({
+      where: { villaMilestoneId: vmId },
+      data: {
+        baselineStart: sagg.ps ?? undefined,
+        baselineFinish: sagg.pe ?? undefined,
+      },
+    });
+  }
+  for (const [vmId, agg] of milestoneAgg) {
+    if (stageAgg.has(vmId)) continue;
+    if (!agg.minPlannedStart && !agg.maxPlannedEnd) continue;
+    await prisma.wBSNode.updateMany({
+      where: { villaMilestoneId: vmId },
+      data: {
+        baselineStart: agg.minPlannedStart ?? undefined,
+        baselineFinish: agg.maxPlannedEnd ?? undefined,
+      },
+    });
+    if (agg.endMarkerSeen) {
       await prisma.villaMilestone.update({
         where: { id: vmId },
         data: { actualFinish: agg.endMarkerClose ?? null },
       });
+      const star = await prisma.wBSNode.findFirst({
+        where: { villaMilestoneId: vmId, isSubMilestone: true },
+        select: { id: true },
+      }) ?? await prisma.wBSNode.findFirst({
+        where: { villaMilestoneId: vmId },
+        select: { id: true },
+      });
+      if (star) {
+        await prisma.wBSNode.update({
+          where: { id: star.id },
+          data: { actualFinish: agg.endMarkerClose ?? null },
+        });
+      }
     }
   }
+}
 
-  stats.elapsedMs = Date.now() - t0;
-  return stats;
+/** §8 — stamp the default contractor on every wbsNode under a touched villa
+ *  that doesn't already have a contractor. Fixes the §2 "villas in scope"
+ *  undercount from earlier when only ~20% of activity-matched nodes got
+ *  tagged. */
+async function bulkTagUntaggedWbsNodes(
+  prisma: PrismaLike,
+  projectId: string,
+  touchedVillaIds: Set<string>,
+  defaultContractorName: string | undefined,
+  contractorByName: Map<string, ContractorLookup>,
+  stats: ColabSyncStats,
+): Promise<void> {
+  if (!defaultContractorName || touchedVillaIds.size === 0) return;
+  const cleaned = defaultContractorName.replace(/^NA-/, "").trim();
+  const contractor = contractorByName.get(cleaned.toLowerCase());
+  if (!contractor) return;
+  const result = await prisma.wBSNode.updateMany({
+    where: {
+      projectId,
+      villaId: { in: [...touchedVillaIds] },
+      contractorId: null,
+    },
+    data: { contractorId: contractor.id },
+  });
+  stats.wbsNodesUpdated += result.count ?? 0;
+}
+
+/** §9 — recompute VillaMilestone.pctComplete + actualStart/Finish from
+ *  child wbsNodes for every villaMilestone we touched. */
+async function rollupTouchedMilestones(
+  prisma: PrismaLike,
+  touchedIds: Set<string>,
+  stats: ColabSyncStats,
+): Promise<void> {
+  for (const villaMilestoneId of touchedIds) {
+    try {
+      await syncVillaMilestoneFromChildren(prisma, villaMilestoneId);
+      stats.villaMilestonesUpdated++;
+    } catch (err) {
+      console.error(`[colab-sync] rollup failed for ${villaMilestoneId}:`, err);
+    }
+  }
+}
+
+/** §10 — Colab-authoritative override. The rollup at §9 recomputes
+ *  actualFinish/actualStart from wbsNode children; that can clear the
+ *  Colab END-marker close we set in §7b. This pass re-applies the
+ *  authoritative values AFTER the rollup so weekly §2 buckets + the
+ *  currentStage picker read Python-parity data. */
+async function overrideAuthoritativeCloseDates(
+  prisma: PrismaLike,
+  stageAgg: Map<string, StageAggState>,
+  milestoneAgg: Map<string, MilestoneAggState>,
+): Promise<void> {
+  const seen = new Set<string>();
+  for (const [vmId, sagg] of stageAgg) {
+    if (!sagg.endMarkerSeen) continue;
+    seen.add(vmId);
+    await prisma.villaMilestone.update({
+      where: { id: vmId },
+      data: {
+        actualFinish: sagg.endMarkerActualEnd ?? null,
+        actualStart: sagg.earliestProgress ?? undefined,
+      },
+    });
+  }
+  for (const [vmId, agg] of milestoneAgg) {
+    if (seen.has(vmId) || !agg.endMarkerSeen) continue;
+    await prisma.villaMilestone.update({
+      where: { id: vmId },
+      data: { actualFinish: agg.endMarkerClose ?? null },
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
