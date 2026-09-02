@@ -73,6 +73,11 @@ export default function VoiceTextarea({
   }, [value]);
 
   useEffect(() => {
+    // Client-only feature detection: SpeechRecognition is undefined during
+    // SSR, so we default `supported` to false and flip it after hydration.
+    // This is exactly the "sync with external system" use case setState-in-
+    // effect is for; the lint rule can't tell.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSupported(getRecognitionCtor() !== null);
   }, []);
 

@@ -24,7 +24,6 @@ import {
 } from "@/lib/dashboardSectionsServer";
 import { istDayStart } from "@/lib/istDay";
 import { isHoliday } from "@/lib/holidays";
-import { isVillaPlannedToday, type VillaMilestoneForStage } from "@/lib/currentStage";
 import {
   AMANVANA_VILLA_NUMBER_TO_BLOCK,
   AMANVANA_CONTRACTOR_SCOPE,

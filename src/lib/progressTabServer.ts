@@ -79,7 +79,6 @@ export interface VillaProgressRow {
 
 export async function getVillaProgressRows(
   projectId: string,
-  _asOf: Date = new Date(),
 ): Promise<VillaProgressRow[]> {
   const villas = await prisma.villa.findMany({
     where: { projectId, inScope: true },
