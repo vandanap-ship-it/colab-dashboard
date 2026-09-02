@@ -36,10 +36,17 @@ export interface WeeklyMilestoneItem {
   movedThisWeek?: boolean;
   daysIdle?: number;
   reason?: string;
-  /** ISO of milestone actualStart — used by the Stalled aging-bar panel's
-   *  "since DD MMM" caption (RUNBOOK weekly §3). Only populated for the
-   *  inProgressStalled items to keep other buckets lean. */
-  sinceDate?: string;
+  /** ISO of milestone.baselineStart — rendered as "DD MMM" in §3 To-Start
+   *  planned column, and in the Stalled aging-bar panel's "since DD MMM"
+   *  caption (Python parity: gen_wk30.py L96 `since {r["date"]}` where
+   *  date = dmy(s['ps'])). */
+  plannedStart?: string;
+  /** ISO of milestone.baselineFinish — rendered as "DD MMM" in §3
+   *  To-Complete planned column (Python parity: date = dmy(s['pe'])). */
+  plannedFinish?: string;
+  /** True when the milestone has an actualStart on/before weekEnd. Powers
+   *  the "started?" pill in the §3 breakdown table (Python: s['started']). */
+  started?: boolean;
 }
 
 export interface WeeklyMilestonePlan {
@@ -419,6 +426,9 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
         blockCode: v.block.code,
         milestoneName: m.section?.name ?? "—",
         daysLate: daysLatePos(m.baselineFinish, weekEnd),
+        plannedStart: m.baselineStart?.toISOString(),
+        plannedFinish: m.baselineFinish?.toISOString(),
+        started: !!m.actualStart && m.actualStart <= weekEnd,
         reason,
       };
 

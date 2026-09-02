@@ -35,6 +35,12 @@ function itemsLbl(list: string[], n = 8): string {
 function chipLabel(i: WeeklyMilestoneItem): string {
   return `V${i.villaNumber.toString().padStart(2, "0")} ${i.milestoneName}`;
 }
+function fmtIsoDayShort(iso: string | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
 function reasonColor(reason: string): string {
   const r = reason.toLowerCase();
   if (r.includes("design") || r.includes("scope")) return "#8E2D1E";
@@ -479,13 +485,14 @@ function BreakdownTable({ mode, rows }: { mode: "complete" | "start"; rows: Brea
       <tbody>
         {rows.map((r, i) => {
           const days = r.daysLate ?? 0;
-          const started = !!r.sinceDate || !!r.daysIdle;
+          const started = !!r.started;
+          const plannedIso = mode === "complete" ? r.plannedFinish : r.plannedStart;
           return (
             <tr key={`${r.villaNumber}-${r.milestoneName}-${i}`}>
               <td className={weekly.dVv}>V{r.villaNumber.toString().padStart(2, "0")}</td>
               <td>Block {r.blockCode}</td>
               <td>{r.milestoneName}</td>
-              <td>—</td>
+              <td>{fmtIsoDayShort(plannedIso)}</td>
               <td className={mode === "complete" ? weekly.dLate : weekly.dWarn}>{days}d</td>
               <td>
                 <span className={`${weekly.srcp} ${r.tag === "spilled" ? weekly.srcpSp : weekly.srcpTw}`}>
@@ -518,7 +525,13 @@ function StalledPanelV2({ items, weekEnd }: { items: WeeklyMilestoneItem[]; week
         const d = r.daysIdle ?? 0;
         const col = d >= 14 ? "#8E2D1E" : d >= 7 ? "#B5561F" : "#CA9F49";
         const w = Math.max(6, Math.round((d / mx) * 100));
-        const since = r.sinceDate ? new Date(r.sinceDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : fmtDayShort(weekEnd);
+        // Python gen_wk30.py L96: `since {r["date"]}` where date = dmy(s['ps']),
+        // i.e. the planned START. Fallback to weekEnd only if planned start
+        // is missing (should never happen for stalled items — they're stalled
+        // BECAUSE the planned start has passed).
+        const since = r.plannedStart
+          ? new Date(r.plannedStart).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
+          : fmtDayShort(weekEnd);
         const reason = r.reason ?? "no cause logged";
         return (
           <div key={`${r.villaNumber}-${r.milestoneName}-${i}`} className={weekly.nmrow}>
