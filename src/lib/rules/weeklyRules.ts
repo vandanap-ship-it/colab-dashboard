@@ -310,22 +310,32 @@ export interface DelayReasonRow {
   maxDelay: number | null;   // max ditto
 }
 
-/** Group by normalised reason across Abraham villa rows only. Matches
- *  build_wk23.py L207-232. */
-export function computeDelayReasons(rows: ColabCsvRow[], weekEnd: Date): DelayReasonRow[] {
-  const abrahamVillas = new Set(Object.values(ABRAHAM_BLOCKS).flat());
+/** A single per-activity input to §5. `villa` is the display label (Python
+ *  normalises to "V05"); server callers should already pass it in that form.
+ *  `plannedEnd` and `rawReason` are the Python columns `Planned_End_Date`
+ *  and `Reason_for_Delay`. */
+export interface DelayReasonInput {
+  villa: string;
+  plannedEnd: Date | null;
+  rawReason: string | null | undefined;
+}
+
+/** Core aggregation — Python build_wk23.py L207-232.
+ *
+ * Takes pre-filtered per-activity items (caller decides which villas are
+ * in scope) and returns the same shape both the CSV path and the
+ * server-side Prisma path emit. `weekEnd` gates the days-past window.
+ */
+export function aggregateDelayReasons(items: DelayReasonInput[], weekEnd: Date): DelayReasonRow[] {
   const byReason = new Map<string, { rowCount: number; villas: Set<string>; delays: number[] }>();
-  for (const r of rows) {
-    const villa = r.Location_Name?.trim();
-    if (!villa || !abrahamVillas.has(villa)) continue;
-    const reason = normalizeReason(r.Reason_for_Delay);
+  for (const it of items) {
+    const reason = normalizeReason(it.rawReason);
     if (!reason) continue;
     const entry = byReason.get(reason) ?? { rowCount: 0, villas: new Set<string>(), delays: [] };
     entry.rowCount++;
-    entry.villas.add(villa);
-    const pe = parseColabDate(r.Planned_End_Date);
-    if (pe) {
-      const days = Math.round((weekEnd.getTime() - pe.getTime()) / 86400000);
+    entry.villas.add(it.villa);
+    if (it.plannedEnd) {
+      const days = Math.round((weekEnd.getTime() - it.plannedEnd.getTime()) / 86400000);
       if (days > 0) entry.delays.push(days);
     }
     byReason.set(reason, entry);
@@ -353,6 +363,23 @@ export function computeDelayReasons(rows: ColabCsvRow[], weekEnd: Date): DelayRe
   // on that base ordering).
   out.sort((a, b) => (b.acts - a.acts) || a.reason.localeCompare(b.reason));
   return out;
+}
+
+/** CSV entry point — filters to Abraham villas per WEEKLY_HANDOFF.md, then
+ *  delegates to {@link aggregateDelayReasons}. */
+export function computeDelayReasons(rows: ColabCsvRow[], weekEnd: Date): DelayReasonRow[] {
+  const abrahamVillas = new Set(Object.values(ABRAHAM_BLOCKS).flat());
+  const items: DelayReasonInput[] = [];
+  for (const r of rows) {
+    const villa = r.Location_Name?.trim();
+    if (!villa || !abrahamVillas.has(villa)) continue;
+    items.push({
+      villa,
+      plannedEnd: parseColabDate(r.Planned_End_Date),
+      rawReason: r.Reason_for_Delay,
+    });
+  }
+  return aggregateDelayReasons(items, weekEnd);
 }
 
 // ---------------------------------------------------------------------------

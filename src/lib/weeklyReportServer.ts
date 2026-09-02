@@ -13,9 +13,11 @@
 import { prisma } from "@/lib/prisma";
 import { rangeSummary, type DaySummary, type ManpowerEntryRow, type TradePlanRow } from "@/lib/manpower";
 import { reasonLabel } from "@/lib/hindranceReasons";
-import { mitigationFor } from "@/lib/reasonMitigations";
+import { mitigationForLabel } from "@/lib/reasonMitigations";
 import { istDayStart } from "@/lib/istDay";
 import { isHoliday } from "@/lib/holidays";
+import { aggregateDelayReasons } from "@/lib/rules/weeklyRules";
+import { AMANVANA_VILLA_NUMBER_TO_BLOCK } from "@/lib/projects/amanvana";
 
 // ---------------------------------------------------------------------------
 // Shapes
@@ -282,17 +284,20 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
         },
       },
     }),
-    // Colab activities carrying a reasonCode — the raw per-activity source
-    // Python's §5 aggregates over (build_wk30.py L207-230). Read the full
-    // reason-tagged set here (not just this-week) because Python's `ab` is
-    // the entire project export, not week-scoped. `plannedEnd` + `weekEnd`
-    // are what drives avg/max delay.
+    // Colab activities carrying a reason note — the raw per-activity source
+    // Python's §5 aggregates over (build_wk23.py L207-232). Read the full
+    // reason-tagged set (not just this-week) because Python's `ab` is the
+    // entire project export, not week-scoped. We read the RAW `reasonNote`
+    // (not our pre-mapped `reasonCode`) so the shared normalizeReason
+    // matches Python's `norm_reason` exactly — otherwise everything our
+    // importer coded as OTHER collapses into one bucket instead of being
+    // dropped as Python does for hygiene rows.
     prisma.colabActivity.findMany({
-      where: { projectId, reasonCode: { not: null } },
+      where: { projectId, reasonNote: { not: null } },
       select: {
         villaId: true,
         plannedEnd: true,
-        reasonCode: true,
+        reasonNote: true,
       },
     }),
   ]);
@@ -646,65 +651,37 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     };
   })();
 
-  // ------- §5 Delay Reasons & Mitigation (Python parity, build_wk30.py L207-232) -------
-  //   acts       = row count in reason group (raw Colab activity rows)
-  //   nvillas    = distinct villas the reason touches
-  //   avg_delay  = round(mean((weekEnd - plannedEnd).days)) over rows where > 0
-  //   max_delay  = max of same
-  //   sort       = acts desc, tie-break by reason label (Python's groupby yields
-  //                alpha order, then a stable sort on acts preserves it).
-  const reasonAgg = new Map<string, {
-    label: string;
-    count: number;              // acts
-    delays: number[];           // per-row overdueDays where > 0
-    villas: Set<number>;
-    hasProjectLevel: boolean;
-  }>();
-  for (const a of reasonActivities) {
-    const code = a.reasonCode;
-    if (!code) continue;
-    const key = code;
-    const entry = reasonAgg.get(key) ?? {
-      label: reasonLabel(code),
-      count: 0,
-      delays: [],
-      villas: new Set<number>(),
-      hasProjectLevel: false,
-    };
-    entry.count++;
-    if (a.villaId) {
-      const num = villaIdToNumber.get(a.villaId);
-      if (num != null) entry.villas.add(num);
-      else entry.hasProjectLevel = true; // villa outside inScope set
-    } else {
-      entry.hasProjectLevel = true;
-    }
-    if (a.plannedEnd) {
-      const days = Math.floor((weekEnd.getTime() - a.plannedEnd.getTime()) / 86400000);
-      if (days > 0) entry.delays.push(days);
-    }
-    reasonAgg.set(key, entry);
-  }
-  const delayReasons: DelayReasonWithMitigation[] = [...reasonAgg.entries()]
-    .map(([code, v]) => {
-      const sum = v.delays.reduce((n, d) => n + d, 0);
-      return {
-        code,
-        label: v.label,
-        count: v.count,
-        // `daysImpact` is retained on the shape for backwards compatibility
-        // with any downstream consumer — we now surface the sum of positive
-        // per-activity overdue days (mirrors Python's numerator for avg).
-        daysImpact: sum,
-        avgDaysImpact: v.delays.length > 0 ? Math.round(sum / v.delays.length) : 0,
-        maxDaysImpact: v.delays.length > 0 ? Math.max(...v.delays) : 0,
-        affectedVillas: [...v.villas].sort((a, b) => a - b),
-        activityCount: v.count,
-        hasProjectLevel: v.hasProjectLevel,
-        mitigation: mitigationFor(code),
-      };
-    })
-    .sort((a, b) => (b.count - a.count) || a.label.localeCompare(b.label));
+  // ------- §5 Delay Reasons & Mitigation (Python parity, build_wk23.py L207-232) -------
+  // Delegate to the rules-module aggregator so the deploy and the fixture
+  // tests hit the same code path. Python's `ab` dataframe is filtered to
+  // Abraham villas (build_wk23.py L5: `ab=df[df['Location_Name'].isin(ALLV)]`)
+  // BEFORE any §5 groupby, so we mirror that filter here.
+  const abrahamNumbers = new Set(Object.keys(AMANVANA_VILLA_NUMBER_TO_BLOCK).map((k) => parseInt(k, 10)));
+  const reasonInputs = reasonActivities.flatMap((a) => {
+    const num = a.villaId ? villaIdToNumber.get(a.villaId) : undefined;
+    if (num == null || !abrahamNumbers.has(num)) return [];
+    return [{
+      villa: `V${num.toString().padStart(2, "0")}`,
+      plannedEnd: a.plannedEnd,
+      rawReason: a.reasonNote,
+    }];
+  });
+  const aggregated = aggregateDelayReasons(reasonInputs, weekEnd);
+  // Adapt to the report's downstream shape (adds code, mitigation, etc.).
+  // The reason label from the rules module IS the display label — we reuse it
+  // for the code slot so the UI keys stay stable.
+  const delayReasons: DelayReasonWithMitigation[] = aggregated.map((r) => ({
+    code: r.reason,
+    label: r.reason,
+    count: r.acts,
+    daysImpact: (r.avgDelay ?? 0) * r.acts,
+    avgDaysImpact: r.avgDelay ?? 0,
+    maxDaysImpact: r.maxDelay ?? 0,
+    affectedVillas: r.villas.map((v) => parseInt(v.replace(/^V/, ""), 10)),
+    activityCount: r.acts,
+    hasProjectLevel: false,
+    mitigation: mitigationForLabel(r.reason),
+  }));
 
   return {
     project,

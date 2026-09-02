@@ -4,7 +4,7 @@
 // the exact wording as a starting point. Admin can override per project
 // later if needed (schema doesn't support that yet — future work).
 
-import type { HindranceReasonCode } from "@/lib/hindranceReasons";
+import { HINDRANCE_REASONS, type HindranceReasonCode } from "@/lib/hindranceReasons";
 
 export const REASON_MITIGATIONS: Record<HindranceReasonCode | "UNSPECIFIED", string> = {
   CHANGE_ORDER:
@@ -40,4 +40,17 @@ export const REASON_MITIGATIONS: Record<HindranceReasonCode | "UNSPECIFIED", str
 export function mitigationFor(code: string | null | undefined): string {
   const key = code as keyof typeof REASON_MITIGATIONS;
   return REASON_MITIGATIONS[key] ?? REASON_MITIGATIONS.UNSPECIFIED;
+}
+
+// Label → code map for lookups from the display label (used by the Weekly
+// Report §5 where the aggregator returns the Python-style label directly).
+const LABEL_TO_CODE: Map<string, HindranceReasonCode> = new Map(
+  HINDRANCE_REASONS.map((r) => [r.label, r.code]),
+);
+
+/** Same as {@link mitigationFor} but accepts the display label. Falls back
+ *  to the UNSPECIFIED string for labels outside the known taxonomy. */
+export function mitigationForLabel(label: string): string {
+  const code = LABEL_TO_CODE.get(label);
+  return code ? REASON_MITIGATIONS[code] : REASON_MITIGATIONS.UNSPECIFIED;
 }
