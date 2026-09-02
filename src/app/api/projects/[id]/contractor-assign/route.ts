@@ -1,9 +1,28 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canCreateProject } from "@/lib/roles";
 import { recordAudit } from "@/lib/audit";
 import { badRequest, forbidden, notFound, unauthorized } from "@/lib/apiErrors";
+import { parseBody } from "@/lib/parseBody";
+
+const BodySchema = z.discriminatedUnion("scope", [
+  z.object({ scope: z.literal("untagged"), contractorId: z.string().min(1) }),
+  z.object({ scope: z.literal("block"), contractorId: z.string().min(1), blockCode: z.string().min(1) }),
+  z.object({ scope: z.literal("villa"), contractorId: z.string().min(1), villaNumber: z.number().int().positive() }),
+  z.object({
+    scope: z.literal("villa-list"),
+    contractorId: z.string().min(1),
+    villaNumbers: z.array(z.number().int().positive()).min(1),
+    override: z.literal(true, { message: "override=true required for scope=villa-list" }),
+  }),
+  z.object({
+    scope: z.literal("all"),
+    contractorId: z.string().min(1),
+    override: z.literal(true, { message: "override=true required for scope=all" }),
+  }),
+]);
 
 /**
  * Bulk-assign a contractor to WBS activities in a project.
@@ -31,42 +50,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
   if (!project) return notFound();
 
-  let body: unknown;
-  try { body = await req.json(); } catch { return badRequest("Invalid JSON"); }
+  const parsed = await parseBody(req, BodySchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+  const { contractorId, scope } = body;
+  const blockCode    = scope === "block" ? body.blockCode : undefined;
+  const villaNumber  = scope === "villa" ? body.villaNumber : undefined;
+  const villaNumbers = scope === "villa-list" ? body.villaNumbers : undefined;
 
-  const { contractorId, scope, blockCode, villaNumber, villaNumbers, override } = (body ?? {}) as {
-    contractorId?: string;
-    scope?: "untagged" | "block" | "villa" | "villa-list" | "all";
-    blockCode?: string;
-    villaNumber?: number;
-    /** For scope=villa-list — batch reassign every activity across a set of
-     *  villa numbers in one call. Skips the null-filter (implicit override)
-     *  so Elegant can be assigned to villas Abraham currently owns. */
-    villaNumbers?: number[];
-    override?: boolean;
-  };
-
-  if (!contractorId) return badRequest("contractorId required");
   const contractor = await prisma.contractor.findFirst({
     where: { id: contractorId, projectId },
     select: { id: true, name: true },
   });
   if (!contractor) return badRequest("Contractor not found on this project");
-
-  if (!scope) return badRequest("scope required (untagged | block | villa | villa-list | all)");
-  if (scope === "all" && !override) {
-    return badRequest("scope=all overrides existing contractor tags — pass override:true to confirm");
-  }
-  if (scope === "block" && !blockCode) return badRequest("blockCode required for scope=block");
-  if (scope === "villa" && villaNumber == null) return badRequest("villaNumber required for scope=villa");
-  if (scope === "villa-list") {
-    if (!Array.isArray(villaNumbers) || villaNumbers.length === 0) {
-      return badRequest("villaNumbers (non-empty array) required for scope=villa-list");
-    }
-    if (!override) {
-      return badRequest("scope=villa-list overrides existing contractor tags — pass override:true to confirm");
-    }
-  }
 
   // Build the where clause based on scope. Every scope narrows to this project.
   // scope=all and scope=villa-list both override existing tags (their own gate

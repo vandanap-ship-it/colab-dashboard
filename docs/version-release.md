@@ -87,6 +87,35 @@ Tracks what's in each release, what's planned next, and what's deferred.
 
 ---
 
+## Coding patterns (in effect from 2026-08-30)
+
+### API request-body validation — always use zod + parseBody
+
+Every new `/api/**/route.ts` that parses a JSON body must use the shared
+`parseBody` helper in `src/lib/parseBody.ts`, with a zod schema. This
+enforces validation at the type level and returns structured 400 errors.
+
+```typescript
+import { z } from "zod";
+import { parseBody } from "@/lib/parseBody";
+
+const BodySchema = z.object({
+  contractorId: z.string().min(1),
+  scope: z.enum(["untagged", "block", "villa"]),
+});
+
+export async function POST(req: Request) {
+  const parsed = await parseBody(req, BodySchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;   // fully typed
+  ...
+}
+```
+
+Discriminated unions (`z.discriminatedUnion("scope", [...])`) work well
+when a field's validity depends on other fields — see
+`api/projects/[id]/contractor-assign/route.ts` for the pattern.
+
 ## V1.5 — Tech-debt cleanup (first 2 weeks post-launch)
 
 From the code review on 2026-08-29, take these before scaling to more projects:
