@@ -1,24 +1,54 @@
-/* Weekly report — inherits .wrap tokens from scorecard.module.css
-   (charcoal / cream / gold / green / red palette, serif + sans stack).
-   Additional weekly-only components below. */
+/* Weekly report — ported from Amanvana Reporting Toolkit v14
+   scripts/gen_wk30.py HTML template. Palette + class semantics kept
+   1:1 with the Python-generated HTML so the rendered result matches
+   Amanvana_Phase1_Weekly_wk30.pdf. */
 
-/* -------------- Hero (dark navy, matches Python PDF exactly) -------------- */
+/* Palette tokens for reference:
+   CH (charcoal)   = #161926
+   CREAM (bg)      = #F3EFE8
+   GOLD            = #CA9F49
+   SAND            = #FAE1C8
+   CEM (cement)    = #8a8a84
+   RED             = #8E2D1E
+   REDS (soft red) = #C9756A
+   GREEN           = #73823C
+   GREEN2 (hi)     = #8CA04A
+   AMBER           = #B5561F
+*/
+
+/* -------------- Page frame -------------- */
+.page {
+  background: #F3EFE8;
+  color: #161926;
+  padding: 30px 34px;
+  font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  max-width: 820px;
+  margin: 0 auto;
+}
+.page :global(*) { box-sizing: border-box; }
+
+/* -------------- Head -------------- */
 .hero {
   background: #161926;
-  color: #F7EDD9;
-  padding: 22px 26px 24px;
-  border-radius: 10px;
-  margin-bottom: 18px;
+  border-radius: 14px;
+  padding: 20px 26px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
 }
+.heroLeft {}
 .heroCrumb {
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  color: #C7BFA7;
-  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #FAE1C8;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 7px;
 }
 .heroCrumbDot {
   width: 6px;
@@ -27,807 +57,621 @@
   background: #CA9F49;
   display: inline-block;
 }
-.heroBody {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
 .heroTitle {
   font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
-  font-size: 40px;
+  font-size: 27px;
+  color: #ffffff;
+  margin-top: 6px;
   font-weight: 400;
-  color: #F7EDD9;
-  line-height: 1.05;
-  margin: 0;
-  letter-spacing: 0.005em;
+  line-height: 1.1;
 }
-.heroTitle em {
+.heroTitle em, .heroTitle span {
   color: #CA9F49;
   font-style: normal;
 }
 .heroDate {
-  font-size: 13px;
-  color: #E7DEC7;
-  letter-spacing: 0.02em;
-  padding-bottom: 6px;
-  white-space: nowrap;
+  text-align: right;
 }
-
-/* -------------- §1 Overall Project Progress — dark navy card, two panels -------------- */
-.overallHeroCard {
-  background: #161926;
-  color: #F7EDD9;
-  padding: 22px 26px;
-  border-radius: 10px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-.overallHeroPanel {
-  text-align: left;
-}
-.overallHeroLbl {
-  font-size: 10.5px;
-  letter-spacing: 0.16em;
-  color: #C7BFA7;
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-.overallHeroVal {
+.heroDateVal {
   font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
-  font-size: 46px;
-  font-weight: 400;
-  color: #F7EDD9;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
+  font-size: 17px;
+  color: #ffffff;
 }
-.overallHeroValGold { color: #CA9F49; }
-
-/* -------------- §2 Contractor strip -------------- */
-.mpContractorStrip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 16px;
-  background: #FCF6EA;
-  border: 1px solid #E7DFC9;
-  border-left: 3px solid #CA9F49;
-  border-radius: 6px;
-  margin-bottom: 14px;
-}
-.mpContractorLeft { min-width: 0; }
-.mpContractorName {
-  font-size: 14px;
-  font-weight: 600;
-  color: #161926;
-}
-.mpContractorNote {
-  font-size: 12px;
-  color: #706C61;
+.heroDateSub {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a8a84;
   margin-top: 3px;
 }
-.mpPill {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 5px 12px;
-  border-radius: 999px;
-  white-space: nowrap;
+
+/* -------------- Section header -------------- */
+.sec { margin-top: 24px; }
+.sechd {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 13px;
 }
-.mpPillActive {
-  background: #E8F1E4;
-  color: #486E3B;
-  border: 1px solid #C8DFC0;
+.secNum {
+  background: #161926;
+  color: #CA9F49;
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 14px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
-.mpPillMuted {
-  background: #F3EFE2;
-  color: #7A5A00;
-  border: 1px solid #E7DFC9;
+.secTitle {
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 20px;
+  color: #161926;
+  font-weight: 400;
+  line-height: 1;
+}
+.secNote {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: #8a8a84;
+  font-style: italic;
 }
 
-/* -------------- §2 Three-card grid -------------- */
-.mpCards {
+/* -------------- §1 Snap panel (dark navy) -------------- */
+.snap {
+  background: #161926;
+  border-radius: 13px;
+  padding: 22px 26px;
+}
+.snapRow {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  margin-bottom: 12px;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
-@media (max-width: 800px) {
-  .mpCards { grid-template-columns: 1fr; }
+.snapCell { padding: 0 4px; }
+.snapLbl {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a8a84;
+  margin-bottom: 7px;
 }
-.mpCard {
-  padding: 16px 18px 18px;
-  background: #FCFAF3;
-  border: 1px solid #E7DFC9;
-  border-radius: 8px;
-  border-top: 3px solid #CA9F49;
-}
-.mpCardTitle {
-  font-size: 10.5px;
-  letter-spacing: 0.14em;
-  font-weight: 700;
-  color: #7A5A00;
-  margin-bottom: 12px;
-}
-.mpCardBigRow {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.mpCardBig {
+.snapVal {
   font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
-  font-size: 52px;
+  font-size: 34px;
   line-height: 1;
-  color: #161926;
+  color: #ffffff;
   font-variant-numeric: tabular-nums;
 }
-.mpCardDenomWrap {
-  flex: 1;
-  min-width: 0;
-  padding-bottom: 4px;
+.snapValAct { color: #CA9F49; }
+
+/* -------------- §2 Contractor strip (cbar) -------------- */
+.cbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  border: 1px solid #e5ded2;
+  border-left: 5px solid #CA9F49;
+  border-radius: 10px;
+  padding: 11px 16px;
+  margin-bottom: 13px;
 }
-.mpCardDenom {
-  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
-  font-size: 18px;
-  color: #706C61;
-  line-height: 1;
-  margin-bottom: 4px;
+.cbarName {
+  font-weight: 800;
+  font-size: 13px;
+  color: #161926;
 }
-.mpCardSubLbl {
-  font-size: 9.5px;
-  letter-spacing: 0.10em;
+.cbarNote {
+  font-size: 11px;
+  color: #8a8a84;
+}
+.cbarPill {
+  margin-left: auto;
+  font-size: 10px;
   font-weight: 700;
-  color: #706C61;
+  padding: 3px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.cbarPillActive {
+  color: #73823C;
+  background: rgba(115, 130, 60, 0.12);
+  border: 1px solid rgba(115, 130, 60, 0.4);
+}
+.cbarPillMuted {
+  color: #B5561F;
+  background: rgba(181, 86, 31, 0.1);
+  border: 1px solid rgba(181, 86, 31, 0.35);
+}
+
+/* -------------- §2 Milestone cards -------------- */
+.mcards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 13px;
+}
+@media (max-width: 780px) {
+  .mcards { grid-template-columns: 1fr; }
+}
+.mc {
+  background: #ffffff;
+  border: 1px solid #e5ded2;
+  border-radius: 12px;
+  padding: 16px 17px;
+  border-top: 3px solid #161926;
+}
+.mcDone { border-top-color: #8E2D1E; }
+.mcH3 {
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #161926;
+  font-weight: 700;
+  margin-bottom: 11px;
+}
+.mcPa {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.mcBig {
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 34px;
+  color: #161926;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.mcOf {
+  font-size: 14px;
+  color: #8a8a84;
+}
+.mcLb {
+  font-size: 10px;
+  color: #7a7a72;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-left: auto;
+  text-align: right;
   line-height: 1.3;
 }
-.mpCardBar {
+.tabar {
   position: relative;
-  height: 6px;
-  background: #F0EBD9;
-  border-radius: 3px;
-  margin-bottom: 10px;
-  overflow: visible;
-}
-.mpCardBarFill {
-  height: 100%;
-  background: #7BAE60;
-  border-radius: 3px;
-  transition: width 200ms ease;
-}
-.mpCardBarPct {
-  position: absolute;
-  right: 0;
-  top: 8px;
-  font-size: 10.5px;
-  font-weight: 700;
-  color: #486E3B;
-}
-.mpCardNote {
-  font-size: 11px;
-  color: #706C61;
+  height: 7px;
+  background: #efe8db;
+  border-radius: 4px;
   margin-top: 12px;
-  line-height: 1.5;
-}
-.mpCardHr {
-  border: 0;
-  border-top: 1px dashed #E7DFC9;
-  margin: 12px 0 10px;
-}
-.mpCardSpillTitle {
-  font-size: 10.5px;
-  letter-spacing: 0.14em;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-.mpCardSpillTitleAmber { color: #965532; }
-.mpCardSpillTitleNotMoving { color: #965532; }
-.mpCardSpillCount {
-  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
-  font-size: 24px;
-  color: #965532;
-  line-height: 1;
-  margin-bottom: 6px;
-}
-.mpCardSpillNote {
-  font-size: 11px;
-  color: #706C61;
-  line-height: 1.5;
-}
-
-/* -------------- §3 Milestone Breakdown tables -------------- */
-.mbSection {
-  margin-bottom: 20px;
-}
-.mbBanner {
-  color: #F7EDD9;
-  font-size: 11.5px;
-  letter-spacing: 0.14em;
-  font-weight: 700;
-  padding: 10px 14px;
-  border-radius: 6px 6px 0 0;
-}
-.mbBannerComplete { background: #7A2E1F; }
-.mbBannerStart    { background: #8B5A00; }
-.mbBannerInProgress { background: #2F5D8A; }
-.mbEmpty {
-  padding: 14px 16px;
-  font-size: 12px;
-  color: #706C61;
-  background: #FCFAF3;
-  border: 1px solid #E7DFC9;
-  border-top: 0;
-  border-radius: 0 0 6px 6px;
-}
-.mbTable {
-  width: 100%;
-  border-collapse: collapse;
-  background: #FCFAF3;
-  border: 1px solid #E7DFC9;
-  border-top: 0;
-  border-radius: 0 0 6px 6px;
   overflow: hidden;
-  font-size: 11.5px;
-  color: #161926;
 }
-.mbTable thead th {
-  text-align: left;
-  padding: 10px 12px;
-  background: #F3EFE2;
-  color: #7A5A00;
-  font-size: 10px;
-  letter-spacing: 0.10em;
-  font-weight: 700;
-  border-bottom: 1px solid #E7DFC9;
-  vertical-align: middle;
-}
-.mbTable tbody td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #F3EFE2;
-  vertical-align: middle;
-}
-.mbTable tbody tr:last-child td { border-bottom: 0; }
-.mbVilla {
-  font-weight: 700;
-  color: #161926;
-}
-.mbLate {
-  color: #965532;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.mbReason {
-  color: #706C61;
-  font-size: 11px;
-  line-height: 1.5;
-  max-width: 220px;
-}
-.mbTag {
-  display: inline-block;
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 3px 8px;
-  border-radius: 3px;
-  white-space: nowrap;
-}
-.mbTagSpilled  { background: #FCE4D9; color: #7A2E1F; }
-.mbTagWeek     { background: #FDF1D3; color: #8B5A00; }
-.mbTagMoving   { background: #E8F1E4; color: #486E3B; }
-.mbTagStalled  { background: #F3EFE2; color: #706C61; }
-.mbSitePill {
-  display: inline-block;
-  font-size: 10.5px;
-  padding: 3px 8px;
-  background: #F3EFE2;
-  color: #7A5A00;
-  border-radius: 3px;
-  white-space: nowrap;
-}
-
-/* -------------- §2 Explanation text -------------- */
-.mpExplain {
-  font-size: 11.5px;
-  color: #706C61;
-  line-height: 1.6;
-  margin: 4px 0 16px;
-}
-
-/* -------------- §5 Delay Reason cards (PDF style) -------------- */
-.reasonCard {
-  position: relative;
-  padding: 12px 16px 14px 22px;
-  border: 1px solid #E7DFC9;
-  border-radius: 6px;
-  background: #FCFAF3;
-  margin-bottom: 10px;
-}
-.reasonBullet {
+.tafill {
   position: absolute;
-  left: 10px;
-  top: 18px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #965532;
+  left: 0;
+  top: 0;
+  height: 100%;
+  border-radius: 4px;
 }
-.reasonHead {
-  margin-bottom: 8px;
-}
-.reasonName {
-  font-size: 14px;
-  font-weight: 600;
-  color: #161926;
-  margin-bottom: 3px;
-}
-.reasonStatLine {
-  font-size: 11.5px;
-  color: #706C61;
-  line-height: 1.5;
-}
-.reasonStatLine strong {
-  color: #161926;
-  font-weight: 700;
-}
-
-/* -------------- §5 Mitigation & recovery table -------------- */
-.mitTitle {
-  font-size: 13px;
-  font-weight: 600;
-  color: #161926;
-  margin: 18px 0 8px;
-}
-.mitTable {
-  width: 100%;
-  border-collapse: collapse;
-  background: #FCFAF3;
-  border: 1px solid #E7DFC9;
-  border-radius: 6px;
-  overflow: hidden;
-  font-size: 11.5px;
-  color: #161926;
-}
-.mitTable thead th {
-  text-align: left;
-  padding: 10px 12px;
-  background: #F3EFE2;
-  color: #7A5A00;
+.tapct {
   font-size: 10px;
-  letter-spacing: 0.10em;
   font-weight: 700;
-  border-bottom: 1px solid #E7DFC9;
-}
-.mitTable tbody td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #F3EFE2;
-  vertical-align: top;
-  line-height: 1.5;
-}
-.mitTable tbody tr:last-child td { border-bottom: 0; }
-.mitReason { font-weight: 600; color: #161926; white-space: nowrap; }
-.mitAction { color: #16202F; }
-.mitBlank  { color: #B7AF95; font-size: 12px; }
-
-/* -------------- §1 Overall Progress — Target & Actual only (RUNBOOK) -------------- */
-.overallRow {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14px;
-}
-.overallCell {
-  padding: 18px 20px;
-  border-radius: 6px;
-  border: 1px solid #E7DFC9;
-  text-align: left;
-  background: #FCF6EA;
-}
-.overallLbl {
-  font-size: 10px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #A0A09B;
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-.overallSubLbl {
-  font-size: 10px;
-  color: #A0A09B;
   margin-top: 4px;
-  font-style: italic;
+  text-align: right;
 }
-.overallVal {
+.spill {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px dashed #ddd4c4;
+}
+.spillH {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #B5561F;
+  font-weight: 700;
+}
+.spillN {
   font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
-  font-size: 42px;
-  font-weight: 400;
-  letter-spacing: 0.005em;
-  color: #161926;
-  font-variant-numeric: tabular-nums;
+  font-size: 20px;
+  color: #B5561F;
+  margin: 2px 0 4px;
   line-height: 1;
 }
-.overallPlanned .overallVal { color: #161926; }
-.overallActual .overallVal { color: #CA9F49; /* gold — the actual number */ }
-
-/* Contractor block */
-.contractorBlock {
-  padding: 12px 0;
-  border-bottom: 1px dashed #EDE9DD;
-}
-.contractorBlock:last-child { border-bottom: 0; padding-bottom: 0; }
-.contractorTitle {
-  font-size: 12px;
-  font-weight: 700;
-  color: #16202F;
-  letter-spacing: 0.02em;
-  margin-bottom: 8px;
-}
-.contractorNoSched {
-  font-weight: 500;
-  color: #8B93A0;
-  font-style: italic;
-}
-
-/* Milestone bucket */
-.bucket { padding: 8px 0; }
-.bucket + .bucket { border-top: 1px dashed #F1EEE4; }
-.bucketHd {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-.bucketLbl {
+.spillI {
   font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #16202F;
-  font-weight: 700;
+  color: #7a7a72;
+  line-height: 1.4;
 }
-.bucketMetric {
-  font-size: 15px;
-  font-weight: 700;
-  color: #16202F;
-  font-variant-numeric: tabular-nums;
+.si2 {
+  font-size: 10px;
+  color: #7a7a72;
+  margin-top: 10px;
+  line-height: 1.4;
 }
-.bucketMetricLbl {
+.si2 strong, .si2 b { color: #161926; font-weight: 700; }
+.empty { color: #9a9a92; }
+
+.mnote {
   font-size: 10.5px;
-  color: #8B93A0;
-  font-weight: 500;
-  margin-left: 4px;
+  color: #8a8a84;
+  margin-top: 11px;
+  line-height: 1.5;
 }
-.bucketEmpty { padding: 4px 0; color: #B8BCC4; font-size: 11px; }
-.bucketItems { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 0; }
-.bucketItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border: 1px solid #E2DDD0;
-  border-radius: 3px;
-  font-size: 11px;
-  background: #FFFFFF;
-}
-.bucketItemVilla { font-weight: 700; color: #16202F; font-variant-numeric: tabular-nums; }
-.bucketItemMilestone { color: #4E5866; }
-.bucketItemLate {
-  font-size: 10px;
-  font-weight: 700;
-  color: #FFFFFF;
-  background: #B33A3A;
-  padding: 1px 5px;
-  border-radius: 2px;
-  font-variant-numeric: tabular-nums;
-}
-.bucketItemStalled {
-  font-size: 10px;
-  font-weight: 700;
-  color: #FFFFFF;
-  background: #C77A2A;
-  padding: 1px 5px;
-  border-radius: 2px;
-  font-variant-numeric: tabular-nums;
-}
-.bucketItemMore {
-  padding: 3px 8px;
-  color: #8B93A0;
-  font-size: 11px;
-  font-style: italic;
-}
-.bucketItemMoving {
-  font-size: 10px;
-  font-weight: 700;
-  color: #FFFFFF;
-  background: #2E7D5B;
-  padding: 1px 5px;
-  border-radius: 2px;
-}
-.bucketItemReason {
-  font-size: 10px;
-  color: #4E5866;
-  font-style: italic;
-  padding-left: 4px;
-  border-left: 1px solid #E2DDD0;
-  margin-left: 2px;
-}
+.mnote b, .mnote strong { color: #161926; }
 
-/* -------------- Holiday shading (RUNBOOK point 4) -------------- */
-.chartHoliday {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: repeating-linear-gradient(
-    45deg,
-    #F3EFE8,
-    #F3EFE8 4px,
-    #E7DFC9 4px,
-    #E7DFC9 8px
-  );
-  border: 1px dashed #CA9F49;
-  border-radius: 3px;
-  padding: 6px 2px;
+/* -------------- §3 Milestone breakdown tables -------------- */
+.dtable {
+  background: #ffffff;
+  border: 1px solid #e5ded2;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 13px;
 }
-.chartHolidayLabel {
+.dtable:first-of-type { margin-top: 0; }
+.dgrp {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 11px 16px 7px;
+  color: #ffffff;
+}
+.dgrpA { background: #8E2D1E; }
+.dgrpB { background: #B5561F; }
+.dTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+.dTable th {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a8a84;
+  text-align: left;
+  padding: 8px 16px;
+  border-bottom: 1px solid #ece4d5;
+  font-weight: 700;
+}
+.dTable td {
+  padding: 8px 16px;
+  border-bottom: 1px solid #f1ebdf;
+  font-size: 11.5px;
+  color: #161926;
+  vertical-align: top;
+}
+.dTable tr:last-child td { border-bottom: none; }
+.dVv { font-weight: 800; }
+.dLate { color: #8E2D1E; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dWarn { color: #B5561F; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dRsn { font-size: 10.5px; color: #161926; max-width: 240px; line-height: 1.45; }
+.dNone { color: #a79f8f; font-style: italic; }
+.stPill {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  display: inline-block;
+}
+.stOn { color: #73823C; background: rgba(115, 130, 60, 0.12); }
+.stOff { color: #8E2D1E; background: rgba(142, 45, 30, 0.1); }
+.srcp {
   font-size: 8.5px;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  color: #7A5A00;
+  padding: 2px 7px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  display: inline-block;
 }
-.chartHolidayActual {
-  font-size: 10px;
-  color: #2E7D5B;
-  margin-top: 2px;
-  font-variant-numeric: tabular-nums;
-}
-.tradeTblHolCell {
-  background: repeating-linear-gradient(
-    45deg,
-    #F3EFE8,
-    #F3EFE8 3px,
-    #E7DFC9 3px,
-    #E7DFC9 6px
-  );
-  color: #7A5A00;
-  font-weight: 600;
-}
+.srcpTw { color: #5a5a54; background: #efe8db; }
+.srcpSp { color: #B5561F; background: rgba(181, 86, 31, 0.12); }
+.srcpSt { color: #8E2D1E; background: rgba(142, 45, 30, 0.1); }
 
-/* -------------- Manpower 4-tile weekly strip (RUNBOOK §4) -------------- */
-.mpHead4 {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-bottom: 14px;
+/* -------------- §3 In-progress panel (dark navy) -------------- */
+.ipwrap {
+  margin-top: 13px;
+  background: #161926;
+  border-radius: 12px;
+  padding: 18px 20px;
 }
-.mpHeadSub {
-  font-size: 9.5px;
+.ipbar {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px solid rgba(250, 225, 200, 0.16);
+  padding-bottom: 11px;
+  margin-bottom: 13px;
+}
+.ipt {
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  color: #ffffff;
+}
+.ipsplit {
+  margin-left: auto;
+  font-size: 12px;
+  color: #c9c4ba;
+}
+.ipsplit .ipMoving { color: #8CA04A; font-weight: 700; }
+.ipsplit .ipStalled { color: #C9756A; font-weight: 700; }
+.ipmoving {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.ipml {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #8CA04A;
   font-weight: 700;
-  letter-spacing: 0.14em;
-  color: #A0A09B;
+  margin-right: 6px;
+}
+.chip {
+  font-size: 10.5px;
+  color: #e6e2d8;
+  background: rgba(140, 160, 74, 0.14);
+  border: 1px solid rgba(140, 160, 74, 0.3);
+  border-radius: 14px;
+  padding: 3px 9px;
+}
+.chip small { color: #a7a29a; }
+.nmhd { margin-top: 16px; margin-bottom: 12px; }
+.nmt2 {
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  color: #ffffff;
+}
+.nmt2 span { color: #C9756A; font-size: 13px; }
+.nms2 {
+  font-size: 10.5px;
+  color: #c9c4ba;
+  line-height: 1.5;
   margin-top: 4px;
 }
-
-/* -------------- Stalled · needs a push (RUNBOOK weekly §3) -------------- */
-.stalledPanel {
-  margin-top: 14px;
-  padding: 14px 16px;
-  background: #FCF6EA;
-  border: 1px solid #E7DFC9;
-  border-radius: 6px;
+.nms2 b { color: #ffffff; }
+.nmpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
 }
-.stalledHd { margin-bottom: 10px; }
-.stalledTitle {
-  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
-  font-size: 16px;
-  color: #161926;
-  letter-spacing: 0.002em;
-}
-.stalledCaption {
-  font-size: 10.5px;
-  color: #A0A09B;
-  font-style: italic;
-  margin-top: 2px;
-}
-.stalledEmpty {
-  padding: 8px 0;
-  font-size: 11.5px;
-  color: #73823C;
-  font-style: italic;
-}
-.stalledList { list-style: none; padding: 0; margin: 0; }
-.stalledRow {
+.nmrow {
   display: grid;
-  grid-template-columns: 1fr 100px 60px 1fr;
-  gap: 8px 10px;
+  grid-template-columns: 120px 1fr 150px 78px;
   align-items: center;
-  padding: 5px 0;
-  border-bottom: 1px dashed #E7DFC9;
-  font-size: 11px;
+  gap: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 9px;
+  padding: 10px 14px;
 }
-.stalledRow:last-child { border-bottom: 0; }
-.stalledLbl { display: flex; gap: 6px; align-items: baseline; overflow: hidden; }
-.stalledVilla { font-weight: 700; color: #161926; }
-.stalledMs { color: #4E5866; }
-.stalledBlock { color: #A0A09B; font-size: 10px; }
-.stalledBarWrap {
-  height: 8px;
-  background: #EDE7D2;
-  border-radius: 4px;
+@media (max-width: 780px) {
+  .nmrow { grid-template-columns: 1fr; }
+}
+.nmv { display: flex; flex-direction: column; }
+.nmvn { font-weight: 800; font-size: 15px; color: #ffffff; }
+.nmvs { font-size: 10px; color: #a7a29a; margin-top: 1px; }
+.nmbarwrap { display: flex; align-items: center; gap: 9px; }
+.nmbar {
+  flex: 1;
+  height: 9px;
+  background: rgba(250, 225, 200, 0.1);
+  border-radius: 5px;
   overflow: hidden;
 }
-.stalledBar { height: 100%; border-radius: 4px; }
-.stalledBarRed   { background: #8E2D1E; }
-.stalledBarAmber { background: #9A6A1F; }
-.stalledBarGold  { background: #CA9F49; }
-.stalledIdle {
-  font-size: 10.5px;
-  font-weight: 700;
-  color: #161926;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.stalledReason {
-  font-size: 10.5px;
-  color: #4E5866;
-  font-style: italic;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.stalledSince { color: #A0A09B; font-style: normal; }
-.stalledMore {
-  padding: 5px 0;
-  font-size: 10.5px;
-  color: #A0A09B;
-  font-style: italic;
-}
-
-/* Manpower headline */
-.mpHead {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-bottom: 10px;
-}
-.mpHeadCell {
-  padding: 8px 10px;
-  background: #F1EEE4;
+.nmbar i {
+  display: block;
+  height: 100%;
   border-radius: 5px;
 }
-.mpHeadLbl { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #A0A09B; font-weight: 700; }
-.mpHeadVal {
-  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
-  font-size: 28px;
-  font-weight: 400;
-  color: #161926;
-  font-variant-numeric: tabular-nums;
-  margin-top: 4px;
-  letter-spacing: 0.005em;
-  line-height: 1;
-}
+.nmd { font-weight: 700; font-size: 11.5px; white-space: nowrap; }
+.nmr { font-size: 11px; color: #FAE1C8; text-align: left; }
+.nmrNolog { color: #8a857c; font-style: italic; }
+.nmact { font-size: 10px; color: #a7a29a; text-align: right; }
+.nmempty { font-size: 12px; color: #8CA04A; padding: 8px 0; }
 
-/* Manpower chart */
-.chart {
+/* -------------- §4 Manpower -------------- */
+.mpwrap {
+  background: #ffffff;
+  border: 1px solid #e5ded2;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.mptotal {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-  height: 120px;
-  padding: 8px 0;
-  border-top: 1px dashed #EDE9DD;
-  border-bottom: 1px dashed #EDE9DD;
-  margin-bottom: 10px;
+  grid-template-columns: 1fr 1fr 1fr;
+  background: #161926;
 }
-.chartCell { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.chartBars { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 100%; width: 100%; }
-.chartBar {
-  width: 40%;
-  min-height: 3px;
-  border-radius: 2px 2px 0 0;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  position: relative;
+@media (max-width: 780px) {
+  .mptotal { grid-template-columns: 1fr; }
 }
-.chartBarPlanned { background: linear-gradient(180deg, #4C7FB0, #2F5D8A); }
-.chartBarActual { background: linear-gradient(180deg, #369669, #2E7D5B); }
-.chartValue { font-size: 8.5px; color: #FFFFFF; font-weight: 700; margin-top: -12px; text-shadow: 0 1px 1px rgba(0,0,0,0.2); }
-.chartDay { font-size: 9px; color: #8B93A0; font-variant-numeric: tabular-nums; }
-
-/* Trade table */
-.tradeTbl { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-.tradeTbl thead th {
-  padding: 4px 6px;
-  border-bottom: 1px solid #E2DDD0;
-  font-size: 9px;
-  letter-spacing: 0.1em;
+.mptCell {
+  padding: 16px 18px;
+  border-right: 1px solid rgba(250, 225, 200, 0.12);
+}
+.mptCell:last-child { border-right: none; }
+.mptL {
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #8B93A0;
+  color: #8a8a84;
+  margin-bottom: 7px;
+}
+.mptV {
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 30px;
+  color: #ffffff;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.mptVAct { color: #CA9F49; }
+.mptSub {
+  font-size: 9px;
+  color: #8a8a84;
+  margin-top: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.mpday {
+  background: #faf6ef;
+  border-bottom: 1px solid #ece4d5;
+  padding: 11px 18px;
+  font-size: 11.5px;
+  color: #4a4a44;
+  line-height: 1.5;
+}
+.mpday b { color: #161926; }
+.mpchart { padding: 14px 16px 6px; }
+.mpctH {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #161926;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.mpleg {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  font-size: 10px;
+  color: #5a5a54;
+  margin-bottom: 4px;
+}
+.mpleg i {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.dwwrap { padding: 0 12px 12px; }
+.dwTable { width: 100%; border-collapse: collapse; }
+.dwTable th {
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #8a8a84;
+  padding: 7px 6px;
+  border-bottom: 1px solid #ece4d5;
   font-weight: 700;
   text-align: left;
 }
-.tradeTbl thead th:first-child { text-align: left; }
-.tradeTbl tbody td {
-  padding: 4px 6px;
-  border-bottom: 1px solid #EDE9DD;
-  font-variant-numeric: tabular-nums;
-  color: #4E5866;
-}
-.tradeTbl tbody tr:last-child td { border-bottom: 0; }
-.tradeTblRight { text-align: right !important; }
-
-/* Delay reason cards */
-.reasonList { display: flex; flex-direction: column; gap: 8px; }
-.reasonCard {
-  border: 1px solid #E2DDD0;
-  border-radius: 5px;
-  padding: 10px 12px;
-  background: #FFFFFF;
-  break-inside: avoid;
-  page-break-inside: avoid;
-}
-.reasonHead {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-  border-bottom: 1px solid #EDE9DD;
-  padding-bottom: 4px;
-  margin-bottom: 6px;
-}
-.reasonName { font-size: 13px; font-weight: 700; color: #16202F; }
-.reasonStat { display: flex; gap: 8px; align-items: baseline; font-size: 10.5px; }
-.reasonDays {
-  padding: 2px 7px;
-  background: #F3DFDF;
-  color: #B33A3A;
-  border-radius: 3px;
-  font-weight: 700;
+.dwTable td {
+  padding: 7px 6px;
+  border-bottom: 1px solid #f1ebdf;
+  font-size: 11px;
+  color: #161926;
   font-variant-numeric: tabular-nums;
 }
-.reasonCount { color: #4E5866; font-weight: 500; }
-.reasonVillas { color: #8B93A0; font-weight: 500; }
-.reasonVillasList { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
-.reasonVillaChip {
-  padding: 2px 6px;
-  border-radius: 2px;
-  font-size: 10px;
-  font-weight: 700;
-  background: #F1EEE4;
-  color: #4E5866;
-  font-variant-numeric: tabular-nums;
-  border: 1px solid #E2DDD0;
+.dwTable td.tt { font-weight: 700; text-align: left; }
+.dwTable tr.dwtot td {
+  border-bottom: none;
+  background: #f6f1e8;
+  font-weight: 800;
 }
-.reasonMoreChip {
-  padding: 2px 6px;
-  font-size: 10px;
-  font-weight: 500;
-  color: #8B93A0;
+.dwTable th.hol, .dwTable td.hol {
+  background: #f0ece2;
+  color: #a79f8f;
   font-style: italic;
 }
-.reasonMitigation {
-  padding: 6px 10px;
-  background: #E9F0F7;
-  border-left: 3px solid #2F5D8A;
-  border-radius: 3px;
-  font-size: 11px;
-  color: #16202F;
-  line-height: 1.5;
+
+/* -------------- §4 Contractor 2 dashed strip -------------- */
+.c2 {
+  background: #faf6ef;
+  border: 1px dashed #cbb98f;
+  border-radius: 11px;
+  padding: 13px 17px;
+  margin-top: 13px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.reasonMitigationLbl {
-  display: block;
-  font-size: 9.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #2F5D8A;
+.c2N { font-weight: 800; color: #161926; font-size: 12.5px; }
+.c2T { font-size: 11px; color: #7a7a72; }
+.c2P {
+  margin-left: auto;
+  font-size: 10px;
   font-weight: 700;
-  margin-bottom: 3px;
+  color: #B5561F;
+  background: rgba(181, 86, 31, 0.1);
+  border: 1px solid rgba(181, 86, 31, 0.35);
+  padding: 3px 10px;
+  border-radius: 20px;
 }
 
-/* -------------- Print rules (mirror scorecard) -------------- */
+/* -------------- §5 Delay reasons -------------- */
+.rzwrap {
+  background: #ffffff;
+  border: 1px solid #e5ded2;
+  border-radius: 12px;
+  padding: 0 0 4px;
+  overflow: hidden;
+}
+.rzlead {
+  background: #faf6ef;
+  border-bottom: 1px solid #ece4d5;
+  padding: 13px 18px;
+  font-size: 11.5px;
+  color: #4a4a44;
+  line-height: 1.55;
+}
+.rzlead b { color: #161926; }
+.rzTable { width: 100%; border-collapse: collapse; }
+.rzTable th {
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a8a84;
+  text-align: left;
+  padding: 9px 18px;
+  border-bottom: 1px solid #ece4d5;
+  font-weight: 700;
+}
+.rzTable td {
+  padding: 9px 18px;
+  border-bottom: 1px solid #f1ebdf;
+  font-size: 12px;
+  color: #161926;
+  vertical-align: top;
+}
+.rzTable tr:last-child td { border-bottom: none; }
+.rzR { font-weight: 700; }
+.rzDot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+.rzV { color: #5a5a54; font-size: 11px; }
+.rzLate { color: #8E2D1E; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mzhd {
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  color: #161926;
+  margin: 16px 0 9px;
+}
+.mzhd span { color: #8a8a84; font-size: 12px; }
+.mzAct { font-size: 11px; color: #161926; line-height: 1.4; max-width: 340px; }
+.mzFill { font-size: 11px; }
+.mzFill .mzNone { color: #b09a6a; font-style: italic; }
+
+/* -------------- Foot -------------- */
+.foot {
+  margin-top: 20px;
+  font-size: 9.5px;
+  color: #8a8a82;
+  line-height: 1.6;
+  border-top: 1px solid #e2dacb;
+  padding-top: 12px;
+}
+
+/* -------------- Print rules (color preservation) -------------- */
 @page { size: A4; margin: 12mm; }
 @media print {
   :global(*), :global(*::before), :global(*::after) {
@@ -835,7 +679,7 @@
     print-color-adjust: exact !important;
     color-adjust: exact !important;
   }
-  :global(html), :global(body) { background: #FFFFFF !important; margin: 0; }
+  :global(html), :global(body) { background: #F3EFE8 !important; margin: 0; }
   :global(nav),
   :global(header),
   :global(aside),
@@ -844,7 +688,8 @@
   :global(button) {
     display: none !important;
   }
-  .bucketCard, .overallCell, .stalledRow, .reasonCard, .tradeTbl, .manpowerBox {
+  .page { padding: 0; max-width: none; }
+  .mc, .dtable, .ipwrap, .mpwrap, .rzwrap, .cbar, .c2, .snap {
     page-break-inside: avoid;
     break-inside: avoid;
   }

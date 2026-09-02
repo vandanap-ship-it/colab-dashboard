@@ -7,143 +7,38 @@ import styles from "./scorecard.module.css";
 import weekly from "./weekly-report.module.css";
 import type { WeeklyReport, WeeklyMilestoneItem } from "@/lib/weeklyReportServer";
 
+// Weekly Report — ported from Amanvana Reporting Toolkit v14
+// scripts/gen_wk30.py HTML template. Structure + class semantics mirror
+// the Python-generated HTML so the rendered result matches
+// Amanvana_Phase1_Weekly_wk30.pdf.
+
 export interface WeeklyReportViewProps {
   report: WeeklyReport;
   projectId: string;
   weekEndingStr: string; // YYYY-MM-DD
 }
 
-function fmtLong(d: Date): string {
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
 function fmtDayShort(d: Date): string {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 function fmtPct(n: number): string { return `${n.toFixed(2)}%`; }
+function itemsLbl(list: string[], n = 8): string {
+  if (!list.length) return "none";
+  const extra = list.length > n ? ` +${list.length - n} more` : "";
+  return list.slice(0, n).join(", ") + extra;
+}
 function chipLabel(i: WeeklyMilestoneItem): string {
   return `V${i.villaNumber.toString().padStart(2, "0")} ${i.milestoneName}`;
 }
-
-// -------- §2 Contractor strip + Milestone Card (Python PDF template) --------
-function ContractorStrip({ index, name, villaNote, pill }: {
-  index: number;
-  name: string;
-  villaNote: string;
-  pill: { text: string; tone: "active" | "muted" };
-}) {
-  return (
-    <div className={weekly.mpContractorStrip}>
-      <div className={weekly.mpContractorLeft}>
-        <div className={weekly.mpContractorName}>Contractor {index} · {name}</div>
-        <div className={weekly.mpContractorNote}>{villaNote}</div>
-      </div>
-      <span className={`${weekly.mpPill} ${pill.tone === "active" ? weekly.mpPillActive : weekly.mpPillMuted}`}>
-        {pill.text}
-      </span>
-    </div>
-  );
-}
-
-function MilestoneCard({
-  title, big, denom, subLbl, emptyText, spill,
-}: {
-  title: string;
-  big: number;
-  denom: number;
-  subLbl: React.ReactNode;
-  emptyText: string;
-  spill: { title: string; count: number; note: string; tone?: "notMoving" };
-}) {
-  const pct = denom > 0 ? Math.round((big / denom) * 100) : 0;
-  const isEmpty = big === 0 && denom === 0;
-  return (
-    <div className={weekly.mpCard}>
-      <div className={weekly.mpCardTitle}>{title}</div>
-      <div className={weekly.mpCardBigRow}>
-        <div className={weekly.mpCardBig}>{big}</div>
-        <div className={weekly.mpCardDenomWrap}>
-          <div className={weekly.mpCardDenom}>/ {denom}</div>
-          <div className={weekly.mpCardSubLbl}>{subLbl}</div>
-        </div>
-      </div>
-      <div className={weekly.mpCardBar}>
-        <div className={weekly.mpCardBarFill} style={{ width: `${pct}%` }} />
-        <span className={weekly.mpCardBarPct}>{isEmpty ? "0%" : `${pct}%`}</span>
-      </div>
-      <div className={weekly.mpCardNote}>{emptyText}</div>
-      <hr className={weekly.mpCardHr} />
-      <div className={`${weekly.mpCardSpillTitle} ${spill.tone === "notMoving" ? weekly.mpCardSpillTitleNotMoving : weekly.mpCardSpillTitleAmber}`}>
-        {spill.title}
-      </div>
-      <div className={weekly.mpCardSpillCount}>{spill.tone === "notMoving" ? spill.count : `+${spill.count}`}</div>
-      <div className={weekly.mpCardSpillNote}>{spill.note}</div>
-    </div>
-  );
-}
-
-// -------- §3 Milestone drill-down table (Python PDF style) --------
-type MilestoneTableRow = WeeklyMilestoneItem & { tag: "SPILLED" | "THIS WEEK" | "MOVING" | "STALLED" };
-function MilestoneTable({
-  kind, title, rows,
-}: {
-  kind: "complete" | "start" | "in-progress";
-  title: string;
-  rows: MilestoneTableRow[];
-}) {
-  const dateHeader = kind === "complete" ? "PLANNED FINISH" : kind === "start" ? "PLANNED START" : "PLANNED WINDOW";
-  const dateBucketHeader = kind === "complete" ? "DAYS PAST" : "DAYS IDLE";
-  return (
-    <div className={weekly.mbSection}>
-      <div className={`${weekly.mbBanner} ${kind === "complete" ? weekly.mbBannerComplete : kind === "start" ? weekly.mbBannerStart : weekly.mbBannerInProgress}`}>{title}</div>
-      {rows.length === 0 ? (
-        <div className={weekly.mbEmpty}>Nothing in this bucket this week.</div>
-      ) : (
-        <table className={weekly.mbTable}>
-          <thead>
-            <tr>
-              <th>VILLA</th>
-              <th>BLOCK</th>
-              <th>MILESTONE</th>
-              <th>{dateHeader}</th>
-              <th>{dateBucketHeader}</th>
-              <th>WHEN</th>
-              <th>ON SITE?</th>
-              <th>DELAY REASON</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => {
-              const daysPast = r.daysLate ?? 0;
-              const dateStr = kind === "complete"
-                ? "—"
-                : kind === "start" && r.sinceDate
-                ? new Date(r.sinceDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
-                : "—";
-              const onSite = r.movedThisWeek ? "moved this week" : r.tag === "STALLED" ? "no progress logged" : r.daysIdle != null ? "being worked" : "not started";
-              return (
-                <tr key={`${r.villaNumber}-${r.milestoneName}-${i}`}>
-                  <td className={weekly.mbVilla}>V{r.villaNumber.toString().padStart(2, "0")}</td>
-                  <td>Block {r.blockCode}</td>
-                  <td>{r.milestoneName}</td>
-                  <td>{dateStr}</td>
-                  <td className={daysPast > 0 ? weekly.mbLate : ""}>{daysPast > 0 ? `${daysPast}d` : "—"}</td>
-                  <td>
-                    <span className={`${weekly.mbTag} ${r.tag === "SPILLED" ? weekly.mbTagSpilled : r.tag === "THIS WEEK" ? weekly.mbTagWeek : r.tag === "MOVING" ? weekly.mbTagMoving : weekly.mbTagStalled}`}>
-                      {r.tag}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={weekly.mbSitePill}>{onSite}</span>
-                  </td>
-                  <td className={weekly.mbReason}>{r.reason ?? "not recorded"}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
+function reasonColor(reason: string): string {
+  const r = reason.toLowerCase();
+  if (r.includes("design") || r.includes("scope")) return "#8E2D1E";
+  if (r.includes("drawing")) return "#B5561F";
+  if (r.includes("material")) return "#9A6A1F";
+  if (r.includes("vendor")) return "#965532";
+  if (r.includes("priorit")) return "#CA9F49";
+  if (r.includes("manpower") || r.includes("labour")) return "#73823C";
+  return "#A0A09B";
 }
 
 export default function WeeklyReportView({ report, projectId, weekEndingStr }: WeeklyReportViewProps) {
@@ -165,10 +60,17 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
     if (typeof window !== "undefined") window.print();
   }, []);
 
-  const asOfLabel = `${fmtLong(report.weekStart)} → ${fmtLong(report.weekEnd)}`;
+  const wkLabel = `${fmtDayShort(report.weekStart)}–${fmtDayShort(report.weekEnd)} ${report.weekEnd.getFullYear()}`;
+  const wkEndStr = fmtDayShort(report.weekEnd);
+
+  // Abraham (Contractor 1) is the only party in the milestone maths per spec.
+  // Elegant renders as a name-only strip. Untagged bucket already dropped
+  // upstream (weeklyReportServer.ts).
+  const p1 = report.milestonePlans.find((m) => m.contractorName.trim().toLowerCase() !== "elegant construction" && m.hasSchedule);
+  const elegant = report.milestonePlans.find((m) => m.contractorName.trim().toLowerCase() === "elegant construction");
 
   return (
-    <div className={styles.wrap}>
+    <>
       {/* Toolbar (screen only) */}
       <div className={styles.toolbar}>
         <div className={styles.toolbarLeft}>
@@ -186,481 +88,560 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
         </button>
       </div>
 
-      {/* Header — dark navy hero. Date range right-aligned per Python PDF. */}
-      <div className={weekly.hero}>
-        <div className={weekly.heroCrumb}>
-          <span className={weekly.heroCrumbDot} />
-          {(report.project.tagline ?? "White Lotus Group").toUpperCase()} · {report.project.name.toUpperCase()} {report.project.code ? `· ${report.project.code.toUpperCase()}` : ""}
-        </div>
-        <div className={weekly.heroBody}>
-          <h1 className={weekly.heroTitle}>
-            Weekly Progress <em>Report</em>
-          </h1>
-          <div className={weekly.heroDate}>{fmtDayShort(report.weekStart)}–{fmtDayShort(report.weekEnd)} {report.weekEnd.getFullYear()}</div>
-        </div>
-      </div>
-
-      {/* §1 Overall Project Progress — Target & Actual only, panels inside a
-          dark navy card (Python PDF style). */}
-      <Section num="01" title="Overall Project Progress" meta={`progress required by Sun ${fmtDayShort(report.weekEnd)} vs achieved`}>
-        <div className={weekly.overallHeroCard}>
-          <div className={weekly.overallHeroPanel}>
-            <div className={weekly.overallHeroLbl}>TARGET · DUE BY {fmtDayShort(report.weekEnd).toUpperCase()}</div>
-            <div className={weekly.overallHeroVal}>{fmtPct(report.overall.plannedPct)}</div>
+      <div className={weekly.page}>
+        {/* Head */}
+        <div className={weekly.hero}>
+          <div className={weekly.heroLeft}>
+            <div className={weekly.heroCrumb}>
+              <span className={weekly.heroCrumbDot} />
+              White Lotus Group · {report.project.name}
+            </div>
+            <div className={weekly.heroTitle}>Weekly Progress <span>Report</span></div>
           </div>
-          <div className={weekly.overallHeroPanel}>
-            <div className={weekly.overallHeroLbl}>ACTUAL · ACHIEVED</div>
-            <div className={`${weekly.overallHeroVal} ${weekly.overallHeroValGold}`}>{fmtPct(report.overall.actualPct)}</div>
+          <div className={weekly.heroDate}>
+            <div className={weekly.heroDateVal}>{wkLabel}</div>
           </div>
         </div>
-      </Section>
 
-      {/* §2 Weekly Milestone Plan — Python PDF template.
-          One "Contractor N" strip per contractor, then 3 side-by-side cards
-          (TO COMPLETE / TO START / IN PROGRESS) with big number, progress
-          bar, and SPILLED-OVER / NOT-MOVING callouts. */}
-      <Section num="02" title="Weekly Milestone Plan · Contractor-wise" meta="planned vs actual · this week + spill-over from earlier">
-        {report.milestonePlans.map((plan, idx) => {
-          const isFirst = idx === 0;
-          const isElegant = plan.contractorName.trim().toLowerCase() === "elegant construction";
-          const noSchedule = !plan.hasSchedule || isElegant;
-          return (
-            <div key={plan.contractorId ?? plan.contractorName}>
-              <ContractorStrip
-                index={idx + 1}
-                name={plan.contractorName}
-                villaNote={
-                  isElegant
-                    ? "52 villas · Awarded — 52 villas across 12 blocks. Schedule received; integration with the collab tools under process."
-                    : `${plan.hasSchedule ? "full schedule loaded" : "schedule yet to be received"}`
-                }
-                pill={isElegant ? { text: "Schedule received", tone: "muted" } : { text: "Active", tone: "active" }}
+        {/* §1 Overall Project Progress */}
+        <div className={weekly.sec}>
+          <div className={weekly.sechd}>
+            <div className={weekly.secNum}>01</div>
+            <h2 className={weekly.secTitle}>Overall Project Progress</h2>
+            <div className={weekly.secNote}>progress required by {wkEndStr} vs achieved</div>
+          </div>
+          <div className={weekly.snap}>
+            <div className={weekly.snapRow}>
+              <div className={weekly.snapCell}>
+                <div className={weekly.snapLbl}>Target - due by {wkEndStr}</div>
+                <div className={weekly.snapVal}>{fmtPct(report.overall.plannedPct)}</div>
+              </div>
+              <div className={weekly.snapCell}>
+                <div className={weekly.snapLbl}>Actual - achieved</div>
+                <div className={`${weekly.snapVal} ${weekly.snapValAct}`}>{fmtPct(report.overall.actualPct)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* §2 Weekly Milestone Plan */}
+        <div className={weekly.sec}>
+          <div className={weekly.sechd}>
+            <div className={weekly.secNum}>02</div>
+            <h2 className={weekly.secTitle}>Weekly Milestone Plan - Contractor-wise</h2>
+            <div className={weekly.secNote}>planned vs actual · this week + spill-over from earlier</div>
+          </div>
+
+          {p1 && (
+            <>
+              <div className={weekly.cbar}>
+                <span className={weekly.cbarName}>Contractor 1 - {p1.contractorName}</span>
+                <span className={weekly.cbarNote}>41 villas · full schedule loaded</span>
+                <span className={`${weekly.cbarPill} ${weekly.cbarPillActive}`}>Active</span>
+              </div>
+
+              <div className={weekly.mcards}>
+                <MilestoneCardV2
+                  variant="done"
+                  title="Milestones to complete"
+                  numer={p1.toComplete.closed}
+                  denom={p1.toComplete.total}
+                  labelLine={<>closed this week<br />of planned finishes</>}
+                  postText={<>planned but not closed: <b>{p1.toComplete.items.length ? itemsLbl(p1.toComplete.items.map(chipLabel)) : "none"}</b></>}
+                  spill={{
+                    title: "Spilled over from earlier",
+                    count: p1.overdue.total,
+                    note: p1.overdue.total > 0 ? `overdue, still open: ${itemsLbl(p1.overdue.items.map(chipLabel))}` : "none",
+                  }}
+                />
+                <MilestoneCardV2
+                  title="Milestones to start"
+                  numer={p1.toStart.started}
+                  denom={p1.toStart.total}
+                  labelLine={<>started this week<br />of planned starts</>}
+                  postText={<>planned but not started: <b>{p1.toStart.total - p1.toStart.started > 0 ? "some" : "none"}</b></>}
+                  spill={{
+                    title: "Spilled over from earlier",
+                    count: p1.toStart.spill,
+                    note: p1.toStart.spill > 0 ? `should have started: ${itemsLbl(p1.toStart.spillItems.map(chipLabel))}` : "none",
+                  }}
+                />
+                <MilestoneCardV2
+                  title="Milestones in progress"
+                  numer={p1.inProgress.moving}
+                  denom={p1.inProgress.total}
+                  labelLine={<>actually moving<br />of planned in progress</>}
+                  postText={<>the rest are moving on site</>}
+                  spill={{
+                    title: "Not moving",
+                    count: p1.inProgress.stalled,
+                    note: p1.inProgress.stalled > 0 ? `no progress logged this week: ${itemsLbl(p1.inProgress.stalledItems.map(chipLabel))}` : "none",
+                    plainCount: true,
+                  }}
+                />
+              </div>
+
+              <div className={weekly.mnote}>
+                One milestone = a villa&apos;s current construction stage. <b>To complete</b> and <b>in progress</b> overlap where a stage is due to finish this week. Spill-over = stages whose planned date has already passed and are still open or not started. Read Planned → Actual left to right in each card.
+              </div>
+            </>
+          )}
+
+          {elegant && (
+            <div className={weekly.c2}>
+              <span className={weekly.c2N}>Contractor 2 - {elegant.contractorName}</span>
+              <span className={weekly.c2T}>52 villas · Awarded - 52 villas across 12 blocks. Schedule received; integration with the collab tools under process.</span>
+              <span className={weekly.c2P}>Schedule received</span>
+            </div>
+          )}
+        </div>
+
+        {/* §3 Milestone breakdown */}
+        {p1 && (
+          <div className={weekly.sec}>
+            <div className={weekly.sechd}>
+              <div className={weekly.secNum}>03</div>
+              <h2 className={weekly.secTitle}>Milestone breakdown</h2>
+              <div className={weekly.secNote}>the villas inside each of the three metrics above</div>
+            </div>
+
+            {/* To complete */}
+            <div className={weekly.dtable}>
+              <div className={`${weekly.dgrp} ${weekly.dgrpA}`}>
+                ① To complete - {p1.toComplete.total + p1.overdue.total} milestones due, {p1.toComplete.closed} closed
+              </div>
+              <BreakdownTable
+                mode="complete"
+                rows={[
+                  ...p1.overdue.items.map((it) => ({ ...it, tag: "spilled" as const })),
+                  ...p1.toComplete.items.map((it) => ({ ...it, tag: "this-week" as const })),
+                ].sort((a, b) => (b.daysLate ?? 0) - (a.daysLate ?? 0))}
               />
-              {isFirst && !noSchedule && (
-                <>
-                  <div className={weekly.mpCards}>
-                    <MilestoneCard
-                      title="MILESTONES TO COMPLETE"
-                      big={plan.toComplete.closed}
-                      denom={plan.toComplete.total}
-                      subLbl={<>CLOSED THIS WEEK<br />OF PLANNED FINISHES</>}
-                      emptyText={plan.toComplete.items.length === 0 ? "planned but not closed: none" : `planned but not closed: ${plan.toComplete.items.map(chipLabel).join(", ")}`}
-                      spill={{
-                        title: "SPILLED OVER FROM EARLIER",
-                        count: plan.overdue.total,
-                        note: plan.overdue.total > 0 ? `overdue, still open: ${plan.overdue.items.map(chipLabel).join(", ")}` : "none",
-                      }}
-                    />
-                    <MilestoneCard
-                      title="MILESTONES TO START"
-                      big={plan.toStart.started}
-                      denom={plan.toStart.total}
-                      subLbl={<>STARTED THIS WEEK<br />OF PLANNED STARTS</>}
-                      emptyText={
-                        plan.toStart.total === 0
-                          ? "planned but not started: none"
-                          : `planned but not started: ${plan.toStart.items.filter((i) => !plan.toStart.items.slice(0, plan.toStart.started).includes(i)).map(chipLabel).join(", ") || "none"}`
-                      }
-                      spill={{
-                        title: "SPILLED OVER FROM EARLIER",
-                        count: plan.toStart.spill,
-                        note: plan.toStart.spill > 0 ? `should have started: ${plan.toStart.spillItems.map(chipLabel).join(", ")}` : "none",
-                      }}
-                    />
-                    <MilestoneCard
-                      title="MILESTONES IN PROGRESS"
-                      big={plan.inProgress.moving}
-                      denom={plan.inProgress.total}
-                      subLbl={<>ACTUALLY MOVING<br />OF PLANNED IN PROGRESS</>}
-                      emptyText={plan.inProgress.stalled === 0 ? "the rest are moving on site" : "the rest are moving on site"}
-                      spill={{
-                        title: "NOT MOVING",
-                        count: plan.inProgress.stalled,
-                        note: plan.inProgress.stalled > 0 ? `no progress logged this week: ${plan.inProgress.stalledItems.map(chipLabel).join(", ")}` : "none",
-                        tone: "notMoving",
-                      }}
-                    />
-                  </div>
-                  <p className={weekly.mpExplain}>
-                    One milestone = a villa&apos;s current construction stage. <strong>To complete</strong> and <strong>in progress</strong> overlap where a stage is due to finish this week. Spill-over = stages whose planned date has already passed and are still open or not started. Read Planned → Actual left to right in each card.
-                  </p>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </Section>
-
-      {/* §3 Milestone Breakdown — three drill-down tables per PDF. */}
-      {(() => {
-        // Just the Abraham plan (Contractor 1) — Elegant is name-only.
-        const p1 = report.milestonePlans.find((m) => m.contractorName.trim().toLowerCase() !== "elegant construction" && m.hasSchedule);
-        if (!p1) return null;
-        return (
-          <Section num="03" title="Milestone breakdown" meta="the villas inside each of the three metrics above">
-            <MilestoneTable
-              kind="complete"
-              title={`TO COMPLETE — ${p1.toComplete.total} MILESTONES DUE, ${p1.toComplete.closed} CLOSED`}
-              rows={[
-                ...p1.overdue.items.map((it) => ({ ...it, tag: "SPILLED" as const })),
-                ...p1.toComplete.items.map((it) => ({ ...it, tag: "THIS WEEK" as const })),
-              ].sort((a, b) => (b.daysLate ?? 0) - (a.daysLate ?? 0))}
-            />
-            <MilestoneTable
-              kind="start"
-              title={`TO START — ${p1.toStart.total} THIS WEEK, ${p1.toStart.started} STARTED`}
-              rows={[
-                ...p1.toStart.spillItems.map((it) => ({ ...it, tag: "SPILLED" as const })),
-                ...p1.toStart.items.map((it) => ({ ...it, tag: "THIS WEEK" as const })),
-              ].sort((a, b) => (b.daysLate ?? 0) - (a.daysLate ?? 0))}
-            />
-            <MilestoneTable
-              kind="in-progress"
-              title={`IN PROGRESS — ${p1.inProgress.total} MILESTONES · ${p1.inProgress.moving} MOVING · ${p1.inProgress.stalled} STALLED`}
-              rows={[
-                ...p1.inProgress.movingItems.map((it) => ({ ...it, tag: "MOVING" as const })),
-                ...p1.inProgress.stalledItems.map((it) => ({ ...it, tag: "STALLED" as const })),
-              ]}
-            />
-            {/* Stalled aging bar panel — RUNBOOK weekly §3 add-on. */}
-            <StalledPanel items={p1.inProgress.stalledItems} />
-          </Section>
-        );
-      })()}
-
-      {/* §4 Manpower — Python PDF template: per-contractor strip + tiles + chart + table. */}
-      <Section num="04" title="Manpower" meta="planned vs actual · trade breakdown">
-        {report.manpowerByContractor.map((c, idx) => (
-          <div key={c.contractorId}>
-            <ContractorStrip
-              index={idx + 1}
-              name={c.contractorName}
-              villaNote={c.hasPlan ? "full manpower plan loaded" : "no plan set"}
-              pill={c.hasPlan ? { text: "Active", tone: "active" } : { text: "No plan", tone: "muted" }}
-            />
-            {!c.hasPlan ? null : (
-              <>
-                {/* 4-tile weekly strip per RUNBOOK §4 (no Remark box). */}
-                {(() => {
-                  const workingDays = c.perDay.filter((d) => !d.isHoliday).length;
-                  const loggedDays = c.perDay.filter((d) => d.actualTotal > 0).length;
-                  const planPerDay = workingDays > 0 ? Math.round(c.weeklyPlanned / workingDays) : 0;
-                  // Python parity (build_wk23.py L190): avg = actual / 7 (per week
-                  // day, incl. holidays if any) — the "how many workers actually
-                  // showed up on an average day". Not planned/day.
-                  const avgActualPerDay = c.perDay.length > 0
-                    ? Math.round(c.weeklyActual / c.perDay.length)
-                    : 0;
-                  return (
-                    <div className={weekly.mpHead4}>
-                      <div className={weekly.mpHeadCell}>
-                        <div className={weekly.mpHeadLbl}>Weekly target</div>
-                        <div className={weekly.mpHeadVal}>{c.weeklyPlanned}</div>
-                        <div className={weekly.mpHeadSub}>{planPerDay}/DAY × {workingDays}D</div>
-                      </div>
-                      <div className={weekly.mpHeadCell}>
-                        <div className={weekly.mpHeadLbl}>Achieved</div>
-                        <div className={weekly.mpHeadVal}>{c.weeklyActual}</div>
-                        <div className={weekly.mpHeadSub}>{loggedDays}/{workingDays} DAYS LOGGED</div>
-                      </div>
-                      <div className={weekly.mpHeadCell}>
-                        <div className={weekly.mpHeadLbl}>Week vs target</div>
-                        <div className={weekly.mpHeadVal}>{c.pctOfPlan == null ? "—" : `${c.pctOfPlan}%`}</div>
-                        <div className={weekly.mpHeadSub}>AVG {avgActualPerDay}/DAY ACTUAL</div>
-                      </div>
-                      <div className={weekly.mpHeadCell}>
-                        <div className={weekly.mpHeadLbl}>Best day</div>
-                        <div className={weekly.mpHeadVal}>{c.bestDayActual}</div>
-                        <div className={weekly.mpHeadSub}>
-                          {c.bestDayDate
-                            ? `${new Date(c.bestDayDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }).toUpperCase()} · VS ${avgActualPerDay}`
-                            : "—"}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-                <ManpowerChart perDay={c.perDay} />
-                <ManpowerTradeTable perDay={c.perDay} />
-              </>
-            )}
-          </div>
-        ))}
-      </Section>
-
-      {/* §5 Delay Reasons & Mitigation — Python PDF template. */}
-      <Section num="05" title="Delay Reasons & Mitigation" meta="ranked by activity count · avg days late across the reason bucket">
-        {report.delayReasons.length === 0 ? (
-          <div className={styles.empty}>No open hindrances tagged this week. Excellent.</div>
-        ) : (
-          <>
-            <div className={weekly.reasonList}>
-              {report.delayReasons.map((r) => (
-                <div key={r.code} className={weekly.reasonCard}>
-                  <div className={weekly.reasonBullet} />
-                  <div className={weekly.reasonHead}>
-                    <div className={weekly.reasonName}>{r.label}</div>
-                    <div className={weekly.reasonStatLine}>
-                      {r.avgDaysImpact > 0 && <>avg <strong>{r.avgDaysImpact}d</strong> · </>}
-                      {r.maxDaysImpact > 0 && <>worst <strong>{r.maxDaysImpact}d</strong> · </>}
-                      <strong>{r.activityCount}</strong> act{r.activityCount === 1 ? "" : "s"} · <strong>{r.affectedVillas.length}</strong> villa{r.affectedVillas.length === 1 ? "" : "s"}
-                      {r.hasProjectLevel && " · +project-level"}
-                    </div>
-                  </div>
-                  {r.affectedVillas.length > 0 && (
-                    <div className={weekly.reasonVillasList}>
-                      {r.affectedVillas.slice(0, 24).map((n) => (
-                        <span key={n} className={weekly.reasonVillaChip}>V{n.toString().padStart(2, "0")}</span>
-                      ))}
-                      {r.affectedVillas.length > 24 && <span className={weekly.reasonMoreChip}>+{r.affectedVillas.length - 24}</span>}
-                    </div>
-                  )}
-                </div>
-              ))}
             </div>
 
-            {/* Mitigation & recovery — table below all reason cards. */}
-            <div className={weekly.mitTitle}>Mitigation &amp; recovery</div>
-            <table className={weekly.mitTable}>
-              <thead>
-                <tr>
-                  <th>REASON</th>
-                  <th>SUGGESTED ACTION</th>
-                  <th>OWNER</th>
-                  <th>TARGET</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.delayReasons.map((r) => (
-                  <tr key={r.code}>
-                    <td className={weekly.mitReason}>{r.label}</td>
-                    <td className={weekly.mitAction}>{r.mitigation}</td>
-                    <td className={weekly.mitBlank}>—</td>
-                    <td className={weekly.mitBlank}>—</td>
-                  </tr>
+            {/* To start */}
+            <div className={weekly.dtable}>
+              <div className={`${weekly.dgrp} ${weekly.dgrpB}`}>
+                ② To start - {p1.toStart.total + p1.toStart.spill} milestones due, {p1.toStart.started} started
+              </div>
+              <BreakdownTable
+                mode="start"
+                rows={[
+                  ...p1.toStart.spillItems.map((it) => ({ ...it, tag: "spilled" as const })),
+                  ...p1.toStart.items.map((it) => ({ ...it, tag: "this-week" as const })),
+                ].sort((a, b) => (b.daysLate ?? 0) - (a.daysLate ?? 0))}
+              />
+            </div>
+
+            {/* In progress (dark navy panel) */}
+            <div className={weekly.ipwrap}>
+              <div className={weekly.ipbar}>
+                <span className={weekly.ipt}>③ In progress - {p1.inProgress.total} milestones</span>
+                <span className={weekly.ipsplit}>
+                  <span className={weekly.ipMoving}>{p1.inProgress.moving} moving</span> · <span className={weekly.ipStalled}>{p1.inProgress.stalled} stalled</span>
+                </span>
+              </div>
+              <div className={weekly.ipmoving}>
+                <div className={weekly.ipml}>Moving on site</div>
+                {p1.inProgress.movingItems.map((r) => (
+                  <span key={`${r.villaNumber}-${r.milestoneName}`} className={weekly.chip}>
+                    V{r.villaNumber.toString().padStart(2, "0")} <small>{r.milestoneName}</small>
+                  </span>
                 ))}
-              </tbody>
-            </table>
-          </>
+              </div>
+              <div className={weekly.nmhd} style={{ marginTop: 16 }}>
+                <div className={weekly.nmt2}>Stalled <span>· needs a push</span></div>
+                <div className={weekly.nms2}>Planned to be under way but <b>zero progress logged</b> - stalled, not slow. Bar length = days idle.</div>
+              </div>
+              <StalledPanelV2 items={p1.inProgress.stalledItems} weekEnd={report.weekEnd} />
+            </div>
+
+            <div className={weekly.mnote}>
+              A milestone can appear in more than one metric - a stage due to finish this week is also in progress this week. &quot;Days past&quot; counts from the planned finish; &quot;days idle&quot; from the planned start; both to {wkEndStr}. <b>Delay reason</b> is pulled from the sub-task rows (tracker-update notes filtered out). &quot;This week&quot; vs &quot;spilled&quot; tells you whether the milestone belongs to this week&apos;s plan or carried over from an earlier week.
+            </div>
+          </div>
         )}
-      </Section>
-    </div>
-  );
-}
 
-// ---------------------------------------------------------------------------
-// Bucket + Chart + Trade table
-// ---------------------------------------------------------------------------
+        {/* §4 Manpower */}
+        <div className={weekly.sec}>
+          <div className={weekly.sechd}>
+            <div className={weekly.secNum}>04</div>
+            <h2 className={weekly.secTitle}>Manpower - target vs achieved</h2>
+            <div className={weekly.secNote}>headcount planned vs on site · contractor-wise · numbers and %</div>
+          </div>
 
-function MilestoneBucket({
-  label,
-  metric,
-  metricLbl,
-  items,
-  variant,
-}: {
-  label: string;
-  metric: string;
-  metricLbl: string;
-  items: WeeklyMilestoneItem[];
-  variant?: "in-progress" | "overdue";
-}) {
-  return (
-    <div className={weekly.bucket}>
-      <div className={weekly.bucketHd}>
-        <div className={weekly.bucketLbl}>{label}</div>
-        <div className={weekly.bucketMetric}>
-          {metric}{metricLbl && <span className={weekly.bucketMetricLbl}> {metricLbl}</span>}
+          {report.manpowerByContractor.filter((c) => c.hasPlan).map((c) => {
+            const totalDays = c.perDay.length || 7;
+            const workingDays = c.perDay.filter((d) => !d.isHoliday).length;
+            const loggedDays = c.perDay.filter((d) => d.actualTotal > 0).length;
+            const planPerDay = workingDays > 0 ? Math.round(c.weeklyPlanned / workingDays) : 0;
+            const avgActualPerDay = totalDays > 0 ? Math.round(c.weeklyActual / totalDays) : 0;
+            const pct = c.pctOfPlan ?? 0;
+            const pctColor = pct >= 100 ? "#8CA04A" : "#C9756A";
+            return (
+              <div key={c.contractorId}>
+                <div className={weekly.cbar}>
+                  <span className={weekly.cbarName}>Contractor 1 - {c.contractorName}</span>
+                  <span className={weekly.cbarNote}>all site labour is under Contractor 1</span>
+                  <span className={`${weekly.cbarPill} ${weekly.cbarPillActive}`}>Active</span>
+                </div>
+                <div className={weekly.mpwrap}>
+                  <div className={weekly.mptotal}>
+                    <div className={weekly.mptCell}>
+                      <div className={weekly.mptL}>Weekly target (labour-days)</div>
+                      <div className={weekly.mptV}>{c.weeklyPlanned}</div>
+                      <div className={weekly.mptSub}>{planPerDay}/day × {workingDays} days</div>
+                    </div>
+                    <div className={weekly.mptCell}>
+                      <div className={weekly.mptL}>Achieved (labour-days)</div>
+                      <div className={`${weekly.mptV} ${weekly.mptVAct}`}>{c.weeklyActual}</div>
+                      <div className={weekly.mptSub}>{loggedDays} of {totalDays} days logged</div>
+                    </div>
+                    <div className={weekly.mptCell}>
+                      <div className={weekly.mptL}>Week achieved vs target</div>
+                      <div className={weekly.mptV} style={{ color: pctColor }}>{pct}%</div>
+                      <div className={weekly.mptSub}>avg {avgActualPerDay}/day on site</div>
+                    </div>
+                  </div>
+                  <div className={weekly.mpchart}>
+                    <div className={weekly.mpctH}>Total labour - planned vs actual by day</div>
+                    <ManpowerChart perDay={c.perDay} />
+                  </div>
+                  <div className={weekly.mpday}>
+                    Date-wise count (actual / planned). Attendance logged <b>{loggedDays === totalDays ? "every day this week" : `${loggedDays} of ${totalDays} days this week`}</b>.
+                  </div>
+                  <div className={weekly.dwwrap}>
+                    <ManpowerTradeTable perDay={c.perDay} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {elegant && (
+            <div className={weekly.c2}>
+              <span className={weekly.c2N}>Contractor 2 - {elegant.contractorName}</span>
+              <span className={weekly.c2T}>52 villas · schedule received; collab-tool integration under process, so no manpower feed yet.</span>
+              <span className={weekly.c2P}>Schedule received</span>
+            </div>
+          )}
+        </div>
+
+        {/* §5 Delay Reasons & Mitigation */}
+        <div className={weekly.sec}>
+          <div className={weekly.sechd}>
+            <div className={weekly.secNum}>05</div>
+            <h2 className={weekly.secTitle}>Delay Reasons &amp; Mitigation</h2>
+            <div className={weekly.secNote}>every cause · average delay it caused · the fix</div>
+          </div>
+
+          {report.delayReasons.length === 0 ? (
+            <div className={styles.empty}>No open hindrances tagged this week. Excellent.</div>
+          ) : (
+            <>
+              <div className={weekly.rzwrap}>
+                <div className={weekly.rzlead}>
+                  Every recorded cause · normalised buckets · the days each is costing. Villas not listed are delayed with no reason logged.
+                </div>
+                <table className={weekly.rzTable}>
+                  <thead>
+                    <tr>
+                      <th>Delay reason</th>
+                      <th>Avg delay</th>
+                      <th>Worst</th>
+                      <th>Activities</th>
+                      <th>Villas</th>
+                      <th>Which villas</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.delayReasons.map((r) => (
+                      <tr key={r.code}>
+                        <td className={weekly.rzR}>
+                          <span className={weekly.rzDot} style={{ background: reasonColor(r.label) }} />
+                          {r.label}
+                        </td>
+                        <td className={weekly.rzLate}>{r.avgDaysImpact > 0 ? `${r.avgDaysImpact}d` : "-"}</td>
+                        <td>{r.maxDaysImpact > 0 ? `${r.maxDaysImpact}d` : "-"}</td>
+                        <td>{r.activityCount}</td>
+                        <td style={{ fontWeight: 800 }}>{r.affectedVillas.length}</td>
+                        <td className={weekly.rzV}>{r.affectedVillas.map((n) => `V${n.toString().padStart(2, "0")}`).slice(0, 24).join(", ")}{r.affectedVillas.length > 24 ? ` +${r.affectedVillas.length - 24}` : ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className={weekly.mzhd}>Mitigation &amp; recovery <span>· the action against each cause</span></div>
+              <div className={weekly.rzwrap}>
+                <table className={weekly.rzTable}>
+                  <thead>
+                    <tr>
+                      <th>Delay reason</th>
+                      <th>Mitigation action</th>
+                      <th>Owner</th>
+                      <th>Target date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.delayReasons.map((r) => (
+                      <tr key={r.code}>
+                        <td className={weekly.rzR}>
+                          <span className={weekly.rzDot} style={{ background: reasonColor(r.label) }} />
+                          {r.label}
+                        </td>
+                        <td className={weekly.mzAct}>{r.mitigation}</td>
+                        <td className={weekly.mzFill}><span className={weekly.mzNone}>assign</span></td>
+                        <td className={weekly.mzFill}><span className={weekly.mzNone}>set date</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className={weekly.mnote}>
+                <b>How to capture mitigation:</b> the tracker does not have a mitigation field, so it lives here in a fixed format — <i>reason → action → owner → target date</i>. The actions above are suggested starting points; put real mitigation, owner and recovery date next to each cause once agreed.
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className={weekly.foot}>
+          Week defined Mon–Sun, ending {wkEndStr} {report.weekEnd.getFullYear()}. Contractor 1 (Abraham Thomas) is the only party with a loaded schedule; Contractor 2 (Elegant Construction) is awarded with 52 villas across 12 blocks; its schedule has been received and integration with the collab tools is under process, so it carries no milestones here yet. Milestone dates are stage-level (all activities in a stage), not the tracker&apos;s single END-marker date, so they reflect true stage finish.
         </div>
       </div>
-      {items.length === 0 ? (
-        <div className={weekly.bucketEmpty}>—</div>
-      ) : (
-        <div className={weekly.bucketItems}>
-          {items.slice(0, 12).map((it, i) => (
-            <div key={`${it.villaNumber}-${it.milestoneName}-${i}`} className={weekly.bucketItem}>
-              <span className={weekly.bucketItemVilla}>{it.villaLabel ?? `V${it.villaNumber}`}</span>
-              <span className={weekly.bucketItemMilestone}>{it.milestoneName}</span>
-              {it.daysLate != null && it.daysLate > 0 && <span className={weekly.bucketItemLate}>+{it.daysLate}d late</span>}
-              {variant === "in-progress" && it.movedThisWeek === false && it.daysIdle != null && (
-                <span className={weekly.bucketItemStalled}>idle {it.daysIdle}d</span>
-              )}
-              {variant === "in-progress" && it.movedThisWeek === true && (
-                <span className={weekly.bucketItemMoving}>moved this week</span>
-              )}
-              {it.reason && <span className={weekly.bucketItemReason}>reason: {it.reason}</span>}
-            </div>
-          ))}
-          {items.length > 12 && (
-            <div className={weekly.bucketItemMore}>+{items.length - 12} more</div>
-          )}
-        </div>
-      )}
+    </>
+  );
+}
+
+// -------- Milestone card v2 (mirrors gen_wk30.py .mc) --------
+function MilestoneCardV2({
+  variant, title, numer, denom, labelLine, postText, spill,
+}: {
+  variant?: "done";
+  title: string;
+  numer: number;
+  denom: number;
+  labelLine: React.ReactNode;
+  postText: React.ReactNode;
+  spill: { title: string; count: number; note: string; plainCount?: boolean };
+}) {
+  const pct = denom > 0 ? Math.round((numer / denom) * 100) : 0;
+  const barColor = pct >= 80 ? "#8CA04A" : pct >= 40 ? "#B5561F" : "#8E2D1E";
+  const barPctColor = pct >= 80 ? "#73823C" : pct >= 40 ? "#B5561F" : "#8E2D1E";
+  return (
+    <div className={`${weekly.mc} ${variant === "done" ? weekly.mcDone : ""}`}>
+      <h3 className={weekly.mcH3}>{title}</h3>
+      <div className={weekly.mcPa}>
+        <span className={weekly.mcBig}>{numer}</span>
+        <span className={weekly.mcOf}>/ {denom}</span>
+        <span className={weekly.mcLb}>{labelLine}</span>
+      </div>
+      <div className={weekly.tabar}>
+        <div className={weekly.tafill} style={{ width: `${Math.min(pct, 100)}%`, background: barColor }} />
+      </div>
+      <div className={weekly.tapct} style={{ color: barPctColor }}>{pct}%</div>
+      <div className={weekly.si2}>{postText}</div>
+      <div className={weekly.spill}>
+        <div className={weekly.spillH}>{spill.title}</div>
+        <div className={weekly.spillN}>{spill.plainCount ? spill.count : `+${spill.count}`}</div>
+        <div className={weekly.spillI}>{spill.note}</div>
+      </div>
     </div>
   );
 }
 
-function ManpowerChart({ perDay }: { perDay: WeeklyReport["manpowerByContractor"][number]["perDay"] }) {
-  const max = Math.max(1, ...perDay.map((d) => Math.max(d.plannedTotal, d.actualTotal)));
+// -------- Breakdown table (§3) --------
+type BreakdownRow = WeeklyMilestoneItem & { tag: "spilled" | "this-week" };
+function BreakdownTable({ mode, rows }: { mode: "complete" | "start"; rows: BreakdownRow[] }) {
+  if (rows.length === 0) {
+    return <div style={{ padding: "12px 16px", fontSize: 12, color: "#8a8a84" }}>Nothing in this bucket this week.</div>;
+  }
   return (
-    <div className={weekly.chart}>
-      {perDay.map((d) => (
-        <div key={d.date.toISOString()} className={weekly.chartCell}>
-          {d.isHoliday ? (
-            <div className={weekly.chartHoliday}>
-              <span className={weekly.chartHolidayLabel}>HOLIDAY</span>
-              {d.actualTotal > 0 && (
-                <span className={weekly.chartHolidayActual}>+{d.actualTotal}</span>
-              )}
-            </div>
-          ) : (
-            <div className={weekly.chartBars}>
-              <div
-                className={`${weekly.chartBar} ${weekly.chartBarPlanned}`}
-                style={{ height: `${(d.plannedTotal / max) * 100}%` }}
-                title={`Planned: ${d.plannedTotal}`}
-              >
-                {d.plannedTotal > 0 && <span className={weekly.chartValue}>{d.plannedTotal}</span>}
-              </div>
-              <div
-                className={`${weekly.chartBar} ${weekly.chartBarActual}`}
-                style={{ height: `${(d.actualTotal / max) * 100}%` }}
-                title={`Actual: ${d.actualTotal}`}
-              >
-                {d.actualTotal > 0 && <span className={weekly.chartValue}>{d.actualTotal}</span>}
-              </div>
-            </div>
-          )}
-          <div className={weekly.chartDay}>{fmtDayShort(d.date)}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ManpowerTradeTable({ perDay }: { perDay: WeeklyReport["manpowerByContractor"][number]["perDay"] }) {
-  // Reshape into trade × day matrix using all trades that appeared anywhere in the week.
-  const trades = Array.from(new Set(perDay.flatMap((d) => d.trades.map((t) => t.trade))));
-  if (trades.length === 0) return null;
-
-  return (
-    <table className={weekly.tradeTbl}>
+    <table className={weekly.dTable}>
       <thead>
         <tr>
-          <th>Trade</th>
-          {perDay.map((d) => (
-            <th
-              key={d.date.toISOString()}
-              className={`${weekly.tradeTblRight} ${d.isHoliday ? weekly.tradeTblHolCell : ""}`}
-            >
-              {fmtDayShort(d.date)}
-            </th>
-          ))}
+          <th>Villa</th>
+          <th>Block</th>
+          <th>Milestone</th>
+          <th>{mode === "complete" ? "Planned finish" : "Planned start"}</th>
+          <th>{mode === "complete" ? "Days past" : "Days idle"}</th>
+          <th>When due</th>
+          <th>{mode === "complete" ? "On site?" : "Started?"}</th>
+          <th>Delay reason</th>
         </tr>
       </thead>
       <tbody>
-        {trades.map((trade) => (
-          <tr key={trade}>
-            <td>{trade}</td>
-            {perDay.map((d) => {
-              const cell = d.trades.find((t) => t.trade === trade);
-              if (d.isHoliday) {
-                return (
-                  <td key={d.date.toISOString()} className={`${weekly.tradeTblRight} ${weekly.tradeTblHolCell}`}>
-                    Hol
-                  </td>
-                );
-              }
-              return (
-                <td key={d.date.toISOString()} className={weekly.tradeTblRight}>
-                  {cell ? `${cell.actual}/${cell.planned}` : "—"}
-                </td>
-              );
-            })}
-          </tr>
-        ))}
+        {rows.map((r, i) => {
+          const days = r.daysLate ?? 0;
+          const started = !!r.sinceDate || !!r.daysIdle;
+          return (
+            <tr key={`${r.villaNumber}-${r.milestoneName}-${i}`}>
+              <td className={weekly.dVv}>V{r.villaNumber.toString().padStart(2, "0")}</td>
+              <td>Block {r.blockCode}</td>
+              <td>{r.milestoneName}</td>
+              <td>—</td>
+              <td className={mode === "complete" ? weekly.dLate : weekly.dWarn}>{days}d</td>
+              <td>
+                <span className={`${weekly.srcp} ${r.tag === "spilled" ? weekly.srcpSp : weekly.srcpTw}`}>
+                  {r.tag === "spilled" ? "spilled" : "this week"}
+                </span>
+              </td>
+              <td>
+                <span className={`${weekly.stPill} ${started ? weekly.stOn : weekly.stOff}`}>
+                  {mode === "complete" ? (started ? "being worked" : "not started") : (started ? "started" : "not started")}
+                </span>
+              </td>
+              <td className={weekly.dRsn}>{r.reason ?? <span className={weekly.dNone}>not recorded</span>}</td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
 }
 
-function Section({
-  num,
-  title,
-  meta,
-  children,
-}: {
-  num: string;
-  title: string;
-  meta?: string;
-  children: React.ReactNode;
-}) {
+// -------- Stalled aging bar panel v2 (dark navy rows) --------
+function StalledPanelV2({ items, weekEnd }: { items: WeeklyMilestoneItem[]; weekEnd: Date }) {
+  if (items.length === 0) {
+    return <div className={weekly.nmempty}>Nothing stalled - every planned milestone is moving on site.</div>;
+  }
+  const mx = Math.max(1, ...items.map((r) => r.daysIdle ?? 0));
   return (
-    <section className={styles.section}>
-      <div className={styles.sectionHd}>
-        <span className={styles.sectionNum}>{num}</span>
-        <span className={styles.sectionTitle}>{title}</span>
-        {meta && <div className={styles.sectionMeta}>{meta}</div>}
-      </div>
-      <div className={styles.sectionBody}>{children}</div>
-    </section>
+    <div className={weekly.nmpanel}>
+      {items.map((r, i) => {
+        const d = r.daysIdle ?? 0;
+        const col = d >= 14 ? "#8E2D1E" : d >= 7 ? "#B5561F" : "#CA9F49";
+        const w = Math.max(6, Math.round((d / mx) * 100));
+        const since = r.sinceDate ? new Date(r.sinceDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : fmtDayShort(weekEnd);
+        const reason = r.reason ?? "no cause logged";
+        return (
+          <div key={`${r.villaNumber}-${r.milestoneName}-${i}`} className={weekly.nmrow}>
+            <div className={weekly.nmv}>
+              <span className={weekly.nmvn}>V{r.villaNumber.toString().padStart(2, "0")}</span>
+              <span className={weekly.nmvs}>{r.milestoneName} · Block {r.blockCode}</span>
+            </div>
+            <div className={weekly.nmbarwrap}>
+              <div className={weekly.nmbar}>
+                <i style={{ width: `${w}%`, background: col }} />
+              </div>
+              <span className={weekly.nmd} style={{ color: col }}>{d}d idle</span>
+            </div>
+            <div className={`${weekly.nmr} ${r.reason ? "" : weekly.nmrNolog}`}>{reason}</div>
+            <div className={weekly.nmact}>since {since}</div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-/**
- * Stalled — needs a push aging-bar panel. Per RUNBOOK weekly §3, this
- * lives at the bottom of the In-Progress bucket. For each stalled villa
- * we render a horizontal bar sized by days_idle vs the worst-idled item
- * this week, coloured red (≥14d), amber (≥7d), or gold (<7d). Empty
- * state: "Nothing stalled — every planned milestone is moving on site."
- */
-function StalledPanel({ items }: { items: WeeklyMilestoneItem[] }) {
-  const stalled = items.filter((it) => it.movedThisWeek === false && it.daysIdle != null);
-  const maxIdle = Math.max(1, ...stalled.map((it) => it.daysIdle ?? 0));
+// -------- Manpower chart (SVG bar, per-day planned vs actual) --------
+function ManpowerChart({ perDay }: { perDay: WeeklyReport["manpowerByContractor"][number]["perDay"] }) {
+  const W = 752, H = 250;
+  const ml = 34, mr = 10, mt = 22, mb = 24;
+  const pw = W - ml - mr;
+  const ph = H - mt - mb;
+  const dates = perDay.map((d) => new Date(d.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }));
+  const planned = perDay.map((d) => d.plannedTotal);
+  const actual = perDay.map((d) => d.actualTotal);
+  const holidays = perDay.map((d) => !!d.isHoliday);
+  const maxVal = Math.max(...planned, ...actual, 0);
+  const ymax = Math.max(60, Math.ceil((maxVal + 9) / 10) * 10);
+  const y = (v: number) => mt + ph - (v / ymax) * ph;
+  const n = perDay.length || 1;
+  const gw = pw / n;
+  const bw = gw * 0.30;
+  const gap = gw * 0.06;
+  const pc = "#9CC9E0";
+  const ac = "#A7D98C";
   return (
-    <div className={weekly.stalledPanel}>
-      <div className={weekly.stalledHd}>
-        <div className={weekly.stalledTitle}>Stalled · needs a push</div>
-        <div className={weekly.stalledCaption}>
-          Planned to be under way but zero progress this week. Bar = days idle.
-        </div>
+    <>
+      <div className={weekly.mpleg}>
+        <span><i style={{ background: pc }} />Planned labour</span>
+        <span><i style={{ background: ac }} />Actual labour</span>
       </div>
-      {stalled.length === 0 ? (
-        <div className={weekly.stalledEmpty}>
-          Nothing stalled — every planned milestone is moving on site.
-        </div>
-      ) : (
-        <ul className={weekly.stalledList}>
-          {stalled.slice(0, 12).map((it, i) => {
-            const idle = it.daysIdle ?? 0;
-            const widthPct = Math.max(4, Math.round((idle / maxIdle) * 100));
-            const tone = idle >= 14 ? weekly.stalledBarRed : idle >= 7 ? weekly.stalledBarAmber : weekly.stalledBarGold;
-            const sinceStr = it.sinceDate
-              ? new Date(it.sinceDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
-              : null;
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" xmlns="http://www.w3.org/2000/svg" fontFamily="Open Sans,sans-serif">
+        {Array.from({ length: Math.floor(ymax / 10) + 1 }, (_, i) => i * 10).map((gv) => (
+          <g key={gv}>
+            <line x1={ml} y1={y(gv)} x2={W - mr} y2={y(gv)} stroke="#e8e1d3" strokeWidth={1} />
+            <text x={ml - 6} y={y(gv) + 3} fontSize={9} fill="#9a9488" textAnchor="end">{gv}</text>
+          </g>
+        ))}
+        {dates.map((d, i) => {
+          const cx = ml + i * gw + gw / 2;
+          const pv = planned[i];
+          const av = actual[i];
+          if (holidays[i]) {
             return (
-              <li key={i} className={weekly.stalledRow}>
-                <div className={weekly.stalledLbl}>
-                  <span className={weekly.stalledVilla}>{it.villaLabel ?? `V${it.villaNumber}`}</span>
-                  <span className={weekly.stalledMs}>{it.milestoneName}</span>
-                  <span className={weekly.stalledBlock}>· Block {it.blockCode}</span>
-                </div>
-                <div className={weekly.stalledBarWrap}>
-                  <div className={`${weekly.stalledBar} ${tone}`} style={{ width: `${widthPct}%` }} />
-                </div>
-                <div className={weekly.stalledIdle}>{idle}d idle</div>
-                <div className={weekly.stalledReason}>
-                  {it.reason ?? "no cause logged"}
-                  {sinceStr && <span className={weekly.stalledSince}> · since {sinceStr}</span>}
-                </div>
-              </li>
+              <g key={i}>
+                <rect x={ml + i * gw} y={mt} width={gw} height={ph} fill="#f0ece2" />
+                <text x={cx} y={mt + ph / 2} fontSize={9.5} fill="#a79f8f" textAnchor="middle" transform={`rotate(-90 ${cx} ${mt + ph / 2})`}>HOLIDAY</text>
+                <text x={cx} y={H - 8} fontSize={8.5} fill="#7a7a72" textAnchor="middle">{d}</text>
+              </g>
             );
+          }
+          const px = cx - bw - gap / 2;
+          const ax = cx + gap / 2;
+          return (
+            <g key={i}>
+              <rect x={px} y={y(pv)} width={bw} height={ph - (y(pv) - mt)} fill={pc} rx={2} />
+              <text x={px + bw / 2} y={y(pv) - 4} fontSize={9.5} fill="#5a5a54" textAnchor="middle">{pv}</text>
+              {av > 0 ? (
+                <>
+                  <rect x={ax} y={y(av)} width={bw} height={ph - (y(av) - mt)} fill={ac} rx={2} />
+                  <text x={ax + bw / 2} y={y(av) - 4} fontSize={9.5} fill="#4E7A46" textAnchor="middle" fontWeight={700}>{av}</text>
+                </>
+              ) : (
+                <text x={ax + bw / 2} y={y(0) - 4} fontSize={9.5} fill="#b8b2a6" textAnchor="middle">0</text>
+              )}
+              <text x={cx} y={H - 8} fontSize={8.5} fill="#7a7a72" textAnchor="middle">{d}</text>
+            </g>
+          );
+        })}
+        <line x1={ml} y1={y(0)} x2={W - mr} y2={y(0)} stroke="#cbc3b4" strokeWidth={1.2} />
+      </svg>
+    </>
+  );
+}
+
+// -------- Manpower per-trade per-day table --------
+function ManpowerTradeTable({ perDay }: { perDay: WeeklyReport["manpowerByContractor"][number]["perDay"] }) {
+  const dates = perDay.map((d) => new Date(d.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }));
+  const holidays = perDay.map((d) => !!d.isHoliday);
+  // Union of trades across all days.
+  const tradeSet = new Set<string>();
+  for (const d of perDay) for (const t of d.trades) tradeSet.add(t.trade);
+  const trades = Array.from(tradeSet);
+  const cell = (val: string, isHol: boolean) => isHol ? "Hol" : val;
+  return (
+    <table className={weekly.dwTable}>
+      <thead>
+        <tr>
+          <th>Trade</th>
+          {dates.map((d, i) => (
+            <th key={i} className={holidays[i] ? "hol" : ""}>{d}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {trades.map((t) => (
+          <tr key={t}>
+            <td className="tt">{t}</td>
+            {perDay.map((d, i) => {
+              const tr = d.trades.find((x) => x.trade === t);
+              const val = tr ? `${tr.actual}/${tr.planned}` : "-";
+              return <td key={i} className={holidays[i] ? "hol" : ""}>{cell(val, holidays[i])}</td>;
+            })}
+          </tr>
+        ))}
+        <tr className="dwtot">
+          <td className="tt">Total</td>
+          {perDay.map((d, i) => {
+            const val = `${d.actualTotal}/${d.plannedTotal}`;
+            return <td key={i} className={holidays[i] ? "hol" : ""}>{cell(val, holidays[i])}</td>;
           })}
-          {stalled.length > 12 && (
-            <li className={weekly.stalledMore}>+{stalled.length - 12} more stalled</li>
-          )}
-        </ul>
-      )}
-    </div>
+        </tr>
+      </tbody>
+    </table>
   );
 }
