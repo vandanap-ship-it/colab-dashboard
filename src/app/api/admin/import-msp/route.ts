@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
@@ -9,6 +10,15 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 // Long-running import (7k+ rows) — extend Vercel's function timeout.
 export const maxDuration = 300;
+
+// Same cap enforced further down for multipart uploads — validate JSON at the
+// same boundary so both entry points agree on the max size.
+const MAX_CSV_BYTES = 20 * 1024 * 1024;
+
+const JsonPostSchema = z.object({
+  csv: z.string().min(1).max(MAX_CSV_BYTES),
+  projectName: z.string().max(200).optional(),
+});
 
 /**
  * POST /api/admin/import-msp
@@ -47,12 +57,22 @@ export async function POST(req: Request) {
       const nameField = form.get("projectName");
       if (typeof nameField === "string" && nameField.trim()) projectName = nameField.trim();
     } else if (contentType.includes("application/json")) {
-      const body = (await req.json()) as { csv?: string; projectName?: string };
-      if (typeof body.csv !== "string" || body.csv.trim() === "") {
-        return NextResponse.json({ error: "JSON body must include 'csv' string" }, { status: 400 });
+      const raw = await req.json();
+      const parsed = JsonPostSchema.safeParse(raw);
+      if (!parsed.success) {
+        return NextResponse.json(
+          {
+            error: "Request body failed validation",
+            details: parsed.error.issues.map((i) => ({
+              path: i.path.join("."),
+              message: i.message,
+            })),
+          },
+          { status: 400 },
+        );
       }
-      csvText = body.csv;
-      if (body.projectName) projectName = body.projectName.trim();
+      csvText = parsed.data.csv;
+      if (parsed.data.projectName) projectName = parsed.data.projectName.trim();
     } else {
       return NextResponse.json(
         { error: "Send as multipart/form-data (file field) or application/json (csv field)" },
