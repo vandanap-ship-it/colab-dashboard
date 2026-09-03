@@ -10,6 +10,7 @@
 //
 // All aggregation over existing tables. Zero new schema.
 
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { rangeSummary, type DaySummary, type ManpowerEntryRow, type TradePlanRow } from "@/lib/manpower";
 import { reasonLabel } from "@/lib/hindranceReasons";
@@ -141,7 +142,7 @@ function daysLatePos(baseline: Date | null | undefined, at: Date): number | null
 // Public API
 // ---------------------------------------------------------------------------
 
-export async function getWeeklyReport(projectId: string, weekEnding: Date): Promise<WeeklyReport | null> {
+async function getWeeklyReportUncached(projectId: string, weekEnding: Date): Promise<WeeklyReport | null> {
   const weekEnd = istDayStart(weekEnding);
   const weekStart = new Date(weekEnd.getTime() - 6 * 86400000);
   const weekEndExclusive = new Date(weekEnd.getTime() + 86400000);
@@ -721,4 +722,21 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
     manpowerByContractor,
     delayReasons,
   };
+}
+
+/**
+ * Cached wrapper — 60-second edge cache. Weekly report aggregates over the
+ * whole project; underlying queries are heavy. The 60s window is invisible
+ * for weekly-cadence reads but drops repeat views to <100ms. Serialise the
+ * `weekEnding` Date to an ISO string internally so the cache key is stable.
+ */
+const _cachedWeekly = unstable_cache(
+  async (projectId: string, weekEndingIso: string): Promise<WeeklyReport | null> => {
+    return getWeeklyReportUncached(projectId, new Date(weekEndingIso));
+  },
+  ["weekly-report"],
+  { revalidate: 60 },
+);
+export async function getWeeklyReport(projectId: string, weekEnding: Date): Promise<WeeklyReport | null> {
+  return _cachedWeekly(projectId, weekEnding.toISOString());
 }

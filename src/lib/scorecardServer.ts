@@ -14,6 +14,7 @@
 //
 // Everything is read-only aggregation over existing tables. Zero new schema.
 
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { daySummary, type DaySummary, type ManpowerEntryRow, type TradePlanRow } from "@/lib/manpower";
 import {
@@ -710,7 +711,7 @@ async function computeProjectHealth(projectId: string, asOf: Date): Promise<Scor
 // Public API — one call, all sections, parallelised.
 // ---------------------------------------------------------------------------
 
-export async function getScorecard(
+async function getScorecardUncached(
   projectId: string,
   day: Date = new Date(),
   contractorFilterId: string | null = null,
@@ -759,4 +760,25 @@ export async function getScorecard(
     blockProgress,
     projectHealth,
   };
+}
+
+/**
+ * Cached wrapper — 60-second edge cache. Scorecard is heavy (~2.5s cold)
+ * and read many times per day per user. `day` and `contractorFilterId`
+ * are serialised into the cache key so different date/filter combos have
+ * independent entries.
+ */
+const _cachedScorecard = unstable_cache(
+  async (projectId: string, dayIso: string, contractorFilterId: string | null): Promise<Scorecard | null> => {
+    return getScorecardUncached(projectId, new Date(dayIso), contractorFilterId);
+  },
+  ["scorecard"],
+  { revalidate: 60 },
+);
+export async function getScorecard(
+  projectId: string,
+  day: Date = new Date(),
+  contractorFilterId: string | null = null,
+): Promise<Scorecard | null> {
+  return _cachedScorecard(projectId, day.toISOString(), contractorFilterId);
 }
