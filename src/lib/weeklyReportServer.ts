@@ -16,7 +16,7 @@ import { reasonLabel } from "@/lib/hindranceReasons";
 import { mitigationForLabel } from "@/lib/reasonMitigations";
 import { istDayStart } from "@/lib/istDay";
 import { isHoliday } from "@/lib/holidays";
-import { aggregateDelayReasons } from "@/lib/rules/weeklyRules";
+import { aggregateDelayReasons, normalizeReason } from "@/lib/rules/weeklyRules";
 import { AMANVANA_VILLA_NUMBER_TO_BLOCK } from "@/lib/projects/amanvana";
 
 // ---------------------------------------------------------------------------
@@ -171,6 +171,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
         milestones: {
           select: {
             id: true,
+            sectionId: true,   // used to pair with ColabActivity.sectionId for §3 reason lookup
             baselineStart: true,
             baselineFinish: true,
             actualStart: true,
@@ -296,6 +297,7 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
       where: { projectId, reasonNote: { not: null } },
       select: {
         villaId: true,
+        sectionId: true,   // needed to attribute a reason to a specific villaMilestone
         plannedEnd: true,
         reasonNote: true,
       },
@@ -332,16 +334,26 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
 
   // ------- Reason index: per villaMilestone, best-effort reason label -------
   // Weekly Milestone Breakdown wants each item to show WHY it's late.
-  // Sources in order of preference:
+  // Sources in order of preference (first non-empty wins):
   //   1) Hindrance opened on the milestone's wbsNode(s) this week
   //   2) ProgressEntry.reasonCode logged on the milestone's wbsNode(s) this week
+  //   3) ColabActivity.reasonNote from the villa's own Colab sub-task rows —
+  //      Python's fallback and by far the most populated source in real data.
+  //      Without this, real deployed reports show "not recorded" everywhere
+  //      because the site team logs reasons in the Colab tracker, not via
+  //      Siddhi's Hindrance form.
   const reasonByMilestone = new Map<string, string>();
   {
     // Build a wbsNode -> villaMilestoneId lookup from villas we already loaded.
     const wbsToMilestone = new Map<string, string>();
+    // Also build a (villaId,sectionId) -> villaMilestoneId lookup for the
+    // ColabActivity path — ColabActivity has no wbsNode link, so we pair on
+    // the same (villa, section) coordinates that VillaMilestone uses.
+    const villaSectionToMilestone = new Map<string, string>();
     for (const v of villas) {
       for (const m of v.milestones) {
         for (const w of m.wbsNodes) wbsToMilestone.set(w.id, m.id);
+        if (m.sectionId) villaSectionToMilestone.set(`${v.id}::${m.sectionId}`, m.id);
       }
     }
     for (const h of weekHindrances) {
@@ -357,6 +369,19 @@ export async function getWeeklyReport(projectId: string, weekEnding: Date): Prom
       const mid = wbsId ? wbsToMilestone.get(wbsId) : undefined;
       if (!mid || reasonByMilestone.has(mid)) continue;
       reasonByMilestone.set(mid, reasonLabel(pe.reasonCode));
+    }
+    // Third-tier: Colab activity notes. Iterate in an order that biases toward
+    // the row that best represents the stage — most recent plannedEnd wins so
+    // a stale reason on an early sub-task doesn't override a fresher one.
+    const colabOrdered = [...reasonActivities]
+      .filter((a): a is typeof a & { villaId: string; sectionId: string } => !!a.villaId && !!a.sectionId)
+      .sort((a, b) => (b.plannedEnd?.getTime() ?? 0) - (a.plannedEnd?.getTime() ?? 0));
+    for (const a of colabOrdered) {
+      const label = normalizeReason(a.reasonNote);
+      if (!label) continue;
+      const mid = villaSectionToMilestone.get(`${a.villaId}::${a.sectionId}`);
+      if (!mid || reasonByMilestone.has(mid)) continue;
+      reasonByMilestone.set(mid, label);
     }
   }
 
