@@ -109,11 +109,12 @@ jobs:
             (async () => {
               try {
                 const buf = fs.readFileSync(process.env.BACKUP_FILE);
+                // access must match the store's config; store is Private, so
+                // any file-level access:'public' is rejected. Older SDK
+                // versions require the option — pass 'public' for public
+                // stores, 'private' for private ones (this store).
                 const { url } = await put(process.env.BLOB_PATH, buf, {
-                  access: 'public',       // Access flag on the file itself — the
-                                          // *store* being Private overrides this,
-                                          // so the URL still requires the token
-                                          // for read. Required-non-empty by SDK.
+                  access: 'private',
                   addRandomSuffix: false,
                   contentType: 'application/gzip',
                   token: process.env.BLOB_READ_WRITE_TOKEN,
