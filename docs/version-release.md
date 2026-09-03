@@ -170,7 +170,9 @@ That auto-generates `sentry.client.config.ts` + `sentry.server.config.ts` + edge
 Walked every navigable route on the deploy as admin. Zero 500s across 34 tested routes. Real bugs found:
 
 **Critical perf**
-- `/reports/master` — **10.3 seconds**. Root cause: fetches all ~14k WBS nodes to build a name/parent/level lookup for only 30 highlight entries (src/app/projects/[id]/reports/master/page.tsx:79). Fix: fetch only the ancestors of highlight nodes (max ~200 rows). One-day fix.
+- `/reports/master` — **~10 seconds**. Two 14k-row WBSNode fetches per render:
+  - Page level (location-path lookup): **fixed** in commit `efa7472` — now walks only ancestors of highlight rows (~200 rows).
+  - `getMasterReport()` in src/lib/reports.ts:667 — still full-tree scan. Used for phase totals, leaf detection, and plannedSum/achievedSum reductions across every leaf. Real fix requires refactoring the reductions to Postgres SUM/MIN/MAX aggregates (SELECT SUM(percentComplete) WHERE isLeaf...) instead of pulling every row to the app. ~1 day of work. Not a demo blocker — page is functional, just slow.
 
 **Noticeable perf** (functional but slow — > 1.5s server render):
 - `/reports/weekly` — 2.8s
