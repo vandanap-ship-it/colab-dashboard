@@ -664,11 +664,29 @@ export async function importColabProgress(
   }
 
   if (!options.dryRun) {
-    await bulkWriteColabActivity(prisma, pendingColabActivities);
-    await applyStageAggregateBaselines(prisma, stageAgg, milestoneAgg);
-    await bulkTagUntaggedWbsNodes(prisma, projectId, touchedVillaIds, options.defaultContractorName, contractorByName, stats);
-    await rollupTouchedMilestones(prisma, touchedVillaMilestones, stats);
-    await overrideAuthoritativeCloseDates(prisma, stageAgg, milestoneAgg);
+    // Wrap the five post-loop phases in a single transaction. Individual
+    // per-row writes above are idempotent (idempotencyKey on ProgressEntry,
+    // no-op-if-no-change on WBSNode), so a retry after a mid-loop crash is
+    // safe. The post-loop phases are NOT independently idempotent — the
+    // ColabActivity bulk write + milestone aggregate + rollup + close-date
+    // override are one logical operation. If any of them fails halfway,
+    // rolling back keeps the DB consistent with "this sync never happened
+    // after the per-row loop" instead of "half the ColabActivity mirror is
+    // populated and rollups reflect the partial state". Weekly Report can
+    // then read a coherent snapshot at any moment.
+    //
+    // Timeout is generous (5 min) because full-project syncs on Amanvana
+    // touch ~14k ColabActivity rows in 200-batch chunks + milestone rollups.
+    await prisma.$transaction(
+      async (tx: PrismaLike) => {
+        await bulkWriteColabActivity(tx, pendingColabActivities);
+        await applyStageAggregateBaselines(tx, stageAgg, milestoneAgg);
+        await bulkTagUntaggedWbsNodes(tx, projectId, touchedVillaIds, options.defaultContractorName, contractorByName, stats);
+        await rollupTouchedMilestones(tx, touchedVillaMilestones, stats);
+        await overrideAuthoritativeCloseDates(tx, stageAgg, milestoneAgg);
+      },
+      { timeout: 300_000, maxWait: 30_000 },
+    );
   } else {
     stats.villaMilestonesUpdated = touchedVillaMilestones.size;
   }
