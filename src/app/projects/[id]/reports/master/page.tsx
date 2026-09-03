@@ -75,23 +75,40 @@ export default async function MasterReportPage({
     },
   });
 
-  // Build location path
-  const allNodes = await prisma.wBSNode.findMany({
-    where: { projectId: id },
-    select: { id: true, name: true, parentId: true, level: true },
-  });
-  const nameById = new Map(allNodes.map((n) => [n.id, n.name]));
-  const parentById = new Map(allNodes.map((n) => [n.id, n.parentId]));
-  const levelById = new Map(allNodes.map((n) => [n.id, n.level]));
+  // Build location path — walks up to 6 parents from each highlight entry's
+  // WBSNode. Previous code loaded the entire WBSNode table (~14k rows for
+  // Amanvana) to build these lookups, costing ~10 seconds on the deploy.
+  // Instead: walk the tree level-by-level in ID batches, stopping when the
+  // frontier is empty or we've climbed 6 levels. Worst case here is ~30
+  // highlights × 7 levels = ~210 rows fetched, in ~7 short queries.
+  const seedIds = new Set<string>();
+  for (const e of highlightEntries) {
+    if (e.wbsNode?.id) seedIds.add(e.wbsNode.id);
+  }
+  const nodeById = new Map<string, { id: string; name: string; parentId: string | null; level: number }>();
+  let frontier: string[] = [...seedIds];
+  for (let depth = 0; depth < 7 && frontier.length > 0; depth++) {
+    const found = await prisma.wBSNode.findMany({
+      where: { projectId: id, id: { in: frontier } },
+      select: { id: true, name: true, parentId: true, level: true },
+    });
+    const next: string[] = [];
+    for (const n of found) {
+      if (!nodeById.has(n.id)) {
+        nodeById.set(n.id, n);
+        if (n.parentId) next.push(n.parentId);
+      }
+    }
+    frontier = [...new Set(next)];
+  }
   function locationFor(nodeId: string): string {
     const parts: string[] = [];
-    let cur: string | null = parentById.get(nodeId) ?? null;
+    let cur: string | null = nodeById.get(nodeId)?.parentId ?? null;
     let depth = 0;
     while (cur && depth < 6) {
-      const lvl = levelById.get(cur);
-      const nm = nameById.get(cur);
-      if (lvl != null && lvl >= 1 && nm) parts.push(nm);
-      cur = parentById.get(cur) ?? null;
+      const n = nodeById.get(cur);
+      if (n && n.level >= 1) parts.push(n.name);
+      cur = n?.parentId ?? null;
       depth += 1;
     }
     return parts.reverse().join(" / ") || "—";
