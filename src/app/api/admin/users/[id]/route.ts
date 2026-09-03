@@ -1,11 +1,21 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ROLES, isAdmin } from "@/lib/roles";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { serializeModules } from "@/lib/modules";
+import { parseBody } from "@/lib/parseBody";
 
 const VALID_ROLES = new Set<string>(Object.values(ROLES));
+
+const PatchUserSchema = z.object({
+  name: z.string().min(2).max(120).optional(),
+  role: z.string().refine((v) => VALID_ROLES.has(v), { message: "Invalid role" }).optional(),
+  active: z.boolean().optional(),
+  designation: z.string().max(120).nullable().optional(),
+  modules: z.array(z.string().max(60)).nullable().optional(),
+});
 
 export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[id]">) {
   const session = await auth();
@@ -13,15 +23,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
   if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await ctx.params;
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
-  const { name, role, active, designation, modules } = (body ?? {}) as {
-    name?: string;
-    role?: string;
-    active?: boolean;
-    designation?: string | null;
-    modules?: string[] | null;
-  };
+  const parsed = await parseBody(req, PatchUserSchema);
+  if (!parsed.ok) return parsed.response;
+  const { name, role, active, designation, modules } = parsed.data;
 
   const data: {
     name?: string;
@@ -30,17 +34,13 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
     designation?: string | null;
     modules?: string | null;
   } = {};
-  if (typeof name === "string" && name.trim().length >= 2) data.name = name.trim();
-  if (typeof role === "string" && VALID_ROLES.has(role)) data.role = role;
-  if (typeof active === "boolean") data.active = active;
+  if (name !== undefined) data.name = name.trim();
+  if (role !== undefined) data.role = role;
+  if (active !== undefined) data.active = active;
   if (designation !== undefined) {
-    data.designation = typeof designation === "string" && designation.trim().length > 0
-      ? designation.trim()
-      : null;
+    data.designation = designation && designation.trim().length > 0 ? designation.trim() : null;
   }
-  if (modules !== undefined) {
-    data.modules = serializeModules(modules);
-  }
+  if (modules !== undefined) data.modules = serializeModules(modules);
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });

@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
 import { recordAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/parseBody";
+
+const PostClearSchema = z.object({
+  confirm: z.literal("CLEAR_TEST_DATA", {
+    message: 'Body must include { "confirm": "CLEAR_TEST_DATA" } to actually delete.',
+  }),
+  resetWbs: z.boolean().optional(),
+});
 
 async function summarise() {
   const [
@@ -103,17 +112,9 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { confirm?: string; resetWbs?: boolean } = {};
-  try { body = await req.json(); } catch {}
-
-  if (body.confirm !== "CLEAR_TEST_DATA") {
-    return NextResponse.json(
-      { error: 'Body must include { "confirm": "CLEAR_TEST_DATA" } to actually delete.' },
-      { status: 400 },
-    );
-  }
-
-  const resetWbs = body.resetWbs === true;
+  const parsed = await parseBody(req, PostClearSchema);
+  if (!parsed.ok) return parsed.response;
+  const resetWbs = parsed.data.resetWbs === true;
   const before = await summarise();
 
   const result = await prisma.$transaction(async (tx) => {

@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
 import { recordAudit } from "@/lib/audit";
+import { parseBody } from "@/lib/parseBody";
+
+const PostContractorSchema = z.object({
+  projectId: z.string().min(1),
+  name: z.string().min(2).max(200),
+  category: z.string().min(2).max(80),
+});
 
 // Endpoint historically served two callers:
 //   - `/admin/contractors` page → list ALL contractors across projects (admin-only)
@@ -37,20 +45,11 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
-
-  const { projectId, name, category } = (body ?? {}) as {
-    projectId?: string;
-    name?: string;
-    category?: string;
-  };
-
-  if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
-  const n = (name ?? "").trim();
-  const c = (category ?? "").trim();
-  if (n.length < 2) return NextResponse.json({ error: "Name too short" }, { status: 400 });
-  if (c.length < 2) return NextResponse.json({ error: "Category too short" }, { status: 400 });
+  const parsed = await parseBody(req, PostContractorSchema);
+  if (!parsed.ok) return parsed.response;
+  const { projectId, name, category } = parsed.data;
+  const n = name.trim();
+  const c = category.trim();
 
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });

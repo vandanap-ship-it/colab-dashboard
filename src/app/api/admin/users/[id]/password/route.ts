@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
+import { parseBody } from "@/lib/parseBody";
+
+const PostPasswordSchema = z.object({
+  password: z.string().min(6, "Password must be at least 6 characters.").max(200),
+});
 
 export async function POST(req: Request, ctx: RouteContext<"/api/admin/users/[id]/password">) {
   const session = await auth();
@@ -12,16 +18,9 @@ export async function POST(req: Request, ctx: RouteContext<"/api/admin/users/[id
   }
 
   const { id } = await ctx.params;
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-  const { password } = (body ?? {}) as { password?: string };
-  if (typeof password !== "string" || password.length < 6) {
-    return NextResponse.json({ error: "Password must be at least 6 characters." }, { status: 400 });
-  }
+  const parsed = await parseBody(req, PostPasswordSchema);
+  if (!parsed.ok) return parsed.response;
+  const { password } = parsed.data;
 
   const user = await prisma.user.findUnique({ where: { id }, select: { id: true } });
   if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });

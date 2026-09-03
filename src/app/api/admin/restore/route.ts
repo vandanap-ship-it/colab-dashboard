@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
 import { recordAudit, type AuditEntityType } from "@/lib/audit";
+import { parseBody } from "@/lib/parseBody";
+
+const PostRestoreSchema = z.object({
+  entityType: z.enum(["ProgressEntry", "Issue", "Hindrance", "Concern", "Inspection"]),
+  id: z.string().min(1),
+});
 
 const RESTORABLE: Record<string, AuditEntityType> = {
   ProgressEntry: "ProgressEntry",
@@ -22,24 +29,10 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  let body: { entityType?: string; id?: string } = {};
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const entityType = body.entityType ? RESTORABLE[body.entityType] : null;
-  if (!entityType) {
-    return NextResponse.json(
-      { error: `entityType must be one of: ${Object.keys(RESTORABLE).join(", ")}` },
-      { status: 400 },
-    );
-  }
-  const id = body.id;
-  if (typeof id !== "string" || !id) {
-    return NextResponse.json({ error: "id required" }, { status: 400 });
-  }
+  const parsed = await parseBody(req, PostRestoreSchema);
+  if (!parsed.ok) return parsed.response;
+  const { entityType: rawType, id } = parsed.data;
+  const entityType: AuditEntityType = RESTORABLE[rawType];
 
   try {
     let projectId: string | null = null;

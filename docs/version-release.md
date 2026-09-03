@@ -140,9 +140,17 @@ Compared the deploy vs a live render of `scripts/gen_wk23.py` on the same fixtur
 
 8. **§3 per-item Delay reason column blank on the deploy.** Python shows "Change orders" per row for the villas where a reason is logged; ours shows "not recorded" on every row. The `reasonByMilestone` lookup in `weeklyReportServer.ts` isn't finding matches — likely a small server-side fix (wbsNode → villaMilestone join not populating), separate from the §5 aggregation fix that just landed.
 
-### Zod migration rollout (in progress, Tier 2.1)
+### Zod migration rollout — 32 of 34 done (Tier 2.1)
 
-`parseBody` + zod is the standard for API request bodies. Migrated so far: `/api/progress`, `/api/hindrances` (POST), `/api/concerns` (POST), `/api/issues` (POST), `/api/projects/[id]/contractor-assign`. Remaining ~29 write endpoints (bills, drawings, expenses, permits, projects, rfi, inspections, manpower-entries, admin/*) still use hand-narrowed casts. Same 15-line refactor per route — schema at top, `parseBody(req, Schema)` in place of `req.json()` + inline validation. Track adoption via presence of `import { z } from "zod"` in the route file.
+`parseBody` + zod is the standard for API request bodies. Only 2 routes remain, and they take multipart form-data with special handling — parseBody would need a matching multipart helper before they can migrate:
+
+- `/api/admin/import-msp` (POST)
+- `/api/admin/import-colab-progress` (POST)
+- `/api/admin/import-colab-manpower` (POST)
+
+The JSON fallback paths in those imports already do sanity checks (CSV size < 20 MB, header shape, `csv` key present) so they're not un-validated — just not on the same `parseBody` pattern as the rest. Full parity is a small helper away.
+
+Every other write endpoint now enforces its inputs at the boundary: type shape, string length limits, numeric bounds (0-1e6 quantities, 0-100%, 0-500 headcount, etc.), enum validity, URL shape. Invalid JSON returns a clean 400 with a Zod `details` array. Track adoption via presence of `import { z } from "zod"` in the route file.
 
 ### Rate limiting — recommend enabling Vercel Firewall (Tier 2.4)
 

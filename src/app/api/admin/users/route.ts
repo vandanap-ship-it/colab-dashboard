@@ -1,11 +1,22 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ROLES, isAdmin } from "@/lib/roles";
 import { serializeModules } from "@/lib/modules";
+import { parseBody } from "@/lib/parseBody";
 
 const VALID_ROLES = new Set<string>(Object.values(ROLES));
+
+const PostUserSchema = z.object({
+  username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9._-]+$/, "Username must be lowercase letters/numbers/._-"),
+  name: z.string().min(2).max(120),
+  role: z.string().refine((v) => VALID_ROLES.has(v), { message: "Invalid role" }),
+  password: z.string().min(6).max(200),
+  designation: z.string().max(120).nullable().optional(),
+  modules: z.array(z.string().max(60)).nullable().optional(),
+});
 
 export async function GET() {
   const session = await auth();
@@ -24,31 +35,15 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
-
-  const { username, name, role, password, designation, modules } = (body ?? {}) as {
-    username?: string;
-    name?: string;
-    role?: string;
-    password?: string;
-    designation?: string | null;
-    modules?: string[] | null;
-  };
-
-  const u = (username ?? "").trim().toLowerCase();
-  const n = (name ?? "").trim();
-  const r = role ?? "";
-  const p = password ?? "";
-  const d = typeof designation === "string" ? designation.trim() : null;
-  const mods = serializeModules(modules);
-
-  if (!/^[a-z0-9._-]{3,30}$/.test(u)) {
-    return NextResponse.json({ error: "Username must be 3-30 lowercase letters/numbers/._-" }, { status: 400 });
-  }
-  if (n.length < 2) return NextResponse.json({ error: "Name too short" }, { status: 400 });
-  if (!VALID_ROLES.has(r)) return NextResponse.json({ error: "Invalid role" }, { status: 400 });
-  if (p.length < 6) return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+  const parsed = await parseBody(req, PostUserSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+  const u = body.username.trim().toLowerCase();
+  const n = body.name.trim();
+  const r = body.role;
+  const p = body.password;
+  const d = body.designation?.trim() ?? null;
+  const mods = serializeModules(body.modules ?? null);
 
   const existing = await prisma.user.findUnique({ where: { username: u } });
   if (existing) return NextResponse.json({ error: "Username already taken" }, { status: 400 });
