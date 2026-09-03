@@ -32,11 +32,15 @@ jobs:
 
       - name: List and delete under backups/
         env:
-          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          # Prefers OLD_BLOB_TOKEN so a one-off cleanup can target a store
+          # that's no longer the active BLOB_READ_WRITE_TOKEN (e.g. the old
+          # public siddhi-photos store after we rotated to a private one).
+          # Falls back to BLOB_READ_WRITE_TOKEN if the temp secret isn't set.
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.OLD_BLOB_TOKEN || secrets.BLOB_READ_WRITE_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "$BLOB_READ_WRITE_TOKEN" ]; then
-            echo "::error::BLOB_READ_WRITE_TOKEN not set."
+            echo "::error::Neither OLD_BLOB_TOKEN nor BLOB_READ_WRITE_TOKEN set."
             exit 1
           fi
 
