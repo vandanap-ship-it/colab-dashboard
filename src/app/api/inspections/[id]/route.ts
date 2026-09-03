@@ -5,17 +5,18 @@ import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
 import { recordAudit } from "@/lib/audit";
 import {
-  badRequest,
   forbidden,
   handleApiError,
   notFound,
   unauthorized,
 } from "@/lib/apiErrors";
 import { parseBody } from "@/lib/parseBody";
+import { checkConflict } from "@/lib/optimisticLock";
 
 const PatchInspectionSchema = z.object({
   status: z.enum(["IN_REVIEW", "PASSED", "REJECTED"]),
   rejectionReason: z.string().max(1000).optional(),
+  expectedUpdatedAt: z.string().optional(),
 });
 
 export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[id]">) {
@@ -29,14 +30,18 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
   const { id } = await ctx.params;
   const parsed = await parseBody(req, PatchInspectionSchema);
   if (!parsed.ok) return parsed.response;
-  const { status, rejectionReason } = parsed.data;
+  const { status, rejectionReason, expectedUpdatedAt } = parsed.data;
 
   try {
     const before = await prisma.inspection.findUnique({
       where: { id },
-      select: { id: true, projectId: true, status: true, title: true },
+      select: { id: true, projectId: true, status: true, title: true, updatedAt: true },
     });
     if (!before) return notFound();
+    const conflict = checkConflict(expectedUpdatedAt, before.updatedAt, {
+      id: before.id, status: before.status, title: before.title,
+    });
+    if (!conflict.ok) return conflict.response!;
     const inspection = await prisma.inspection.update({
       where: { id },
       data: {

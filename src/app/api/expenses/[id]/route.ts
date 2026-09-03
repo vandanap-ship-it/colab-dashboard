@@ -8,6 +8,7 @@ import { isScopedUser } from "@/lib/modules";
 import { allowedExpenseTransition, normalizeCategory, parseAmount } from "@/lib/expenses";
 import { badRequest, forbidden, handleApiError, notFound, unauthorized } from "@/lib/apiErrors";
 import { parseBody } from "@/lib/parseBody";
+import { checkConflict } from "@/lib/optimisticLock";
 
 const PatchExpenseSchema = z.object({
   status: z.enum(["SUBMITTED", "APPROVED", "REJECTED", "PAID"]).optional(),
@@ -18,6 +19,7 @@ const PatchExpenseSchema = z.object({
   date: z.string().datetime({ offset: true }).optional(),
   paidTo: z.string().max(200).optional(),
   notes: z.string().max(2000).optional(),
+  expectedUpdatedAt: z.string().optional(),
 });
 
 const expenseInclude = {
@@ -48,13 +50,17 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/expenses/[id]"
   const { id } = await ctx.params;
   const expense = await prisma.expense.findUnique({
     where: { id },
-    select: { id: true, projectId: true, status: true, loggedById: true, description: true },
+    select: { id: true, projectId: true, status: true, loggedById: true, description: true, updatedAt: true },
   });
   if (!expense) return notFound();
 
   const parsed = await parseBody(req, PatchExpenseSchema);
   if (!parsed.ok) return parsed.response;
-  const { status: newStatus, rejectionReason, category, description, amount, date, paidTo, notes } = parsed.data;
+  const { status: newStatus, rejectionReason, category, description, amount, date, paidTo, notes, expectedUpdatedAt } = parsed.data;
+  const conflict = checkConflict(expectedUpdatedAt, expense.updatedAt, {
+    id: expense.id, status: expense.status, description: expense.description,
+  });
+  if (!conflict.ok) return conflict.response!;
 
   const role = session.user.role;
   const isLogger = expense.loggedById === session.user.id;

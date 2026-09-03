@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canCreateProject } from "@/lib/roles";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { parseBody } from "@/lib/parseBody";
+import { checkConflict } from "@/lib/optimisticLock";
 
 const PatchProjectSchema = z.object({
   name: z.string().min(2, "Name too short").max(200).optional(),
@@ -18,6 +19,7 @@ const PatchProjectSchema = z.object({
   endDate: z.string().nullable().optional(),
   actualStartDate: z.string().nullable().optional(),
   projectedEndDate: z.string().nullable().optional(),
+  expectedUpdatedAt: z.string().optional(),
 });
 
 function parseDateOrNull(v: string | null | undefined): Date | null | undefined {
@@ -43,6 +45,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/projects/[id]"
   const parsed = await parseBody(req, PatchProjectSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
+  const conflict = checkConflict(body.expectedUpdatedAt, project.updatedAt, {
+    id: project.id, name: project.name, status: project.status,
+  });
+  if (!conflict.ok) return conflict.response!;
 
   const data: {
     name?: string;

@@ -8,6 +8,7 @@ import { canAccessModule, MODULES } from "@/lib/modules";
 import { milestoneCompletionEmail, sendEmail } from "@/lib/email";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { parseBody } from "@/lib/parseBody";
+import { checkConflict } from "@/lib/optimisticLock";
 import {
   badRequest,
   forbidden,
@@ -29,6 +30,7 @@ const PatchProgressSchema = z.object({
       count: z.number().finite().min(0).max(500).optional(),
     }),
   ).max(20).optional(),
+  expectedUpdatedAt: z.string().optional(),
 });
 
 const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
@@ -92,6 +94,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
       cumulativeQuantity: true,
       contractorId: true,
       notes: true,
+      updatedAt: true,
     },
   });
   if (!entry) return notFound();
@@ -104,7 +107,11 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
   const parsed = await parseBody(req, PatchProgressSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
-  const { date, type, achievedQuantity, cumulativeQuantity, contractorId, notes, labour } = body;
+  const { date, type, achievedQuantity, cumulativeQuantity, contractorId, notes, labour, expectedUpdatedAt } = body;
+  const conflict = checkConflict(expectedUpdatedAt, entry.updatedAt, {
+    id: entry.id, date: entry.date, achievedQuantity: entry.achievedQuantity, cumulativeQuantity: entry.cumulativeQuantity,
+  });
+  if (!conflict.ok) return conflict.response!;
 
   const data: {
     date?: Date;

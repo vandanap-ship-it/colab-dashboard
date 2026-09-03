@@ -13,6 +13,7 @@ import {
   unauthorized,
 } from "@/lib/apiErrors";
 import { parseBody } from "@/lib/parseBody";
+import { checkConflict } from "@/lib/optimisticLock";
 
 const PatchPermitSchema = z.object({
   status: z.enum(PERMIT_STATUSES).optional(),
@@ -21,6 +22,7 @@ const PatchPermitSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
   documentUrl: z.string().url().max(2000).nullable().optional(),
   responsibleUserId: z.string().min(1).nullable().optional(),
+  expectedUpdatedAt: z.string().optional(),
 });
 
 const PERMIT_INCLUDE = {
@@ -54,6 +56,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/permits/[id]">
     const parsed = await parseBody(req, PatchPermitSchema);
     if (!parsed.ok) return parsed.response;
     const patch = parsed.data;
+    const conflict = checkConflict(patch.expectedUpdatedAt, existing.updatedAt, {
+      id: existing.id, status: existing.status, expiryDate: existing.expiryDate,
+    });
+    if (!conflict.ok) return conflict.response!;
 
     const data: Record<string, unknown> = {};
     const changes: string[] = [];

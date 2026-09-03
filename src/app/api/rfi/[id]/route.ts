@@ -14,6 +14,7 @@ import {
   type RfiStatus,
 } from "@/lib/rfi";
 import { parseBody } from "@/lib/parseBody";
+import { checkConflict } from "@/lib/optimisticLock";
 
 const PatchRfiSchema = z.object({
   assignedToId: z.string().min(1).nullable().optional(),
@@ -81,6 +82,13 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/rfi/[id]">) {
     const parsed = await parseBody(req, PatchRfiSchema);
     if (!parsed.ok) return parsed.response;
     const patch = parsed.data;
+    const conflict = checkConflict(patch.expectedUpdatedAt, existing.updatedAt, {
+      id: existing.id,
+      status: existing.status,
+      assignedToId: existing.assignedToId,
+      priority: existing.priority,
+    });
+    if (!conflict.ok) return conflict.response!;
 
     // Build the update object incrementally + track what changed for the audit.
     const data: Record<string, unknown> = {};

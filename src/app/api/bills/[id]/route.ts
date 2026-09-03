@@ -13,6 +13,7 @@ import {
 } from "@/lib/billing";
 import { badRequest, forbidden, handleApiError, notFound, unauthorized } from "@/lib/apiErrors";
 import { parseBody } from "@/lib/parseBody";
+import { checkConflict } from "@/lib/optimisticLock";
 
 const BillLineSchema = z.object({
   type: z.string().max(40).optional(),
@@ -33,6 +34,7 @@ const PatchBillSchema = z.object({
   notes: z.string().max(2000).optional(),
   taxPercent: z.number().finite().min(0).max(100).optional(),
   lines: z.array(BillLineSchema).max(200).optional(),
+  expectedUpdatedAt: z.string().optional(),
 });
 
 const billInclude = {
@@ -60,7 +62,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/bills/[id]">) 
   const { id } = await ctx.params;
   const bill = await prisma.subContractorBill.findUnique({
     where: { id },
-    select: { id: true, projectId: true, status: true, title: true },
+    select: { id: true, projectId: true, status: true, title: true, updatedAt: true },
   });
   if (!bill) return notFound();
 
@@ -75,7 +77,12 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/bills/[id]">) 
     notes,
     taxPercent,
     lines,
+    expectedUpdatedAt,
   } = parsed.data;
+  const conflict = checkConflict(expectedUpdatedAt, bill.updatedAt, {
+    id: bill.id, status: bill.status, title: bill.title,
+  });
+  if (!conflict.ok) return conflict.response!;
 
   try {
     // ---- Status transition (submit / approve / reject / reopen / mark paid) ----

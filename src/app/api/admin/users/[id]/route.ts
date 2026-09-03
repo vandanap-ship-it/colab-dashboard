@@ -6,6 +6,7 @@ import { ROLES, isAdmin } from "@/lib/roles";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { serializeModules } from "@/lib/modules";
 import { parseBody } from "@/lib/parseBody";
+import { checkConflict } from "@/lib/optimisticLock";
 
 const VALID_ROLES = new Set<string>(Object.values(ROLES));
 
@@ -15,6 +16,7 @@ const PatchUserSchema = z.object({
   active: z.boolean().optional(),
   designation: z.string().max(120).nullable().optional(),
   modules: z.array(z.string().max(60)).nullable().optional(),
+  expectedUpdatedAt: z.string().optional(),
 });
 
 export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[id]">) {
@@ -25,7 +27,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
   const { id } = await ctx.params;
   const parsed = await parseBody(req, PatchUserSchema);
   if (!parsed.ok) return parsed.response;
-  const { name, role, active, designation, modules } = parsed.data;
+  const { name, role, active, designation, modules, expectedUpdatedAt } = parsed.data;
 
   const data: {
     name?: string;
@@ -52,8 +54,14 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
 
   const before = await prisma.user.findUnique({
     where: { id },
-    select: { name: true, role: true, active: true },
+    select: { name: true, role: true, active: true, updatedAt: true },
   });
+  if (before) {
+    const conflict = checkConflict(expectedUpdatedAt, before.updatedAt, {
+      id, name: before.name, role: before.role, active: before.active,
+    });
+    if (!conflict.ok) return conflict.response!;
+  }
   const user = await prisma.user.update({
     where: { id },
     data,

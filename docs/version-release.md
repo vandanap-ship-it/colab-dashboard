@@ -165,21 +165,14 @@ Error boundaries at `src/app/error.tsx` and `src/app/global-error.tsx` already c
 
 That auto-generates `sentry.client.config.ts` + `sentry.server.config.ts` + edge config + `instrumentation.ts` and reads the DSN from the env var. The boundaries pick up the global `window.Sentry` automatically — no code changes needed.
 
-### Concurrency guard rollout (in progress, Tier 1.5)
+### Concurrency guard — server complete (Tier 1.5)
 
-Optimistic-locking helper landed at `src/lib/optimisticLock.ts` and wired into `PATCH /api/concerns/[id]`, `PATCH /api/issues/[id]`, `PATCH /api/hindrances/[id]`. Same treatment still needed on 9 more PATCH endpoints:
+Optimistic-locking helper at `src/lib/optimisticLock.ts` now wired into every mutable PATCH endpoint (12 total):
+concerns, issues, hindrances, rfi, progress, drawings, permits, projects, inspections, bills, expenses, admin/users.
 
-- `/api/rfi/[id]`
-- `/api/progress/[id]`
-- `/api/drawings/[id]`
-- `/api/expenses/[id]`
-- `/api/permits/[id]`
-- `/api/projects/[id]`
-- `/api/inspections/[id]`
-- `/api/bills/[id]`
-- `/api/admin/users/[id]`
+**Server side: done.** All PATCH endpoints accept `expectedUpdatedAt` and return 409 with the current row's `updatedAt` on mismatch.
 
-Server-side pattern is a 4-line diff per route: select `updatedAt` in the pre-read, take `expectedUpdatedAt` off the request body, call `checkConflict(...)`. Client-side: every edit form must echo the ISO `updatedAt` it received back to the server on save. Track adoption via logs added inside `checkConflict` when clients still don't send the field.
+**Client side: still to do.** Every edit form on desktop + mobile needs to (a) capture the `updatedAt` returned from the read, and (b) echo it back on save. Track adoption via presence of `expectedUpdatedAt` in the payload; the server logs a warning inside `checkConflict` when clients don't send it. Once every form is sending it, flip the helper from "no-op when absent" to "require present".
 
 ## V2 — First quarter after launch (Sept–Nov 2026)
 

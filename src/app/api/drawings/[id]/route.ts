@@ -8,12 +8,14 @@ import { isScopedUser } from "@/lib/modules";
 import { normalizeDiscipline, normalizeDrawingNumber } from "@/lib/drawings";
 import { badRequest, forbidden, handleApiError, notFound, unauthorized } from "@/lib/apiErrors";
 import { parseBody } from "@/lib/parseBody";
+import { checkConflict } from "@/lib/optimisticLock";
 
 const PatchDrawingSchema = z.object({
   drawingNumber: z.string().min(1).max(60).optional(),
   title: z.string().min(2).max(200).optional(),
   discipline: z.string().max(40).optional(),
   notes: z.string().max(2000).optional(),
+  expectedUpdatedAt: z.string().optional(),
 });
 
 const drawingDetailInclude = {
@@ -63,13 +65,17 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/drawings/[id]"
   const { id } = await ctx.params;
   const existing = await prisma.designDrawing.findUnique({
     where: { id },
-    select: { id: true, projectId: true, drawingNumber: true, title: true },
+    select: { id: true, projectId: true, drawingNumber: true, title: true, updatedAt: true },
   });
   if (!existing) return notFound();
 
   const parsed = await parseBody(req, PatchDrawingSchema);
   if (!parsed.ok) return parsed.response;
-  const { drawingNumber, title, discipline, notes } = parsed.data;
+  const { drawingNumber, title, discipline, notes, expectedUpdatedAt } = parsed.data;
+  const conflict = checkConflict(expectedUpdatedAt, existing.updatedAt, {
+    id: existing.id, drawingNumber: existing.drawingNumber, title: existing.title,
+  });
+  if (!conflict.ok) return conflict.response!;
 
   const data: {
     drawingNumber?: string;
