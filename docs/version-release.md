@@ -165,6 +165,19 @@ Error boundaries at `src/app/error.tsx` and `src/app/global-error.tsx` already c
 
 That auto-generates `sentry.client.config.ts` + `sentry.server.config.ts` + edge config + `instrumentation.ts` and reads the DSN from the env var. The boundaries pick up the global `window.Sentry` automatically — no code changes needed.
 
+### Missing DELETE endpoints — 6 of 10 record types can't be soft-deleted via the API
+
+Walked write flows on the mockup project during the Tier 3 walkthrough and found a real gap: the following models have `deletedAt` on the Prisma schema (so soft-delete is supported at the DB level) but no route handler exposes it:
+
+- `/api/hindrances/[id]` — no DELETE
+- `/api/concerns/[id]` — no DELETE
+- `/api/issues/[id]` — no DELETE
+- `/api/rfi/[id]` — no DELETE
+- `/api/manpower-entries/[id]` — no DELETE and no `/[id]` route at all
+- `/api/admin/contractors/[id]` — no DELETE, no toggle
+
+Users can only close/resolve/reject these records — never remove them. That leaves test data, duplicates, and mis-created records permanently visible. Add the six DELETE handlers (soft-delete pattern already used by progress/expense/bill/drawing — ~15 min per route + a 3-liner audit log entry). Contractor also needs a UI toggle to set `active: false` from the admin console.
+
 ### Tier 3 walkthrough (2026-09-03) — perf findings
 
 Walked every navigable route on the deploy as admin. Zero 500s across 34 tested routes. Real bugs found:
