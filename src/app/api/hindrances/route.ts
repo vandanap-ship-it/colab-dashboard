@@ -1,10 +1,24 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { isValidReasonCode } from "@/lib/hindranceReasons";
+import { parseBody } from "@/lib/parseBody";
+
+const PostHindranceSchema = z.object({
+  projectId: z.string().min(1),
+  wbsNodeId: z.string().min(1).nullable().optional(),
+  description: z.string().min(3, "Description too short").max(2000),
+  startDate: z.string().datetime({ offset: true }).optional(),
+  daysImpact: z.number().finite().min(0).max(365).optional(),
+  photoUrls: z.array(z.string().url()).max(6).optional(),
+  reasonCode: z.string().max(40).optional(),
+  reasonNote: z.string().max(500).optional(),
+  idempotencyKey: z.string().max(120).optional(),
+});
 
 const STATUSES = new Set(["OPEN", "RESOLVED"]);
 
@@ -42,33 +56,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Your account doesn't have access to hindrances." }, { status: 403 });
   }
 
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
+  const parsed = await parseBody(req, PostHindranceSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+  const { projectId, wbsNodeId, description, startDate, daysImpact, photoUrls, reasonCode, reasonNote } = body;
 
-  const { projectId, wbsNodeId, description, startDate, daysImpact, photoUrls, reasonCode, reasonNote } = (body ?? {}) as {
-    projectId?: string;
-    wbsNodeId?: string;
-    description?: string;
-    startDate?: string;
-    daysImpact?: number;
-    photoUrls?: string[];
-    reasonCode?: string;
-    reasonNote?: string;
-  };
-
-  if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
-  const desc = (description ?? "").trim();
-  if (desc.length < 3) return NextResponse.json({ error: "Description too short" }, { status: 400 });
-
+  const desc = description.trim();
   const start = startDate ? new Date(startDate) : new Date();
-  if (isNaN(start.getTime())) return NextResponse.json({ error: "Invalid startDate" }, { status: 400 });
-
-  const impact = Number.isFinite(Number(daysImpact)) ? Math.max(0, Math.floor(Number(daysImpact))) : null;
-  const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 6) : [];
+  const impact = daysImpact != null ? Math.floor(daysImpact) : null;
+  const photos = (photoUrls ?? []).slice(0, 6);
   // Silently drop unknown reason codes (client-only enum guard) rather than
   // rejecting — the record is more important than the tag.
   const reason = isValidReasonCode(reasonCode) ? reasonCode : null;
-  const note = typeof reasonNote === "string" ? reasonNote.trim().slice(0, 500) : "";
+  const note = (reasonNote ?? "").trim();
   const idempotencyKey = readIdempotencyKey(body);
   const hindranceInclude = {
     createdBy: { select: { id: true, name: true } },

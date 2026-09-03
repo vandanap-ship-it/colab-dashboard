@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
@@ -7,6 +8,7 @@ import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { milestoneCompletionEmail, sendEmail } from "@/lib/email";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { isValidReasonCode } from "@/lib/hindranceReasons";
+import { parseBody } from "@/lib/parseBody";
 
 const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
@@ -51,8 +53,6 @@ async function maybeSendMilestoneCompletionEmail(wbsNodeId: string, actualFinish
   );
 }
 
-const VALID_TYPES = new Set(["LABOUR_SUPPLY", "PRW", "MISC"]);
-
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -87,7 +87,35 @@ export async function GET(req: Request) {
   return NextResponse.json({ entries });
 }
 
-type LabourInput = { category?: string; count?: number };
+// Bounds:
+//   - achieved/cumulativeQuantity: negatives make no sense on a site; upper
+//     bound is generous but real (a villa is unlikely to log > 1e6 in any
+//     single unit).
+//   - date: allow future dates only up to a week — engineers sometimes log
+//     from a slightly-wrong device clock but not from Q3 next year.
+//   - labour count: 0-500 per row (site-realistic).
+//   - photoUrls: max 6 per entry (matches existing slice).
+//   - notes: 2000 chars (a full paragraph).
+const PostProgressSchema = z.object({
+  wbsNodeId: z.string().min(1, "wbsNodeId required"),
+  date: z.string().datetime({ offset: true }).optional(),
+  type: z.enum(["LABOUR_SUPPLY", "PRW", "MISC"]).optional(),
+  achievedQuantity: z.number().finite().min(0).max(1_000_000).optional(),
+  cumulativeQuantity: z.number().finite().min(0).max(1_000_000).optional(),
+  contractorId: z.string().min(1).nullable().optional(),
+  notes: z.string().max(2000).optional(),
+  labour: z.array(
+    z.object({
+      category: z.string().max(60).optional(),
+      count: z.number().finite().min(0).max(500).optional(),
+    }),
+  ).max(20).optional(),
+  photoUrls: z.array(z.string().url()).max(6).optional(),
+  reasonCode: z.string().max(40).optional(),
+  reasonNote: z.string().max(500).optional(),
+  // Idempotency key — kept flexible; validated at readIdempotencyKey().
+  idempotencyKey: z.string().max(120).optional(),
+});
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -98,9 +126,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Your account doesn't have access to progress logging." }, { status: 403 });
   }
 
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
-
+  const parsed = await parseBody(req, PostProgressSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
   const {
     wbsNodeId,
     date,
@@ -113,21 +141,7 @@ export async function POST(req: Request) {
     photoUrls,
     reasonCode,
     reasonNote,
-  } = (body ?? {}) as {
-    wbsNodeId?: string;
-    date?: string;
-    type?: string;
-    achievedQuantity?: number;
-    cumulativeQuantity?: number;
-    contractorId?: string | null;
-    notes?: string;
-    labour?: LabourInput[];
-    photoUrls?: string[];
-    reasonCode?: string;
-    reasonNote?: string;
-  };
-
-  if (!wbsNodeId) return NextResponse.json({ error: "wbsNodeId required" }, { status: 400 });
+  } = body;
   const node = await prisma.wBSNode.findUnique({
     where: { id: wbsNodeId },
     select: { id: true, projectId: true, contractorId: true, totalQuantity: true },
@@ -146,21 +160,18 @@ export async function POST(req: Request) {
     }
   }
 
-  const finalType = type && VALID_TYPES.has(type) ? type : "LABOUR_SUPPLY";
+  // Zod already validated date is a proper ISO string when provided, so
+  // `new Date(date)` is safe — no more NaN guard.
+  const finalType = type ?? "LABOUR_SUPPLY";
   const entryDate = date ? new Date(date) : new Date();
-  if (isNaN(entryDate.getTime())) {
-    return NextResponse.json({ error: "Invalid date" }, { status: 400 });
-  }
-  const achieved = Number(achievedQuantity ?? 0);
-  const cumulative = Number(cumulativeQuantity ?? 0);
+  const achieved = achievedQuantity ?? 0;
+  const cumulative = cumulativeQuantity ?? 0;
 
-  const labourClean = Array.isArray(labour)
-    ? labour
-        .map((l) => ({ category: (l.category ?? "").trim(), count: Math.max(0, Math.floor(Number(l.count ?? 0))) }))
-        .filter((l) => l.category.length > 0 && l.count > 0)
-    : [];
+  const labourClean = (labour ?? [])
+    .map((l) => ({ category: (l.category ?? "").trim(), count: Math.floor(l.count ?? 0) }))
+    .filter((l) => l.category.length > 0 && l.count > 0);
 
-  const photosClean = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 6) : [];
+  const photosClean = (photoUrls ?? []).slice(0, 6);
 
   // Silent-drop unknown reason codes rather than 400 — the entry is more
   // important than the tag.

@@ -1,11 +1,24 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, primaryModuleFor, isScopedUser, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
+import { parseBody } from "@/lib/parseBody";
 
 const SEVERITIES = new Set(["LOW", "MEDIUM", "HIGH"]);
+
+const PostIssueSchema = z.object({
+  projectId: z.string().min(1),
+  wbsNodeId: z.string().min(1).nullable().optional(),
+  description: z.string().min(3, "Description too short").max(2000),
+  severity: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
+  category: z.string().max(60).optional(),
+  photoUrls: z.array(z.string().url()).max(6).optional(),
+  assignedToId: z.string().min(1).optional(),
+  idempotencyKey: z.string().max(120).optional(),
+});
 const STATUSES = new Set(["OPEN", "RESOLVED"]);
 
 export async function GET(req: Request) {
@@ -49,26 +62,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Your account doesn't have access to raise snags." }, { status: 403 });
   }
 
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
-
-  const { projectId, wbsNodeId, description, severity, category, photoUrls, assignedToId } =
-    (body ?? {}) as {
-      projectId?: string;
-      wbsNodeId?: string;
-      description?: string;
-      severity?: string;
-      category?: string;
-      photoUrls?: string[];
-      assignedToId?: string;
-    };
-
-  if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
-  const desc = (description ?? "").trim();
-  if (desc.length < 3) return NextResponse.json({ error: "Description too short" }, { status: 400 });
-  const sev = severity && SEVERITIES.has(severity) ? severity : null;
+  const parsed = await parseBody(req, PostIssueSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+  const { projectId, wbsNodeId, description, severity, category, photoUrls, assignedToId } = body;
+  const desc = description.trim();
+  const sev = severity ?? null;
   const cat = (category ?? "").trim();
-  const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 6) : [];
+  const photos = (photoUrls ?? []).slice(0, 6);
+  void SEVERITIES; // superseded by zod enum
 
   // If an assignee is set, verify they exist + are active before creating —
   // matches the PATCH guard so create + assign-on-create stay symmetric.
