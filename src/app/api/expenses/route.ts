@@ -47,7 +47,7 @@ export async function GET(req: Request) {
   const category = searchParams.get("category");
   if (!projectId) return badRequest("projectId required");
 
-  const where: { projectId: string; status?: string; category?: string } = { projectId };
+  const where: { projectId: string; status?: string; category?: string; deletedAt: null } = { projectId, deletedAt: null };
   if (status) where.status = status;
   if (category) where.category = category;
 

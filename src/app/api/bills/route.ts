@@ -54,7 +54,7 @@ export async function GET(req: Request) {
   const status = searchParams.get("status");
   if (!projectId) return badRequest("projectId required");
 
-  const where: { projectId: string; status?: string } = { projectId };
+  const where: { projectId: string; status?: string; deletedAt: null } = { projectId, deletedAt: null };
   if (status) where.status = status;
 
   const bills = await prisma.subContractorBill.findMany({

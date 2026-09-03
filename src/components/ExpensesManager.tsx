@@ -22,6 +22,7 @@ type Expense = {
   status: "SUBMITTED" | "APPROVED" | "REJECTED";
   rejectionReason: string | null;
   notes: string | null;
+  updatedAt: string; // echoed on PATCH so the server's concurrency guard fires
   loggedBy: Person;
   approvedBy: Person;
   photos: Photo[];
@@ -119,11 +120,16 @@ export default function ExpensesManager({
       const res = await fetch(`/api/expenses/${exp.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, rejectionReason }),
+        body: JSON.stringify({ status, rejectionReason, expectedUpdatedAt: exp.updatedAt }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setActionError(data?.error ?? `Action failed (${res.status})`);
+        if (res.status === 409) {
+          setActionError("Someone else just edited this expense — reloading so you see the latest.");
+          reload();
+        } else {
+          setActionError(data?.error ?? `Action failed (${res.status})`);
+        }
       } else {
         reload();
       }
@@ -408,7 +414,7 @@ function ExpenseEditor({
         ? await fetch(`/api/expenses/${expense.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
+            body: JSON.stringify({ ...payload, expectedUpdatedAt: expense.updatedAt }),
           })
         : await fetch("/api/expenses", {
             method: "POST",
@@ -417,7 +423,11 @@ function ExpenseEditor({
           });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setError(data?.error ?? `Save failed (${res.status})`);
+        if (res.status === 409) {
+          setError("Someone else just edited this expense. Close and reopen to see their changes.");
+        } else {
+          setError(data?.error ?? `Save failed (${res.status})`);
+        }
         setPending(false);
         return;
       }

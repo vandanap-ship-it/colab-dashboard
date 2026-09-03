@@ -34,6 +34,7 @@ type Bill = {
   periodStart: string | null;
   periodEnd: string | null;
   rejectionReason: string | null;
+  updatedAt: string; // echoed on PATCH so the concurrency guard fires on stale edits
   contractor: Contractor;
   preparedBy: Person;
   approvedBy: Person;
@@ -161,11 +162,16 @@ export default function BillsManager({
       const res = await fetch(`/api/bills/${bill.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, rejectionReason }),
+        body: JSON.stringify({ status, rejectionReason, expectedUpdatedAt: bill.updatedAt }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setActionError(data?.error ?? `Action failed (${res.status})`);
+        if (res.status === 409) {
+          setActionError("Someone else just edited this bill — reloading so you see the latest.");
+          reload();
+        } else {
+          setActionError(data?.error ?? `Action failed (${res.status})`);
+        }
       } else {
         reload();
       }
@@ -518,7 +524,7 @@ function BillEditor({
         ? await fetch(`/api/bills/${bill.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
+            body: JSON.stringify({ ...payload, expectedUpdatedAt: bill.updatedAt }),
           })
         : await fetch("/api/bills", {
             method: "POST",
@@ -527,7 +533,11 @@ function BillEditor({
           });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setError(data?.error ?? `Save failed (${res.status})`);
+        if (res.status === 409) {
+          setError("Someone else just edited this bill. Close and reopen to see their changes.");
+        } else {
+          setError(data?.error ?? `Save failed (${res.status})`);
+        }
         setPending(false);
         return;
       }

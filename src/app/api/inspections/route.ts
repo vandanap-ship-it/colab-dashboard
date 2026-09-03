@@ -34,7 +34,7 @@ export async function GET(req: Request) {
   const filledById = searchParams.get("filledById");
   if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
 
-  const where: { projectId: string; status?: string; filledById?: string; module?: string } = { projectId };
+  const where: { projectId: string; status?: string; filledById?: string; module?: string; deletedAt: null } = { projectId, deletedAt: null };
   if (status && STATUSES.has(status)) where.status = status;
   if (filledById) where.filledById = filledById;
   // Scoped contractors only see inspections tagged to their module.

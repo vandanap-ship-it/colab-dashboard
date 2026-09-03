@@ -174,6 +174,7 @@ export default async function RfiDetailPage({
                 currentAssigneeId={rfi.assignedToId}
                 assignableUsers={assignableUsers}
                 canAnswer={canAnswer}
+                updatedAt={rfi.updatedAt.toISOString()}
               />
             </section>
           </aside>

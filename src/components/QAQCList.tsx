@@ -13,6 +13,7 @@ type Inspection = {
   rejectionReason: string | null;
   createdAt: string;
   reviewedAt: string | null;
+  updatedAt: string; // echoed on PATCH for the server's concurrency guard
   filledBy: { id: string; name: string };
   reviewedBy: { id: string; name: string } | null;
   wbsNode: { id: string; name: string; taskCode: string } | null;
@@ -61,11 +62,16 @@ export default function QAQCList({ projectId, canReview }: { projectId: string; 
     const res = await fetch(`/api/inspections/${insp.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, rejectionReason }),
+      body: JSON.stringify({ status, rejectionReason, expectedUpdatedAt: insp.updatedAt }),
     });
     if (res.ok) {
       load();
       setExpandedId(null);
+      return;
+    }
+    if (res.status === 409) {
+      alert("Someone else just reviewed this inspection. Refreshing so you see the latest.");
+      load();
     }
   }
 

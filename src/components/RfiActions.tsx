@@ -11,6 +11,11 @@ export interface RfiActionsProps {
   currentAssigneeId: string | null;
   assignableUsers: Array<{ id: string; name: string }>;
   canAnswer: boolean;
+  /** ISO of the RFI's current updatedAt — echoed on every PATCH so the
+   *  server-side concurrency guard rejects stale writes with 409. Optional
+   *  for backward compat with older callers; if omitted, PATCHes still work
+   *  but bypass the guard. */
+  updatedAt?: string;
 }
 
 export default function RfiActions({
@@ -19,6 +24,7 @@ export default function RfiActions({
   currentAssigneeId,
   assignableUsers,
   canAnswer,
+  updatedAt,
 }: RfiActionsProps) {
   const router = useRouter();
   const [answer, setAnswer] = useState("");
@@ -33,11 +39,14 @@ export default function RfiActions({
       const res = await fetch(`/api/rfi/${rfiId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, expectedUpdatedAt: updatedAt }),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({ error: "Request failed" }));
-        throw new Error(body.error ?? "Request failed");
+        if (res.status === 409) {
+          throw new Error("Someone else just edited this RFI. Refresh to see their changes.");
+        }
+        const errBody = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(errBody.error ?? "Request failed");
       }
       router.refresh();
       setAnswer("");
