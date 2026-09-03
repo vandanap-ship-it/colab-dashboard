@@ -21,7 +21,7 @@ function fmtDate(d: Date | null | undefined): string {
 export default async function TrashPage() {
   // Each model has its own findMany — we pass an explicit deletedAt filter so
   // the soft-delete extension lets the query through and returns trashed rows.
-  const [progress, issues, hindrances, concerns, inspections, rfis, manpower, projects] =
+  const [progress, issues, hindrances, concerns, inspections, rfis, manpower, permits, projects] =
     await Promise.all([
       prisma.progressEntry.findMany({
         where: { deletedAt: { not: null } },
@@ -88,13 +88,21 @@ export default async function TrashPage() {
           project: { select: { id: true, name: true } },
         },
       }),
+      prisma.permit.findMany({
+        where: { deletedAt: { not: null } },
+        orderBy: { deletedAt: "desc" },
+        take: 100,
+        include: {
+          project: { select: { id: true, name: true } },
+        },
+      }),
       prisma.project.findMany({ select: { id: true, name: true } }),
     ]);
 
   const projectName = new Map(projects.map((p) => [p.id, p.name]));
 
   const total =
-    progress.length + issues.length + hindrances.length + concerns.length + inspections.length + rfis.length + manpower.length;
+    progress.length + issues.length + hindrances.length + concerns.length + inspections.length + rfis.length + manpower.length + permits.length;
 
   return (
     <div className="space-y-6">
@@ -202,6 +210,18 @@ export default async function TrashPage() {
               line: `${m.contractor.name} · ${m.trade} · ${m.actualCount} on ${m.entryDate.toISOString().slice(0, 10)}`,
             }))}
           />
+
+          <Section
+            title="Permits"
+            items={permits.map((p) => ({
+              id: p.id,
+              entityType: "Permit" as const,
+              projectName: projectName.get(p.projectId) ?? "—",
+              when: p.deletedAt,
+              who: "—",
+              line: `${p.name}${p.number ? ` · #${p.number}` : ""}${p.issuingAuthority ? ` · ${p.issuingAuthority}` : ""}`,
+            }))}
+          />
         </>
       )}
     </div>
@@ -214,7 +234,7 @@ export default async function TrashPage() {
     title: string;
     items: Array<{
       id: string;
-      entityType: "ProgressEntry" | "Issue" | "Hindrance" | "Concern" | "Inspection" | "Rfi" | "ManpowerEntry";
+      entityType: "ProgressEntry" | "Issue" | "Hindrance" | "Concern" | "Inspection" | "Rfi" | "ManpowerEntry" | "Permit";
       projectName: string;
       when: Date | null | undefined;
       who: string;

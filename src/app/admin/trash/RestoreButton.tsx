@@ -9,7 +9,7 @@ export default function RestoreButton({
   entityType,
   id,
 }: {
-  entityType: "ProgressEntry" | "Issue" | "Hindrance" | "Concern" | "Inspection" | "Rfi" | "ManpowerEntry";
+  entityType: "ProgressEntry" | "Issue" | "Hindrance" | "Concern" | "Inspection" | "Rfi" | "ManpowerEntry" | "Permit";
   id: string;
 }) {
   const router = useRouter();

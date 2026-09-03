@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
+import { isAdmin } from "@/lib/roles";
 import { recordAudit } from "@/lib/audit";
 import { PERMIT_STATUSES } from "@/lib/permit";
 import {
@@ -13,8 +14,11 @@ import {
   unauthorized,
 } from "@/lib/apiErrors";
 import { parseBody } from "@/lib/parseBody";
-import { checkConflict } from "@/lib/optimisticLock";
 
+// Note: Permit has no `updatedAt` in its Prisma schema, so this route can't
+// participate in the optimistic-lock (checkConflict) pattern the other
+// PATCH endpoints use. Concurrent-edit protection here would require a
+// schema migration to add updatedAt — punchlisted.
 const PatchPermitSchema = z.object({
   status: z.enum(PERMIT_STATUSES).optional(),
   expiryDate: z.string().nullable().optional(),
@@ -22,7 +26,6 @@ const PatchPermitSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
   documentUrl: z.string().url().max(2000).nullable().optional(),
   responsibleUserId: z.string().min(1).nullable().optional(),
-  expectedUpdatedAt: z.string().optional(),
 });
 
 const PERMIT_INCLUDE = {
@@ -56,10 +59,6 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/permits/[id]">
     const parsed = await parseBody(req, PatchPermitSchema);
     if (!parsed.ok) return parsed.response;
     const patch = parsed.data;
-    const conflict = checkConflict(patch.expectedUpdatedAt, existing.updatedAt, {
-      id: existing.id, status: existing.status, expiryDate: existing.expiryDate,
-    });
-    if (!conflict.ok) return conflict.response!;
 
     const data: Record<string, unknown> = {};
     const changes: string[] = [];
@@ -109,5 +108,37 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/permits/[id]">
     return NextResponse.json({ permit: updated });
   } catch (e) {
     return handleApiError(e, "permits/[id]");
+  }
+}
+
+/** Soft-delete a permit. Admin only — permits are compliance records and
+ *  removal is a higher-stakes act than the module-holder should decide alone.
+ *  Restorable via /api/admin/restore. */
+export async function DELETE(_req: Request, ctx: RouteContext<"/api/permits/[id]">) {
+  try {
+    const session = await auth();
+    if (!session?.user) return unauthorized();
+    if (!canAccessModule(session.user.modules, MODULES.PERMIT)) return forbidden();
+    if (!isAdmin(session.user.role)) return forbidden("Only admins can delete permits.");
+
+    const { id } = await ctx.params;
+    const existing = await prisma.permit.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, projectId: true, name: true },
+    });
+    if (!existing) return notFound();
+
+    await prisma.permit.update({ where: { id }, data: { deletedAt: new Date() } });
+    await recordAudit({
+      projectId: existing.projectId,
+      userId: session.user.id,
+      action: "DELETE",
+      entityType: "Permit",
+      entityId: id,
+      summary: `Permit moved to trash: ${existing.name.slice(0, 60)}${existing.name.length > 60 ? "…" : ""}`,
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return handleApiError(e, "DELETE /api/permits/:id");
   }
 }

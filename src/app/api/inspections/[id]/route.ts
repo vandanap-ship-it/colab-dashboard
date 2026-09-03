@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canReview } from "@/lib/roles";
+import { canReview, isAdmin } from "@/lib/roles";
 import { recordAudit } from "@/lib/audit";
 import {
   forbidden,
@@ -72,5 +72,34 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
     return NextResponse.json({ inspection });
   } catch (e) {
     return handleApiError(e, "PATCH /api/inspections/:id");
+  }
+}
+
+/** Soft-delete an inspection. Filler or admin only. Restorable. */
+export async function DELETE(_req: Request, ctx: RouteContext<"/api/inspections/[id]">) {
+  const session = await auth();
+  if (!session?.user) return unauthorized();
+
+  const { id } = await ctx.params;
+  const existing = await prisma.inspection.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true, projectId: true, title: true, filledById: true },
+  });
+  if (!existing) return notFound();
+  if (existing.filledById !== session.user.id && !isAdmin(session.user.role)) return forbidden();
+
+  try {
+    await prisma.inspection.update({ where: { id }, data: { deletedAt: new Date() } });
+    await recordAudit({
+      projectId: existing.projectId,
+      userId: session.user.id,
+      action: "DELETE",
+      entityType: "Inspection",
+      entityId: id,
+      summary: `Inspection moved to trash: ${existing.title.slice(0, 60)}${existing.title.length > 60 ? "…" : ""}`,
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return handleApiError(e, "DELETE /api/inspections/:id");
   }
 }

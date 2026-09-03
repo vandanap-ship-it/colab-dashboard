@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 
 /**
@@ -24,7 +25,10 @@ export interface TrashButtonProps {
   kind: string;
   /** Short label of the row being removed, shown in the confirm dialog. */
   label?: string;
-  /** Called after a successful DELETE — usually a parent-state refresh. */
+  /** Called after a successful DELETE. When omitted, the component falls
+   *  back to `router.refresh()` — the right default for Server Components
+   *  that render lists straight from Prisma and can't easily pass a
+   *  client callback across the RSC boundary. */
   onDeleted?: () => void;
   /** Optional tooltip text override. */
   title?: string;
@@ -40,6 +44,7 @@ export default function TrashButton({
   title,
   showLabel = false,
 }: TrashButtonProps) {
+  const router = useRouter();
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -60,8 +65,11 @@ export default function TrashButton({
         setPending(false);
         return;
       }
-      // Successful — parent decides whether to remove row or refetch.
-      onDeleted?.();
+      // Successful — let the parent choose how to refresh, or fall back
+      // to router.refresh() for server-rendered lists that can't pass a
+      // client callback across the RSC boundary.
+      if (onDeleted) onDeleted();
+      else router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Network error");
       setPending(false);

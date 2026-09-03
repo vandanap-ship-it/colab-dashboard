@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isAdmin } from "@/lib/roles";
 import { formatDayMonthYear as fmt } from "@/lib/dates";
+import TrashButton from "@/components/TrashButton";
 
 export default async function ActivityPage({
   params,
@@ -32,16 +34,18 @@ export default async function ActivityPage({
   }
 
   const recent = await prisma.progressEntry.findMany({
-    where: { wbsNodeId: wbsId },
+    where: { wbsNodeId: wbsId, deletedAt: null },
     orderBy: { date: "desc" },
     take: 10,
     include: {
-      createdBy: { select: { name: true } },
+      createdBy: { select: { id: true, name: true } },
       contractor: { select: { name: true } },
       labour: true,
       photos: true,
     },
   });
+  const currentUserId = session.user.id;
+  const isCurrentUserAdmin = isAdmin(session.user.role);
 
   return (
     <div className="px-4 py-4 space-y-4">
@@ -113,12 +117,21 @@ export default async function ActivityPage({
                 key={e.id}
                 className="rounded-xl border border-stone-200 bg-white p-3 text-xs"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <div className="font-medium text-stone-900">
                     {fmt(e.date)} · {e.cumulativeQuantity}{" "}
                     {node.unit ?? ""}
                   </div>
-                  <div className="text-stone-500">{e.createdBy.name}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-stone-500">{e.createdBy.name}</div>
+                    {(e.createdBy.id === currentUserId || isCurrentUserAdmin) && (
+                      <TrashButton
+                        url={`/api/progress/${e.id}`}
+                        kind="progress entry"
+                        label={`${fmt(e.date)} · ${e.cumulativeQuantity} ${node.unit ?? ""}`}
+                      />
+                    )}
+                  </div>
                 </div>
                 {e.contractor && <div className="text-stone-500 mt-1">{e.contractor.name}</div>}
                 {e.labour.length > 0 && (
