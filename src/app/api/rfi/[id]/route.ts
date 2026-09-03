@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
@@ -10,9 +11,18 @@ import {
   canTransition,
   formatRfiNumber,
   validateAnswer,
-  type RfiPriority,
   type RfiStatus,
 } from "@/lib/rfi";
+import { parseBody } from "@/lib/parseBody";
+
+const PatchRfiSchema = z.object({
+  assignedToId: z.string().min(1).nullable().optional(),
+  answer: z.string().max(8000).optional(),
+  status: z.enum(RFI_STATUSES).optional(),
+  priority: z.enum(RFI_PRIORITIES).optional(),
+  dueDate: z.string().datetime({ offset: true }).nullable().optional(),
+  expectedUpdatedAt: z.string().optional(),
+});
 import {
   badRequest,
   forbidden,
@@ -68,15 +78,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/rfi/[id]">) {
     const existing = await prisma.rfi.findUnique({ where: { id }, include: RFI_INCLUDE });
     if (!existing) return notFound();
 
-    let body: unknown;
-    try { body = await req.json(); } catch { return badRequest("Invalid JSON"); }
-    const patch = (body ?? {}) as {
-      assignedToId?: string | null;
-      answer?: string;
-      status?: RfiStatus;
-      priority?: RfiPriority;
-      dueDate?: string | null;
-    };
+    const parsed = await parseBody(req, PatchRfiSchema);
+    if (!parsed.ok) return parsed.response;
+    const patch = parsed.data;
 
     // Build the update object incrementally + track what changed for the audit.
     const data: Record<string, unknown> = {};

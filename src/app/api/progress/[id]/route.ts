@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin, ROLES } from "@/lib/roles";
@@ -6,6 +7,7 @@ import { recordAudit, diffSummary } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { milestoneCompletionEmail, sendEmail } from "@/lib/email";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
+import { parseBody } from "@/lib/parseBody";
 import {
   badRequest,
   forbidden,
@@ -13,6 +15,21 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/apiErrors";
+
+const PatchProgressSchema = z.object({
+  date: z.string().datetime({ offset: true }).optional(),
+  type: z.enum(["LABOUR_SUPPLY", "PRW", "MISC"]).optional(),
+  achievedQuantity: z.number().finite().min(0).max(1_000_000).optional(),
+  cumulativeQuantity: z.number().finite().min(0).max(1_000_000).optional(),
+  contractorId: z.string().min(1).nullable().optional(),
+  notes: z.string().max(2000).optional(),
+  labour: z.array(
+    z.object({
+      category: z.string().max(60).optional(),
+      count: z.number().finite().min(0).max(500).optional(),
+    }),
+  ).max(20).optional(),
+});
 
 const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
@@ -52,10 +69,6 @@ async function maybeSendMilestoneCompletionEmail(wbsNodeId: string, actualFinish
   );
 }
 
-const VALID_TYPES = new Set(["LABOUR_SUPPLY", "PRW", "MISC"]);
-
-type LabourInput = { category?: string; count?: number };
-
 function canEditAnyEntry(role: string): boolean {
   return role === ROLES.PLANNER || role === ROLES.PRODUCT_TEAM || isAdmin(role);
 }
@@ -88,30 +101,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
     return forbidden();
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest("Invalid JSON");
-  }
-
-  const {
-    date,
-    type,
-    achievedQuantity,
-    cumulativeQuantity,
-    contractorId,
-    notes,
-    labour,
-  } = (body ?? {}) as {
-    date?: string;
-    type?: string;
-    achievedQuantity?: number;
-    cumulativeQuantity?: number;
-    contractorId?: string | null;
-    notes?: string;
-    labour?: LabourInput[];
-  };
+  const parsed = await parseBody(req, PatchProgressSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+  const { date, type, achievedQuantity, cumulativeQuantity, contractorId, notes, labour } = body;
 
   const data: {
     date?: Date;
@@ -122,27 +115,12 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
     notes?: string | null;
   } = {};
 
-  if (date !== undefined) {
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return badRequest("Invalid date");
-    data.date = d;
-  }
-  if (type !== undefined) {
-    if (!VALID_TYPES.has(type)) return badRequest("Invalid type");
-    data.type = type;
-  }
-  if (achievedQuantity !== undefined) {
-    const n = Number(achievedQuantity);
-    if (!isFinite(n) || n < 0) return badRequest("Invalid achievedQuantity");
-    data.achievedQuantity = n;
-  }
-  if (cumulativeQuantity !== undefined) {
-    const n = Number(cumulativeQuantity);
-    if (!isFinite(n) || n < 0) return badRequest("Invalid cumulativeQuantity");
-    data.cumulativeQuantity = n;
-  }
+  if (date !== undefined) data.date = new Date(date);
+  if (type !== undefined) data.type = type;
+  if (achievedQuantity !== undefined) data.achievedQuantity = achievedQuantity;
+  if (cumulativeQuantity !== undefined) data.cumulativeQuantity = cumulativeQuantity;
   if (contractorId !== undefined) data.contractorId = contractorId || null;
-  if (notes !== undefined) data.notes = (notes ?? "").trim() || null;
+  if (notes !== undefined) data.notes = notes.trim() || null;
 
   // A contractor must belong to the entry's project — otherwise a foreign
   // contractor would pollute this project's labour/contractor rollups.
@@ -161,11 +139,11 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
       const u = await tx.progressEntry.update({ where: { id }, data });
 
       // Replace labour records if provided
-      if (Array.isArray(labour)) {
+      if (labour !== undefined) {
         const clean = labour
           .map((l) => ({
             category: (l.category ?? "").trim(),
-            count: Math.max(0, Math.floor(Number(l.count ?? 0))),
+            count: Math.floor(l.count ?? 0),
           }))
           .filter((l) => l.category.length > 0 && l.count > 0);
         await tx.progressLabour.deleteMany({ where: { progressEntryId: id } });

@@ -1,9 +1,26 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, primaryModuleFor, isScopedUser, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
+import { parseBody } from "@/lib/parseBody";
+
+const PostInspectionSchema = z.object({
+  projectId: z.string().min(1),
+  wbsNodeId: z.string().min(1).nullable().optional(),
+  title: z.string().min(3).max(200),
+  items: z.array(
+    z.object({
+      label: z.string().max(300).optional(),
+      passed: z.union([z.boolean(), z.null()]).optional(),
+      notes: z.string().max(500).optional(),
+    }),
+  ).max(100).optional(),
+  photoUrls: z.array(z.string().url()).max(10).optional(),
+  idempotencyKey: z.string().max(120).optional(),
+});
 
 const STATUSES = new Set(["IN_REVIEW", "PASSED", "REJECTED"]);
 
@@ -49,8 +66,6 @@ export async function GET(req: Request) {
   return NextResponse.json({ inspections, counts });
 }
 
-type ItemInput = { label?: string; passed?: boolean | null; notes?: string };
-
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -62,20 +77,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Your account doesn't have access to inspections." }, { status: 403 });
   }
 
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
-
-  const { projectId, wbsNodeId, title, items, photoUrls } = (body ?? {}) as {
-    projectId?: string;
-    wbsNodeId?: string;
-    title?: string;
-    items?: ItemInput[];
-    photoUrls?: string[];
-  };
-
-  if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
-  const t = (title ?? "").trim();
-  if (t.length < 3) return NextResponse.json({ error: "Title too short" }, { status: 400 });
+  const parsed = await parseBody(req, PostInspectionSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+  const { projectId, wbsNodeId, title, items, photoUrls } = body;
+  const t = title.trim();
 
   // Refuse the submission if any non-empty item has an unset pass/fail.
   // Pre-Jun-2026 the server coerced `!!i.passed` so a missing value silently

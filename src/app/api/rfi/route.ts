@@ -1,18 +1,35 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import {
+  RFI_CATEGORIES,
+  RFI_PRIORITIES,
   RFI_STATUSES,
   formatRfiNumber,
   nextRfiNumber,
   validateCreateRfi,
-  type RfiCategory,
-  type RfiPriority,
   type RfiStatus,
 } from "@/lib/rfi";
+import { parseBody } from "@/lib/parseBody";
+
+// Top-level shape guard. `validateCreateRfi` does deeper semantic checks
+// (subject length, category-vs-project rules, etc.) — kept for now.
+const PostRfiSchema = z.object({
+  projectId: z.string().min(1),
+  subject: z.string().min(3).max(200),
+  description: z.string().min(3).max(4000),
+  category: z.enum(RFI_CATEGORIES),
+  priority: z.enum(RFI_PRIORITIES).optional(),
+  assignedToId: z.string().min(1).nullable().optional(),
+  wbsNodeId: z.string().min(1).nullable().optional(),
+  dueDate: z.string().datetime({ offset: true }).nullable().optional(),
+  photoUrls: z.array(z.string().url()).max(6).optional(),
+  idempotencyKey: z.string().max(120).optional(),
+});
 
 const RFI_INCLUDE = {
   raisedBy: { select: { id: true, name: true } },
@@ -69,35 +86,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Your account doesn't have access to RFIs." }, { status: 403 });
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const raw = (body ?? {}) as {
-    projectId?: string;
-    subject?: string;
-    description?: string;
-    category?: RfiCategory;
-    priority?: RfiPriority;
-    assignedToId?: string | null;
-    wbsNodeId?: string | null;
-    dueDate?: string | null;
-    photoUrls?: string[];
-  };
-
-  if (!raw.projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
-
+  const parsed = await parseBody(req, PostRfiSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+  const raw = body;
+  // Deeper semantic checks (project-specific rules etc.) still run.
   const errors = validateCreateRfi(raw);
   if (errors.length > 0) {
     return NextResponse.json({ error: errors[0].message, errors }, { status: 400 });
   }
-
-  const photos = Array.isArray(raw.photoUrls)
-    ? raw.photoUrls.filter((u): u is string => typeof u === "string" && u.length > 0).slice(0, 6)
-    : [];
+  const photos = (raw.photoUrls ?? []).slice(0, 6);
   const idempotencyKey = readIdempotencyKey(body);
 
   // Sequential per-project number is allocated inside the create transaction so
