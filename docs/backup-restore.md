@@ -90,11 +90,33 @@ Once Resend is wired, the nightly workflow appends a step that emails the Blob d
 5. Verify: `psql "postgresql://<fresh-branch-url>" -c "SELECT COUNT(*) FROM \"WBSNode\";"`
 6. Promote the branch to primary once verified.
 
+## The restore drill (do this once before we invite real users)
+
+An untested backup is not a backup. Walk this once with today's data — no risk to prod, and it proves the whole chain works.
+
+1. **Pick a backup timestamp.** Neon dashboard → project → **History**. Pick anything from the last hour.
+2. **Create a branch from that timestamp.** Click **Create branch from this point**. Name it `drill-YYYY-MM-DD`. Neon spins up a full copy of the DB as of that moment — no impact on prod.
+3. **Get the branch's connection string.** On the branch page → **Connection Details** → copy the `postgresql://...` URL.
+4. **Query the branch** — from any laptop with `psql` installed:
+   ```
+   psql "<branch-connection-string>" -c 'SELECT COUNT(*) FROM "Villa";'
+   ```
+   You should see the villa count from that moment (~93 for Amanvana).
+5. **Query one row** to prove data is real:
+   ```
+   psql "<branch-connection-string>" -c 'SELECT number, label FROM "Villa" LIMIT 3;'
+   ```
+6. **Delete the branch** when done — dashboard → branch page → **Delete branch**. Costs nothing.
+
+**Pass criteria:** step 5 returned real villa numbers + labels (not empty, not an error).
+**If any step fails:** stop, screenshot the error, fix before real users are on the system.
+
 ## Monitoring
 
-- **Backup workflow failing?** GitHub → Actions tab → failed run has full logs.
+- **Backup workflow failing?** GitHub → Actions tab → failed run has full logs. Failure emails to backup recipients also fire on any red run (if `RESEND_API_KEY` is set).
 - **Missing daily email?** Check the workflow ran (Actions tab) — if it ran but email step warned, `RESEND_API_KEY` might be missing/expired.
 - **Neon paid tier?** Neon dashboard → Settings → Billing shows current plan. Free tier keeps PITR to 24 hours only — verify Scale is on.
+- **Sanity floor:** the workflow now hard-fails if the produced backup is under 1 KB, so a silent pg_dump abort can't ship an empty gzip masquerading as a backup (this is exactly how we lost 10 days of backups earlier).
 
 ## What we DON'T do (deliberate)
 

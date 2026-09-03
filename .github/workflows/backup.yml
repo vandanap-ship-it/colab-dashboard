@@ -142,6 +142,35 @@ jobs:
             echo "Email digest sent to ${RECIPIENTS}"
           fi
 
+      - name: Notify by email on FAILURE (Resend)
+        if: failure()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          BACKUP_EMAIL_RECIPIENTS: ${{ secrets.BACKUP_EMAIL_RECIPIENTS }}
+        # Fires only when a prior step failed. Success emails are already
+        # sent by the "Notify by email (Resend)" step above. This step is
+        # our loudest signal that backups broke — the whole reason we
+        # discovered the 10-day silent break was because nobody read
+        # GitHub's built-in failure notifications. An addressed email
+        # in the same inbox as the success digest is much harder to miss.
+        run: |
+          if [ -z "$RESEND_API_KEY" ]; then
+            echo "::notice::RESEND_API_KEY not set — skipping failure email. Check the run logs manually."
+            exit 0
+          fi
+          RECIPIENTS=${BACKUP_EMAIL_RECIPIENTS:-"vandana.p@whitelotusgroup.in,shraddha.b@whitelotusgroup.in"}
+          TO_JSON=$(echo "$RECIPIENTS" | python3 -c "import json,sys; print(json.dumps([e.strip() for e in sys.stdin.read().split(',')]))")
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          curl -s -X POST "https://api.resend.com/emails" \
+            -H "authorization: Bearer $RESEND_API_KEY" \
+            -H "content-type: application/json" \
+            -d "{
+              \"from\": \"Siddhi Backups <backups@whitelotusgroup.in>\",
+              \"to\": ${TO_JSON},
+              \"subject\": \"🚨 Siddhi backup FAILED — check now\",
+              \"html\": \"<p><b>Nightly backup did not complete.</b></p><p>Every hour past this failure is an hour of data we can't restore. Investigate before the next scheduled run at 02:00 IST.</p><p><b>Run:</b> <a href=\\\"${RUN_URL}\\\">${RUN_URL}</a></p><p>Common causes: DATABASE_URL secret missing/rotated, Neon Postgres version bump breaking pg_dump, BLOB_READ_WRITE_TOKEN expired.</p>\"
+            }" || true
+
       - name: Summary
         if: always()
         run: |
