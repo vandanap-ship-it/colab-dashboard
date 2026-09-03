@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
@@ -7,6 +8,15 @@ import { isScopedUser } from "@/lib/modules";
 import { normalizeRevisionLabel } from "@/lib/drawings";
 import { isOwnUploadUrl } from "@/lib/upload";
 import { badRequest, forbidden, handleApiError, notFound, unauthorized } from "@/lib/apiErrors";
+import { parseBody } from "@/lib/parseBody";
+
+const PostRevisionSchema = z.object({
+  revisionLabel: z.string().min(1).max(20),
+  fileUrl: z.string().url(),
+  fileName: z.string().min(1).max(200),
+  issuedDate: z.string().datetime({ offset: true }).optional(),
+  notes: z.string().max(2000).optional(),
+});
 
 /**
  * Upload a new revision of a drawing. The file should already be uploaded via
@@ -29,30 +39,16 @@ export async function POST(req: Request, ctx: RouteContext<"/api/drawings/[id]/r
   });
   if (!drawing) return notFound();
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest("Invalid JSON");
-  }
-  const { revisionLabel, fileUrl, fileName, issuedDate, notes } = (body ?? {}) as {
-    revisionLabel?: string;
-    fileUrl?: string;
-    fileName?: string;
-    issuedDate?: string;
-    notes?: string;
-  };
-
+  const parsed = await parseBody(req, PostRevisionSchema);
+  if (!parsed.ok) return parsed.response;
+  const { revisionLabel, fileUrl, fileName, issuedDate, notes } = parsed.data;
   const label = normalizeRevisionLabel(revisionLabel);
   if (label.length < 1) return badRequest("Revision label required (e.g. R0, R1)");
-  if (typeof fileUrl !== "string" || fileUrl.length < 1) return badRequest("File URL required");
   // Only accept URLs from our own /api/upload pipeline. Without this, an
   // attacker could store a hostile URL — phishing redirect, malware, or a
   // doxxing image — as the canonical revision of someone else's blueprint.
   if (!isOwnUploadUrl(fileUrl)) return badRequest("Unsupported file URL");
-  if (typeof fileName !== "string" || fileName.length < 1) return badRequest("File name required");
   const when = issuedDate ? new Date(issuedDate) : new Date();
-  if (isNaN(when.getTime())) return badRequest("Invalid issued date");
 
   try {
     const revision = await prisma.$transaction(async (tx) => {

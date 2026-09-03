@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
@@ -6,6 +7,15 @@ import { canManageDrawings } from "@/lib/roles";
 import { isScopedUser } from "@/lib/modules";
 import { normalizeDiscipline, normalizeDrawingNumber } from "@/lib/drawings";
 import { badRequest, forbidden, unauthorized } from "@/lib/apiErrors";
+import { parseBody } from "@/lib/parseBody";
+
+const PostDrawingSchema = z.object({
+  projectId: z.string().min(1),
+  drawingNumber: z.string().min(1).max(60),
+  title: z.string().min(2).max(200),
+  discipline: z.string().max(40).optional(),
+  notes: z.string().max(2000).optional(),
+});
 
 export const drawingInclude = {
   createdBy: { select: { id: true, name: true } },
@@ -54,26 +64,12 @@ export async function POST(req: Request) {
     return forbidden("Your account can't add drawings.");
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest("Invalid JSON");
-  }
-
-  const { projectId, drawingNumber, title, discipline, notes } = (body ?? {}) as {
-    projectId?: string;
-    drawingNumber?: string;
-    title?: string;
-    discipline?: string;
-    notes?: string;
-  };
-
-  if (!projectId) return badRequest("projectId required");
+  const parsed = await parseBody(req, PostDrawingSchema);
+  if (!parsed.ok) return parsed.response;
+  const { projectId, drawingNumber, title, discipline, notes } = parsed.data;
   const num = normalizeDrawingNumber(drawingNumber);
   if (num.length < 1) return badRequest("Drawing number required");
-  const t = (title ?? "").trim();
-  if (t.length < 2) return badRequest("Title too short");
+  const t = title.trim();
 
   try {
     const drawing = await prisma.designDrawing.create({

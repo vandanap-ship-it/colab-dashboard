@@ -1,14 +1,30 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import {
+  PERMIT_CATEGORIES,
   effectivePermitStatus,
   validateCreatePermit,
-  type PermitCategory,
   type PermitStatus,
 } from "@/lib/permit";
+import { parseBody } from "@/lib/parseBody";
+
+const PostPermitSchema = z.object({
+  projectId: z.string().min(1),
+  name: z.string().min(1).max(200),
+  number: z.string().max(80).nullable().optional(),
+  issuingAuthority: z.string().min(1).max(200),
+  category: z.enum(PERMIT_CATEGORIES),
+  issuedDate: z.string(),
+  expiryDate: z.string().nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  documentUrl: z.string().url().max(2000).nullable().optional(),
+  responsibleUserId: z.string().min(1).nullable().optional(),
+  renewalReminderDays: z.number().int().min(0).max(365).optional(),
+});
 
 const PERMIT_INCLUDE = {
   responsible: { select: { id: true, name: true } },
@@ -56,25 +72,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Your account doesn't have access to permits." }, { status: 403 });
   }
 
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
+  const parsed = await parseBody(req, PostPermitSchema);
+  if (!parsed.ok) return parsed.response;
+  const raw = parsed.data;
 
-  const raw = (body ?? {}) as {
-    projectId?: string;
-    name?: string;
-    number?: string | null;
-    issuingAuthority?: string;
-    category?: PermitCategory;
-    issuedDate?: string;
-    expiryDate?: string | null;
-    notes?: string | null;
-    documentUrl?: string | null;
-    responsibleUserId?: string | null;
-    renewalReminderDays?: number;
-  };
-
-  if (!raw.projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
-
+  // Deeper semantic checks stay inline — date sanity, category-specific rules.
   const errors = validateCreatePermit(raw);
   if (errors.length > 0) {
     return NextResponse.json({ error: errors[0].message, errors }, { status: 400 });

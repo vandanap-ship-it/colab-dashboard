@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
@@ -6,6 +7,14 @@ import { canManageDrawings } from "@/lib/roles";
 import { isScopedUser } from "@/lib/modules";
 import { normalizeDiscipline, normalizeDrawingNumber } from "@/lib/drawings";
 import { badRequest, forbidden, handleApiError, notFound, unauthorized } from "@/lib/apiErrors";
+import { parseBody } from "@/lib/parseBody";
+
+const PatchDrawingSchema = z.object({
+  drawingNumber: z.string().min(1).max(60).optional(),
+  title: z.string().min(2).max(200).optional(),
+  discipline: z.string().max(40).optional(),
+  notes: z.string().max(2000).optional(),
+});
 
 const drawingDetailInclude = {
   createdBy: { select: { id: true, name: true } },
@@ -58,18 +67,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/drawings/[id]"
   });
   if (!existing) return notFound();
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest("Invalid JSON");
-  }
-  const { drawingNumber, title, discipline, notes } = (body ?? {}) as {
-    drawingNumber?: string;
-    title?: string;
-    discipline?: string;
-    notes?: string;
-  };
+  const parsed = await parseBody(req, PatchDrawingSchema);
+  if (!parsed.ok) return parsed.response;
+  const { drawingNumber, title, discipline, notes } = parsed.data;
 
   const data: {
     drawingNumber?: string;

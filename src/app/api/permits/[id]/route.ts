@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { recordAudit } from "@/lib/audit";
-import { PERMIT_STATUSES, type PermitStatus } from "@/lib/permit";
+import { PERMIT_STATUSES } from "@/lib/permit";
 import {
   badRequest,
   forbidden,
@@ -11,6 +12,16 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/apiErrors";
+import { parseBody } from "@/lib/parseBody";
+
+const PatchPermitSchema = z.object({
+  status: z.enum(PERMIT_STATUSES).optional(),
+  expiryDate: z.string().nullable().optional(),
+  renewalReminderDays: z.number().int().min(1).max(365).optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  documentUrl: z.string().url().max(2000).nullable().optional(),
+  responsibleUserId: z.string().min(1).nullable().optional(),
+});
 
 const PERMIT_INCLUDE = {
   responsible: { select: { id: true, name: true } },
@@ -40,22 +51,14 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/permits/[id]">
     const existing = await prisma.permit.findUnique({ where: { id } });
     if (!existing) return notFound();
 
-    let body: unknown;
-    try { body = await req.json(); } catch { return badRequest("Invalid JSON"); }
-    const patch = (body ?? {}) as {
-      status?: PermitStatus;
-      expiryDate?: string | null;
-      renewalReminderDays?: number;
-      notes?: string | null;
-      documentUrl?: string | null;
-      responsibleUserId?: string | null;
-    };
+    const parsed = await parseBody(req, PatchPermitSchema);
+    if (!parsed.ok) return parsed.response;
+    const patch = parsed.data;
 
     const data: Record<string, unknown> = {};
     const changes: string[] = [];
 
     if (patch.status && patch.status !== existing.status) {
-      if (!(PERMIT_STATUSES as readonly string[]).includes(patch.status)) return badRequest("Invalid status");
       data.status = patch.status;
       changes.push(`status: ${existing.status} → ${patch.status}`);
     }
@@ -70,9 +73,6 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/permits/[id]">
       }
     }
     if (patch.renewalReminderDays != null && patch.renewalReminderDays !== existing.renewalReminderDays) {
-      if (!Number.isInteger(patch.renewalReminderDays) || patch.renewalReminderDays < 1 || patch.renewalReminderDays > 365) {
-        return badRequest("Reminder must be 1–365 days.");
-      }
       data.renewalReminderDays = patch.renewalReminderDays;
       changes.push(`reminder: ${existing.renewalReminderDays}d → ${patch.renewalReminderDays}d`);
     }
