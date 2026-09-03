@@ -28,7 +28,7 @@ Turn on the **Scale plan ($19/mo)** for Amanvana's Neon project. That unlocks:
 Lives at `.github/workflows/backup.yml`. Runs at **02:00 IST daily** and on manual trigger from the Actions tab.
 
 What it does:
-1. Installs `postgresql-client-17` (matches Neon's server version)
+1. Installs `postgresql-client-18` (matches Neon's server version, 18.6 as of Sep 2026)
 2. `pg_dump --no-owner --no-acl --format=plain | gzip` → `siddhi-backup-YYYY-MM-DDTHH-MM-SSZ.sql.gz`
 3. Uploads to Vercel Blob under `backups/YYYY-MM/`
 4. Also uploads to the GitHub workflow's own artifact store (30-day retention, fallback if Blob token is missing)
