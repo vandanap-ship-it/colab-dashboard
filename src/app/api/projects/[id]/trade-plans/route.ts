@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { isAdmin, ROLES } from "@/lib/roles";
+import { canAccessModule, isScopedUser, MODULES } from "@/lib/modules";
 import { TRADES } from "@/lib/manpower";
 import { parseBody } from "@/lib/parseBody";
 
@@ -35,6 +36,13 @@ export async function GET(
 ) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Planned headcount is planning-side data. Scoped external contractors
+  // (QAQC, SAFETY, PERMIT, RFI, etc.) shouldn't read every subcontractor's
+  // planned counts. A scoped PROGRESS contractor legitimately would, so
+  // gate on PROGRESS rather than a blanket isScopedUser block.
+  if (isScopedUser(session.user.modules) && !canAccessModule(session.user.modules, MODULES.PROGRESS)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id: projectId } = await params;
 

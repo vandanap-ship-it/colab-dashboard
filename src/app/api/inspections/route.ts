@@ -27,6 +27,15 @@ const STATUSES = new Set(["IN_REVIEW", "PASSED", "REJECTED"]);
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Inspections belong to QAQC or SAFETY. A scoped contractor with only
+  // HINDRANCE/CONCERN/etc. has no legitimate reason to hit this endpoint;
+  // block them before the query so counts don't leak. Full-access users pass.
+  if (
+    !canAccessModule(session.user.modules, MODULES.QAQC) &&
+    !canAccessModule(session.user.modules, MODULES.SAFETY)
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");
@@ -38,10 +47,8 @@ export async function GET(req: Request) {
   if (status && STATUSES.has(status)) where.status = status;
   if (filledById) where.filledById = filledById;
   // Scoped contractors only see inspections tagged to their module.
-  if (isScopedUser(session.user.modules)) {
-    const m = primaryModuleFor(session.user.modules);
-    if (m) where.module = m;
-  }
+  const scopedModule = isScopedUser(session.user.modules) ? primaryModuleFor(session.user.modules) : null;
+  if (scopedModule) where.module = scopedModule;
 
   const inspections = await prisma.inspection.findMany({
     where,
@@ -55,9 +62,11 @@ export async function GET(req: Request) {
     },
   });
 
+  // Apply the same module scope to the counts — otherwise a scoped user
+  // sees status pills that count inspections outside their module.
   const grouped = await prisma.inspection.groupBy({
     by: ["status"],
-    where: { projectId },
+    where: scopedModule ? { projectId, module: scopedModule } : { projectId },
     _count: { _all: true },
   });
   const counts: Record<string, number> = { IN_REVIEW: 0, PASSED: 0, REJECTED: 0 };

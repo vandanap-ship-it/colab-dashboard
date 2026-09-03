@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canCreateProject } from "@/lib/roles";
+import { isScopedUser } from "@/lib/modules";
 import { uploadPhoto } from "@/lib/upload";
 
 const KINDS = new Set(["LAYOUT", "360_IMAGE", "OTHER"]);
@@ -9,6 +10,12 @@ const KINDS = new Set(["LAYOUT", "360_IMAGE", "OTHER"]);
 export async function GET(_req: Request, ctx: RouteContext<"/api/projects/[id]/drawings">) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Site plans / 360 images are working documents — internal only. Scoped
+  // external contractors shouldn't be able to enumerate or download them
+  // by walking projectIds.
+  if (isScopedUser(session.user.modules)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id: projectId } = await ctx.params;
   const drawings = await prisma.projectDrawing.findMany({
@@ -21,6 +28,12 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/projects/[id]/d
 export async function POST(req: Request, ctx: RouteContext<"/api/projects/[id]/drawings">) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Same rationale as GET — plus canCreateProject below limits writers to
+  // planners+admins so a scoped user in the write role wouldn't be able
+  // to upload either, but the isScopedUser gate makes the intent explicit.
+  if (isScopedUser(session.user.modules)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   if (!canCreateProject(session.user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

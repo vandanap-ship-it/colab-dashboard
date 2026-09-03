@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessModule, MODULES } from "@/lib/modules";
 
 /**
  * Leaf activities under a specific VillaMilestone — the terminal drilldown
@@ -15,6 +16,12 @@ export async function GET(
 ) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Peer routes (wbs, activities/picker) gate on PROGRESS; do the same here
+  // so a scoped QAQC/Safety contractor can't enumerate leaf activities by
+  // guessing a villaMilestoneId. Full-access users always pass.
+  if (!canAccessModule(session.user.modules, MODULES.PROGRESS)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id: projectId, villaMilestoneId } = await params;
 

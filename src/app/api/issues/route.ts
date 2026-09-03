@@ -24,6 +24,14 @@ const STATUSES = new Set(["OPEN", "RESOLVED"]);
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Same gate as the POST below: snags belong to QAQC or SAFETY. A scoped
+  // user without either module has no legitimate reason to hit this list.
+  if (
+    !canAccessModule(session.user.modules, MODULES.QAQC) &&
+    !canAccessModule(session.user.modules, MODULES.SAFETY)
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");

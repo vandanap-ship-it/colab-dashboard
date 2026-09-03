@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isScopedUser } from "@/lib/modules";
 import { prisma } from "@/lib/prisma";
 import { getPortfolioStats } from "@/lib/projectStats";
 
@@ -74,6 +75,12 @@ async function safeTradePlansFindMany(projectIds: string[], today: Date) {
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Portfolio rollup is planning-side data — counts, delay days, labour,
+  // financial progress. Scoped external contractors are single-project and
+  // shouldn't get a portfolio-wide view of every other subcontractor.
+  if (isScopedUser(session.user.modules)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   // Try to include the new columns; if the DB is pre-migration for
   // Project.projectType or Project.logoUrl, fall back to a minimal select
