@@ -82,6 +82,7 @@ function toEditable(r: ProjectSummary): EditableProject {
     startDate: r.startDate,
     endDate: r.endDate,
     address: null, // not returned by /summary — the edit modal defaults blank
+    updatedAt: r.updatedAt,
   };
 }
 

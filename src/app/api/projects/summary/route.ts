@@ -13,6 +13,8 @@ export type ProjectSummary = {
   startDate: string | null;
   endDate: string | null;
   projectedEndDate: string | null;
+  // Echoed on PATCH so the server rejects stale edits from a second admin.
+  updatedAt: string;
   progressPercent: number;
   plannedPercent: number;
   totalActivities: number;
@@ -86,6 +88,7 @@ export async function GET() {
     projectedEndDate: Date | null;
     logoUrl: string | null;
     projectType: string | null;
+    updatedAt: Date;
   };
   let projects: MaybeExtendedProject[];
   try {
@@ -101,6 +104,7 @@ export async function GET() {
         startDate: true,
         endDate: true,
         projectedEndDate: true,
+        updatedAt: true,
       },
     });
   } catch (e) {
@@ -116,6 +120,7 @@ export async function GET() {
         endDate: true,
         projectedEndDate: true,
         logoUrl: true,
+        updatedAt: true,
       },
     });
     projects = bare.map((p) => ({ ...p, projectType: null }));
@@ -181,6 +186,7 @@ export async function GET() {
       startDate: p.startDate?.toISOString() ?? null,
       endDate: p.endDate?.toISOString() ?? null,
       projectedEndDate: p.projectedEndDate?.toISOString() ?? null,
+      updatedAt: p.updatedAt.toISOString(),
       progressPercent: s.achievedPercent,
       plannedPercent: s.plannedPercent,
       totalActivities: s.totalActivities,

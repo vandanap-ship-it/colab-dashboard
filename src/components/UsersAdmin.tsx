@@ -11,6 +11,9 @@ type UserRow = {
   role: string;
   active: boolean;
   createdAt: string;
+  // Echoed back on PATCH so the server can reject stale writes when two
+  // admins edit the same user at the same time (optimistic-lock guard).
+  updatedAt: string;
 };
 
 const ROLE_OPTIONS = Object.values(ROLES);
@@ -71,8 +74,13 @@ export default function UsersAdmin() {
     const res = await fetch(`/api/admin/users/${u.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active: !u.active }),
+      body: JSON.stringify({ active: !u.active, expectedUpdatedAt: u.updatedAt }),
     });
+    if (res.status === 409) {
+      alert("Another admin just edited this user. Refreshing so you see the latest.");
+      load();
+      return;
+    }
     if (!res.ok) {
       const data = await res.json().catch(() => null);
       setError(data?.error ?? "Failed");
@@ -85,8 +93,13 @@ export default function UsersAdmin() {
     const res = await fetch(`/api/admin/users/${u.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: newRole }),
+      body: JSON.stringify({ role: newRole, expectedUpdatedAt: u.updatedAt }),
     });
+    if (res.status === 409) {
+      alert("Another admin just edited this user. Refreshing so you see the latest.");
+      load();
+      return;
+    }
     if (!res.ok) {
       const data = await res.json().catch(() => null);
       setError(data?.error ?? "Failed");
@@ -104,8 +117,15 @@ export default function UsersAdmin() {
     const res = await fetch(`/api/admin/users/${u.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: trimmed }),
+      body: JSON.stringify({ name: trimmed, expectedUpdatedAt: u.updatedAt }),
     });
+    if (res.status === 409) {
+      alert("Another admin just edited this user. Refreshing so you see the latest.");
+      setEditingId(null);
+      setEditingName("");
+      load();
+      return;
+    }
     if (!res.ok) {
       const data = await res.json().catch(() => null);
       setError(data?.error ?? "Failed");

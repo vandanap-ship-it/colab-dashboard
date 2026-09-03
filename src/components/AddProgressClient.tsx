@@ -18,6 +18,9 @@ export type ProgressEntryRow = {
   createdBy: { id: string; name: string };
   labour: { category: string; count: number }[];
   photos: { id: string; url: string }[];
+  // Echoed on PATCH so the server rejects stale writes if the same entry
+  // was edited by another user in the interim (optimistic-lock guard).
+  updatedAt: string;
 };
 
 export type ActivityOption = {
@@ -347,7 +350,7 @@ function ProgressEntryDialog({
     setPending(true);
     setError(null);
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       wbsNodeId: activityId,
       date,
       type,
@@ -356,6 +359,8 @@ function ProgressEntryDialog({
       contractorId: contractorId || null,
       notes,
       labour: labour.filter((l) => l.count > 0 && l.category.trim().length > 0),
+      // Only sent on edit — POST /api/progress has no existing row to guard.
+      expectedUpdatedAt: isEdit ? entry!.updatedAt : undefined,
     };
 
     const res = await fetch(isEdit ? `/api/progress/${entry.id}` : "/api/progress", {
@@ -364,6 +369,10 @@ function ProgressEntryDialog({
       body: JSON.stringify(payload),
     });
     setPending(false);
+    if (res.status === 409) {
+      setError("Someone else just updated this entry. Close and reopen to see the latest.");
+      return;
+    }
     if (!res.ok) {
       const data = await res.json().catch(() => null);
       setError(data?.error ?? "Failed to save.");
@@ -384,8 +393,11 @@ function ProgressEntryDialog({
       activity: activity!,
       contractor: contractors.find((c) => c.id === contractorId) ?? null,
       createdBy: entry?.createdBy ?? { id: "", name: "You" },
-      labour: payload.labour,
+      labour: (payload.labour as { category: string; count: number }[]),
       photos: entry?.photos ?? [],
+      // Server returns the fresh updatedAt; fall back to now for a POST reply
+      // that shouldn't ever miss it, but we cover the case defensively.
+      updatedAt: saved.updatedAt ? new Date(saved.updatedAt).toISOString() : new Date().toISOString(),
     };
     onSaved(built, isEdit);
   }

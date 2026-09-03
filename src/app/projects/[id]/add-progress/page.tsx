@@ -107,6 +107,7 @@ export default async function AddProgressPage({
     createdBy: e.createdBy,
     labour: e.labour.map((l) => ({ category: l.category, count: l.count })),
     photos: e.photos.map((p) => ({ id: p.id, url: p.url })),
+    updatedAt: e.updatedAt.toISOString(),
   }));
 
   return (

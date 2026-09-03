@@ -23,6 +23,9 @@ export interface EditableProject {
   startDate: string | null; // ISO
   endDate: string | null;
   address: string | null;
+  // Echoed on PATCH so the server rejects stale writes if another admin
+  // edited the same project in the interim (optimistic-lock guard).
+  updatedAt: string;
 }
 
 export default function NewProjectModal({
@@ -92,6 +95,8 @@ export default function NewProjectModal({
       address: address || (isEdit ? null : undefined),
       projectType: projectType || (isEdit ? null : undefined),
       logoUrl: logoUrl || (isEdit ? null : undefined),
+      // Only sent in edit mode — POST /api/projects has no updatedAt to check.
+      expectedUpdatedAt: isEdit ? existing!.updatedAt : undefined,
     };
 
     const res = await fetch(endpoint, {
@@ -100,6 +105,10 @@ export default function NewProjectModal({
       body: JSON.stringify(payload),
     });
     setPending(false);
+    if (res.status === 409) {
+      setError("Another admin just edited this project. Close this dialog and reopen to see the latest.");
+      return;
+    }
     if (!res.ok) {
       const data = await res.json().catch(() => null);
       setError(data?.error ?? `Failed to ${isEdit ? "save" : "create"}`);
