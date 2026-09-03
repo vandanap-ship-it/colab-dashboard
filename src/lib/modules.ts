@@ -77,6 +77,25 @@ export function isScopedUser(modulesField: string | null | undefined): boolean {
 }
 
 /**
+ * True when the user can act on a row whose `module` tag is `rowModule`.
+ * Full-access users always can. Scoped users must have the row's module in
+ * their scope; a row with `rowModule == null` is an internal (general) row
+ * that scoped users can never see or mutate.
+ *
+ * Use for per-row gating on models that carry a `module` field — Inspection,
+ * Issue — so a QAQC-scoped contractor cannot resolve a SAFETY snag by id.
+ */
+export function canAccessScopedRow(
+  modulesField: string | null | undefined,
+  rowModule: string | null | undefined,
+): boolean {
+  const mods = parseUserModules(modulesField);
+  if (mods === null) return true;
+  if (!rowModule) return false;
+  return mods.has(rowModule as ModuleKey);
+}
+
+/**
  * Which modules grant access to each mobile tool. A tool is visible if the
  * user has full access, or any of the tool's modules is in the user's set.
  * Inspection + Snag belong to both QAQC and SAFETY (both raise them).

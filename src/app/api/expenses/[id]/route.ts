@@ -46,6 +46,10 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/expenses/[id]">
 export async function PATCH(req: Request, ctx: RouteContext<"/api/expenses/[id]">) {
   const session = await auth();
   if (!session?.user) return unauthorized();
+  // Expenses are internal-only — the list/GET route makes the same call;
+  // mutate paths were missing it, letting scoped external contractors
+  // edit or approve expenses by direct id.
+  if (isScopedUser(session.user.modules)) return forbidden();
 
   const { id } = await ctx.params;
   const expense = await prisma.expense.findUnique({
@@ -161,6 +165,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/expenses/[id]"
 export async function DELETE(_req: Request, ctx: RouteContext<"/api/expenses/[id]">) {
   const session = await auth();
   if (!session?.user) return unauthorized();
+  // Internal-only; parallels the PATCH gate above.
+  if (isScopedUser(session.user.modules)) return forbidden();
 
   const { id } = await ctx.params;
   const expense = await prisma.expense.findUnique({

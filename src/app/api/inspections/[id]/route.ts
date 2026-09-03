@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview, isAdmin } from "@/lib/roles";
+import { canAccessScopedRow } from "@/lib/modules";
 import { recordAudit } from "@/lib/audit";
 import {
   forbidden,
@@ -35,9 +36,12 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
   try {
     const before = await prisma.inspection.findUnique({
       where: { id },
-      select: { id: true, projectId: true, status: true, title: true, updatedAt: true },
+      select: { id: true, projectId: true, status: true, title: true, updatedAt: true, module: true },
     });
     if (!before) return notFound();
+    // Module gate — QAQC-scoped contractor cannot pass/reject a SAFETY
+    // inspection, and no scoped user can act on a general (module=null) one.
+    if (!canAccessScopedRow(session.user.modules, before.module)) return forbidden();
     const conflict = checkConflict(expectedUpdatedAt, before.updatedAt, {
       id: before.id, status: before.status, title: before.title,
     });
@@ -83,9 +87,12 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/inspections/
   const { id } = await ctx.params;
   const existing = await prisma.inspection.findFirst({
     where: { id, deletedAt: null },
-    select: { id: true, projectId: true, title: true, filledById: true },
+    select: { id: true, projectId: true, title: true, filledById: true, module: true },
   });
   if (!existing) return notFound();
+  // Module gate ahead of the filler-or-admin check so a scoped contractor
+  // outside the inspection's module doesn't even confirm it exists.
+  if (!canAccessScopedRow(session.user.modules, existing.module)) return forbidden();
   if (existing.filledById !== session.user.id && !isAdmin(session.user.role)) return forbidden();
 
   try {

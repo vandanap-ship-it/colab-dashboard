@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview, isAdmin } from "@/lib/roles";
+import { canAccessScopedRow } from "@/lib/modules";
 import { z } from "zod";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { assignmentEmail, sendEmail } from "@/lib/email";
@@ -61,11 +62,15 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
   try {
     const before = await prisma.issue.findUnique({
       where: { id },
-      select: { id: true, projectId: true, status: true, assignedToId: true, updatedAt: true },
+      select: { id: true, projectId: true, status: true, assignedToId: true, updatedAt: true, module: true },
     });
     // findUnique is soft-delete filtered, so a null here means the snag is
     // missing or trashed — don't silently mutate it.
     if (!before) return notFound();
+    // Module gate — a QAQC-scoped contractor cannot resolve or reassign a
+    // SAFETY snag, and no scoped contractor can touch a general (module=null)
+    // snag. Full-access internal users always pass this check.
+    if (!canAccessScopedRow(session.user.modules, before.module)) return forbidden();
     // Optimistic-lock guard — reject if someone else edited between the
     // client's read and this write. No-op when the client didn't send
     // expectedUpdatedAt (backward compat during rollout).
@@ -138,9 +143,12 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/issues/[id]"
   const { id } = await ctx.params;
   const existing = await prisma.issue.findFirst({
     where: { id, deletedAt: null },
-    select: { id: true, projectId: true, description: true, createdById: true },
+    select: { id: true, projectId: true, description: true, createdById: true, module: true },
   });
   if (!existing) return notFound();
+  // Module gate before the ownership check so a scoped contractor can't
+  // even confirm the existence of a snag outside their module.
+  if (!canAccessScopedRow(session.user.modules, existing.module)) return forbidden();
   if (existing.createdById !== session.user.id && !isAdmin(session.user.role)) return forbidden();
 
   try {
