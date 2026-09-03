@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Download, Search } from "lucide-react";
 import PhotoStrip, { type Photo } from "./PhotoStrip";
+import TrashButton from "./TrashButton";
 import { useToast } from "./Toast";
 
 export type SnagRow = {
@@ -329,17 +330,25 @@ export default function SnagMasterTable({
                     </td>
                     {canManage && (
                       <td className="py-2 px-3">
-                        {r.status === "OPEN" ? (
-                          <button
-                            type="button"
-                            onClick={() => resolveSnag(r.id)}
-                            className="text-xs font-medium text-stone-700 hover:text-stone-900 underline-offset-2 hover:underline"
-                          >
-                            Resolve
-                          </button>
-                        ) : (
-                          <span className="text-xs text-stone-400">—</span>
-                        )}
+                        <div className="flex items-center justify-center gap-1">
+                          {r.status === "OPEN" ? (
+                            <button
+                              type="button"
+                              onClick={() => resolveSnag(r.id)}
+                              className="text-xs font-medium text-stone-700 hover:text-stone-900 underline-offset-2 hover:underline"
+                            >
+                              Resolve
+                            </button>
+                          ) : (
+                            <span className="text-xs text-stone-400">—</span>
+                          )}
+                          <TrashButton
+                            url={`/api/issues/${r.id}`}
+                            kind="snag"
+                            label={r.description}
+                            onDeleted={() => setRows((rs) => rs.filter((x) => x.id !== r.id))}
+                          />
+                        </div>
                       </td>
                     )}
                   </tr>

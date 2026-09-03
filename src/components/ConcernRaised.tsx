@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import PhotoStrip from "./PhotoStrip";
+import TrashButton from "./TrashButton";
 
 type Concern = {
   id: string;
@@ -100,17 +101,25 @@ export default function ConcernRaised({ projectId, canManage }: { projectId: str
                     </div>
                   )}
                 </div>
-                {canManage && (
-                  <select
-                    value={c.status}
-                    onChange={(e) => setStatus(c, e.target.value)}
-                    className="text-xs rounded-md border border-stone-200 bg-white px-2 py-1"
-                  >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                    ))}
-                  </select>
-                )}
+                <div className="flex items-center gap-1 shrink-0">
+                  {canManage && (
+                    <select
+                      value={c.status}
+                      onChange={(e) => setStatus(c, e.target.value)}
+                      className="text-xs rounded-md border border-stone-200 bg-white px-2 py-1"
+                    >
+                      {STATUSES.map((s) => (
+                        <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                      ))}
+                    </select>
+                  )}
+                  <TrashButton
+                    url={`/api/concerns/${c.id}`}
+                    kind="concern"
+                    label={c.description}
+                    onDeleted={load}
+                  />
+                </div>
               </div>
             </li>
           ))}

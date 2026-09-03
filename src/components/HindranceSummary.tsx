@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import PhotoStrip from "./PhotoStrip";
+import TrashButton from "./TrashButton";
 import { formatDayMonthYear as fmt } from "@/lib/dates";
 
 type Hindrance = {
@@ -94,14 +95,22 @@ export default function HindranceSummary({ projectId, canResolve }: { projectId:
                     </div>
                   )}
                 </div>
-                {canResolve && h.status === "OPEN" && (
-                  <button
-                    onClick={() => resolve(h)}
-                    className="text-xs rounded-full border border-stone-300 px-3 py-1 hover:bg-stone-100 whitespace-nowrap"
-                  >
-                    Resolve
-                  </button>
-                )}
+                <div className="flex items-center gap-1 shrink-0">
+                  {canResolve && h.status === "OPEN" && (
+                    <button
+                      onClick={() => resolve(h)}
+                      className="text-xs rounded-full border border-stone-300 px-3 py-1 hover:bg-stone-100 whitespace-nowrap"
+                    >
+                      Resolve
+                    </button>
+                  )}
+                  <TrashButton
+                    url={`/api/hindrances/${h.id}`}
+                    kind="hindrance"
+                    label={h.description}
+                    onDeleted={load}
+                  />
+                </div>
               </div>
             </li>
           ))}

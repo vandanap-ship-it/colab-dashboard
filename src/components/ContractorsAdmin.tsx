@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import TrashButton from "./TrashButton";
 
 type Contractor = {
   id: string;
@@ -122,6 +123,7 @@ export default function ContractorsAdmin() {
                 <th className="px-4 py-2 font-medium">Category</th>
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -140,6 +142,17 @@ export default function ContractorsAdmin() {
                     >
                       {c.active ? "Active" : "Disabled"}
                     </span>
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    {c.active && (
+                      <TrashButton
+                        url={`/api/admin/contractors/${c.id}`}
+                        kind="contractor"
+                        label={`${c.name} (${c.project.name})`}
+                        title="Retire this contractor"
+                        onDeleted={load}
+                      />
+                    )}
                   </td>
                 </tr>
               ))}

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { RfiStatus } from "@/lib/rfi";
+import TrashButton from "./TrashButton";
 
 export interface RfiActionsProps {
   rfiId: string;
@@ -105,8 +106,8 @@ export default function RfiActions({
         </div>
       )}
 
-      {/* Close / reopen */}
-      <div className="flex gap-2 pt-2 border-t border-stone-100">
+      {/* Close / reopen / trash */}
+      <div className="flex items-center gap-2 pt-2 border-t border-stone-100">
         {currentStatus !== "CLOSED" && (
           <button
             type="button"
@@ -127,6 +128,13 @@ export default function RfiActions({
             {busy === "reopen" ? "Reopening..." : "Reopen RFI"}
           </button>
         )}
+        <span className="ml-auto" />
+        <TrashButton
+          url={`/api/rfi/${rfiId}`}
+          kind="RFI"
+          onDeleted={() => router.push("../rfi")}
+          showLabel
+        />
       </div>
 
       {error && (

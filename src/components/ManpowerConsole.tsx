@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "./Toast";
+import TrashButton from "./TrashButton";
 import {
   dashboardStrip,
   daySummary,
@@ -247,12 +248,13 @@ export default function ManpowerConsole({
                 <th className="px-4 py-2.5 text-right font-semibold">Actual</th>
                 <th className="px-4 py-2.5 text-right font-semibold">Δ</th>
                 <th className="px-4 py-2.5 text-left font-semibold">Logged by</th>
+                <th className="px-4 py-2.5 text-right font-semibold w-8"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
               {perDay.trades.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-stone-500">
+                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-stone-500">
                     Nothing logged for this day yet.
                   </td>
                 </tr>
@@ -273,6 +275,16 @@ export default function ManpowerConsole({
                     </td>
                     <td className="px-4 py-2.5 text-xs text-stone-500">
                       {entry?.loggedByName ?? "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      {entry && (
+                        <TrashButton
+                          url={`/api/manpower-entries/${entry.id}`}
+                          kind="manpower entry"
+                          label={`${contractor?.name ?? ""} · ${cell.trade} · ${cell.actual} on ${fmtDay(day)}`}
+                          onDeleted={() => router.refresh()}
+                        />
+                      )}
                     </td>
                   </tr>
                 );
