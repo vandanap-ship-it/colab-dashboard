@@ -165,6 +165,20 @@ Error boundaries at `src/app/error.tsx` and `src/app/global-error.tsx` already c
 
 That auto-generates `sentry.client.config.ts` + `sentry.server.config.ts` + edge config + `instrumentation.ts` and reads the DSN from the env var. The boundaries pick up the global `window.Sentry` automatically — no code changes needed.
 
+### Mobile offline queue (Tier 2.3 — deferred pending site check)
+
+Shraddha to check whether cellular signal is genuinely poor at Amanvana before we commit to this. If site coverage is decent, this can slide to V2. If engineers frequently lose submits mid-request, do it before scaling to more projects.
+
+Scope when we do it: submit-with-retry queue on the mobile client so a bad-signal moment doesn't drop a progress entry, hindrance, or photo. Design decisions still open:
+
+1. Silent auto-retry or explicit "queued" UI?
+2. Retry backoff (immediate → 30s → 5m → give up?)
+3. Photo upload chunking or leave as one PUT?
+4. Conflict handling when a queued edit hits a row that changed while offline (ties into the Tier 1.5 concurrency guard — server would return 409 on the retry).
+5. Local storage: IndexedDB via a queue library (e.g. `workbox-background-sync`) or a simple hand-rolled queue?
+
+Estimate: ~1 week once scope + design are agreed.
+
 ### Concurrency guard — server complete (Tier 1.5)
 
 Optimistic-locking helper at `src/lib/optimisticLock.ts` now wired into every mutable PATCH endpoint (12 total):
