@@ -165,6 +165,27 @@ Error boundaries at `src/app/error.tsx` and `src/app/global-error.tsx` already c
 
 That auto-generates `sentry.client.config.ts` + `sentry.server.config.ts` + edge config + `instrumentation.ts` and reads the DSN from the env var. The boundaries pick up the global `window.Sentry` automatically — no code changes needed.
 
+### Tier 3 walkthrough (2026-09-03) — perf findings
+
+Walked every navigable route on the deploy as admin. Zero 500s across 34 tested routes. Real bugs found:
+
+**Critical perf**
+- `/reports/master` — **10.3 seconds**. Root cause: fetches all ~14k WBS nodes to build a name/parent/level lookup for only 30 highlight entries (src/app/projects/[id]/reports/master/page.tsx:79). Fix: fetch only the ancestors of highlight nodes (max ~200 rows). One-day fix.
+
+**Noticeable perf** (functional but slow — > 1.5s server render):
+- `/reports/weekly` — 2.8s
+- `/reports/scorecard` — 2.6s
+- `/projects/[id]/overview` — 2.9s (executive dashboard; may be the same 14k WBSNode fetch pattern)
+- `/projects/[id]/gantt` — 2.3s (large Gantt render — likely fine, but worth checking client-side hydration)
+- `/projects/[id]/progress` — 1.7s
+- `/admin/audit` — 1.5s
+- `/projects/[id]/look-ahead` — 1.4s
+
+**All good**
+- Mobile: every route < 800ms
+- Switch Project modal (post-portal-fix): renders full-viewport, closes cleanly
+- Executive overview: numbers look plausible, no obvious mock leak
+
 ### Mobile offline queue (Tier 2.3 — deferred pending site check)
 
 Shraddha to check whether cellular signal is genuinely poor at Amanvana before we commit to this. If site coverage is decent, this can slide to V2. If engineers frequently lose submits mid-request, do it before scaling to more projects.
