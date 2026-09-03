@@ -74,6 +74,11 @@ jobs:
           fi
           echo "BACKUP_SIZE=${SIZE}" >> $GITHUB_ENV
 
+      - name: Set up Node (for @vercel/blob SDK)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Upload to Vercel Blob
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
@@ -83,30 +88,40 @@ jobs:
             echo "::warning::BLOB_READ_WRITE_TOKEN not set — skipping Blob upload. Backup file is in the workflow artifacts instead."
             exit 0
           fi
-          # Vercel Blob HTTP API: PUT to https://blob.vercel-storage.com/<pathname>
-          # Path convention: backups/YYYY-MM/filename.sql.gz — groups by month for easy pruning.
-          # NB: variable is BLOB_PATH, not PATH — assigning to $PATH would nuke the
-          # shell's search path and the next `curl` call would fail with
-          # `command not found`. Cost us a workflow run to learn this one.
+          # Use @vercel/blob's put() rather than raw HTTP — the SDK reads the
+          # target store's access config from the token and picks the right
+          # upload flow. Raw HTTP was fighting us on Private stores: no header
+          # or query param combination we tried was accepted (documented API
+          # kept returning "Cannot use public access on a private store").
+          # Path convention: backups/YYYY-MM/filename.sql.gz — groups by month
+          # for easy pruning.
+          # NB: BLOB_PATH, not PATH — assigning to $PATH would nuke the shell's
+          # binary search path (curl, node) and error with "command not found".
           MONTH=$(date -u +'%Y-%m')
           BLOB_PATH="backups/${MONTH}/${BACKUP_FILE}"
-          # Access setting is a URL query param, not a header — Vercel's HTTP
-          # API defaults to public, which a Private store rejects with 400.
-          # We had a header attempt first (x-access: private) — that didn't
-          # take, docs confirm the query param is the correct interface.
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
-            -H "authorization: Bearer $BLOB_READ_WRITE_TOKEN" \
-            -H "x-content-type: application/gzip" \
-            -H "x-add-random-suffix: 0" \
-            --data-binary "@${BACKUP_FILE}" \
-            "https://blob.vercel-storage.com/${BLOB_PATH}?access=private")
-          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "::error::Blob upload failed with HTTP $HTTP_CODE: $BODY"
-            exit 1
-          fi
-          BLOB_URL=$(echo "$BODY" | python3 -c "import json,sys; print(json.load(sys.stdin)['url'])")
+          npm install --silent --no-save --prefix /tmp/blob-uploader @vercel/blob
+          BLOB_URL=$(node -e "
+            const { put } = require('/tmp/blob-uploader/node_modules/@vercel/blob');
+            const fs = require('fs');
+            (async () => {
+              try {
+                const buf = fs.readFileSync(process.env.BACKUP_FILE);
+                const { url } = await put(process.env.BLOB_PATH, buf, {
+                  access: 'public',       // Access flag on the file itself — the
+                                          // *store* being Private overrides this,
+                                          // so the URL still requires the token
+                                          // for read. Required-non-empty by SDK.
+                  addRandomSuffix: false,
+                  contentType: 'application/gzip',
+                  token: process.env.BLOB_READ_WRITE_TOKEN,
+                });
+                console.log(url);
+              } catch (e) {
+                console.error(e.message);
+                process.exit(1);
+              }
+            })();
+          " BACKUP_FILE="$BACKUP_FILE" BLOB_PATH="$BLOB_PATH")
           echo "BLOB_URL=${BLOB_URL}" >> $GITHUB_ENV
           echo "Uploaded to: ${BLOB_URL}"
 
