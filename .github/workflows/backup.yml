@@ -78,20 +78,24 @@ jobs:
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
         run: |
+          set -euo pipefail
           if [ -z "$BLOB_READ_WRITE_TOKEN" ]; then
             echo "::warning::BLOB_READ_WRITE_TOKEN not set — skipping Blob upload. Backup file is in the workflow artifacts instead."
             exit 0
           fi
           # Vercel Blob HTTP API: PUT to https://blob.vercel-storage.com/<pathname>
           # Path convention: backups/YYYY-MM/filename.sql.gz — groups by month for easy pruning.
+          # NB: variable is BLOB_PATH, not PATH — assigning to $PATH would nuke the
+          # shell's search path and the next `curl` call would fail with
+          # `command not found`. Cost us a workflow run to learn this one.
           MONTH=$(date -u +'%Y-%m')
-          PATH="backups/${MONTH}/${BACKUP_FILE}"
+          BLOB_PATH="backups/${MONTH}/${BACKUP_FILE}"
           RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
             -H "authorization: Bearer $BLOB_READ_WRITE_TOKEN" \
             -H "x-content-type: application/gzip" \
             -H "x-add-random-suffix: 0" \
             --data-binary "@${BACKUP_FILE}" \
-            "https://blob.vercel-storage.com/${PATH}")
+            "https://blob.vercel-storage.com/${BLOB_PATH}")
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           BODY=$(echo "$RESPONSE" | sed '$d')
           if [ "$HTTP_CODE" -ne 200 ]; then
