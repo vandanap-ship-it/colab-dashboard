@@ -29,7 +29,7 @@ export async function GET(req: Request) {
   const status = searchParams.get("status");
   if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
 
-  const where: { projectId: string; status?: string } = { projectId };
+  const where: { projectId: string; status?: string; deletedAt: null } = { projectId, deletedAt: null };
   if (status && STATUSES.has(status)) where.status = status;
 
   const concerns = await prisma.concern.findMany({
@@ -46,7 +46,7 @@ export async function GET(req: Request) {
   // Counts per status (handy for tabs)
   const grouped = await prisma.concern.groupBy({
     by: ["status"],
-    where: { projectId },
+    where: { projectId, deletedAt: null },
     _count: { _all: true },
   });
   const counts: Record<string, number> = { PENDING: 0, READ: 0, RESOLVED: 0, TASK_ASSIGNED: 0 };

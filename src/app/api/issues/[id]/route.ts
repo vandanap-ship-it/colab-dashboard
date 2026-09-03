@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canReview } from "@/lib/roles";
+import { canReview, isAdmin } from "@/lib/roles";
 import { z } from "zod";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { assignmentEmail, sendEmail } from "@/lib/email";
@@ -127,5 +127,34 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
     return NextResponse.json({ issue });
   } catch (e) {
     return handleApiError(e, "PATCH /api/issues/:id");
+  }
+}
+
+/** Soft-delete an issue (snag). Creator or admin only. Restorable. */
+export async function DELETE(_req: Request, ctx: RouteContext<"/api/issues/[id]">) {
+  const session = await auth();
+  if (!session?.user) return unauthorized();
+
+  const { id } = await ctx.params;
+  const existing = await prisma.issue.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true, projectId: true, description: true, createdById: true },
+  });
+  if (!existing) return notFound();
+  if (existing.createdById !== session.user.id && !isAdmin(session.user.role)) return forbidden();
+
+  try {
+    await prisma.issue.update({ where: { id }, data: { deletedAt: new Date() } });
+    await recordAudit({
+      projectId: existing.projectId,
+      userId: session.user.id,
+      action: "DELETE",
+      entityType: "Issue",
+      entityId: id,
+      summary: `Snag moved to trash: ${existing.description.slice(0, 60)}${existing.description.length > 60 ? "…" : ""}`,
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return handleApiError(e, "DELETE /api/issues/:id");
   }
 }

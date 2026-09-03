@@ -56,7 +56,8 @@ export async function GET(req: Request) {
     projectId: string;
     status?: RfiStatus;
     assignedToId?: string;
-  } = { projectId };
+    deletedAt: null;
+  } = { projectId, deletedAt: null };
   if (status && (RFI_STATUSES as readonly string[]).includes(status)) {
     where.status = status as RfiStatus;
   }
@@ -70,7 +71,7 @@ export async function GET(req: Request) {
 
   const grouped = await prisma.rfi.groupBy({
     by: ["status"],
-    where: { projectId },
+    where: { projectId, deletedAt: null },
     _count: { _all: true },
   });
   const counts: Record<string, number> = { OPEN: 0, ANSWERED: 0, CLOSED: 0 };

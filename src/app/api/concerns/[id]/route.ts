@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canReview } from "@/lib/roles";
+import { canReview, isAdmin } from "@/lib/roles";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { assignmentEmail, sendEmail } from "@/lib/email";
@@ -135,5 +135,36 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/concerns/[id]"
     return NextResponse.json({ concern });
   } catch (e) {
     return handleApiError(e, "PATCH /api/concerns/:id");
+  }
+}
+
+/** Soft-delete a concern. Raiser or admin only. Restorable via
+ *  /api/admin/restore. */
+export async function DELETE(_req: Request, ctx: RouteContext<"/api/concerns/[id]">) {
+  const session = await auth();
+  if (!session?.user) return unauthorized();
+  if (!canAccessModule(session.user.modules, MODULES.CONCERN)) return forbidden();
+
+  const { id } = await ctx.params;
+  const existing = await prisma.concern.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true, projectId: true, description: true, raisedById: true },
+  });
+  if (!existing) return notFound();
+  if (existing.raisedById !== session.user.id && !isAdmin(session.user.role)) return forbidden();
+
+  try {
+    await prisma.concern.update({ where: { id }, data: { deletedAt: new Date() } });
+    await recordAudit({
+      projectId: existing.projectId,
+      userId: session.user.id,
+      action: "DELETE",
+      entityType: "Concern",
+      entityId: id,
+      summary: `Concern moved to trash: ${existing.description.slice(0, 60)}${existing.description.length > 60 ? "…" : ""}`,
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return handleApiError(e, "DELETE /api/concerns/:id");
   }
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canReview } from "@/lib/roles";
+import { canReview, isAdmin } from "@/lib/roles";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { checkConflict } from "@/lib/optimisticLock";
@@ -91,5 +91,39 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/hindrances/[id
     return NextResponse.json({ hindrance });
   } catch (e) {
     return handleApiError(e, "PATCH /api/hindrances/:id");
+  }
+}
+
+/** Soft-delete a hindrance. Creator or admin only. Sets deletedAt so the
+ *  record moves to /admin/trash and can be restored via /api/admin/restore. */
+export async function DELETE(_req: Request, ctx: RouteContext<"/api/hindrances/[id]">) {
+  const session = await auth();
+  if (!session?.user) return unauthorized();
+  if (!canAccessModule(session.user.modules, MODULES.HINDRANCE)) return forbidden();
+
+  const { id } = await ctx.params;
+  const existing = await prisma.hindrance.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true, projectId: true, description: true, createdById: true },
+  });
+  if (!existing) return notFound();
+  // Creator OR admin. Reviewers (planners) don't get the delete right — they
+  // can already RESOLVE via PATCH; removal is a stronger act reserved for
+  // whoever raised it and for admins cleaning up.
+  if (existing.createdById !== session.user.id && !isAdmin(session.user.role)) return forbidden();
+
+  try {
+    await prisma.hindrance.update({ where: { id }, data: { deletedAt: new Date() } });
+    await recordAudit({
+      projectId: existing.projectId,
+      userId: session.user.id,
+      action: "DELETE",
+      entityType: "Hindrance",
+      entityId: id,
+      summary: `Hindrance moved to trash: ${existing.description.slice(0, 60)}${existing.description.length > 60 ? "…" : ""}`,
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return handleApiError(e, "DELETE /api/hindrances/:id");
   }
 }

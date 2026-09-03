@@ -34,7 +34,7 @@ export async function GET(req: Request) {
   const status = searchParams.get("status");
   if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
 
-  const where: { projectId: string; status?: string } = { projectId };
+  const where: { projectId: string; status?: string; deletedAt: null } = { projectId, deletedAt: null };
   if (status && STATUSES.has(status)) where.status = status;
 
   const hindrances = await prisma.hindrance.findMany({

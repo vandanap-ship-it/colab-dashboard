@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
+import { isAdmin } from "@/lib/roles";
 import { recordAudit } from "@/lib/audit";
 import { sendEmail, assignmentEmail } from "@/lib/email";
 import {
@@ -195,5 +196,35 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/rfi/[id]">) {
     return NextResponse.json({ rfi: updated });
   } catch (e) {
     return handleApiError(e, "rfi/[id]");
+  }
+}
+
+/** Soft-delete an RFI. Raiser or admin only. Restorable. */
+export async function DELETE(_req: Request, ctx: RouteContext<"/api/rfi/[id]">) {
+  try {
+    const session = await auth();
+    if (!session?.user) return unauthorized();
+    if (!canAccessModule(session.user.modules, MODULES.RFI)) return forbidden();
+
+    const { id } = await ctx.params;
+    const existing = await prisma.rfi.findFirst({
+      where: { id },
+      select: { id: true, projectId: true, subject: true, number: true, raisedById: true },
+    });
+    if (!existing) return notFound();
+    if (existing.raisedById !== session.user.id && !isAdmin(session.user.role)) return forbidden();
+
+    await prisma.rfi.update({ where: { id }, data: { deletedAt: new Date() } });
+    await recordAudit({
+      projectId: existing.projectId,
+      userId: session.user.id,
+      action: "DELETE",
+      entityType: "Rfi",
+      entityId: id,
+      summary: `RFI ${formatRfiNumber(existing.number)} moved to trash: ${existing.subject.slice(0, 60)}${existing.subject.length > 60 ? "…" : ""}`,
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return handleApiError(e, "DELETE /api/rfi/:id");
   }
 }
