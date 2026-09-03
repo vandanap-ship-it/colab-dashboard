@@ -18,6 +18,7 @@ export type SnagRow = {
   createdByName: string | null;
   assignedToName: string | null;
   createdAt: string; // ISO
+  updatedAt: string; // ISO — echoed on PATCH for the server's concurrency guard
   photos: Photo[];
 };
 
@@ -138,30 +139,36 @@ export default function SnagMasterTable({
   async function resolveSnag(id: string) {
     const ok = window.confirm("Mark this snag as resolved?");
     if (!ok) return;
+    const row = rows.find((r) => r.id === id);
     const res = await fetch(`/api/issues/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "RESOLVED" }),
+      body: JSON.stringify({ status: "RESOLVED", expectedUpdatedAt: row?.updatedAt }),
     });
     if (res.ok) {
       setRows((rs) => rs.map((r) => (r.id === id ? { ...r, status: "RESOLVED" } : r)));
       toast.success("Snag marked resolved.");
+    } else if (res.status === 409) {
+      toast.error("Someone else just edited this snag — refresh to see the latest.");
     } else {
       toast.error("Couldn't resolve. Try again.");
     }
   }
 
   async function assignSnag(id: string, userId: string) {
+    const row = rows.find((r) => r.id === id);
     const res = await fetch(`/api/issues/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assignedToId: userId || null }),
+      body: JSON.stringify({ assignedToId: userId || null, expectedUpdatedAt: row?.updatedAt }),
     });
     if (res.ok) {
       const user = assignableUsers.find((u) => u.id === userId);
       setRows((rs) =>
         rs.map((r) => (r.id === id ? { ...r, assignedToName: user?.name ?? null } : r)),
       );
+    } else if (res.status === 409) {
+      toast.error("Someone else just edited this snag — refresh to see the latest.");
     } else {
       toast.error("Couldn't update assignment.");
     }

@@ -12,6 +12,7 @@ type Hindrance = {
   resolvedDate: string | null;
   daysImpact: number | null;
   status: string;
+  updatedAt: string; // echoed on PATCH for the server's concurrency guard
   createdBy: { id: string; name: string };
   wbsNode: { id: string; name: string; taskCode: string } | null;
   photos: { id: string; url: string }[];
@@ -37,9 +38,13 @@ export default function HindranceSummary({ projectId, canResolve }: { projectId:
     const res = await fetch(`/api/hindrances/${h.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "RESOLVED" }),
+      body: JSON.stringify({ status: "RESOLVED", expectedUpdatedAt: h.updatedAt }),
     });
-    if (res.ok) load();
+    if (res.ok) return load();
+    if (res.status === 409) {
+      alert("Someone else just edited this hindrance. Refreshing so you see the latest.");
+      load();
+    }
   }
 
   return (

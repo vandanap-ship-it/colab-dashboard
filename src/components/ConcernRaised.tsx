@@ -9,6 +9,7 @@ type Concern = {
   description: string;
   status: string;
   createdAt: string;
+  updatedAt: string; // echoed back on PATCH so the server's concurrency guard can fire
   raisedBy: { id: string; name: string };
   assignedTo: { id: string; name: string } | null;
   wbsNode: { id: string; name: string; taskCode: string } | null;
@@ -53,9 +54,19 @@ export default function ConcernRaised({ projectId, canManage }: { projectId: str
     const res = await fetch(`/api/concerns/${c.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      // expectedUpdatedAt fires the server's optimistic-lock guard — a 409
+      // comes back if someone else edited this concern between our load()
+      // and this click. We reload and show what actually happened.
+      body: JSON.stringify({ status, expectedUpdatedAt: c.updatedAt }),
     });
-    if (res.ok) load();
+    if (res.ok) {
+      load();
+      return;
+    }
+    if (res.status === 409) {
+      alert("Someone else just edited this concern. Refreshing so you see the latest.");
+      load();
+    }
   }
 
   return (

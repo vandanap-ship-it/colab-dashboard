@@ -30,7 +30,7 @@ export default async function SnagMasterPage({
   // Pull snags + WBS path map + contractor list + assignable users.
   const [issues, allNodes, contractors, users] = await Promise.all([
     prisma.issue.findMany({
-      where: { projectId },
+      where: { projectId, deletedAt: null },
       orderBy: { createdAt: "desc" },
       include: {
         createdBy: { select: { id: true, name: true } },
@@ -93,6 +93,7 @@ export default async function SnagMasterPage({
     createdByName: i.createdBy?.name ?? null,
     assignedToName: i.assignedTo?.name ?? null,
     createdAt: i.createdAt.toISOString(),
+    updatedAt: i.updatedAt.toISOString(),
     photos: i.photos.map((p) => ({ id: p.id, url: p.url })),
   }));
 
