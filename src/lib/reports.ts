@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { plannedPercentFor } from "@/lib/schedule";
 
@@ -652,8 +653,15 @@ export type MasterReportData = {
  *
  * Header data (overall, per-zone) is "current state" — date range is purely
  * for the report header. Total activities table also reflects current state.
+ *
+ * Wrapped in `unstable_cache` because the underlying full-tree WBSNode scan
+ * costs ~10 seconds for Amanvana (~14k rows), and the result changes at
+ * daily/weekly cadence — a 60-second freshness window is invisible to
+ * users but drops repeat renders to <100ms. To make it strictly-fresh on
+ * write, wire `revalidateTag('master-report:<projectId>')` into the
+ * progress/hindrance/etc. POST/PATCH/DELETE handlers.
  */
-export async function getMasterReport(
+async function getMasterReportUncached(
   projectId: string,
   _fromIso: string,
   _toIso: string,
@@ -859,6 +867,24 @@ export async function getMasterReport(
 
   return { overall, perZone, totalActivities };
 }
+
+/**
+ * Cached wrapper. The `today` param is intentionally excluded from the cache
+ * key — callers should trust the tag-based invalidation and a 60-second TTL.
+ * If we cached per-timestamp, every request would miss.
+ */
+export const getMasterReport = unstable_cache(
+  async (projectId: string, fromIso: string, toIso: string, todayIso?: string) => {
+    return getMasterReportUncached(
+      projectId,
+      fromIso,
+      toIso,
+      todayIso ? new Date(todayIso) : undefined,
+    );
+  },
+  ["master-report"],
+  { revalidate: 60 },
+);
 
 // ============================================================
 // ----- Checklist Report (inspections list) -----
