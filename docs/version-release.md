@@ -165,18 +165,20 @@ Error boundaries at `src/app/error.tsx` and `src/app/global-error.tsx` already c
 
 That auto-generates `sentry.client.config.ts` + `sentry.server.config.ts` + edge config + `instrumentation.ts` and reads the DSN from the env var. The boundaries pick up the global `window.Sentry` automatically — no code changes needed.
 
-### Missing DELETE endpoints — 6 of 10 record types can't be soft-deleted via the API
+### Missing DELETE endpoints — closed 2026-09-03
 
-Walked write flows on the mockup project during the Tier 3 walkthrough and found a real gap: the following models have `deletedAt` on the Prisma schema (so soft-delete is supported at the DB level) but no route handler exposes it:
+All 6 record types now have DELETE handlers (commit `eef896a`):
 
-- `/api/hindrances/[id]` — no DELETE
-- `/api/concerns/[id]` — no DELETE
-- `/api/issues/[id]` — no DELETE
-- `/api/rfi/[id]` — no DELETE
-- `/api/manpower-entries/[id]` — no DELETE and no `/[id]` route at all
-- `/api/admin/contractors/[id]` — no DELETE, no toggle
+- `/api/hindrances/[id]` DELETE — creator or admin, soft-delete via `deletedAt`
+- `/api/concerns/[id]` DELETE — raiser or admin
+- `/api/issues/[id]` DELETE — creator or admin
+- `/api/rfi/[id]` DELETE — raiser or admin
+- `/api/manpower-entries/[id]` DELETE — logger or admin (new route file)
+- `/api/admin/contractors/[id]` PATCH + DELETE — admin only. DELETE flips `active: false` (contractor rows are referenced by many FK-owning tables so hard-delete is off the table; retiring hides them from active pickers instead).
 
-Users can only close/resolve/reject these records — never remove them. That leaves test data, duplicates, and mis-created records permanently visible. Add the six DELETE handlers (soft-delete pattern already used by progress/expense/bill/drawing — ~15 min per route + a 3-liner audit log entry). Contractor also needs a UI toggle to set `active: false` from the admin console.
+Restore endpoint (`/api/admin/restore`) extended to accept `Rfi` and `ManpowerEntry` alongside the existing five. List queries for hindrance / concern / issue / rfi now filter `deletedAt: null` so soft-deleted rows don't leak into the UI.
+
+Remaining piece on the client side: add ✕/Remove affordances in the desktop lists + mobile flows so users can actually call these endpoints from the UI. Small per-form edit; can piggyback on the Tier 1.5 client-side rollout.
 
 ### Tier 3 walkthrough (2026-09-03) — perf findings
 
