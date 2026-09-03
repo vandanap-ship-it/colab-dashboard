@@ -1,11 +1,22 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { isAdmin, ROLES } from "@/lib/roles";
 import { TRADES } from "@/lib/manpower";
+import { parseBody } from "@/lib/parseBody";
 
-const TRADE_SET = new Set<string>(TRADES);
+const PostTradePlanSchema = z.object({
+  contractorId: z.string().min(1),
+  trade: z.string().refine((v) => (TRADES as readonly string[]).includes(v), {
+    message: `trade must be one of ${TRADES.join(", ")}`,
+  }),
+  plannedCount: z.number().finite().min(0).max(10_000),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "startDate must be YYYY-MM-DD").optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "endDate must be YYYY-MM-DD").nullable().optional(),
+  notes: z.string().max(500).nullable().optional(),
+});
 
 /** Only admins, planners and product team can edit the planned headcount. */
 function canEditPlans(role: string): boolean {
@@ -53,45 +64,26 @@ export async function POST(
 
   const { id: projectId } = await params;
 
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
-
-  const { contractorId, trade, plannedCount, startDate, endDate, notes } = (body ?? {}) as {
-    contractorId?: string;
-    trade?: string;
-    plannedCount?: number;
-    startDate?: string;
-    endDate?: string | null;
-    notes?: string | null;
-  };
-
-  if (!contractorId) return NextResponse.json({ error: "contractorId required" }, { status: 400 });
-  if (!trade || !TRADE_SET.has(trade)) {
-    return NextResponse.json({ error: `trade must be one of ${TRADES.join(", ")}` }, { status: 400 });
-  }
-  const rawCount = Number(plannedCount);
-  if (!Number.isFinite(rawCount) || rawCount < 0) {
-    return NextResponse.json({ error: "plannedCount must be a non-negative number" }, { status: 400 });
-  }
-  const count = Math.floor(rawCount);
+  const parsed = await parseBody(req, PostTradePlanSchema);
+  if (!parsed.ok) return parsed.response;
+  const { contractorId, trade, plannedCount, startDate, endDate, notes } = parsed.data;
+  const count = Math.floor(plannedCount);
 
   const start = startDate ? new Date(startDate + "T00:00:00Z") : (() => {
     const t = new Date();
     t.setUTCHours(0, 0, 0, 0);
     return t;
   })();
-  if (isNaN(start.getTime())) return NextResponse.json({ error: "Invalid startDate" }, { status: 400 });
 
   let end: Date | null = null;
   if (endDate) {
     end = new Date(endDate + "T00:00:00Z");
-    if (isNaN(end.getTime())) return NextResponse.json({ error: "Invalid endDate" }, { status: 400 });
     if (end.getTime() <= start.getTime()) {
       return NextResponse.json({ error: "endDate must be after startDate" }, { status: 400 });
     }
   }
 
-  const cleanNotes = typeof notes === "string" ? notes.trim().slice(0, 500) : "";
+  const cleanNotes = (notes ?? "").trim();
 
   // Verify contractor belongs to project.
   const contractor = await prisma.contractor.findFirst({

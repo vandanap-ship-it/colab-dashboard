@@ -1,15 +1,29 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canCreateProject } from "@/lib/roles";
 import { recordAudit, diffSummary } from "@/lib/audit";
+import { parseBody } from "@/lib/parseBody";
 
-const VALID_STATUSES = new Set(["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED"]);
+const PatchProjectSchema = z.object({
+  name: z.string().min(2, "Name too short").max(200).optional(),
+  code: z.string().max(40).nullable().optional(),
+  status: z.enum(["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED"]).optional(),
+  address: z.string().max(500).nullable().optional(),
+  tagline: z.string().max(200).nullable().optional(),
+  projectType: z.string().max(60).nullable().optional(),
+  logoUrl: z.string().url().max(2000).nullable().optional(),
+  startDate: z.string().nullable().optional(),
+  endDate: z.string().nullable().optional(),
+  actualStartDate: z.string().nullable().optional(),
+  projectedEndDate: z.string().nullable().optional(),
+});
 
-function parseDateOrNull(v: unknown): Date | null | undefined {
+function parseDateOrNull(v: string | null | undefined): Date | null | undefined {
   if (v === undefined) return undefined;
   if (v === null || v === "") return null;
-  const d = new Date(String(v));
+  const d = new Date(v);
   return isNaN(d.getTime()) ? undefined : d;
 }
 
@@ -26,24 +40,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/projects/[id]"
   const project = await prisma.project.findUnique({ where: { id } });
   if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
-  let body: {
-    name?: string;
-    code?: string | null;
-    status?: string;
-    address?: string | null;
-    tagline?: string | null;
-    projectType?: string | null;
-    logoUrl?: string | null;
-    startDate?: string | null;
-    endDate?: string | null;
-    actualStartDate?: string | null;
-    projectedEndDate?: string | null;
-  } = {};
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsed = await parseBody(req, PatchProjectSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
 
   const data: {
     name?: string;
@@ -59,17 +58,13 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/projects/[id]"
     projectedEndDate?: Date | null;
   } = {};
 
-  if (typeof body.name === "string") {
-    const n = body.name.trim();
-    if (n.length < 2) return NextResponse.json({ error: "Name too short" }, { status: 400 });
-    data.name = n;
-  }
-  if (body.code !== undefined) data.code = body.code === null ? null : String(body.code).trim() || null;
-  if (body.status !== undefined && VALID_STATUSES.has(body.status)) data.status = body.status;
-  if (body.address !== undefined) data.address = body.address === null ? null : String(body.address).trim() || null;
-  if (body.tagline !== undefined) data.tagline = body.tagline === null ? null : String(body.tagline).trim() || null;
-  if (body.projectType !== undefined) data.projectType = body.projectType === null ? null : String(body.projectType).trim() || null;
-  if (body.logoUrl !== undefined) data.logoUrl = body.logoUrl === null ? null : String(body.logoUrl).trim() || null;
+  if (body.name !== undefined) data.name = body.name.trim();
+  if (body.code !== undefined) data.code = body.code === null ? null : body.code.trim() || null;
+  if (body.status !== undefined) data.status = body.status;
+  if (body.address !== undefined) data.address = body.address === null ? null : body.address.trim() || null;
+  if (body.tagline !== undefined) data.tagline = body.tagline === null ? null : body.tagline.trim() || null;
+  if (body.projectType !== undefined) data.projectType = body.projectType === null ? null : body.projectType.trim() || null;
+  if (body.logoUrl !== undefined) data.logoUrl = body.logoUrl === null ? null : body.logoUrl.trim() || null;
 
   const start = parseDateOrNull(body.startDate);
   if (start !== undefined) data.startDate = start;

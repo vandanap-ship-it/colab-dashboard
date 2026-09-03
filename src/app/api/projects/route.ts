@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canCreateProject } from "@/lib/roles";
 import { isScopedUser } from "@/lib/modules";
+import { parseBody } from "@/lib/parseBody";
 
-const VALID_STATUSES = new Set(["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED"]);
+const PostProjectSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(200),
+  code: z.string().max(40).optional(),
+  status: z.enum(["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED"]).optional(),
+  startDate: z.string().datetime({ offset: true }).optional(),
+  endDate: z.string().datetime({ offset: true }).optional(),
+  address: z.string().max(500).optional(),
+  projectType: z.string().max(60).optional(),
+  logoUrl: z.string().url().max(2000).optional(),
+});
 
 export async function GET() {
   const session = await auth();
@@ -37,25 +48,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
-
-  const { name, code, status, startDate, endDate, address, projectType, logoUrl } = (body ?? {}) as {
-    name?: string;
-    code?: string;
-    status?: string;
-    startDate?: string;
-    endDate?: string;
-    address?: string;
-    projectType?: string;
-    logoUrl?: string;
-  };
-
-  const trimmed = (name ?? "").trim();
-  if (trimmed.length < 2) {
-    return NextResponse.json({ error: "Name must be at least 2 characters" }, { status: 400 });
-  }
-  const finalStatus = status && VALID_STATUSES.has(status) ? status : "PLANNING";
+  const parsed = await parseBody(req, PostProjectSchema);
+  if (!parsed.ok) return parsed.response;
+  const { name, code, status, startDate, endDate, address, projectType, logoUrl } = parsed.data;
+  const trimmed = name.trim();
+  const finalStatus = status ?? "PLANNING";
 
   const project = await prisma.project.create({
     data: {

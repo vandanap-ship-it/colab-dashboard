@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
@@ -10,8 +11,12 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/apiErrors";
+import { parseBody } from "@/lib/parseBody";
 
-const STATUSES = new Set(["IN_REVIEW", "PASSED", "REJECTED"]);
+const PatchInspectionSchema = z.object({
+  status: z.enum(["IN_REVIEW", "PASSED", "REJECTED"]),
+  rejectionReason: z.string().max(1000).optional(),
+});
 
 export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[id]">) {
   const session = await auth();
@@ -22,20 +27,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
   }
 
   const { id } = await ctx.params;
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest("Invalid JSON");
-  }
-
-  const { status, rejectionReason } = (body ?? {}) as {
-    status?: string;
-    rejectionReason?: string;
-  };
-  if (!status || !STATUSES.has(status)) {
-    return badRequest("Invalid status");
-  }
+  const parsed = await parseBody(req, PatchInspectionSchema);
+  if (!parsed.ok) return parsed.response;
+  const { status, rejectionReason } = parsed.data;
 
   try {
     const before = await prisma.inspection.findUnique({
