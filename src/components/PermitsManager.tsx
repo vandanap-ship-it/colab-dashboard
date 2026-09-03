@@ -11,6 +11,7 @@ import {
   type PermitCategory,
   type PermitStatus,
 } from "@/lib/permit";
+import TrashButton from "./TrashButton";
 
 export interface PermitRow {
   id: string;
@@ -112,6 +113,7 @@ export default function PermitsManager({ projectId, permits, users, canManage }:
                 <th className="text-left px-4 py-2 font-medium">Expires</th>
                 <th className="text-left px-4 py-2 font-medium">Status</th>
                 <th className="text-left px-4 py-2 font-medium">Owner</th>
+                {canManage && <th className="px-2 py-2 w-8" aria-label="Actions" />}
               </tr>
             </thead>
             <tbody>
@@ -142,6 +144,17 @@ export default function PermitsManager({ projectId, permits, users, canManage }:
                   <td className="px-4 py-3 text-stone-600 whitespace-nowrap">
                     {r.responsibleName ?? <span className="italic text-stone-400">—</span>}
                   </td>
+                  {canManage && (
+                    <td className="px-2 py-3 text-right">
+                      {/* Server enforces admin-only; non-admin managers see 403. */}
+                      <TrashButton
+                        url={`/api/permits/${r.id}`}
+                        kind="permit"
+                        label={r.name}
+                        onDeleted={() => router.refresh()}
+                      />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

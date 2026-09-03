@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import PhotoStrip from "./PhotoStrip";
+import TrashButton from "./TrashButton";
 import { formatDayMonthYear as fmt } from "@/lib/dates";
 
 type Item = { id: string; label: string; passed: boolean; notes: string | null; orderIndex: number };
@@ -194,6 +195,17 @@ export default function QAQCList({ projectId, canReview }: { projectId: string; 
                         </div>
                       </div>
                     )}
+                    {/* Trash — server enforces filler-or-admin. Non-filler
+                        non-admin users see a 403 which TrashButton surfaces. */}
+                    <div className="flex justify-end pt-1">
+                      <TrashButton
+                        url={`/api/inspections/${insp.id}`}
+                        kind="inspection"
+                        label={insp.title}
+                        showLabel
+                        onDeleted={load}
+                      />
+                    </div>
                   </div>
                 )}
               </li>
