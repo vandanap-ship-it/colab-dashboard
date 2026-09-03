@@ -7,7 +7,7 @@ import { canApproveExpense, canLogExpense, isAdmin } from "@/lib/roles";
 import { isScopedUser } from "@/lib/modules";
 import { allowedExpenseTransition, normalizeCategory, parseAmount } from "@/lib/expenses";
 import { badRequest, forbidden, handleApiError, notFound, unauthorized } from "@/lib/apiErrors";
-import { parseBody } from "@/lib/parseBody";
+import { parseBody, zDateString } from "@/lib/parseBody";
 import { checkConflict } from "@/lib/optimisticLock";
 
 const PatchExpenseSchema = z.object({
@@ -16,7 +16,7 @@ const PatchExpenseSchema = z.object({
   category: z.string().max(60).optional(),
   description: z.string().min(2).max(500).optional(),
   amount: z.number().finite().positive().max(100_000_000).optional(),
-  date: z.string().datetime({ offset: true }).optional(),
+  date: zDateString.optional(),
   paidTo: z.string().max(200).optional(),
   notes: z.string().max(2000).optional(),
   expectedUpdatedAt: z.string().optional(),

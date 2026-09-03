@@ -13,7 +13,7 @@ import {
   validateAnswer,
   type RfiStatus,
 } from "@/lib/rfi";
-import { parseBody } from "@/lib/parseBody";
+import { parseBody, zDateString } from "@/lib/parseBody";
 import { checkConflict } from "@/lib/optimisticLock";
 
 const PatchRfiSchema = z.object({
@@ -21,7 +21,7 @@ const PatchRfiSchema = z.object({
   answer: z.string().max(8000).optional(),
   status: z.enum(RFI_STATUSES).optional(),
   priority: z.enum(RFI_PRIORITIES).optional(),
-  dueDate: z.string().datetime({ offset: true }).nullable().optional(),
+  dueDate: zDateString.nullable().optional(),
   expectedUpdatedAt: z.string().optional(),
 });
 import {

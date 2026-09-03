@@ -8,7 +8,7 @@ import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { milestoneCompletionEmail, sendEmail } from "@/lib/email";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { isValidReasonCode } from "@/lib/hindranceReasons";
-import { parseBody } from "@/lib/parseBody";
+import { parseBody, zDateString } from "@/lib/parseBody";
 
 const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
@@ -98,7 +98,7 @@ export async function GET(req: Request) {
 //   - notes: 2000 chars (a full paragraph).
 const PostProgressSchema = z.object({
   wbsNodeId: z.string().min(1, "wbsNodeId required"),
-  date: z.string().datetime({ offset: true }).optional(),
+  date: zDateString.optional(),
   type: z.enum(["LABOUR_SUPPLY", "PRW", "MISC"]).optional(),
   achievedQuantity: z.number().finite().min(0).max(1_000_000).optional(),
   cumulativeQuantity: z.number().finite().min(0).max(1_000_000).optional(),

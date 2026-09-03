@@ -4,14 +4,14 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canCreateProject } from "@/lib/roles";
 import { isScopedUser } from "@/lib/modules";
-import { parseBody } from "@/lib/parseBody";
+import { parseBody, zDateString } from "@/lib/parseBody";
 
 const PostProjectSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(200),
   code: z.string().max(40).optional(),
   status: z.enum(["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED"]).optional(),
-  startDate: z.string().datetime({ offset: true }).optional(),
-  endDate: z.string().datetime({ offset: true }).optional(),
+  startDate: zDateString.optional(),
+  endDate: zDateString.optional(),
   address: z.string().max(500).optional(),
   projectType: z.string().max(60).optional(),
   logoUrl: z.string().url().max(2000).optional(),

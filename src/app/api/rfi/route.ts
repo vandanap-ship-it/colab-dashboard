@@ -14,7 +14,7 @@ import {
   validateCreateRfi,
   type RfiStatus,
 } from "@/lib/rfi";
-import { parseBody } from "@/lib/parseBody";
+import { parseBody, zDateString } from "@/lib/parseBody";
 
 // Top-level shape guard. `validateCreateRfi` does deeper semantic checks
 // (subject length, category-vs-project rules, etc.) — kept for now.
@@ -26,7 +26,7 @@ const PostRfiSchema = z.object({
   priority: z.enum(RFI_PRIORITIES).optional(),
   assignedToId: z.string().min(1).nullable().optional(),
   wbsNodeId: z.string().min(1).nullable().optional(),
-  dueDate: z.string().datetime({ offset: true }).nullable().optional(),
+  dueDate: zDateString.nullable().optional(),
   photoUrls: z.array(z.string().url()).max(6).optional(),
   idempotencyKey: z.string().max(120).optional(),
 });

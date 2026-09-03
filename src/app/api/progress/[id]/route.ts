@@ -7,7 +7,7 @@ import { recordAudit, diffSummary } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { milestoneCompletionEmail, sendEmail } from "@/lib/email";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
-import { parseBody } from "@/lib/parseBody";
+import { parseBody, zDateString } from "@/lib/parseBody";
 import { checkConflict } from "@/lib/optimisticLock";
 import {
   badRequest,
@@ -18,7 +18,7 @@ import {
 } from "@/lib/apiErrors";
 
 const PatchProgressSchema = z.object({
-  date: z.string().datetime({ offset: true }).optional(),
+  date: zDateString.optional(),
   type: z.enum(["LABOUR_SUPPLY", "PRW", "MISC"]).optional(),
   achievedQuantity: z.number().finite().min(0).max(1_000_000).optional(),
   cumulativeQuantity: z.number().finite().min(0).max(1_000_000).optional(),

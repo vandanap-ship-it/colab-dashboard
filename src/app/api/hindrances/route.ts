@@ -6,13 +6,13 @@ import { recordAudit } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { isValidReasonCode } from "@/lib/hindranceReasons";
-import { parseBody } from "@/lib/parseBody";
+import { parseBody, zDateString } from "@/lib/parseBody";
 
 const PostHindranceSchema = z.object({
   projectId: z.string().min(1),
   wbsNodeId: z.string().min(1).nullable().optional(),
   description: z.string().min(3, "Description too short").max(2000),
-  startDate: z.string().datetime({ offset: true }).optional(),
+  startDate: zDateString.optional(),
   daysImpact: z.number().finite().min(0).max(365).optional(),
   photoUrls: z.array(z.string().url()).max(6).optional(),
   reasonCode: z.string().max(40).optional(),

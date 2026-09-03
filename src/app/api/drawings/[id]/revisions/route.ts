@@ -12,9 +12,12 @@ import { parseBody } from "@/lib/parseBody";
 
 const PostRevisionSchema = z.object({
   revisionLabel: z.string().min(1).max(20),
-  fileUrl: z.string().url(),
+  // Not z.string().url() — the /api/upload pipeline returns relative
+  // paths like `/uploads/drawings-<id>/file.pdf` that are valid but not
+  // absolute URLs. Provenance is enforced by `isOwnUploadUrl` below.
+  fileUrl: z.string().min(1).max(2000),
   fileName: z.string().min(1).max(200),
-  issuedDate: z.string().datetime({ offset: true }).optional(),
+  issuedDate: z.string().optional(),
   notes: z.string().max(2000).optional(),
 });
 

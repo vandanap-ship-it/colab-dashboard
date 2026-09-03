@@ -8,14 +8,14 @@ import { isScopedUser } from "@/lib/modules";
 import { normalizeCategory, parseAmount } from "@/lib/expenses";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { badRequest, forbidden, unauthorized } from "@/lib/apiErrors";
-import { parseBody } from "@/lib/parseBody";
+import { parseBody, zDateString } from "@/lib/parseBody";
 
 const PostExpenseSchema = z.object({
   projectId: z.string().min(1),
   category: z.string().max(60).optional(),
   description: z.string().min(2, "Description too short").max(500),
   amount: z.number().finite().positive().max(100_000_000),
-  date: z.string().datetime({ offset: true }).optional(),
+  date: zDateString.optional(),
   paidTo: z.string().max(200).optional(),
   notes: z.string().max(2000).optional(),
   photoUrls: z.array(z.string().url()).max(6).optional(),

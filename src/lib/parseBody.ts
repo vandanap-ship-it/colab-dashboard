@@ -1,6 +1,20 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+/**
+ * Permissive date-string validator. Accepts anything `new Date()` can parse,
+ * which covers both YYYY-MM-DD (what most of our client forms send from a
+ * `<input type="date">`) AND full ISO 8601 timestamps.
+ *
+ * Use in place of `z.string().datetime({ offset: true })` when the field can
+ * legitimately arrive in either shape — mixing the two was our biggest
+ * source of 400s during the Tier 2.1 rollout.
+ */
+export const zDateString = z.string().refine(
+  (v) => !Number.isNaN(new Date(v).getTime()),
+  { message: "Invalid date" },
+);
+
 // Shared helper for API-route request-body validation.
 //
 // Usage:

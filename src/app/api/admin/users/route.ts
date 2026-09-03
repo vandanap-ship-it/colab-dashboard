@@ -10,7 +10,9 @@ import { parseBody } from "@/lib/parseBody";
 const VALID_ROLES = new Set<string>(Object.values(ROLES));
 
 const PostUserSchema = z.object({
-  username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9._-]+$/, "Username must be lowercase letters/numbers/._-"),
+  // 60 chars is generous headroom — long enough for `test.assignee.<timestamp>-<rand>`
+  // patterns from the E2E suite AND real "firstname.lastname@subteam" style names.
+  username: z.string().min(3).max(60).regex(/^[a-zA-Z0-9._-]+$/, "Username must be lowercase letters/numbers/._-"),
   name: z.string().min(2).max(120),
   role: z.string().refine((v) => VALID_ROLES.has(v), { message: "Invalid role" }),
   password: z.string().min(6).max(200),
