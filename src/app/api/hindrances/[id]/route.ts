@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { recordAudit, diffSummary } from "@/lib/audit";
+import { checkConflict } from "@/lib/optimisticLock";
 import {
   badRequest,
   forbidden,
@@ -28,7 +29,11 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/hindrances/[id
   } catch {
     return badRequest("Invalid JSON");
   }
-  const { status, daysImpact } = (body ?? {}) as { status?: string; daysImpact?: number };
+  const { status, daysImpact, expectedUpdatedAt } = (body ?? {}) as {
+    status?: string;
+    daysImpact?: number;
+    expectedUpdatedAt?: string;
+  };
 
   if (status === "RESOLVED" && !canReview(session.user.role)) {
     return forbidden();
@@ -48,9 +53,18 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/hindrances/[id
   try {
     const before = await prisma.hindrance.findUnique({
       where: { id },
-      select: { id: true, projectId: true, status: true, daysImpact: true },
+      select: { id: true, projectId: true, status: true, daysImpact: true, updatedAt: true },
     });
     if (!before) return notFound();
+    // Optimistic-lock guard — reject if someone else edited between the
+    // client's read and this write. No-op when the client didn't send
+    // expectedUpdatedAt (backward compat during rollout).
+    const conflict = checkConflict(expectedUpdatedAt, before.updatedAt, {
+      id: before.id,
+      status: before.status,
+      daysImpact: before.daysImpact,
+    });
+    if (!conflict.ok) return conflict.response!;
     const hindrance = await prisma.hindrance.update({
       where: { id },
       data,

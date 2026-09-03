@@ -5,6 +5,7 @@ import { canReview } from "@/lib/roles";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { assignmentEmail, sendEmail } from "@/lib/email";
+import { checkConflict } from "@/lib/optimisticLock";
 import {
   badRequest,
   forbidden,
@@ -31,9 +32,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/concerns/[id]"
   } catch {
     return badRequest("Invalid JSON");
   }
-  const { status, assignedToId } = (body ?? {}) as {
+  const { status, assignedToId, expectedUpdatedAt } = (body ?? {}) as {
     status?: string;
     assignedToId?: string | null;
+    expectedUpdatedAt?: string;
   };
 
   // Permission rules:
@@ -71,9 +73,18 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/concerns/[id]"
   try {
     const before = await prisma.concern.findUnique({
       where: { id },
-      select: { id: true, projectId: true, status: true, assignedToId: true },
+      select: { id: true, projectId: true, status: true, assignedToId: true, updatedAt: true },
     });
     if (!before) return notFound();
+    // Optimistic-lock guard: reject if someone else edited this concern
+    // between the client's read and this write. No-op when the client
+    // didn't send expectedUpdatedAt (older clients).
+    const conflict = checkConflict(expectedUpdatedAt, before.updatedAt, {
+      id: before.id,
+      status: before.status,
+      assignedToId: before.assignedToId,
+    });
+    if (!conflict.ok) return conflict.response!;
     const concern = await prisma.concern.update({
       where: { id },
       data,

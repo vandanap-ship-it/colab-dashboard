@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { assignmentEmail, sendEmail } from "@/lib/email";
+import { checkConflict } from "@/lib/optimisticLock";
 import {
   badRequest,
   forbidden,
@@ -27,9 +28,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
   } catch {
     return badRequest("Invalid JSON");
   }
-  const { status, assignedToId } = (body ?? {}) as {
+  const { status, assignedToId, expectedUpdatedAt } = (body ?? {}) as {
     status?: string;
     assignedToId?: string | null;
+    expectedUpdatedAt?: string;
   };
 
   // Status changes (OPEN → RESOLVED, etc.) and reassignment are reviewer-only.
@@ -63,11 +65,20 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
   try {
     const before = await prisma.issue.findUnique({
       where: { id },
-      select: { id: true, projectId: true, status: true, assignedToId: true },
+      select: { id: true, projectId: true, status: true, assignedToId: true, updatedAt: true },
     });
     // findUnique is soft-delete filtered, so a null here means the snag is
     // missing or trashed — don't silently mutate it.
     if (!before) return notFound();
+    // Optimistic-lock guard — reject if someone else edited between the
+    // client's read and this write. No-op when the client didn't send
+    // expectedUpdatedAt (backward compat during rollout).
+    const conflict = checkConflict(expectedUpdatedAt, before.updatedAt, {
+      id: before.id,
+      status: before.status,
+      assignedToId: before.assignedToId,
+    });
+    if (!conflict.ok) return conflict.response!;
     const issue = await prisma.issue.update({
       where: { id },
       data,

@@ -140,6 +140,22 @@ Compared the deploy vs a live render of `scripts/gen_wk23.py` on the same fixtur
 
 8. **§3 per-item Delay reason column blank on the deploy.** Python shows "Change orders" per row for the villas where a reason is logged; ours shows "not recorded" on every row. The `reasonByMilestone` lookup in `weeklyReportServer.ts` isn't finding matches — likely a small server-side fix (wbsNode → villaMilestone join not populating), separate from the §5 aggregation fix that just landed.
 
+### Concurrency guard rollout (in progress, Tier 1.5)
+
+Optimistic-locking helper landed at `src/lib/optimisticLock.ts` and wired into `PATCH /api/concerns/[id]`, `PATCH /api/issues/[id]`, `PATCH /api/hindrances/[id]`. Same treatment still needed on 9 more PATCH endpoints:
+
+- `/api/rfi/[id]`
+- `/api/progress/[id]`
+- `/api/drawings/[id]`
+- `/api/expenses/[id]`
+- `/api/permits/[id]`
+- `/api/projects/[id]`
+- `/api/inspections/[id]`
+- `/api/bills/[id]`
+- `/api/admin/users/[id]`
+
+Server-side pattern is a 4-line diff per route: select `updatedAt` in the pre-read, take `expectedUpdatedAt` off the request body, call `checkConflict(...)`. Client-side: every edit form must echo the ISO `updatedAt` it received back to the server on save. Track adoption via logs added inside `checkConflict` when clients still don't send the field.
+
 ## V2 — First quarter after launch (Sept–Nov 2026)
 
 ### QA/QC team
