@@ -29,9 +29,20 @@ const SIDDHI_BASE_URL =
 export async function GET(req: NextRequest) {
   // Vercel Cron passes a Bearer token that matches CRON_SECRET. Reject anything
   // else so this endpoint can't be triggered anonymously.
+  //
+  // Fail closed when the env var isn't set — the previous check was
+  // `if (expected && ...)` which left the endpoint open to anyone if
+  // CRON_SECRET was ever missing/rotated-empty. For a cron endpoint that
+  // does N project queries and sends emails, "open to anyone" is unacceptable.
   const authHeader = req.headers.get("authorization");
   const expected = process.env.CRON_SECRET;
-  if (expected && authHeader !== `Bearer ${expected}`) {
+  if (!expected) {
+    return NextResponse.json(
+      { error: "CRON_SECRET not configured on this deployment." },
+      { status: 503 },
+    );
+  }
+  if (authHeader !== `Bearer ${expected}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
