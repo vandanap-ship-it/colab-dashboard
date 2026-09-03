@@ -185,9 +185,11 @@ Remaining piece on the client side: add ✕/Remove affordances in the desktop li
 Walked every navigable route on the deploy as admin. Zero 500s across 34 tested routes. Real bugs found:
 
 **Critical perf**
-- `/reports/master` — **~10 seconds**. Two 14k-row WBSNode fetches per render:
-  - Page level (location-path lookup): **fixed** in commit `efa7472` — now walks only ancestors of highlight rows (~200 rows).
-  - `getMasterReport()` in src/lib/reports.ts:667 — still full-tree scan. Used for phase totals, leaf detection, and plannedSum/achievedSum reductions across every leaf. Real fix requires refactoring the reductions to Postgres SUM/MIN/MAX aggregates (SELECT SUM(percentComplete) WHERE isLeaf...) instead of pulling every row to the app. ~1 day of work. Not a demo blocker — page is functional, just slow.
+- `/reports/master` — **~10 seconds**. Attempted fixes so far:
+  - Page-level location-path lookup: **fixed** in `efa7472` (walks only ancestors of highlight rows, ~200 rows instead of 14k).
+  - `getMasterReport()`, `getWeeklyReport()`, `getScorecard()` wrapped in `unstable_cache` with 60s TTL in `0e6a1ca` + `7ad8f02`. **Measured no improvement live** — either Vercel's Data Cache isn't enabled on this project, or dynamic-route rendering bypasses the cache. Worth checking Vercel dashboard → Data Cache to confirm.
+  - Real perf fix still open: refactor `getMasterReport`'s reductions to Postgres `SUM/MIN/MAX` aggregates instead of pulling every leaf row. ~1 day. Punchlisted for the perf pass.
+- Not a demo blocker — page is functional, just slow.
 
 **Noticeable perf** (functional but slow — > 1.5s server render):
 - `/reports/weekly` — 2.8s
