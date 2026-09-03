@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ProjectSummary } from "@/app/api/projects/summary/route";
 
 export default function SwitchProjectModal({
@@ -58,8 +59,13 @@ export default function SwitchProjectModal({
   }, [projects]);
 
   if (!open) return null;
+  if (typeof document === "undefined") return null; // SSR guard for the portal
 
-  return (
+  // Portal to <body> so the modal escapes any ancestor that establishes a
+  // containing block for `position: fixed` — notably Navbar's
+  // `sticky top-0 backdrop-blur-md`, which clips a nested `fixed inset-0`
+  // to the navbar's 56px band instead of the viewport.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-stone-900/40 backdrop-blur-sm overflow-y-auto"
       onClick={onClose}
@@ -171,6 +177,7 @@ export default function SwitchProjectModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
