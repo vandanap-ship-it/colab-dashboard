@@ -14,11 +14,8 @@ import {
   unauthorized,
 } from "@/lib/apiErrors";
 import { parseBody } from "@/lib/parseBody";
+import { checkConflict } from "@/lib/optimisticLock";
 
-// Note: Permit has no `updatedAt` in its Prisma schema, so this route can't
-// participate in the optimistic-lock (checkConflict) pattern the other
-// PATCH endpoints use. Concurrent-edit protection here would require a
-// schema migration to add updatedAt — punchlisted.
 const PatchPermitSchema = z.object({
   status: z.enum(PERMIT_STATUSES).optional(),
   expiryDate: z.string().nullable().optional(),
@@ -26,6 +23,9 @@ const PatchPermitSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
   documentUrl: z.string().url().max(2000).nullable().optional(),
   responsibleUserId: z.string().min(1).nullable().optional(),
+  // Optional so callers that predate the guard keep working; when supplied,
+  // a mismatched timestamp turns into a 409 the client can reload against.
+  expectedUpdatedAt: z.string().optional(),
 });
 
 const PERMIT_INCLUDE = {
@@ -59,6 +59,11 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/permits/[id]">
     const parsed = await parseBody(req, PatchPermitSchema);
     if (!parsed.ok) return parsed.response;
     const patch = parsed.data;
+
+    const conflict = checkConflict(patch.expectedUpdatedAt, existing.updatedAt, {
+      id, name: existing.name, status: existing.status,
+    });
+    if (!conflict.ok) return conflict.response!;
 
     const data: Record<string, unknown> = {};
     const changes: string[] = [];
