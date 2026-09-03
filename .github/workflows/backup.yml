@@ -90,10 +90,16 @@ jobs:
           # `command not found`. Cost us a workflow run to learn this one.
           MONTH=$(date -u +'%Y-%m')
           BLOB_PATH="backups/${MONTH}/${BACKUP_FILE}"
+          # `x-access: private` is required when the target Blob store is
+          # configured as Private. Without it, Vercel returns 400
+          # `Cannot use public access on a private store`. The header is
+          # ignored (or a no-op) for public stores, so it's safe to set
+          # unconditionally — future-proofs against store type changes.
           RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
             -H "authorization: Bearer $BLOB_READ_WRITE_TOKEN" \
             -H "x-content-type: application/gzip" \
             -H "x-add-random-suffix: 0" \
+            -H "x-access: private" \
             --data-binary "@${BACKUP_FILE}" \
             "https://blob.vercel-storage.com/${BLOB_PATH}")
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
