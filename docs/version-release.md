@@ -140,6 +140,23 @@ Compared the deploy vs a live render of `scripts/gen_wk23.py` on the same fixtur
 
 8. **§3 per-item Delay reason column blank on the deploy.** Python shows "Change orders" per row for the villas where a reason is logged; ours shows "not recorded" on every row. The `reasonByMilestone` lookup in `weeklyReportServer.ts` isn't finding matches — likely a small server-side fix (wbsNode → villaMilestone join not populating), separate from the §5 aggregation fix that just landed.
 
+### Zod migration rollout (in progress, Tier 2.1)
+
+`parseBody` + zod is the standard for API request bodies. Migrated so far: `/api/progress`, `/api/hindrances` (POST), `/api/concerns` (POST), `/api/issues` (POST), `/api/projects/[id]/contractor-assign`. Remaining ~29 write endpoints (bills, drawings, expenses, permits, projects, rfi, inspections, manpower-entries, admin/*) still use hand-narrowed casts. Same 15-line refactor per route — schema at top, `parseBody(req, Schema)` in place of `req.json()` + inline validation. Track adoption via presence of `import { z } from "zod"` in the route file.
+
+### Rate limiting — recommend enabling Vercel Firewall (Tier 2.4)
+
+Middleware ships a per-instance burst-limit (100 req / 10 sec / IP on `/api/*`) that catches obvious script hammering, but Vercel's serverless model means separate instances have separate counters — sustained abuse from many IPs slips through. Fix in Vercel dashboard: **Firewall → Rate Limiting → Create rule**: match `/api/*`, threshold ~600 req/min per IP, action = challenge or block. Free tier includes basic rate limiting; higher-scale needs a paid Attack Challenge Mode subscription.
+
+### Sentry error monitoring (Tier 2.5 — needs DSN)
+
+Error boundaries at `src/app/error.tsx` and `src/app/global-error.tsx` already call `window.Sentry?.captureException?.()`. No-op until the SDK is installed. Once `NEXT_PUBLIC_SENTRY_DSN` is set in Vercel env vars:
+
+  npm install @sentry/nextjs
+  npx @sentry/wizard@latest -i nextjs
+
+That auto-generates `sentry.client.config.ts` + `sentry.server.config.ts` + edge config + `instrumentation.ts` and reads the DSN from the env var. The boundaries pick up the global `window.Sentry` automatically — no code changes needed.
+
 ### Concurrency guard rollout (in progress, Tier 1.5)
 
 Optimistic-locking helper landed at `src/lib/optimisticLock.ts` and wired into `PATCH /api/concerns/[id]`, `PATCH /api/issues/[id]`, `PATCH /api/hindrances/[id]`. Same treatment still needed on 9 more PATCH endpoints:

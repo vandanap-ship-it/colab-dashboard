@@ -19,6 +19,17 @@ export default function Error({
     // Surface to the browser console (and any error monitoring) so we can
     // diagnose. The digest links to the server-side stack in Vercel logs.
     console.error("[route error]", error);
+    // Sentry hook — no-op until NEXT_PUBLIC_SENTRY_DSN is set and the SDK
+    // is installed. Ready to switch on with a one-line change once the DSN
+    // is in Vercel env vars.
+    if (typeof window !== "undefined") {
+      const w = window as unknown as {
+        Sentry?: { captureException?: (e: unknown, opts?: unknown) => void };
+      };
+      w.Sentry?.captureException?.(error, {
+        tags: { source: "route-error-boundary", digest: error.digest },
+      });
+    }
   }, [error]);
 
   return (
