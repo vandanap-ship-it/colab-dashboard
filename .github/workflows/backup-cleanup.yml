@@ -1,0 +1,82 @@
+name: One-off backup cleanup
+
+# Manual trigger only — lists everything under `backups/` in the Blob store the
+# BLOB_READ_WRITE_TOKEN secret points at, and deletes it.
+#
+# Purpose: after moving backups from the shared `siddhi-photos` (public) store
+# to a dedicated private store, run this workflow ONCE while the secret still
+# points at the OLD store, so the old public backup files are wiped before we
+# rotate the token.
+#
+# Safe to leave in the repo — no schedule, requires explicit workflow_dispatch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type PURGE-BACKUPS to confirm you want to delete every file under backups/ in the store the current token points at."
+        required: true
+        default: ""
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Guard rail
+        run: |
+          if [ "${{ inputs.confirm }}" != "PURGE-BACKUPS" ]; then
+            echo "::error::Confirmation string wrong. Aborting."
+            exit 1
+          fi
+
+      - name: List and delete under backups/
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$BLOB_READ_WRITE_TOKEN" ]; then
+            echo "::error::BLOB_READ_WRITE_TOKEN not set."
+            exit 1
+          fi
+
+          # Vercel Blob list API — GET https://blob.vercel-storage.com?prefix=backups/
+          # returns { blobs: [{ url, pathname, size, uploadedAt }, ...] }
+          echo "Listing files under backups/ ..."
+          LIST=$(curl -s -X GET "https://blob.vercel-storage.com?prefix=backups/&limit=1000" \
+            -H "authorization: Bearer $BLOB_READ_WRITE_TOKEN")
+          COUNT=$(echo "$LIST" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('blobs',[])))")
+          echo "Found $COUNT file(s)."
+          if [ "$COUNT" = "0" ]; then
+            echo "Nothing to delete."
+            exit 0
+          fi
+
+          echo "$LIST" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          for b in d.get('blobs', []):
+            print(f\"  - {b['pathname']}  ({b['size']} bytes)  {b['url']}\")
+          "
+
+          # Vercel Blob delete API — POST /delete with the URL as body
+          echo "Deleting..."
+          echo "$LIST" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          urls = [b['url'] for b in d.get('blobs', [])]
+          print(json.dumps({'urls': urls}))
+          " > /tmp/delete-payload.json
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://blob.vercel-storage.com/delete" \
+            -H "authorization: Bearer $BLOB_READ_WRITE_TOKEN" \
+            -H "content-type: application/json" \
+            -d @/tmp/delete-payload.json)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          if [ "$HTTP_CODE" -ge 400 ]; then
+            echo "::error::Delete failed HTTP $HTTP_CODE: $BODY"
+            exit 1
+          fi
+          echo "Deleted $COUNT file(s)."
