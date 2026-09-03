@@ -4,10 +4,12 @@ import { PrismaPg } from "@prisma/adapter-pg";
 type ExtendedClient = ReturnType<typeof createClient>;
 const globalForPrisma = globalThis as unknown as { prisma?: ExtendedClient };
 
-// Models that support soft-delete via deletedAt: progressEntry, issue,
-// hindrance, concern, inspection, subContractorBill (see the per-model query
+// Models that support soft-delete via deletedAt (see the per-model query
 // hooks below). Reads against them automatically exclude soft-deleted rows
 // unless the caller passes an explicit deletedAt in `where`.
+// Current coverage: progressEntry, issue, hindrance, concern, inspection,
+// subContractorBill, expense, designDrawing, rfi, permit, manpowerEntry,
+// tradePlan — everything on the schema with a deletedAt column.
 const READ_OPERATIONS = new Set([
   "findMany",
   "findFirst",
@@ -88,6 +90,26 @@ function createClient() {
         },
       },
       designDrawing: {
+        async $allOperations({ operation, args, query }) {
+          return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
+        },
+      },
+      rfi: {
+        async $allOperations({ operation, args, query }) {
+          return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
+        },
+      },
+      permit: {
+        async $allOperations({ operation, args, query }) {
+          return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
+        },
+      },
+      manpowerEntry: {
+        async $allOperations({ operation, args, query }) {
+          return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
+        },
+      },
+      tradePlan: {
         async $allOperations({ operation, args, query }) {
           return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
         },

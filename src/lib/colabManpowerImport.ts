@@ -268,7 +268,14 @@ export async function importColabManpower(
         stats.manpowerEntriesCreated++;
         continue;
       }
-      const existing = await prisma.manpowerEntry.findUnique({
+      // Upsert (not findUnique) so that a trashed row for the same
+      // (project, contractor, trade, date) is UPDATED and un-trashed rather
+      // than crashing the import on the unique-composite constraint. The
+      // soft-delete extension filters read operations but leaves upsert
+      // alone, so the where clause matches trashed rows too. Colab is the
+      // authoritative source for a re-sync — treating a re-imported day
+      // as a restore-and-update is the least-surprising behavior.
+      const upserted = await prisma.manpowerEntry.upsert({
         where: {
           projectId_contractorId_trade_entryDate: {
             projectId,
@@ -277,26 +284,26 @@ export async function importColabManpower(
             entryDate: cell.date,
           },
         },
-        select: { id: true },
+        create: {
+          projectId,
+          contractorId: contractor.id,
+          trade,
+          entryDate: cell.date,
+          actualCount: cell.actual,
+          createdById: options.createdById,
+        },
+        update: {
+          actualCount: cell.actual,
+          // Harmless no-op on rows that are already live; on a trashed
+          // row this restores it since the import declares it real again.
+          deletedAt: null,
+        },
+        select: { createdAt: true, updatedAt: true },
       });
-      if (existing) {
-        await prisma.manpowerEntry.update({
-          where: { id: existing.id },
-          data: { actualCount: cell.actual },
-        });
-        stats.manpowerEntriesUpdated++;
-      } else {
-        await prisma.manpowerEntry.create({
-          data: {
-            projectId,
-            contractorId: contractor.id,
-            trade,
-            entryDate: cell.date,
-            actualCount: cell.actual,
-            createdById: options.createdById,
-          },
-        });
+      if (upserted.createdAt.getTime() === upserted.updatedAt.getTime()) {
         stats.manpowerEntriesCreated++;
+      } else {
+        stats.manpowerEntriesUpdated++;
       }
     }
   }
