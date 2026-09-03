@@ -82,6 +82,7 @@ export async function DELETE(
   if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
   if (!project.masterPlanUrl) return NextResponse.json({ ok: true });
 
+  const previousUrl = project.masterPlanUrl;
   await prisma.project.update({
     where: { id: projectId },
     data: { masterPlanUrl: null },
@@ -93,6 +94,11 @@ export async function DELETE(
     entityType: "Project",
     entityId: projectId,
     summary: `Master plan removed for ${project.name}`,
+    // Preserve the URL so an accidental delete is recoverable — the Blob file
+    // itself is never deleted, so re-linking the project to `previousUrl`
+    // fully restores. Without this, a "wait, that was the wrong project"
+    // moment can only be fixed by re-uploading the file.
+    changes: { previousUrl },
   });
   return NextResponse.json({ ok: true });
 }

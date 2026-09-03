@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
+import { recordAudit } from "@/lib/audit";
 
 async function summarise() {
   const [
@@ -86,6 +87,22 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  // Production guard. This endpoint hard-deletes all progress logs, hindrances,
+  // concerns, issues, inspections and their photos across every project. Once
+  // real users are on the tool that is unacceptable data-loss surface, even
+  // for an authenticated admin. Require an explicit env var to be set on the
+  // running server before the deletion path is reachable — a compromised
+  // admin session by itself can't wipe prod.
+  if (process.env.ALLOW_DATA_WIPE !== "yes") {
+    return NextResponse.json(
+      {
+        error:
+          "Disabled on this deployment. Set ALLOW_DATA_WIPE=yes on the server (and restart) to enable — intended for pre-launch test-data cleanup only.",
+      },
+      { status: 403 },
+    );
+  }
+
   let body: { confirm?: string; resetWbs?: boolean } = {};
   try { body = await req.json(); } catch {}
 
@@ -153,5 +170,18 @@ export async function POST(req: Request) {
   });
 
   const after = await summarise();
+
+  // Audit even though this endpoint doesn't scope by project — one row per
+  // wipe, entityType "Project", entityId "*" is a coarse trail. If someone
+  // ever asks "who wiped what and when" this is the only surviving evidence.
+  await recordAudit({
+    userId: session.user.id,
+    action: "DELETE",
+    entityType: "Project",
+    entityId: "*",
+    summary: "Cleared all test data (progress + hindrances + concerns + issues + inspections + photos)",
+    changes: { deleted: result.deleted, reset: result.reset, before: before.wiping },
+  });
+
   return NextResponse.json({ mode: "executed", before, result, after });
 }
