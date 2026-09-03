@@ -98,7 +98,10 @@ jobs:
           # NB: BLOB_PATH, not PATH — assigning to $PATH would nuke the shell's
           # binary search path (curl, node) and error with "command not found".
           MONTH=$(date -u +'%Y-%m')
-          BLOB_PATH="backups/${MONTH}/${BACKUP_FILE}"
+          # Must `export` so the node subprocess inherits these — the local
+          # BLOB_PATH= assignment stays in the shell without export.
+          export BLOB_PATH="backups/${MONTH}/${BACKUP_FILE}"
+          export BACKUP_FILE
           npm install --silent --no-save --prefix /tmp/blob-uploader @vercel/blob
           BLOB_URL=$(node -e "
             const { put } = require('/tmp/blob-uploader/node_modules/@vercel/blob');
@@ -121,7 +124,7 @@ jobs:
                 process.exit(1);
               }
             })();
-          " BACKUP_FILE="$BACKUP_FILE" BLOB_PATH="$BLOB_PATH")
+          ")
           echo "BLOB_URL=${BLOB_URL}" >> $GITHUB_ENV
           echo "Uploaded to: ${BLOB_URL}"
 
