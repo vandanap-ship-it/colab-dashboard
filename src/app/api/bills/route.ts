@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
@@ -8,10 +9,32 @@ import {
   parseBillDate,
   parseTaxPercent,
   withTotals,
-  type BillLineInput,
 } from "@/lib/billing";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { badRequest, forbidden, unauthorized } from "@/lib/apiErrors";
+import { parseBody } from "@/lib/parseBody";
+
+const BillLineSchema = z.object({
+  type: z.string().max(40).optional(),
+  description: z.string().max(500).optional(),
+  wbsNodeId: z.string().min(1).nullable().optional(),
+  quantity: z.number().finite().nullable().optional(),
+  unit: z.string().max(20).nullable().optional(),
+  rate: z.number().finite().nullable().optional(),
+  amount: z.number().finite().nullable().optional(),
+});
+
+const PostBillSchema = z.object({
+  projectId: z.string().min(1),
+  contractorId: z.string().min(1),
+  title: z.string().min(3).max(200),
+  periodStart: z.string().optional(),
+  periodEnd: z.string().optional(),
+  notes: z.string().max(2000).optional(),
+  taxPercent: z.number().finite().min(0).max(100).optional(),
+  lines: z.array(BillLineSchema).max(200).optional(),
+  idempotencyKey: z.string().max(120).optional(),
+});
 
 const billInclude = {
   contractor: { select: { id: true, name: true } },
@@ -49,29 +72,11 @@ export async function POST(req: Request) {
     return forbidden("Your account can't prepare bills.");
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest("Invalid JSON");
-  }
-
-  const { projectId, contractorId, title, periodStart, periodEnd, notes, taxPercent, lines } =
-    (body ?? {}) as {
-      projectId?: string;
-      contractorId?: string;
-      title?: string;
-      periodStart?: string;
-      periodEnd?: string;
-      notes?: string;
-      taxPercent?: number;
-      lines?: BillLineInput[];
-    };
-
-  if (!projectId) return badRequest("projectId required");
-  if (!contractorId) return badRequest("contractorId required");
-  const t = (title ?? "").trim();
-  if (t.length < 3) return badRequest("Title too short");
+  const parsed = await parseBody(req, PostBillSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+  const { projectId, contractorId, title, periodStart, periodEnd, notes, taxPercent, lines } = body;
+  const t = title.trim();
 
   // The contractor must belong to this project (no cross-project bills).
   const contractor = await prisma.contractor.findUnique({

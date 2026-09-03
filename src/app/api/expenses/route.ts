@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
@@ -7,6 +8,19 @@ import { isScopedUser } from "@/lib/modules";
 import { normalizeCategory, parseAmount } from "@/lib/expenses";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { badRequest, forbidden, unauthorized } from "@/lib/apiErrors";
+import { parseBody } from "@/lib/parseBody";
+
+const PostExpenseSchema = z.object({
+  projectId: z.string().min(1),
+  category: z.string().max(60).optional(),
+  description: z.string().min(2, "Description too short").max(500),
+  amount: z.number().finite().positive().max(100_000_000),
+  date: z.string().datetime({ offset: true }).optional(),
+  paidTo: z.string().max(200).optional(),
+  notes: z.string().max(2000).optional(),
+  photoUrls: z.array(z.string().url()).max(6).optional(),
+  idempotencyKey: z.string().max(120).optional(),
+});
 
 /**
  * Any internal member who can log or approve may view expenses. Scoped external
@@ -52,35 +66,14 @@ export async function POST(req: Request) {
     return forbidden("Your account can't log expenses.");
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest("Invalid JSON");
-  }
-
-  const { projectId, category, description, amount, date, paidTo, notes, photoUrls } = (body ?? {}) as {
-    projectId?: string;
-    category?: string;
-    description?: string;
-    amount?: number;
-    date?: string;
-    paidTo?: string;
-    notes?: string;
-    photoUrls?: string[];
-  };
-
-  if (!projectId) return badRequest("projectId required");
-  const desc = (description ?? "").trim();
-  if (desc.length < 2) return badRequest("Description too short");
-  const amt = parseAmount(amount);
-  if (amt === null) return badRequest("Amount must be greater than 0");
+  const parsed = await parseBody(req, PostExpenseSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+  const { projectId, category, description, amount, date, paidTo, notes, photoUrls } = body;
+  const desc = description.trim();
+  const amt = parseAmount(amount) ?? amount; // parseAmount enforces round + non-null; amount is already positive per zod
   const when = date ? new Date(date) : new Date();
-  if (isNaN(when.getTime())) return badRequest("Invalid date");
-
-  const photos = Array.isArray(photoUrls)
-    ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 6)
-    : [];
+  const photos = (photoUrls ?? []).slice(0, 6);
   const idempotencyKey = readIdempotencyKey(body);
 
   const { record: expense, duplicate } = await createIdempotent(

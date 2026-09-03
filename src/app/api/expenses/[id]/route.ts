@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
@@ -6,6 +7,18 @@ import { canApproveExpense, canLogExpense, isAdmin } from "@/lib/roles";
 import { isScopedUser } from "@/lib/modules";
 import { allowedExpenseTransition, normalizeCategory, parseAmount } from "@/lib/expenses";
 import { badRequest, forbidden, handleApiError, notFound, unauthorized } from "@/lib/apiErrors";
+import { parseBody } from "@/lib/parseBody";
+
+const PatchExpenseSchema = z.object({
+  status: z.enum(["SUBMITTED", "APPROVED", "REJECTED", "PAID"]).optional(),
+  rejectionReason: z.string().max(1000).optional(),
+  category: z.string().max(60).optional(),
+  description: z.string().min(2).max(500).optional(),
+  amount: z.number().finite().positive().max(100_000_000).optional(),
+  date: z.string().datetime({ offset: true }).optional(),
+  paidTo: z.string().max(200).optional(),
+  notes: z.string().max(2000).optional(),
+});
 
 const expenseInclude = {
   loggedBy: { select: { id: true, name: true } },
@@ -39,23 +52,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/expenses/[id]"
   });
   if (!expense) return notFound();
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest("Invalid JSON");
-  }
-  const { status: newStatus, rejectionReason, category, description, amount, date, paidTo, notes } =
-    (body ?? {}) as {
-      status?: string;
-      rejectionReason?: string;
-      category?: string;
-      description?: string;
-      amount?: number;
-      date?: string;
-      paidTo?: string;
-      notes?: string;
-    };
+  const parsed = await parseBody(req, PatchExpenseSchema);
+  if (!parsed.ok) return parsed.response;
+  const { status: newStatus, rejectionReason, category, description, amount, date, paidTo, notes } = parsed.data;
 
   const role = session.user.role;
   const isLogger = expense.loggedById === session.user.id;

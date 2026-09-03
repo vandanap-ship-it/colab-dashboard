@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
@@ -9,9 +10,30 @@ import {
   parseBillDate,
   parseTaxPercent,
   withTotals,
-  type BillLineInput,
 } from "@/lib/billing";
 import { badRequest, forbidden, handleApiError, notFound, unauthorized } from "@/lib/apiErrors";
+import { parseBody } from "@/lib/parseBody";
+
+const BillLineSchema = z.object({
+  type: z.string().max(40).optional(),
+  description: z.string().max(500).optional(),
+  wbsNodeId: z.string().min(1).nullable().optional(),
+  quantity: z.number().finite().nullable().optional(),
+  unit: z.string().max(20).nullable().optional(),
+  rate: z.number().finite().nullable().optional(),
+  amount: z.number().finite().nullable().optional(),
+});
+
+const PatchBillSchema = z.object({
+  status: z.enum(["DRAFT", "SUBMITTED", "APPROVED", "REJECTED", "PAID"]).optional(),
+  rejectionReason: z.string().max(1000).optional(),
+  title: z.string().min(3).max(200).optional(),
+  periodStart: z.string().optional(),
+  periodEnd: z.string().optional(),
+  notes: z.string().max(2000).optional(),
+  taxPercent: z.number().finite().min(0).max(100).optional(),
+  lines: z.array(BillLineSchema).max(200).optional(),
+});
 
 const billInclude = {
   contractor: { select: { id: true, name: true } },
@@ -42,12 +64,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/bills/[id]">) 
   });
   if (!bill) return notFound();
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest("Invalid JSON");
-  }
+  const parsed = await parseBody(req, PatchBillSchema);
+  if (!parsed.ok) return parsed.response;
   const {
     status: newStatus,
     rejectionReason,
@@ -57,16 +75,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/bills/[id]">) 
     notes,
     taxPercent,
     lines,
-  } = (body ?? {}) as {
-    status?: string;
-    rejectionReason?: string;
-    title?: string;
-    periodStart?: string;
-    periodEnd?: string;
-    notes?: string;
-    taxPercent?: number;
-    lines?: BillLineInput[];
-  };
+  } = parsed.data;
 
   try {
     // ---- Status transition (submit / approve / reject / reopen / mark paid) ----
