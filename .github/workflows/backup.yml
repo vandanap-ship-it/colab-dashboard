@@ -29,8 +29,19 @@ jobs:
           # a newer server, so we track Neon's version explicitly. If they bump
           # to 19, this step + docs/backup-restore.md need to bump together.
           sudo apt-get install -y postgresql-client-18
-          echo "pg_dump version:"
-          pg_dump --version
+          # `pg_dump` on Ubuntu is a wrapper (pg_wrapper) that dispatches to the
+          # "default" cluster's binary — which stays on v16 even after we
+          # install v18 alongside. Use the explicit path so the right binary
+          # runs regardless of what apt considers "default".
+          PG_DUMP=/usr/lib/postgresql/18/bin/pg_dump
+          if [ ! -x "$PG_DUMP" ]; then
+            echo "::error::Expected pg_dump v18 at $PG_DUMP but it isn't executable."
+            ls -la /usr/lib/postgresql/ || true
+            exit 1
+          fi
+          echo "PG_DUMP=$PG_DUMP" >> $GITHUB_ENV
+          echo "pg_dump v18 version:"
+          "$PG_DUMP" --version
 
       - name: Dump database
         env:
@@ -50,7 +61,7 @@ jobs:
           echo "BACKUP_FILE=${FILENAME}" >> $GITHUB_ENV
           # --no-owner + --no-acl → portable dump, no role assumptions.
           # --format=plain + gzip → simple, greppable, small.
-          pg_dump "$DATABASE_URL" --no-owner --no-acl --format=plain \
+          "$PG_DUMP" "$DATABASE_URL" --no-owner --no-acl --format=plain \
             | gzip -9 > "$FILENAME"
           BYTES=$(stat -c%s "$FILENAME")
           SIZE=$(du -h "$FILENAME" | cut -f1)
