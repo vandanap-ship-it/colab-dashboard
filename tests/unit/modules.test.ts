@@ -3,6 +3,7 @@ import {
   MODULES,
   parseUserModules,
   canAccessModule,
+  canAccessScopedRow,
   hasFullAccess,
   isScopedUser,
   canAccessTool,
@@ -105,6 +106,37 @@ describe("module access — primaryModuleFor (record tagging)", () => {
 
   it("prefers SAFETY then QAQC when both present", () => {
     expect(primaryModuleFor('["QAQC","SAFETY"]')).toBe(MODULES.SAFETY);
+  });
+});
+
+describe("module access — canAccessScopedRow", () => {
+  it("full-access user passes for every row module (including null)", () => {
+    expect(canAccessScopedRow(null, "QAQC")).toBe(true);
+    expect(canAccessScopedRow(null, "SAFETY")).toBe(true);
+    expect(canAccessScopedRow(null, null)).toBe(true);
+    expect(canAccessScopedRow(null, undefined)).toBe(true);
+  });
+
+  it("scoped QAQC user passes for a QAQC row, blocked on SAFETY", () => {
+    const scope = serializeModules(["QAQC"]);
+    expect(canAccessScopedRow(scope, "QAQC")).toBe(true);
+    expect(canAccessScopedRow(scope, "SAFETY")).toBe(false);
+  });
+
+  it("scoped user is always blocked on a general (null-module) row", () => {
+    const qaqc = serializeModules(["QAQC"]);
+    const safety = serializeModules(["SAFETY"]);
+    expect(canAccessScopedRow(qaqc, null)).toBe(false);
+    expect(canAccessScopedRow(safety, null)).toBe(false);
+    expect(canAccessScopedRow(qaqc, undefined)).toBe(false);
+  });
+
+  it("multi-module scoped user passes only for their modules", () => {
+    const scope = serializeModules(["QAQC", "HINDRANCE"]);
+    expect(canAccessScopedRow(scope, "QAQC")).toBe(true);
+    expect(canAccessScopedRow(scope, "HINDRANCE")).toBe(true);
+    expect(canAccessScopedRow(scope, "SAFETY")).toBe(false);
+    expect(canAccessScopedRow(scope, null)).toBe(false);
   });
 });
 
