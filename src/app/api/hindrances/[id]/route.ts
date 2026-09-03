@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { checkConflict } from "@/lib/optimisticLock";
+import { parseBody } from "@/lib/parseBody";
 import {
   badRequest,
   forbidden,
@@ -13,7 +15,11 @@ import {
   unauthorized,
 } from "@/lib/apiErrors";
 
-const STATUSES = new Set(["OPEN", "RESOLVED"]);
+const PatchHindranceSchema = z.object({
+  status: z.enum(["OPEN", "RESOLVED"]).optional(),
+  daysImpact: z.number().finite().min(0).max(365).optional(),
+  expectedUpdatedAt: z.string().optional(),
+});
 
 export async function PATCH(req: Request, ctx: RouteContext<"/api/hindrances/[id]">) {
   const session = await auth();
@@ -23,31 +29,21 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/hindrances/[id
   if (!canAccessModule(session.user.modules, MODULES.HINDRANCE)) return forbidden();
 
   const { id } = await ctx.params;
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest("Invalid JSON");
-  }
-  const { status, daysImpact, expectedUpdatedAt } = (body ?? {}) as {
-    status?: string;
-    daysImpact?: number;
-    expectedUpdatedAt?: string;
-  };
+  const parsed = await parseBody(req, PatchHindranceSchema);
+  if (!parsed.ok) return parsed.response;
+  const { status, daysImpact, expectedUpdatedAt } = parsed.data;
 
   if (status === "RESOLVED" && !canReview(session.user.role)) {
     return forbidden();
   }
 
   const data: { status?: string; daysImpact?: number; resolvedDate?: Date | null } = {};
-  if (status && STATUSES.has(status)) {
+  if (status) {
     data.status = status;
     if (status === "RESOLVED") data.resolvedDate = new Date();
     if (status === "OPEN") data.resolvedDate = null;
   }
-  if (Number.isFinite(Number(daysImpact))) {
-    data.daysImpact = Math.max(0, Math.floor(Number(daysImpact)));
-  }
+  if (daysImpact != null) data.daysImpact = Math.floor(daysImpact);
   if (Object.keys(data).length === 0) return badRequest("Nothing to update");
 
   try {

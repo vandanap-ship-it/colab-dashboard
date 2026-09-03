@@ -1,12 +1,27 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { readIdempotencyKey } from "@/lib/idempotency";
 import { TRADES } from "@/lib/manpower";
+import { parseBody } from "@/lib/parseBody";
 
-const TRADE_SET = new Set<string>(TRADES);
+const PostManpowerSchema = z.object({
+  projectId: z.string().min(1),
+  contractorId: z.string().min(1),
+  // Trades enforced against the runtime list — zod's z.enum() needs literal
+  // union at compile time, but TRADES is `readonly string[]`. Use refine.
+  trade: z.string().refine((v) => (TRADES as readonly string[]).includes(v), {
+    message: `trade must be one of ${TRADES.join(", ")}`,
+  }),
+  // ISO date string (YYYY-MM-DD). The handler appends T00:00:00Z below.
+  entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "entryDate must be YYYY-MM-DD").optional(),
+  actualCount: z.number().finite().min(0).max(1000),
+  notes: z.string().max(500).optional(),
+  idempotencyKey: z.string().max(120).optional(),
+});
 
 const MANPOWER_INCLUDE = {
   contractor: { select: { id: true, name: true } },
@@ -59,37 +74,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Your account can't log manpower." }, { status: 403 });
   }
 
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
-
-  const { projectId, contractorId, trade, entryDate, actualCount, notes } = (body ?? {}) as {
-    projectId?: string;
-    contractorId?: string;
-    trade?: string;
-    entryDate?: string;
-    actualCount?: number;
-    notes?: string;
-  };
-
-  if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
-  if (!contractorId) return NextResponse.json({ error: "contractorId required" }, { status: 400 });
-  if (!trade || !TRADE_SET.has(trade)) {
-    return NextResponse.json({ error: `trade must be one of ${TRADES.join(", ")}` }, { status: 400 });
-  }
-  const rawCount = Number(actualCount);
-  if (!Number.isFinite(rawCount) || rawCount < 0) {
-    return NextResponse.json({ error: "actualCount must be a non-negative number" }, { status: 400 });
-  }
-  const count = Math.floor(rawCount);
-
+  const parsed = await parseBody(req, PostManpowerSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+  const { projectId, contractorId, trade, entryDate, actualCount, notes } = body;
+  const count = Math.floor(actualCount);
   const day = entryDate ? new Date(entryDate + "T00:00:00Z") : (() => {
     const t = new Date();
     t.setUTCHours(0, 0, 0, 0);
     return t;
   })();
-  if (isNaN(day.getTime())) return NextResponse.json({ error: "Invalid entryDate" }, { status: 400 });
-
-  const cleanNotes = typeof notes === "string" ? notes.trim().slice(0, 500) : "";
+  const cleanNotes = (notes ?? "").trim();
   const idempotencyKey = readIdempotencyKey(body);
 
   // Verify contractor belongs to project.

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
@@ -6,6 +7,13 @@ import { canAccessModule, MODULES } from "@/lib/modules";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { assignmentEmail, sendEmail } from "@/lib/email";
 import { checkConflict } from "@/lib/optimisticLock";
+import { parseBody } from "@/lib/parseBody";
+
+const PatchConcernSchema = z.object({
+  status: z.enum(["PENDING", "READ", "RESOLVED", "TASK_ASSIGNED"]).optional(),
+  assignedToId: z.string().min(1).nullable().optional(),
+  expectedUpdatedAt: z.string().optional(),
+});
 import {
   badRequest,
   forbidden,
@@ -16,8 +24,6 @@ import {
 
 const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
-const STATUSES = new Set(["PENDING", "READ", "RESOLVED", "TASK_ASSIGNED"]);
-
 export async function PATCH(req: Request, ctx: RouteContext<"/api/concerns/[id]">) {
   const session = await auth();
   if (!session?.user) return unauthorized();
@@ -26,17 +32,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/concerns/[id]"
   if (!canAccessModule(session.user.modules, MODULES.CONCERN)) return forbidden();
 
   const { id } = await ctx.params;
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest("Invalid JSON");
-  }
-  const { status, assignedToId, expectedUpdatedAt } = (body ?? {}) as {
-    status?: string;
-    assignedToId?: string | null;
-    expectedUpdatedAt?: string;
-  };
+  const parsed = await parseBody(req, PatchConcernSchema);
+  if (!parsed.ok) return parsed.response;
+  const { status, assignedToId, expectedUpdatedAt } = parsed.data;
 
   // Permission rules:
   //   - RESOLVED  → reviewers only (Planner / Product Team / Admin)
@@ -53,7 +51,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/concerns/[id]"
   }
 
   const data: { status?: string; assignedToId?: string | null } = {};
-  if (status && STATUSES.has(status)) data.status = status;
+  if (status) data.status = status;
   if (assignedToId === null) data.assignedToId = null;
   else if (typeof assignedToId === "string" && assignedToId.length > 0) {
     // Verify user exists + active. Refusing to assign to a deactivated user

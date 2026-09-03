@@ -2,9 +2,17 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
+import { z } from "zod";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { assignmentEmail, sendEmail } from "@/lib/email";
 import { checkConflict } from "@/lib/optimisticLock";
+import { parseBody } from "@/lib/parseBody";
+
+const PatchIssueSchema = z.object({
+  status: z.enum(["OPEN", "RESOLVED"]).optional(),
+  assignedToId: z.string().min(1).nullable().optional(),
+  expectedUpdatedAt: z.string().optional(),
+});
 import {
   badRequest,
   forbidden,
@@ -15,24 +23,15 @@ import {
 
 const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
-const STATUSES = new Set(["OPEN", "RESOLVED"]);
 
 export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">) {
   const session = await auth();
   if (!session?.user) return unauthorized();
 
   const { id } = await ctx.params;
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest("Invalid JSON");
-  }
-  const { status, assignedToId, expectedUpdatedAt } = (body ?? {}) as {
-    status?: string;
-    assignedToId?: string | null;
-    expectedUpdatedAt?: string;
-  };
+  const parsed = await parseBody(req, PatchIssueSchema);
+  if (!parsed.ok) return parsed.response;
+  const { status, assignedToId, expectedUpdatedAt } = parsed.data;
 
   // Status changes (OPEN → RESOLVED, etc.) and reassignment are reviewer-only.
   if ((status !== undefined || assignedToId !== undefined) && !canReview(session.user.role)) {
@@ -40,10 +39,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
   }
 
   const data: { status?: string; assignedToId?: string | null } = {};
-  if (status !== undefined) {
-    if (!STATUSES.has(status)) return badRequest("Invalid status");
-    data.status = status;
-  }
+  if (status !== undefined) data.status = status;
   if (assignedToId !== undefined) {
     if (assignedToId === null || assignedToId === "") {
       data.assignedToId = null;
