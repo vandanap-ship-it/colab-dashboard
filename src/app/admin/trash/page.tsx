@@ -21,7 +21,7 @@ function fmtDate(d: Date | null | undefined): string {
 export default async function TrashPage() {
   // Each model has its own findMany — we pass an explicit deletedAt filter so
   // the soft-delete extension lets the query through and returns trashed rows.
-  const [progress, issues, hindrances, concerns, inspections, projects] =
+  const [progress, issues, hindrances, concerns, inspections, rfis, manpower, projects] =
     await Promise.all([
       prisma.progressEntry.findMany({
         where: { deletedAt: { not: null } },
@@ -69,13 +69,32 @@ export default async function TrashPage() {
           project: { select: { id: true, name: true } },
         },
       }),
+      prisma.rfi.findMany({
+        where: { deletedAt: { not: null } },
+        orderBy: { deletedAt: "desc" },
+        take: 100,
+        include: {
+          raisedBy: { select: { name: true } },
+          project: { select: { id: true, name: true } },
+        },
+      }),
+      prisma.manpowerEntry.findMany({
+        where: { deletedAt: { not: null } },
+        orderBy: { deletedAt: "desc" },
+        take: 100,
+        include: {
+          createdBy: { select: { name: true } },
+          contractor: { select: { name: true } },
+          project: { select: { id: true, name: true } },
+        },
+      }),
       prisma.project.findMany({ select: { id: true, name: true } }),
     ]);
 
   const projectName = new Map(projects.map((p) => [p.id, p.name]));
 
   const total =
-    progress.length + issues.length + hindrances.length + concerns.length + inspections.length;
+    progress.length + issues.length + hindrances.length + concerns.length + inspections.length + rfis.length + manpower.length;
 
   return (
     <div className="space-y-6">
@@ -159,6 +178,30 @@ export default async function TrashPage() {
               line: s.title,
             }))}
           />
+
+          <Section
+            title="RFIs"
+            items={rfis.map((r) => ({
+              id: r.id,
+              entityType: "Rfi" as const,
+              projectName: projectName.get(r.projectId) ?? "—",
+              when: r.deletedAt,
+              who: r.raisedBy?.name ?? "—",
+              line: `#${r.number} · ${r.subject.slice(0, 100)}`,
+            }))}
+          />
+
+          <Section
+            title="Manpower entries"
+            items={manpower.map((m) => ({
+              id: m.id,
+              entityType: "ManpowerEntry" as const,
+              projectName: projectName.get(m.projectId) ?? "—",
+              when: m.deletedAt,
+              who: m.createdBy?.name ?? "—",
+              line: `${m.contractor.name} · ${m.trade} · ${m.actualCount} on ${m.entryDate.toISOString().slice(0, 10)}`,
+            }))}
+          />
         </>
       )}
     </div>
@@ -171,7 +214,7 @@ export default async function TrashPage() {
     title: string;
     items: Array<{
       id: string;
-      entityType: "ProgressEntry" | "Issue" | "Hindrance" | "Concern" | "Inspection";
+      entityType: "ProgressEntry" | "Issue" | "Hindrance" | "Concern" | "Inspection" | "Rfi" | "ManpowerEntry";
       projectName: string;
       when: Date | null | undefined;
       who: string;
