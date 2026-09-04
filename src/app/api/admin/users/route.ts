@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { ROLES, isAdmin } from "@/lib/roles";
 import { serializeModules } from "@/lib/modules";
 import { parseBody } from "@/lib/parseBody";
+import { recordAudit } from "@/lib/audit";
 
 const VALID_ROLES = new Set<string>(Object.values(ROLES));
 
@@ -54,6 +55,14 @@ export async function POST(req: Request) {
   const user = await prisma.user.create({
     data: { username: u, name: n, role: r, passwordHash, designation: d || null, modules: mods },
     select: { id: true, username: true, name: true, role: true, designation: true, modules: true, active: true, createdAt: true, updatedAt: true },
+  });
+
+  await recordAudit({
+    userId: session.user.id,
+    action: "CREATE",
+    entityType: "User",
+    entityId: user.id,
+    summary: `User provisioned: ${user.username} (${user.role})${user.modules ? ` [scoped: ${user.modules}]` : ""}`,
   });
 
   return NextResponse.json({ user }, { status: 201 });

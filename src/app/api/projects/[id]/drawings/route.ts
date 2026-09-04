@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canCreateProject } from "@/lib/roles";
 import { isScopedUser } from "@/lib/modules";
 import { uploadPhoto } from "@/lib/upload";
+import { recordAudit } from "@/lib/audit";
 
 const KINDS = new Set(["LAYOUT", "360_IMAGE", "OTHER"]);
 
@@ -61,6 +62,15 @@ export async function POST(req: Request, ctx: RouteContext<"/api/projects/[id]/d
     return tx.projectDrawing.create({
       data: { projectId, label, kind, imageUrl: uploaded.url, isDefault },
     });
+  });
+
+  await recordAudit({
+    projectId,
+    userId: session.user.id,
+    action: "CREATE",
+    entityType: "ProjectDrawing",
+    entityId: drawing.id,
+    summary: `Drawing added: ${label} (${kind}${isDefault ? ", default" : ""})`,
   });
 
   return NextResponse.json({ drawing }, { status: 201 });

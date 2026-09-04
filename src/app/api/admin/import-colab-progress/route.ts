@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
 import { importColabProgress } from "@/lib/colabSync";
 import { parseBody } from "@/lib/parseBody";
+import { recordAudit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,12 +50,25 @@ export async function POST(req: Request) {
   if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
   try {
+    const dryRun = body.dryRun !== false;
     const stats = await importColabProgress(prisma, body.projectId, body.csv, {
-      dryRun: body.dryRun !== false,
+      dryRun,
       createdById: session.user.id,
       projectName: body.projectName,
       defaultContractorName: body.defaultContractorName,
     });
+    // Only audit live runs — dry-run doesn't mutate data, so an audit
+    // entry would just add noise.
+    if (!dryRun) {
+      await recordAudit({
+        projectId: project.id,
+        userId: session.user.id,
+        action: "UPDATE",
+        entityType: "Project",
+        entityId: project.id,
+        summary: `Colab progress import: ${stats.progressEntriesCreated ?? 0} entries, ${stats.progressEntriesUpdated ?? 0} updated, ${stats.wbsNodesUpdated ?? 0} WBS nodes touched`,
+      });
+    }
     return NextResponse.json({ ok: true, stats });
   } catch (err) {
     console.error("[colab-sync] failed", err);

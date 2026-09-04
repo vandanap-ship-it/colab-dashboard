@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
 import { importColabManpower } from "@/lib/colabManpowerImport";
 import { parseBody } from "@/lib/parseBody";
+import { recordAudit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -53,13 +54,24 @@ export async function POST(req: Request) {
   if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
   try {
+    const dryRun = body.dryRun !== false;
     const stats = await importColabManpower(prisma, body.projectId, body.csv, {
-      dryRun: body.dryRun !== false,
+      dryRun,
       createdById: session.user.id,
       projectName: body.projectName,
       ignoreContractors: body.ignoreContractors,
       tradeAliases: body.tradeAliases,
     });
+    if (!dryRun) {
+      await recordAudit({
+        projectId: project.id,
+        userId: session.user.id,
+        action: "UPDATE",
+        entityType: "Project",
+        entityId: project.id,
+        summary: `Colab manpower import: ${stats.manpowerEntriesCreated ?? 0} entries, ${stats.manpowerEntriesUpdated ?? 0} updated, ${stats.tradePlansCreated ?? 0} plan runs`,
+      });
+    }
     return NextResponse.json({ ok: true, stats });
   } catch (err) {
     console.error("[colab-manpower-sync] failed", err);

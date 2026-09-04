@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canCreateProject } from "@/lib/roles";
 import { parseWBSCsv, buildTree } from "@/lib/wbsImport";
+import { recordAudit } from "@/lib/audit";
 import {
   badRequest,
   forbidden,
@@ -141,6 +142,17 @@ export async function POST(req: Request, ctx: RouteContext<"/api/projects/[id]/i
         await tx.wBSNode.createMany({ data: records.slice(i, i + CHUNK) });
       }
       return { inserted: records.length };
+    });
+
+    await recordAudit({
+      projectId,
+      userId: session.user.id,
+      action: replace ? "UPDATE" : "CREATE",
+      entityType: "Project",
+      entityId: projectId,
+      summary:
+        `WBS import: ${result.inserted} nodes${replace ? " (replace mode — existing WBS wiped)" : ""}` +
+        (contractorNames.length > 0 ? `, ${contractorNames.length} contractor(s)` : ""),
     });
 
     return NextResponse.json({

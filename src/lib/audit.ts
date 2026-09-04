@@ -39,6 +39,7 @@ export type AuditEntityType =
   | "Concern"
   | "Inspection"
   | "Project"
+  | "ProjectDrawing"
   | "User"
   | "Contractor"
   | "WBSNode"

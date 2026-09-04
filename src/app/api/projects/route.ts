@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canCreateProject } from "@/lib/roles";
 import { isScopedUser } from "@/lib/modules";
 import { parseBody, zDateString } from "@/lib/parseBody";
+import { recordAudit } from "@/lib/audit";
 
 const PostProjectSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(200),
@@ -67,6 +68,15 @@ export async function POST(req: Request) {
       createdById: session.user.id,
     },
     include: { createdBy: { select: { id: true, name: true, username: true } } },
+  });
+
+  await recordAudit({
+    projectId: project.id,
+    userId: session.user.id,
+    action: "CREATE",
+    entityType: "Project",
+    entityId: project.id,
+    summary: `Project created: ${project.name}${project.code ? ` (${project.code})` : ""}`,
   });
 
   return NextResponse.json({ project }, { status: 201 });
