@@ -38,6 +38,12 @@ jobs:
       DATABASE_URL: "postgresql://siddhi:test@localhost:5432/siddhi"
       AUTH_SECRET: "ci-test-secret-not-used-in-production"
       NODE_ENV: "test"
+      # Explicit opt-in for the seed scripts. Both refuse to run without
+      # these flags — the guard exists so a developer can't accidentally
+      # drop weak-password accounts into a shared / production database.
+      # CI is a fresh local Postgres, so opting in here is safe.
+      ALLOW_SEED: "yes"
+      ALLOW_DEMO_SEED: "1"
 
     steps:
       - uses: actions/checkout@v5
