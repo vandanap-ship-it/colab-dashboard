@@ -7,6 +7,7 @@ import { canAccessModule, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { isValidReasonCode } from "@/lib/hindranceReasons";
 import { parseBody, zDateString } from "@/lib/parseBody";
+import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
 
 const PostHindranceSchema = z.object({
   projectId: z.string().min(1),
@@ -70,6 +71,10 @@ export async function POST(req: Request) {
   const reason = isValidReasonCode(reasonCode) ? reasonCode : null;
   const note = (reasonNote ?? "").trim();
   const idempotencyKey = readIdempotencyKey(body);
+
+  // Cross-project FK guard on the activity tag.
+  const wbsErr = await assertWbsNodeInProject(wbsNodeId, projectId);
+  if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
   const hindranceInclude = {
     createdBy: { select: { id: true, name: true } },
     wbsNode: { select: { id: true, name: true, taskCode: true } },

@@ -15,6 +15,7 @@ import {
   type RfiStatus,
 } from "@/lib/rfi";
 import { parseBody, zDateString } from "@/lib/parseBody";
+import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
 
 // Top-level shape guard. `validateCreateRfi` does deeper semantic checks
 // (subject length, category-vs-project rules, etc.) — kept for now.
@@ -98,6 +99,12 @@ export async function POST(req: Request) {
   }
   const photos = (raw.photoUrls ?? []).slice(0, 6);
   const idempotencyKey = readIdempotencyKey(body);
+
+  // Cross-project FK guard: reject if wbsNodeId names an activity in a
+  // different project than raw.projectId — otherwise a client could
+  // create an RFI tagged to a foreign project's activity.
+  const wbsErr = await assertWbsNodeInProject(raw.wbsNodeId, raw.projectId!);
+  if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
 
   // Sequential per-project number is allocated inside the create transaction so
   // two concurrent POSTs don't get the same number (Postgres unique constraint

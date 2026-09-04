@@ -13,6 +13,7 @@ import {
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { badRequest, forbidden, unauthorized } from "@/lib/apiErrors";
 import { parseBody } from "@/lib/parseBody";
+import { assertWbsNodesInProject } from "@/lib/projectFkGuards";
 
 const BillLineSchema = z.object({
   type: z.string().max(40).optional(),
@@ -90,6 +91,15 @@ export async function POST(req: Request) {
   const cleaned = cleanLines(lines);
   const tax = parseTaxPercent(taxPercent);
   const idempotencyKey = readIdempotencyKey(body);
+
+  // Every wbsNodeId in the cleaned lines must belong to this project;
+  // otherwise a bill on project A could bind billed quantities to
+  // activities in project B and pollute the cost-vs-quantity reports.
+  const lineWbsErr = await assertWbsNodesInProject(
+    cleaned.map((l) => l.wbsNodeId ?? null),
+    projectId,
+  );
+  if (lineWbsErr) return badRequest(lineWbsErr);
 
   const { record: bill, duplicate } = await createIdempotent(
     idempotencyKey,

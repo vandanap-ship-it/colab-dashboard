@@ -14,6 +14,7 @@ import {
 import { badRequest, forbidden, handleApiError, notFound, unauthorized } from "@/lib/apiErrors";
 import { parseBody } from "@/lib/parseBody";
 import { checkConflict } from "@/lib/optimisticLock";
+import { assertWbsNodesInProject } from "@/lib/projectFkGuards";
 
 const BillLineSchema = z.object({
   type: z.string().max(40).optional(),
@@ -152,6 +153,20 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/bills/[id]">) 
     if (periodEnd !== undefined) data.periodEnd = parseBillDate(periodEnd);
     if (notes !== undefined) data.notes = (notes ?? "").trim() || null;
     if (taxPercent !== undefined) data.taxPercent = parseTaxPercent(taxPercent);
+
+    // Cross-project FK guard for line-level wbsNodeIds — checked BEFORE the
+     // transaction so an invalid line doesn't cause a rollback that also wipes
+     // the metadata update above. Same failure mode as POST: without this a
+     // client could bind billed quantities on this bill to activities in
+     // another project.
+    if (Array.isArray(lines)) {
+      const cleanedPreview = cleanLines(lines);
+      const lineWbsErr = await assertWbsNodesInProject(
+        cleanedPreview.map((l) => l.wbsNodeId ?? null),
+        bill.projectId,
+      );
+      if (lineWbsErr) return badRequest(lineWbsErr);
+    }
 
     await prisma.$transaction(async (tx) => {
       if (Object.keys(data).length > 0) {

@@ -6,6 +6,7 @@ import { recordAudit } from "@/lib/audit";
 import { canAccessModule, primaryModuleFor, isScopedUser, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { parseBody } from "@/lib/parseBody";
+import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
 
 const PostInspectionSchema = z.object({
   projectId: z.string().min(1),
@@ -116,6 +117,10 @@ export async function POST(req: Request) {
     });
   }
   if (itemsClean.length === 0) return NextResponse.json({ error: "At least one checklist item required" }, { status: 400 });
+
+  // Cross-project FK guard on the activity tag.
+  const wbsErr = await assertWbsNodeInProject(wbsNodeId, projectId);
+  if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
 
   const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 8) : [];
   const moduleTag = primaryModuleFor(session.user.modules);

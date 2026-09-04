@@ -6,6 +6,7 @@ import { recordAudit } from "@/lib/audit";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { parseBody } from "@/lib/parseBody";
+import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
 
 const PostConcernSchema = z.object({
   projectId: z.string().min(1),
@@ -69,6 +70,10 @@ export async function POST(req: Request) {
   const desc = description.trim();
   const photos = (photoUrls ?? []).slice(0, 6);
   const idempotencyKey = readIdempotencyKey(body);
+
+  // Cross-project FK guard on the activity tag.
+  const wbsErr = await assertWbsNodeInProject(wbsNodeId, projectId);
+  if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
   const concernInclude = {
     raisedBy: { select: { id: true, name: true } },
     assignedTo: { select: { id: true, name: true } },

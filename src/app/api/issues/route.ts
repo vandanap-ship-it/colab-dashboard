@@ -6,6 +6,7 @@ import { recordAudit } from "@/lib/audit";
 import { canAccessModule, primaryModuleFor, isScopedUser, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { parseBody } from "@/lib/parseBody";
+import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
 
 const SEVERITIES = new Set(["LOW", "MEDIUM", "HIGH"]);
 
@@ -92,6 +93,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Cannot assign to a deactivated user." }, { status: 400 });
     }
   }
+
+  // Cross-project FK guard on the activity tag.
+  const wbsErr = await assertWbsNodeInProject(wbsNodeId, projectId);
+  if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
 
   // Tag the snag with the creator's module so scoped contractors only ever
   // see their own module's snags. Full-access staff create untagged snags.
