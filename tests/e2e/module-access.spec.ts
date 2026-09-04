@@ -193,4 +193,82 @@ test.describe("Module access control", () => {
       });
     }
   });
+
+  test("QAQC-scoped contractor cannot touch a general (null-module) snag or inspection", async ({ page }) => {
+    // Regression guard for canAccessScopedRow: an internal user (admin) posts
+    // a snag / inspection with module=null (general). A scoped contractor
+    // must not be able to PATCH or DELETE those rows even by direct id.
+    const uname = `qaqc.crossmod.${Date.now()}`.toLowerCase().replace(/[^a-z0-9._-]/g, "");
+    const PASS = "Siddhi@Test1";
+
+    await signIn(page, "admin");
+    const projectId = await getProjectId(page);
+
+    // 1. Admin creates a general snag + general inspection (module=null).
+    const adminSnag = await page.request.post("/api/issues", {
+      data: { projectId, description: `[cross-mod fk test] general snag ${uniqueId()}` },
+    });
+    expect(adminSnag.status()).toBe(201);
+    const { issue: adminSnagRow } = await adminSnag.json();
+    expect(adminSnagRow.module).toBeNull();
+
+    const adminInsp = await page.request.post("/api/inspections", {
+      data: {
+        projectId,
+        title: `[cross-mod fk test] general inspection ${uniqueId()}`,
+        items: [{ label: "Check", passed: true }],
+      },
+    });
+    expect(adminInsp.status()).toBe(201);
+    const { inspection: adminInspRow } = await adminInsp.json();
+    expect(adminInspRow.module).toBeNull();
+
+    // 2. Admin provisions a QAQC-scoped contractor.
+    const createRes = await page.request.post("/api/admin/users", {
+      data: {
+        username: uname,
+        name: "QAQC Cross-Module Test",
+        role: "SITE_ENGINEER",
+        password: PASS,
+        designation: "QA/QC Contractor",
+        modules: ["QAQC"],
+      },
+    });
+    expect(createRes.ok()).toBeTruthy();
+    const { user } = await createRes.json();
+
+    try {
+      await page.context().clearCookies();
+      await page.goto("/login");
+      await page.fill('input[autocomplete="username"]', uname);
+      await page.fill('input[autocomplete="current-password"]', PASS);
+      await page.click('button[type="submit"]');
+      await page.waitForLoadState("networkidle");
+
+      // 3. Scoped user cannot PATCH admin's null-module snag.
+      const snagPatch = await page.request.patch(`/api/issues/${adminSnagRow.id}`, {
+        data: { status: "RESOLVED" },
+      });
+      expect(snagPatch.status()).toBe(403);
+
+      // 4. Scoped user cannot DELETE it either.
+      const snagDelete = await page.request.delete(`/api/issues/${adminSnagRow.id}`);
+      expect(snagDelete.status()).toBe(403);
+
+      // 5. Same guard on inspection PATCH.
+      const inspPatch = await page.request.patch(`/api/inspections/${adminInspRow.id}`, {
+        data: { status: "PASSED" },
+      });
+      expect(inspPatch.status()).toBe(403);
+      const inspDelete = await page.request.delete(`/api/inspections/${adminInspRow.id}`);
+      expect(inspDelete.status()).toBe(403);
+    } finally {
+      // Cleanup: deactivate scoped user; delete the test rows.
+      await page.context().clearCookies();
+      await signIn(page, "admin");
+      await page.request.patch(`/api/admin/users/${user.id}`, { data: { active: false } });
+      await page.request.delete(`/api/issues/${adminSnagRow.id}`);
+      await page.request.delete(`/api/inspections/${adminInspRow.id}`);
+    }
+  });
 });
