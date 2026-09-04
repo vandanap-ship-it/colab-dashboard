@@ -15,6 +15,33 @@ function buildPrisma() {
 const prisma = buildPrisma();
 
 async function main() {
+  // Production safety guard. This script creates five well-known accounts
+  // (admin/planner/product/manager/engineer) all with the password
+  // "password". That is fine for local dev + CI e2e tests, but running
+  // it against a shared or production database would drop five weak-
+  // password accounts into a running deployment. Require an explicit
+  // opt-in env var — mirrors the guard on /api/admin/clear-test-data.
+  if (process.env.ALLOW_SEED !== "yes") {
+    console.error(
+      "seed.ts refused to run — this script creates test users with weak\n" +
+      "passwords and is intended only for local dev / CI. Set ALLOW_SEED=yes\n" +
+      "in the environment to run it explicitly."
+    );
+    process.exit(1);
+  }
+  // Belt-and-suspenders: also refuse if the URL points at Neon (production).
+  // Local Postgres URLs are localhost / postgres:// with no neon.tech host.
+  const url = process.env.DATABASE_URL ?? "";
+  if (/neon\.tech/i.test(url)) {
+    console.error(
+      "seed.ts refused to run — DATABASE_URL looks like a Neon host\n" +
+      "(matching /neon\\.tech/). This script is for local dev only.\n" +
+      "If you really mean to seed a Neon branch (never production),\n" +
+      "unset the check by editing prisma/seed.ts."
+    );
+    process.exit(1);
+  }
+
   const passwordHash = await bcrypt.hash("password", 10);
 
   const users = [

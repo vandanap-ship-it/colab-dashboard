@@ -25,6 +25,21 @@ if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_SEED !== "1"
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is required (Postgres connection string)");
+
+// Belt-and-suspenders: if the URL host is a Neon endpoint, refuse regardless
+// of NODE_ENV. The NODE_ENV guard above catches the deploy-time case; this
+// catches the "someone ran it locally against the prod URL" case where
+// NODE_ENV might not be set. If you actually want to run demo-seed against
+// a Neon BRANCH (never production main), set ALLOW_DEMO_SEED=1.
+if (/neon\.tech/i.test(url) && process.env.ALLOW_DEMO_SEED !== "1") {
+  console.error(
+    "Refusing to run demo seed: DATABASE_URL points at a Neon host. This\n" +
+    "script wipes and re-inserts WBS + progress + issues + hindrances +\n" +
+    "concerns + inspections. Set ALLOW_DEMO_SEED=1 only if you have\n" +
+    "double-checked the target is a Neon branch, not production main.",
+  );
+  process.exit(1);
+}
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
 
 // Deterministic PRNG so reruns produce stable output.
