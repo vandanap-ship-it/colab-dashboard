@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canCreateProject, canSeeDesktop } from "@/lib/roles";
+import { isScopedUser } from "@/lib/modules";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
 import ContractorAssignConsole from "@/components/ContractorAssignConsole";
@@ -17,6 +18,7 @@ export default async function ContractorAssignPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
+  if (isScopedUser(session.user.modules)) redirect("/mobile");
   if (!canCreateProject(session.user.role)) {
     // Admin + Planner only — same gate as project creation.
     redirect(`/projects/${(await params).id}/overview`);

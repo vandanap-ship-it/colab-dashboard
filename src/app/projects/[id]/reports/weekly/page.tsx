@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canSeeDesktop } from "@/lib/roles";
+import { isScopedUser } from "@/lib/modules";
 import { getWeeklyReport } from "@/lib/weeklyReportServer";
 import WeeklyReportView from "@/components/WeeklyReportView";
 import ReportErrorFallback from "@/components/ReportErrorFallback";
@@ -25,6 +26,7 @@ export default async function WeeklyReportPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
+  if (isScopedUser(session.user.modules)) redirect("/mobile");
 
   const { id: projectId } = await params;
   const { weekEnding: qsWeek } = await searchParams;

@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeDesktop } from "@/lib/roles";
+import { isScopedUser } from "@/lib/modules";
 import Navbar from "@/components/Navbar";
 import MilestoneTimeline from "@/components/schedule/MilestoneTimeline";
 import { getMilestoneTimeline } from "@/lib/scheduleServer";
@@ -18,6 +19,7 @@ export default async function TimelinePage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
+  if (isScopedUser(session.user.modules)) redirect("/mobile");
 
   const { id: projectId } = await params;
   const project = await prisma.project.findUnique({

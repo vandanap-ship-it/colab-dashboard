@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeDesktop } from "@/lib/roles";
+import { isScopedUser } from "@/lib/modules";
 import { getScorecard } from "@/lib/scorecardServer";
 import ScorecardView from "@/components/ScorecardView";
 import ReportErrorFallback from "@/components/ReportErrorFallback";
@@ -27,6 +28,7 @@ export default async function ScorecardPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
+  if (isScopedUser(session.user.modules)) redirect("/mobile");
 
   const { id: projectId } = await params;
   const { date: dateParam, contractor: contractorParam } = await searchParams;

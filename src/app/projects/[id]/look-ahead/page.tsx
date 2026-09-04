@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeDesktop } from "@/lib/roles";
+import { isScopedUser } from "@/lib/modules";
 import Navbar from "@/components/Navbar";
 import WeeklyLookAhead from "@/components/schedule/WeeklyLookAhead";
 import { getWeeklyLookAhead } from "@/lib/scheduleServer";
@@ -20,6 +21,7 @@ export default async function LookAheadPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
+  if (isScopedUser(session.user.modules)) redirect("/mobile");
 
   const { id: projectId } = await params;
   const { days } = await searchParams;

@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ListPlus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canSeeDesktop, isAdmin, ROLES } from "@/lib/roles";
+import { isScopedUser } from "@/lib/modules";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
 import AddProgressClient, {
@@ -19,6 +20,7 @@ export default async function AddProgressPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
+  if (isScopedUser(session.user.modules)) redirect("/mobile");
 
   const { id: projectId } = await params;
 

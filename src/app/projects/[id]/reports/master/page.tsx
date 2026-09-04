@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canSeeDesktop } from "@/lib/roles";
+import { isScopedUser } from "@/lib/modules";
 import { prisma } from "@/lib/prisma";
 import {
   fmtDateLong,
@@ -46,6 +47,10 @@ export default async function MasterReportPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
+  // Reports are planning-side; scoped external contractors get pushed
+  // back to mobile the same way SITE_ENGINEERs are. Defense-in-depth
+  // in case a scoped user is provisioned with a non-mobile role.
+  if (isScopedUser(session.user.modules)) redirect("/mobile");
 
   const { id } = await params;
   const sp = await searchParams;

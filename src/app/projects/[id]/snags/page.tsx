@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Bug } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canSeeDesktop, isAdmin, ROLES } from "@/lib/roles";
+import { isScopedUser } from "@/lib/modules";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
 import SnagMasterTable, { type SnagRow } from "@/components/SnagMasterTable";
@@ -15,6 +16,7 @@ export default async function SnagMasterPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
+  if (isScopedUser(session.user.modules)) redirect("/mobile");
 
   const { id: projectId } = await params;
   const project = await prisma.project.findUnique({

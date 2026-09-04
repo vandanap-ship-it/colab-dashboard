@@ -14,6 +14,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canSeeDesktop } from "@/lib/roles";
+import { isScopedUser } from "@/lib/modules";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
 
@@ -34,6 +35,7 @@ export default async function ReportsLandingPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
+  if (isScopedUser(session.user.modules)) redirect("/mobile");
 
   const { id } = await params;
   const project = await prisma.project.findUnique({

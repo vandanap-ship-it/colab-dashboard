@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canSeeDesktop, canAccessBilling } from "@/lib/roles";
+import { isScopedUser } from "@/lib/modules";
 import { prisma } from "@/lib/prisma";
 import { computeBillTotals } from "@/lib/billing";
 import ReportShell, { ReportSection } from "@/components/ReportShell";
@@ -29,6 +30,7 @@ export default async function BillDetailPage({
   if (!session?.user) redirect("/login");
   const { id: projectId, billId } = await params;
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
+  if (isScopedUser(session.user.modules)) redirect("/mobile");
   if (!canAccessBilling(session.user.role)) redirect(`/projects/${projectId}/snapshot`);
 
   const bill = await prisma.subContractorBill.findUnique({

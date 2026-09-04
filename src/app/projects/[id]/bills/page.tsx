@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ReceiptIndianRupee } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canSeeDesktop, canAccessBilling, canApproveBill, canPrepareBill } from "@/lib/roles";
+import { isScopedUser } from "@/lib/modules";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
 import BillsManager from "@/components/BillsManager";
@@ -15,6 +16,7 @@ export default async function BillsPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
+  if (isScopedUser(session.user.modules)) redirect("/mobile");
   if (!canAccessBilling(session.user.role)) redirect(`/projects/${(await params).id}/snapshot`);
 
   const { id: projectId } = await params;
