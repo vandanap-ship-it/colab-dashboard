@@ -16,18 +16,32 @@ type SearchParams = Promise<{
   limit?: string;
 }>;
 
+// Keep this list in sync with AuditEntityType in src/lib/audit.ts. When a new
+// entity type gets audited, it needs to appear here or admins can't filter by
+// it — the audit log page will still show the row (the filter is optional),
+// but the chip is missing from the filter bar.
 const ENTITY_TYPES = [
   "ProgressEntry",
   "Issue",
   "Hindrance",
   "Concern",
   "Inspection",
+  "Rfi",
+  "Permit",
+  "ManpowerEntry",
+  "TradePlan",
+  "SubContractorBill",
+  "Expense",
   "Project",
+  "ProjectDrawing",
+  "DesignDrawing",
+  "WBSNode",
   "User",
   "Contractor",
 ] as const;
 
-const ACTIONS = ["CREATE", "UPDATE", "DELETE", "RESTORE", "STATUS_CHANGE"] as const;
+// Also mirrors AuditAction in src/lib/audit.ts.
+const ACTIONS = ["CREATE", "UPDATE", "UPSERT", "DELETE", "RESTORE", "STATUS_CHANGE"] as const;
 
 function fmtDate(d: Date): string {
   return d.toLocaleString(undefined, {
