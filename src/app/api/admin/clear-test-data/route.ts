@@ -14,6 +14,11 @@ const PostClearSchema = z.object({
 });
 
 async function summarise() {
+  // Soft-delete filtered models return "live rows only" via the prisma
+  // extension — that's what the site team actually sees, so it's the right
+  // number to report. The DELETE path below hard-deletes both live and
+  // trashed rows so nothing survives, but a re-run of summarise after the
+  // wipe will show zero either way.
   const [
     users,
     projects,
@@ -31,6 +36,18 @@ async function summarise() {
     inspections,
     inspectionItems,
     inspectionPhotos,
+    rfis,
+    rfiPhotos,
+    permits,
+    manpowerEntries,
+    tradePlans,
+    bills,
+    billLines,
+    expenses,
+    expensePhotos,
+    projectDrawings,
+    designDrawings,
+    designDrawingRevisions,
     wbsWithActuals,
   ] = await Promise.all([
     prisma.user.count(),
@@ -49,6 +66,18 @@ async function summarise() {
     prisma.inspection.count(),
     prisma.inspectionItem.count(),
     prisma.inspectionPhoto.count(),
+    prisma.rfi.count(),
+    prisma.rfiPhoto.count(),
+    prisma.permit.count(),
+    prisma.manpowerEntry.count(),
+    prisma.tradePlan.count(),
+    prisma.subContractorBill.count(),
+    prisma.subContractorBillLine.count(),
+    prisma.expense.count(),
+    prisma.expensePhoto.count(),
+    prisma.projectDrawing.count(),
+    prisma.designDrawing.count(),
+    prisma.designDrawingRevision.count(),
     prisma.wBSNode.count({
       where: {
         OR: [
@@ -77,6 +106,18 @@ async function summarise() {
       inspections,
       inspectionItems,
       inspectionPhotos,
+      rfis,
+      rfiPhotos,
+      permits,
+      manpowerEntries,
+      tradePlans,
+      bills,
+      billLines,
+      expenses,
+      expensePhotos,
+      projectDrawings,
+      designDrawings,
+      designDrawingRevisions,
     },
     resetting: { wbsNodesWithNonDefaultRuntime: wbsWithActuals },
   };
@@ -118,6 +159,10 @@ export async function POST(req: Request) {
   const before = await summarise();
 
   const result = await prisma.$transaction(async (tx) => {
+    // Photo/child tables where the cascade isn't declared — clear them
+    // first. For SubContractorBillLine, ExpensePhoto, RfiPhoto and
+    // DesignDrawingRevision the parent-side onDelete: Cascade takes care
+    // of it, so we only need the parent deleteMany.
     const ipDel = await tx.inspectionPhoto.deleteMany();
     const iiDel = await tx.inspectionItem.deleteMany();
     const insDel = await tx.inspection.deleteMany();
@@ -134,6 +179,18 @@ export async function POST(req: Request) {
     const ppDel = await tx.progressPhoto.deleteMany();
     const plDel = await tx.progressLabour.deleteMany();
     const pDel = await tx.progressEntry.deleteMany();
+
+    // Newly-added test-data wipes — the pre-launch walkthrough will
+    // exercise these modules and their rows have to disappear too, else
+    // ghost RFIs / permits / expenses linger in prod after the reset.
+    const rfiDel = await tx.rfi.deleteMany(); // cascades RfiPhoto
+    const permitDel = await tx.permit.deleteMany();
+    const manpowerDel = await tx.manpowerEntry.deleteMany();
+    const tradePlanDel = await tx.tradePlan.deleteMany();
+    const expenseDel = await tx.expense.deleteMany(); // cascades ExpensePhoto
+    const billDel = await tx.subContractorBill.deleteMany(); // cascades SubContractorBillLine
+    const projectDrawingDel = await tx.projectDrawing.deleteMany();
+    const designDrawingDel = await tx.designDrawing.deleteMany(); // cascades DesignDrawingRevision
 
     const wbsReset = resetWbs
       ? await tx.wBSNode.updateMany({
@@ -165,10 +222,18 @@ export async function POST(req: Request) {
         progressEntries: pDel.count,
         progressLabour: plDel.count,
         progressPhotos: ppDel.count,
+        rfis: rfiDel.count,
+        permits: permitDel.count,
+        manpowerEntries: manpowerDel.count,
+        tradePlans: tradePlanDel.count,
+        expenses: expenseDel.count,
+        bills: billDel.count,
+        projectDrawings: projectDrawingDel.count,
+        designDrawings: designDrawingDel.count,
       },
       reset: { wbsNodes: wbsReset.count, requested: resetWbs },
     };
-  });
+  }, { timeout: 60_000 });
 
   const after = await summarise();
 
