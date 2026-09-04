@@ -257,16 +257,27 @@ export async function importMspCsv(
   }
 
   const existingProject = await prisma.project.findFirst({ where: { name: opts.projectName } });
-  const project = existingProject
-    ? existingProject
-    : await prisma.project.create({
-        data: { name: opts.projectName, createdById: creator.id, status: "IN_EXECUTION" },
-      });
-  stats.projectId = project.id;
-  stats.projectName = project.name;
 
+  // Everything below runs in one transaction — including the project
+  // create. Previously project.create was committed BEFORE the sections /
+  // blocks / villas / tasks transaction started, so a rollback of that
+  // transaction left an empty Project row in the projects list until an
+  // admin retried. Merging them means either the whole import lands or
+  // nothing does. For an existing-project re-import, the transaction
+  // still starts with the existing row and idempotent upserts do the
+  // rest, so re-running after a partial failure just retries safely.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let project: { id: string; name: string } = existingProject as any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await prisma.$transaction(async (tx: any) => {
+    if (!existingProject) {
+      project = await tx.project.create({
+        data: { name: opts.projectName, createdById: creator.id, status: "IN_EXECUTION" },
+      });
+    }
+    stats.projectId = project.id;
+    stats.projectName = project.name;
+
     // Milestone sections (unique across project)
     const sectionByName = new Map<string, string>();
     let sectionOrder = 0;

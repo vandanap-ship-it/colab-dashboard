@@ -231,32 +231,39 @@ export async function importColabManpower(
       // Wipe our previously-imported runs for this (contractor, trade), then
       // re-insert. Idempotency by rewrite: cheaper than diff-and-patch, and
       // safe because Colab is authoritative for historical plan.
-      await prisma.tradePlan.deleteMany({
-        where: {
-          projectId,
-          contractorId: contractor.id,
-          trade,
-          // Only delete the ones sourced from Colab — anything set later in
-          // Siddhi with a notes tag stays untouched. Absence of the notes
-          // sentinel means the row was NOT set by Siddhi's admin console.
-          notes: { equals: "imported-from-colab" },
-        },
-      });
-      for (const run of runs) {
-        await prisma.tradePlan.create({
-          data: {
+      // Wrapped in $transaction so a mid-loop failure doesn't leave the
+      // trade with the deletion committed and only a partial re-insert —
+      // that would collapse the planned-labour chart until an admin
+      // manually re-runs the sync.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await prisma.$transaction(async (tx: any) => {
+        await tx.tradePlan.deleteMany({
+          where: {
             projectId,
             contractorId: contractor.id,
             trade,
-            plannedCount: run.plan,
-            startDate: run.startDate,
-            endDate: run.endDate,
-            notes: "imported-from-colab",
-            createdById: options.createdById,
+            // Only delete the ones sourced from Colab — anything set later in
+            // Siddhi with a notes tag stays untouched. Absence of the notes
+            // sentinel means the row was NOT set by Siddhi's admin console.
+            notes: { equals: "imported-from-colab" },
           },
         });
-        stats.tradePlansCreated++;
-      }
+        for (const run of runs) {
+          await tx.tradePlan.create({
+            data: {
+              projectId,
+              contractorId: contractor.id,
+              trade,
+              plannedCount: run.plan,
+              startDate: run.startDate,
+              endDate: run.endDate,
+              notes: "imported-from-colab",
+              createdById: options.createdById,
+            },
+          });
+        }
+      });
+      stats.tradePlansCreated += runs.length;
     } else {
       stats.tradePlansCreated += runs.length;
     }

@@ -584,83 +584,102 @@ export async function importColabProgress(
     // ----- 7. Write (skip in dry-run)
     if (options.dryRun) continue;
 
-    // 7a. Update WBSNode if we matched one — accumulate the state.
-    if (bestWbs) {
-      touchedWbsNodes.add(bestWbs.id);
-      await prisma.wBSNode.update({
-        where: { id: bestWbs.id },
-        data: {
-          // Overwrite baselines from Colab CSV — the source of truth for
-          // "planned today" checks. Without this, WBSNode dates stay at MSP
-          // values which can differ from Colab's tracker and cause
-          // day-of-report counts to disagree with the Colab-branded PDFs.
-          baselineStart: plannedStart ?? undefined,
-          baselineFinish: plannedEnd ?? undefined,
-          actualStart: actualStart ?? undefined,
-          actualFinish: actualEnd ?? undefined,
-          percentComplete: Math.min(100, Math.max(0, pct)),
-          weightPct: weightPct ?? undefined,
-          totalQuantity: totalQty ?? bestWbs.totalQuantity ?? undefined,
-          progressEntered: (achieved > 0 || cumulative > 0) ? true : undefined,
-          contractorId: contractorId ?? undefined,
-        },
-      });
-      stats.wbsNodesUpdated++;
-    }
-
-    // 7b. Upsert ProgressEntry — only when there's a real update (achieved OR
-    //     completion date OR meaningful remark), and only if we matched an
-    //     activity (ProgressEntry.wbsNodeId is required).
-    const hasMeaningfulSignal = achieved > 0 || cumulative > 0 || actualEnd || notes || imageUrl;
-    if (bestWbs && progressAt && hasMeaningfulSignal && activityId) {
-      const idempotencyKey = `colab:${activityId}:${progressAt.toISOString().slice(0, 10)}`;
-      const existing = await prisma.progressEntry.findUnique({
-        where: { idempotencyKey },
-        select: { id: true },
-      });
-      if (existing) {
-        await prisma.progressEntry.update({
-          where: { id: existing.id },
+    // Wrap the per-row WBS update + ProgressEntry write + ProgressPhoto
+    // write in a single transaction. Previously a torn state was possible
+    // if the photo insert failed after ProgressEntry.create committed:
+    // on retry, the entry's idempotencyKey lookup routed the flow through
+    // the UPDATE branch (which skips photo attach), so the source photo
+    // was silently lost. Also protected: an in-flight failure between the
+    // WBSNode update and the ProgressEntry write, which used to leave
+    // dashboards reading the new pct/actualFinish for a row that had no
+    // supporting ProgressEntry until an admin re-ran the sync.
+    // Per-row transaction cost is bounded — Prisma's interactive
+    // transactions on Neon are cheap in the shared driver.
+    const perRowCounters = { wbsNodesUpdated: 0, progressEntriesCreated: 0, progressEntriesUpdated: 0, photosCreated: 0 };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await prisma.$transaction(async (tx: any) => {
+      // 7a. Update WBSNode if we matched one — accumulate the state.
+      if (bestWbs) {
+        await tx.wBSNode.update({
+          where: { id: bestWbs.id },
           data: {
-            date: progressAt,
-            achievedQuantity: achieved,
-            cumulativeQuantity: cumulative,
+            // Overwrite baselines from Colab CSV — the source of truth for
+            // "planned today" checks. Without this, WBSNode dates stay at MSP
+            // values which can differ from Colab's tracker and cause
+            // day-of-report counts to disagree with the Colab-branded PDFs.
+            baselineStart: plannedStart ?? undefined,
+            baselineFinish: plannedEnd ?? undefined,
+            actualStart: actualStart ?? undefined,
+            actualFinish: actualEnd ?? undefined,
+            percentComplete: Math.min(100, Math.max(0, pct)),
+            weightPct: weightPct ?? undefined,
+            totalQuantity: totalQty ?? bestWbs.totalQuantity ?? undefined,
+            progressEntered: (achieved > 0 || cumulative > 0) ? true : undefined,
             contractorId: contractorId ?? undefined,
-            notes,
-            reasonCode: reasonCode ?? undefined,
-            reasonNote,
           },
         });
-        stats.progressEntriesUpdated++;
-      } else {
-        const created = await prisma.progressEntry.create({
-          data: {
-            projectId,
-            wbsNodeId: bestWbs.id,
-            date: progressAt,
-            achievedQuantity: achieved,
-            cumulativeQuantity: cumulative,
-            contractorId: contractorId ?? undefined,
-            notes,
-            reasonCode: reasonCode ?? undefined,
-            reasonNote,
-            createdById: options.createdById,
-            idempotencyKey,
-          },
+        perRowCounters.wbsNodesUpdated++;
+      }
+
+      // 7b. Upsert ProgressEntry — only when there's a real update (achieved OR
+      //     completion date OR meaningful remark), and only if we matched an
+      //     activity (ProgressEntry.wbsNodeId is required).
+      const hasMeaningfulSignal = achieved > 0 || cumulative > 0 || actualEnd || notes || imageUrl;
+      if (bestWbs && progressAt && hasMeaningfulSignal && activityId) {
+        const idempotencyKey = `colab:${activityId}:${progressAt.toISOString().slice(0, 10)}`;
+        const existing = await tx.progressEntry.findUnique({
+          where: { idempotencyKey },
           select: { id: true },
         });
-        stats.progressEntriesCreated++;
-
-        // 7c. Attach the photo (only for freshly-created entries — updates
-        //     would risk piling up duplicates otherwise).
-        if (imageUrl) {
-          await prisma.progressPhoto.create({
-            data: { progressEntryId: created.id, url: imageUrl },
+        if (existing) {
+          await tx.progressEntry.update({
+            where: { id: existing.id },
+            data: {
+              date: progressAt,
+              achievedQuantity: achieved,
+              cumulativeQuantity: cumulative,
+              contractorId: contractorId ?? undefined,
+              notes,
+              reasonCode: reasonCode ?? undefined,
+              reasonNote,
+            },
           });
-          stats.photosCreated++;
+          perRowCounters.progressEntriesUpdated++;
+        } else {
+          const created = await tx.progressEntry.create({
+            data: {
+              projectId,
+              wbsNodeId: bestWbs.id,
+              date: progressAt,
+              achievedQuantity: achieved,
+              cumulativeQuantity: cumulative,
+              contractorId: contractorId ?? undefined,
+              notes,
+              reasonCode: reasonCode ?? undefined,
+              reasonNote,
+              createdById: options.createdById,
+              idempotencyKey,
+            },
+            select: { id: true },
+          });
+          perRowCounters.progressEntriesCreated++;
+
+          // 7c. Attach the photo (only for freshly-created entries — updates
+          //     would risk piling up duplicates otherwise).
+          if (imageUrl) {
+            await tx.progressPhoto.create({
+              data: { progressEntryId: created.id, url: imageUrl },
+            });
+            perRowCounters.photosCreated++;
+          }
         }
       }
-    }
+    });
+    if (bestWbs) touchedWbsNodes.add(bestWbs.id);
+    stats.wbsNodesUpdated += perRowCounters.wbsNodesUpdated;
+    stats.progressEntriesCreated += perRowCounters.progressEntriesCreated;
+    stats.progressEntriesUpdated += perRowCounters.progressEntriesUpdated;
+    stats.photosCreated += perRowCounters.photosCreated;
   }
 
   if (!options.dryRun) {

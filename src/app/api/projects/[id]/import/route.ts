@@ -64,15 +64,6 @@ export async function POST(req: Request, ctx: RouteContext<"/api/projects/[id]/i
   const contractorMap = new Map<string, string>();
 
   try {
-    for (const name of contractorNames) {
-      const c = await prisma.contractor.upsert({
-        where: { projectId_name: { projectId, name } },
-        update: {},
-        create: { projectId, name, category: "Imported" },
-      });
-      contractorMap.set(name, c.id);
-    }
-
     // Pre-generate IDs so we can batch insert + know parent IDs without
     // re-querying. Avoids 384 sequential round-trips on Vercel (which times
     // out the function long before completing the import).
@@ -103,29 +94,44 @@ export async function POST(req: Request, ctx: RouteContext<"/api/projects/[id]/i
       codeToId.set(taskCode, idFor());
     }
 
-    const records = tree.nodes.map((n) => ({
-      id: codeToId.get(n.taskCode)!,
-      projectId,
-      taskCode: n.taskCode,
-      name: n.name,
-      level: n.level,
-      orderIndex: n.orderIndex,
-      baselineStart: n.baselineStart,
-      baselineFinish: n.baselineFinish,
-      actualStart: n.actualStart,
-      actualFinish: n.actualFinish,
-      projectedFinish: n.projectedFinish,
-      percentComplete: n.percentComplete,
-      category: n.category,
-      predecessorsRaw: n.predecessorsRaw,
-      totalQuantity: n.totalQuantity,
-      unit: n.unit,
-      progressEntered: n.progressEntered,
-      contractorId: n.contractorName ? contractorMap.get(n.contractorName) ?? null : null,
-      parentId: n.parentTaskCode ? codeToId.get(n.parentTaskCode) ?? null : null,
-    }));
-
     const result = await prisma.$transaction(async (tx) => {
+      // Contractor upserts run inside the transaction so a downstream
+      // failure (e.g. the WBS createMany chunk that hits the libSQL
+      // parameter cap) rolls the "Imported" contractors back too.
+      // Previously they were committed before the transaction started
+      // and lingered in the project's contractor picker with no WBS
+      // work attached.
+      for (const name of contractorNames) {
+        const c = await tx.contractor.upsert({
+          where: { projectId_name: { projectId, name } },
+          update: {},
+          create: { projectId, name, category: "Imported" },
+        });
+        contractorMap.set(name, c.id);
+      }
+
+      const records = tree.nodes.map((n) => ({
+        id: codeToId.get(n.taskCode)!,
+        projectId,
+        taskCode: n.taskCode,
+        name: n.name,
+        level: n.level,
+        orderIndex: n.orderIndex,
+        baselineStart: n.baselineStart,
+        baselineFinish: n.baselineFinish,
+        actualStart: n.actualStart,
+        actualFinish: n.actualFinish,
+        projectedFinish: n.projectedFinish,
+        percentComplete: n.percentComplete,
+        category: n.category,
+        predecessorsRaw: n.predecessorsRaw,
+        totalQuantity: n.totalQuantity,
+        unit: n.unit,
+        progressEntered: n.progressEntered,
+        contractorId: n.contractorName ? contractorMap.get(n.contractorName) ?? null : null,
+        parentId: n.parentTaskCode ? codeToId.get(n.parentTaskCode) ?? null : null,
+      }));
+
       if (replace) {
         await tx.wBSNode.deleteMany({ where: { projectId } });
       }
