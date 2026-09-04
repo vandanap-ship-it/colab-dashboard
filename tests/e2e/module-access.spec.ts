@@ -150,6 +150,40 @@ test.describe("Module access control", () => {
         `/api/admin/contractors?projectId=${projectId}`,
       );
       expect(scopedContractorsRes.status()).toBe(200);
+
+      // 13. /api/users — internal-only assignee picker. A scoped contractor
+      //     used to be able to enumerate every user's id / name / role.
+      const usersListRes = await page.request.get("/api/users");
+      expect(usersListRes.status()).toBe(403);
+
+      // 14. /api/projects/summary — portfolio rollup with delay days, labour,
+      //     financial progress. Scoped contractors have no legitimate reason
+      //     for a cross-project view.
+      const summaryRes = await page.request.get("/api/projects/summary");
+      expect(summaryRes.status()).toBe(403);
+
+      // 15. /api/projects/[id]/trade-plans — planned headcount per subcontractor
+      //     is planning-side data. A QAQC-scoped user has no PROGRESS module.
+      const tradePlansRes = await page.request.get(`/api/projects/${projectId}/trade-plans`);
+      expect(tradePlansRes.status()).toBe(403);
+
+      // 16. /api/projects/[id]/activities/for-milestone/[id] — leaf activities
+      //     for the mobile picker. Same PROGRESS gate as the sibling wbs and
+      //     picker routes.
+      const forMilestoneRes = await page.request.get(
+        `/api/projects/${projectId}/activities/for-milestone/any-milestone-id`,
+      );
+      expect(forMilestoneRes.status()).toBe(403);
+
+      // 17. /api/expenses/[id] PATCH + DELETE — internal-only. The list and
+      //     GET routes already gated on isScopedUser; the mutate paths did not.
+      //     Any id is fine — the gate runs before the DB lookup.
+      const expPatchRes = await page.request.patch("/api/expenses/any-id", {
+        data: { status: "APPROVED" },
+      });
+      expect(expPatchRes.status()).toBe(403);
+      const expDeleteRes = await page.request.delete("/api/expenses/any-id");
+      expect(expDeleteRes.status()).toBe(403);
     } finally {
       // 8. Cleanup — deactivate the test user as admin
       await page.context().clearCookies();
