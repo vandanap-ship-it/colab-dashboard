@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import FilterSelect from "./FilterSelect";
 
 // Force dynamic rendering — every page load filters audit entries by the
 // caller's role + chosen filters, so there is nothing meaningful to cache at
@@ -168,32 +169,23 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Sea
           <>
             <span className="text-stone-300 w-full sm:w-auto">·</span>
             {allProjects.length > 0 && (
-              <select
-                className="text-xs border border-stone-300 rounded-md px-2 py-1 bg-white"
-                defaultValue={sp.projectId ?? ""}
-                name="projectId"
-              >
-                <option value="">All projects</option>
-                {allProjects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <FilterSelect
+                paramKey="projectId"
+                currentValue={sp.projectId}
+                allLabel="All projects"
+                options={allProjects.map((p) => ({ value: p.id, label: p.name }))}
+              />
             )}
             {allUsers.length > 0 && (
-              <select
-                className="text-xs border border-stone-300 rounded-md px-2 py-1 bg-white"
-                defaultValue={sp.userId ?? ""}
-                name="userId"
-              >
-                <option value="">All users</option>
-                {allUsers.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name} (@{u.username})
-                  </option>
-                ))}
-              </select>
+              <FilterSelect
+                paramKey="userId"
+                currentValue={sp.userId}
+                allLabel="All users"
+                options={allUsers.map((u) => ({
+                  value: u.id,
+                  label: `${u.name} (@${u.username})`,
+                }))}
+              />
             )}
           </>
         )}
