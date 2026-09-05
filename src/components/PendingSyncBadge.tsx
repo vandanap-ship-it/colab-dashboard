@@ -36,6 +36,24 @@ export default function PendingSyncBadge() {
     };
   }, []);
 
+  // Warn the engineer if they try to close / navigate away with pending
+  // entries. IndexedDB does survive a browser reopen, but "clear site
+  // data" or switching to a different browser loses them silently. The
+  // native browser confirmation dialog is enough to catch the
+  // "accidentally closed the tab" case. Modern browsers ignore custom
+  // messages (Chromium 51+, Firefox 44+) but the default prompt still
+  // fires whenever preventDefault is called.
+  useEffect(() => {
+    if (count === 0) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Legacy prop for Safari / older browsers that still read it.
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [count]);
+
   if (count === 0 && !open) return null;
 
   return (
