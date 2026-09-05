@@ -16,6 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Check out repo (for scripts/verify-backup.ts)
+        uses: actions/checkout@v4
+
       - name: Install postgresql-client matching Neon's server version
         run: |
           set -euo pipefail
@@ -135,6 +138,24 @@ jobs:
           name: ${{ env.BACKUP_FILE }}
           path: ${{ env.BACKUP_FILE }}
           retention-days: 30
+
+      - name: Verify backup contents (list + parse newest Blob)
+        # Runs AFTER upload so it reads the file the way a restore would —
+        # from Blob, not from the local pg_dump output. Catches the failure
+        # mode from August 2026 where empty gzips uploaded nightly and
+        # nobody noticed for 10 days.
+        if: env.BLOB_URL != ''
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Install just what the verifier needs — @vercel/blob + tsx.
+          # Skips the full npm ci to keep the workflow fast; the verifier
+          # script only pulls those two deps. NODE_PATH tells node where to
+          # resolve `@vercel/blob` when the script has no local node_modules.
+          npm install --silent --no-save --prefix /tmp/backup-verify @vercel/blob tsx
+          NODE_PATH=/tmp/backup-verify/node_modules \
+            /tmp/backup-verify/node_modules/.bin/tsx scripts/verify-backup.ts
 
       - name: Notify by email (Resend)
         if: env.BLOB_URL != ''
