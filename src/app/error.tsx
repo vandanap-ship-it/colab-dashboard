@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import * as Sentry from "@sentry/nextjs";
 
 /**
  * Route-level error boundary. Catches errors thrown while rendering a route
@@ -16,20 +17,17 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Surface to the browser console (and any error monitoring) so we can
-    // diagnose. The digest links to the server-side stack in Vercel logs.
+    // Surface to the browser console so it's visible in devtools regardless
+    // of Sentry. The digest links to the server-side stack in Vercel logs.
     console.error("[route error]", error);
-    // Sentry hook — no-op until NEXT_PUBLIC_SENTRY_DSN is set and the SDK
-    // is installed. Ready to switch on with a one-line change once the DSN
-    // is in Vercel env vars.
-    if (typeof window !== "undefined") {
-      const w = window as unknown as {
-        Sentry?: { captureException?: (e: unknown, opts?: unknown) => void };
-      };
-      w.Sentry?.captureException?.(error, {
-        tags: { source: "route-error-boundary", digest: error.digest },
-      });
-    }
+    // Sentry.captureException is a no-op when NEXT_PUBLIC_SENTRY_DSN isn't
+    // set (the client init at sentry.client.config.ts / instrumentation-client.ts
+    // silently does nothing without a DSN), so this is safe to run in every
+    // deploy — captures land once the DSN is pasted into Vercel env, no code
+    // change needed.
+    Sentry.captureException(error, {
+      tags: { source: "route-error-boundary", digest: error.digest },
+    });
   }, [error]);
 
   return (

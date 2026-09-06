@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 /**
  * Last-resort error boundary. Catches errors in the root layout itself (where
@@ -16,15 +17,13 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error("[global error]", error);
-    // Sentry hook — no-op until DSN is set and SDK installed.
-    if (typeof window !== "undefined") {
-      const w = window as unknown as {
-        Sentry?: { captureException?: (e: unknown, opts?: unknown) => void };
-      };
-      w.Sentry?.captureException?.(error, {
-        tags: { source: "global-error-boundary", digest: error.digest, severity: "critical" },
-      });
-    }
+    // Sentry.captureException is a no-op when NEXT_PUBLIC_SENTRY_DSN isn't
+    // set, so safe to call unconditionally — captures land once the DSN is
+    // pasted into Vercel env. "severity: critical" tag lets us filter
+    // global-layout errors from ordinary route errors in Sentry's UI.
+    Sentry.captureException(error, {
+      tags: { source: "global-error-boundary", digest: error.digest, severity: "critical" },
+    });
   }, [error]);
 
   return (
