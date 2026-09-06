@@ -27,6 +27,8 @@ export default function UsersAdmin() {
   const [name, setName] = useState("");
   const [role, setRole] = useState<string>(ROLES.SITE_ENGINEER);
   const [password, setPassword] = useState("");
+  const [pwGenerated, setPwGenerated] = useState(false);
+  const [pwCopied, setPwCopied] = useState(false);
   const [pending, setPending] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -65,6 +67,8 @@ export default function UsersAdmin() {
     setUsername("");
     setName("");
     setPassword("");
+    setPwGenerated(false);
+    setPwCopied(false);
     setRole(ROLES.SITE_ENGINEER);
     setCreating(false);
     load();
@@ -195,14 +199,50 @@ export default function UsersAdmin() {
               </option>
             ))}
           </select>
-          <input
-            required
-            type="password"
-            placeholder="Initial password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm focus:outline-none focus:border-stone-900"
-          />
+          <div className="flex gap-1.5 col-span-1">
+            <input
+              required
+              type={pwGenerated ? "text" : "password"}
+              placeholder="Initial password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setPwGenerated(false);
+                setPwCopied(false);
+              }}
+              className="flex-1 min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-mono focus:outline-none focus:border-stone-900"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const next = generateFriendlyPassword();
+                setPassword(next);
+                setPwGenerated(true);
+                setPwCopied(false);
+              }}
+              title="Generate strong password"
+              className="text-xs rounded-md border border-stone-300 bg-white px-2 hover:bg-stone-50"
+            >
+              ⟳
+            </button>
+            {pwGenerated && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(password);
+                    setPwCopied(true);
+                    setTimeout(() => setPwCopied(false), 1500);
+                  } catch {
+                    // Clipboard blocked — password is visible, admin can copy manually
+                  }
+                }}
+                className="text-xs rounded-md border border-stone-300 bg-white px-2 hover:bg-stone-50 whitespace-nowrap"
+              >
+                {pwCopied ? "✓" : "Copy"}
+              </button>
+            )}
+          </div>
           <button
             type="submit"
             disabled={pending}
