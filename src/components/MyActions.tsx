@@ -13,6 +13,17 @@ type Concern = {
   wbsNode: { id: string; name: string } | null;
 };
 
+type Issue = {
+  id: string;
+  description: string;
+  status: string;
+  severity: string | null;
+  createdAt: string;
+  createdBy: { id: string; name: string };
+  project: { id: string; name: string };
+  wbsNode: { id: string; name: string } | null;
+};
+
 type Inspection = {
   id: string;
   title: string;
@@ -27,7 +38,7 @@ function fmt(d: string) {
 }
 
 export default function MyActions({ projectId }: { projectId?: string }) {
-  const [data, setData] = useState<{ concerns: Concern[]; inspectionsToReview: Inspection[] } | null>(null);
+  const [data, setData] = useState<{ concerns: Concern[]; issues: Issue[]; inspectionsToReview: Inspection[] } | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -41,7 +52,11 @@ export default function MyActions({ projectId }: { projectId?: string }) {
         return r.json();
       })
       .then((d) => {
-        if (!cancelled) setData({ concerns: d.concerns ?? [], inspectionsToReview: d.inspectionsToReview ?? [] });
+        if (!cancelled) setData({
+          concerns: d.concerns ?? [],
+          issues: d.issues ?? [],
+          inspectionsToReview: d.inspectionsToReview ?? [],
+        });
       })
       .catch(() => {
         if (!cancelled) setLoadError(true);
@@ -68,7 +83,7 @@ export default function MyActions({ projectId }: { projectId?: string }) {
 
   if (!data) return <p className="text-sm text-stone-500">Loading…</p>;
 
-  const total = data.concerns.length + data.inspectionsToReview.length;
+  const total = data.concerns.length + data.issues.length + data.inspectionsToReview.length;
 
   return (
     <div className="space-y-4">
@@ -100,6 +115,36 @@ export default function MyActions({ projectId }: { projectId?: string }) {
                     className="text-xs rounded-full border border-stone-300 px-3 py-1 hover:bg-stone-100 whitespace-nowrap"
                   >
                     Review →
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {data.issues.length > 0 && (
+        <section className="rounded-xl border border-stone-200 bg-white p-6">
+          <h2 className="text-sm font-semibold text-stone-700 uppercase tracking-wider mb-3">
+            Snags assigned to me ({data.issues.length})
+          </h2>
+          <ul className="space-y-2">
+            {data.issues.map((i) => (
+              <li key={i.id} className="rounded-lg border border-stone-100 bg-stone-50 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-stone-900">{i.description}</p>
+                    <p className="text-[10px] text-stone-500 mt-1">
+                      {fmt(i.createdAt)} · raised by {i.createdBy.name} · {i.project.name}
+                      {i.wbsNode && <> · {i.wbsNode.name}</>}
+                      {i.severity && <> · {i.severity}</>}
+                    </p>
+                  </div>
+                  <Link
+                    href={`/projects/${i.project.id}/snags`}
+                    className="text-xs rounded-full border border-stone-300 px-3 py-1 hover:bg-stone-100 whitespace-nowrap"
+                  >
+                    Resolve →
                   </Link>
                 </div>
               </li>

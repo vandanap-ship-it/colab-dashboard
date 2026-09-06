@@ -26,6 +26,26 @@ export async function GET(req: Request) {
     },
   });
 
+  // Snags assigned to me + still open. /api/issues/[id] PATCH sends an
+  // assignment email pointing at /my-actions, so an assignee who clicks the
+  // link needs to actually see the snag here — previously they landed on
+  // an empty page because /my-actions only returned concerns.
+  const issuesWhere: { assignedToId: string; status: string; projectId?: string } = {
+    assignedToId: session.user.id,
+    status: "OPEN",
+  };
+  if (projectId) issuesWhere.projectId = projectId;
+
+  const issues = await prisma.issue.findMany({
+    where: issuesWhere,
+    orderBy: { createdAt: "desc" },
+    include: {
+      createdBy: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true } },
+      wbsNode: { select: { id: true, name: true } },
+    },
+  });
+
   const role = session.user.role;
   const canReviewInspections =
     role === ROLES.PLANNER || role === ROLES.PRODUCT_TEAM || role === ROLES.ADMIN;
@@ -47,7 +67,8 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     concerns,
+    issues,
     inspectionsToReview,
-    total: concerns.length + inspectionsToReview.length,
+    total: concerns.length + issues.length + inspectionsToReview.length,
   });
 }
