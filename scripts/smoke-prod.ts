@@ -216,6 +216,23 @@ async function main() {
     await check(`    GET /api/hindrances?projectId=${p.id}`, () =>
       expectOk(`/api/hindrances?projectId=${p.id}`, "hindrances"),
     );
+    // Modules the earlier smoke run didn't cover — RFI, Permit,
+    // ManpowerEntry, TradePlan. All are gated by canAccessModule +
+    // per-project tenancy, so a regression in either would surface here
+    // as a 403 for the admin (which is unexpected — admin passes every
+    // module gate).
+    await check(`    GET /api/rfi?projectId=${p.id}`, () =>
+      expectOk(`/api/rfi?projectId=${p.id}`, "rfi"),
+    );
+    await check(`    GET /api/permits?projectId=${p.id}`, () =>
+      expectOk(`/api/permits?projectId=${p.id}`, "permits"),
+    );
+    await check(`    GET /api/manpower-entries?projectId=${p.id}`, () =>
+      expectOk(`/api/manpower-entries?projectId=${p.id}`, "manpower-entries"),
+    );
+    await check(`    GET /api/projects/${p.id}/trade-plans`, () =>
+      expectOk(`/api/projects/${p.id}/trade-plans`, "trade-plans"),
+    );
   }
 
   console.log();
