@@ -435,34 +435,60 @@ async function appliedKeys(): Promise<Set<string>> {
   return new Set(rows.map((r) => r.key));
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const url = new URL(req.url);
+  // ?showSql=true → include the raw SQL for pending migrations so admin can
+  // eyeball what WOULD run before flipping POST. Applied migrations don't
+  // include SQL — the point is to inspect what's about to hit prod, not
+  // audit history (that's what the git repo is for).
+  const showSql = url.searchParams.get("showSql") === "true";
 
   const applied = await appliedKeys();
   return NextResponse.json({
-    migrations: MIGRATIONS.map((m) => ({
-      key: m.key,
-      describe: m.describe,
-      statements: m.sql.length,
-      status: applied.has(m.key) ? "applied" : "pending",
-    })),
+    migrations: MIGRATIONS.map((m) => {
+      const isApplied = applied.has(m.key);
+      return {
+        key: m.key,
+        describe: m.describe,
+        statements: m.sql.length,
+        status: isApplied ? "applied" : "pending",
+        // Only surface SQL for pending — showing every applied statement
+        // would balloon the response and doesn't help with the "what am
+        // I about to run" question.
+        ...(showSql && !isApplied ? { sql: m.sql } : {}),
+      };
+    }),
   });
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdmin(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const url = new URL(req.url);
+  // ?dryRun=true → don't actually run anything, just report the plan.
+  // Returns the exact SQL that WOULD execute and the migrations that WOULD
+  // be marked applied, so admin can review before running for real. No
+  // rows are written to _AdminMigration in dry-run mode.
+  const dryRun = url.searchParams.get("dryRun") === "true";
 
   const applied = await appliedKeys();
   const ran: string[] = [];
   const skipped: string[] = [];
+  const plan: Array<{ key: string; describe: string; sql: string[] }> = [];
 
   for (const m of MIGRATIONS) {
     if (applied.has(m.key)) {
       skipped.push(m.key);
+      continue;
+    }
+    if (dryRun) {
+      plan.push({ key: m.key, describe: m.describe, sql: m.sql });
       continue;
     }
     // Run all statements + the ledger insert in one transaction so a partial
@@ -476,5 +502,8 @@ export async function POST() {
     ran.push(m.key);
   }
 
+  if (dryRun) {
+    return NextResponse.json({ dryRun: true, wouldRun: plan, skipped });
+  }
   return NextResponse.json({ ran, skipped });
 }
