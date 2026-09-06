@@ -46,6 +46,26 @@ export async function GET(req: Request) {
     },
   });
 
+  // RFIs assigned to me + still OPEN (once ANSWERED, the ball is back with
+  // the raiser). RFI assignment emails currently deep-link to the RFI
+  // detail page, not /my-actions, so this is a "consistency with the other
+  // sources" add — someone landing on /my-actions naturally expects to
+  // see every open action item, not a subset.
+  const rfisWhere: { assignedToId: string; status: string; projectId?: string } = {
+    assignedToId: session.user.id,
+    status: "OPEN",
+  };
+  if (projectId) rfisWhere.projectId = projectId;
+
+  const rfis = await prisma.rfi.findMany({
+    where: rfisWhere,
+    orderBy: { createdAt: "desc" },
+    include: {
+      raisedBy: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true } },
+    },
+  });
+
   const role = session.user.role;
   const canReviewInspections =
     role === ROLES.PLANNER || role === ROLES.PRODUCT_TEAM || role === ROLES.ADMIN;
@@ -68,7 +88,8 @@ export async function GET(req: Request) {
   return NextResponse.json({
     concerns,
     issues,
+    rfis,
     inspectionsToReview,
-    total: concerns.length + issues.length + inspectionsToReview.length,
+    total: concerns.length + issues.length + rfis.length + inspectionsToReview.length,
   });
 }
