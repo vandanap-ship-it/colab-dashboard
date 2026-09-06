@@ -348,6 +348,43 @@ export default function UsersAdmin() {
   );
 }
 
+/**
+ * Generate a memorable-but-strong password. Word-based passwords (three
+ * random dictionary words separated by a dash) are easier for a team
+ * member to type from a piece of paper or SMS than a random alphanumeric
+ * blob, and still have plenty of entropy against automated attacks —
+ * three words from a 40-word list is ~15 bits, plus a random 4-digit
+ * suffix is another ~13 bits, ~28 bits total per generated password
+ * (roughly 250 million combinations). We're relying on rate-limiting +
+ * the timing-attack mitigation for online-attack resistance; a truly
+ * targeted offline attack would need the bcrypt hashes, which never
+ * leave the DB.
+ */
+function generateFriendlyPassword(): string {
+  const words = [
+    "acacia", "banyan", "canopy", "delta", "estuary", "forest", "granite",
+    "harbor", "island", "juniper", "kestrel", "lantern", "mango", "neem",
+    "orchid", "pebble", "quartz", "river", "saffron", "teak", "umbra",
+    "veranda", "willow", "yarrow", "zenith", "amber", "basil", "cedar",
+    "dune", "ember", "fern", "grove", "hollow", "ivory", "jade",
+    "kite", "linen", "marble", "nectar", "opal",
+  ];
+  // window.crypto is available on all modern browsers; only guard against
+  // the (impossible in this codepath) SSR case.
+  const rng = typeof window !== "undefined" && window.crypto?.getRandomValues
+    ? (max: number) => {
+        const buf = new Uint32Array(1);
+        window.crypto.getRandomValues(buf);
+        return buf[0] % max;
+      }
+    : (max: number) => Math.floor(Math.random() * max);
+  const w1 = words[rng(words.length)];
+  const w2 = words[rng(words.length)];
+  const w3 = words[rng(words.length)];
+  const suffix = String(rng(10000)).padStart(4, "0");
+  return `${w1}-${w2}-${w3}-${suffix}`;
+}
+
 function ResetPasswordDialog({
   user,
   onClose,
@@ -360,8 +397,34 @@ function ResetPasswordDialog({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  // When admin uses "Generate", we reveal the password (so they can eyeball
+  // it before sending) and offer copy-to-clipboard. Typed passwords stay
+  // masked as before — this only toggles when generateFriendlyPassword ran.
+  const [generated, setGenerated] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   if (!user) return null;
+
+  function onGenerate() {
+    const next = generateFriendlyPassword();
+    setPw(next);
+    setConfirm(next);
+    setGenerated(true);
+    setCopied(false);
+    setError(null);
+  }
+
+  async function onCopy() {
+    try {
+      await navigator.clipboard.writeText(pw);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard API can fail in some browsers / iframes; the input is
+      // visible so admin can select manually as a fallback.
+      setError("Couldn't copy — select the password above and copy manually.");
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -416,24 +479,49 @@ function ResetPasswordDialog({
           <p className="text-xs text-stone-500">
             The user will need this new password to sign in.
           </p>
+          <button
+            type="button"
+            onClick={onGenerate}
+            className="w-full text-xs font-medium rounded-md border border-stone-300 bg-stone-50 py-1.5 hover:bg-stone-100"
+          >
+            ⟳ Generate strong password
+          </button>
           <label className="block">
             <span className="text-[11px] font-medium text-stone-700 uppercase tracking-wider">
               New password
             </span>
-            <input
-              type="password"
-              required
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:border-stone-900"
-            />
+            <div className="mt-1 flex gap-2">
+              <input
+                // Reveal when generated so admin can see + verify what they're
+                // about to send; typed passwords stay masked for shoulder-surfing.
+                type={generated ? "text" : "password"}
+                required
+                value={pw}
+                onChange={(e) => {
+                  setPw(e.target.value);
+                  // Typing invalidates the "generated" state so the field
+                  // re-masks and the copy button hides — matches user intent.
+                  setGenerated(false);
+                }}
+                className="flex-1 rounded-md border border-stone-300 px-3 py-2 text-sm font-mono focus:outline-none focus:border-stone-900"
+              />
+              {generated && (
+                <button
+                  type="button"
+                  onClick={onCopy}
+                  className="text-xs rounded-md border border-stone-300 bg-white px-3 hover:bg-stone-50 whitespace-nowrap"
+                >
+                  {copied ? "Copied ✓" : "Copy"}
+                </button>
+              )}
+            </div>
           </label>
           <label className="block">
             <span className="text-[11px] font-medium text-stone-700 uppercase tracking-wider">
               Confirm new password
             </span>
             <input
-              type="password"
+              type={generated ? "text" : "password"}
               required
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
