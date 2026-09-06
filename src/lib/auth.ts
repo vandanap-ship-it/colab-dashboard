@@ -12,6 +12,13 @@ const REVALIDATE_MS =
     ? Math.max(0, parseInt(process.env.AUTH_REVALIDATE_MS, 10) || 0)
     : undefined;
 
+// bcrypt hash of a random string, computed once at module load. Used by the
+// authorize() timing-attack mitigation below — bcrypt.compare against this
+// always returns false but takes the same wall-clock time as a real password
+// check, so login response time doesn't leak "username exists" vs "wrong
+// password". The random input was thrown away; nobody can log in with it.
+const DUMMY_HASH = "$2b$10$ezYUpMggcqqV269Ei2/04.L3skcKcS0zBiagkPCigPeO7sZjS0lHe";
+
 declare module "next-auth" {
   interface Session {
     user: {
@@ -47,10 +54,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!username || !password) return null;
 
         const user = await prisma.user.findUnique({ where: { username } });
-        if (!user || !user.active) return null;
-
-        const ok = await bcrypt.compare(password, user.passwordHash);
-        if (!ok) return null;
+        // Timing-attack mitigation: run bcrypt.compare even when the user
+        // doesn't exist or is deactivated, so an attacker probing the login
+        // endpoint can't tell "username invalid" (~1ms) apart from "password
+        // wrong" (~100ms). The dummy hash below is a real bcrypt.hash of a
+        // random string — any comparison against it always returns false at
+        // the same cost as a real password check.
+        const hashToCheck = user?.passwordHash ?? DUMMY_HASH;
+        const ok = await bcrypt.compare(password, hashToCheck);
+        if (!user || !user.active || !ok) return null;
 
         return {
           id: user.id,
