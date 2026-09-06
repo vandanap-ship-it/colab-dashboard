@@ -22,3 +22,26 @@ export function formatDayMonthYear(d: Date | string | null | undefined): string 
     timeZone: "Asia/Kolkata",
   });
 }
+
+/**
+ * Date + time (e.g. "02 Jun 2026, 14:32"). Also pinned to IST for the same
+ * reason as formatDayMonthYear — a snag `createdAt` at 21:30 UTC (03:00
+ * IST next morning) should show its IST calendar day + IST wall-clock time,
+ * not whatever the caller's browser happens to think is local.
+ *
+ * Used by pages that show audit-style "when did this happen" timestamps —
+ * audit log, trash log, activity feeds. If you're only rendering a date
+ * (no time), use formatDayMonthYear instead.
+ */
+export function formatDayMonthYearTime(d: Date | string | null | undefined): string {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Kolkata",
+  });
+}

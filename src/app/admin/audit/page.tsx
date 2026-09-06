@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { formatDayMonthYearTime } from "@/lib/dates";
 import FilterSelect from "./FilterSelect";
 
 // Force dynamic rendering — every page load filters audit entries by the
@@ -44,15 +45,9 @@ const ENTITY_TYPES = [
 // Also mirrors AuditAction in src/lib/audit.ts.
 const ACTIONS = ["CREATE", "UPDATE", "UPSERT", "DELETE", "RESTORE", "STATUS_CHANGE"] as const;
 
-function fmtDate(d: Date): string {
-  return d.toLocaleString(undefined, {
-    day: "2-digit",
-    month: "short",
-    year: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+// IST-pinned so audit timestamps read the same on server-render as on the
+// admin's browser — see src/lib/dates.ts for the full reasoning.
+const fmtDate = formatDayMonthYearTime;
 
 function actionStyle(action: string): string {
   if (action === "CREATE") return "bg-emerald-50 text-emerald-700 border-emerald-200";

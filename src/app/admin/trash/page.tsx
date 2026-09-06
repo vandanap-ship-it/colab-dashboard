@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { formatDayMonthYearTime } from "@/lib/dates";
 import RestoreButton from "./RestoreButton";
 
 // Force dynamic rendering — this page hits the DB across six tables to surface
@@ -7,16 +8,9 @@ import RestoreButton from "./RestoreButton";
 // Vercel's build sandbox (>60s) and kills the deploy. Render on demand instead.
 export const dynamic = "force-dynamic";
 
-function fmtDate(d: Date | null | undefined): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleString(undefined, {
-    day: "2-digit",
-    month: "short",
-    year: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+// IST-pinned so trash timestamps read the same on server-render as on the
+// admin's browser. See src/lib/dates.ts for the full reasoning.
+const fmtDate = formatDayMonthYearTime;
 
 export default async function TrashPage() {
   // Each model has its own findMany — we pass an explicit deletedAt filter so
