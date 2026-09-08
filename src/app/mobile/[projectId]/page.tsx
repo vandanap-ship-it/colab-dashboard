@@ -88,6 +88,13 @@ export default async function MobileProjectHome({
       tier: "primary",
     },
     {
+      key: "permit-list",
+      href: `/mobile/${projectId}/permit`,
+      label: "Work Permits",
+      icon: ShieldCheck,
+      tier: "secondary",
+    },
+    {
       key: "site-progress",
       href: `/mobile/${projectId}/site-progress`,
       label: "Site Progress",
