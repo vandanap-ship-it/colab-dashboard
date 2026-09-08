@@ -39,6 +39,7 @@ async function summarise() {
     rfis,
     rfiPhotos,
     permits,
+    workPermits,
     manpowerEntries,
     tradePlans,
     bills,
@@ -69,6 +70,7 @@ async function summarise() {
     prisma.rfi.count(),
     prisma.rfiPhoto.count(),
     prisma.permit.count(),
+    prisma.workPermit.count(),
     prisma.manpowerEntry.count(),
     prisma.tradePlan.count(),
     prisma.subContractorBill.count(),
@@ -109,6 +111,7 @@ async function summarise() {
       rfis,
       rfiPhotos,
       permits,
+      workPermits,
       manpowerEntries,
       tradePlans,
       bills,
@@ -185,6 +188,7 @@ export async function POST(req: Request) {
     // ghost RFIs / permits / expenses linger in prod after the reset.
     const rfiDel = await tx.rfi.deleteMany(); // cascades RfiPhoto
     const permitDel = await tx.permit.deleteMany();
+    const workPermitDel = await tx.workPermit.deleteMany(); // cascades WorkPermitPhoto
     const manpowerDel = await tx.manpowerEntry.deleteMany();
     const tradePlanDel = await tx.tradePlan.deleteMany();
     const expenseDel = await tx.expense.deleteMany(); // cascades ExpensePhoto
@@ -224,6 +228,7 @@ export async function POST(req: Request) {
         progressPhotos: ppDel.count,
         rfis: rfiDel.count,
         permits: permitDel.count,
+        workPermits: workPermitDel.count,
         manpowerEntries: manpowerDel.count,
         tradePlans: tradePlanDel.count,
         expenses: expenseDel.count,

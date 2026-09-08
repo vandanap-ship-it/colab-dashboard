@@ -7,7 +7,7 @@ import { recordAudit, type AuditEntityType } from "@/lib/audit";
 import { parseBody } from "@/lib/parseBody";
 
 const PostRestoreSchema = z.object({
-  entityType: z.enum(["ProgressEntry", "Issue", "Hindrance", "Concern", "Inspection", "Rfi", "ManpowerEntry", "Permit"]),
+  entityType: z.enum(["ProgressEntry", "Issue", "Hindrance", "Concern", "Inspection", "Rfi", "ManpowerEntry", "Permit", "WorkPermit"]),
   id: z.string().min(1),
 });
 
@@ -20,6 +20,7 @@ const RESTORABLE: Record<string, AuditEntityType> = {
   Rfi: "Rfi",
   ManpowerEntry: "ManpowerEntry",
   Permit: "Permit",
+  WorkPermit: "WorkPermit",
 };
 
 /**
@@ -118,6 +119,16 @@ export async function POST(req: Request) {
         if (!found) return NextResponse.json({ error: "Not found in trash" }, { status: 404 });
         projectId = found.projectId;
         await prisma.permit.update({ where: { id }, data: { deletedAt: null } });
+        break;
+      }
+      case "WorkPermit": {
+        const found = await prisma.workPermit.findFirst({
+          where: { id, deletedAt: { not: null } },
+          select: { id: true, projectId: true },
+        });
+        if (!found) return NextResponse.json({ error: "Not found in trash" }, { status: 404 });
+        projectId = found.projectId;
+        await prisma.workPermit.update({ where: { id }, data: { deletedAt: null } });
         break;
       }
     }

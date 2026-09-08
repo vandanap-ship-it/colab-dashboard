@@ -15,7 +15,7 @@ const fmtDate = formatDayMonthYearTime;
 export default async function TrashPage() {
   // Each model has its own findMany — we pass an explicit deletedAt filter so
   // the soft-delete extension lets the query through and returns trashed rows.
-  const [progress, issues, hindrances, concerns, inspections, rfis, manpower, permits, projects] =
+  const [progress, issues, hindrances, concerns, inspections, rfis, manpower, permits, workPermits, projects] =
     await Promise.all([
       prisma.progressEntry.findMany({
         where: { deletedAt: { not: null } },
@@ -90,13 +90,22 @@ export default async function TrashPage() {
           project: { select: { id: true, name: true } },
         },
       }),
+      prisma.workPermit.findMany({
+        where: { deletedAt: { not: null } },
+        orderBy: { deletedAt: "desc" },
+        take: 100,
+        include: {
+          requester: { select: { name: true } },
+          project: { select: { id: true, name: true } },
+        },
+      }),
       prisma.project.findMany({ select: { id: true, name: true } }),
     ]);
 
   const projectName = new Map(projects.map((p) => [p.id, p.name]));
 
   const total =
-    progress.length + issues.length + hindrances.length + concerns.length + inspections.length + rfis.length + manpower.length + permits.length;
+    progress.length + issues.length + hindrances.length + concerns.length + inspections.length + rfis.length + manpower.length + permits.length + workPermits.length;
 
   return (
     <div className="space-y-6">
@@ -216,6 +225,18 @@ export default async function TrashPage() {
               line: `${p.name}${p.number ? ` · #${p.number}` : ""}${p.issuingAuthority ? ` · ${p.issuingAuthority}` : ""}`,
             }))}
           />
+
+          <Section
+            title="Work permits"
+            items={workPermits.map((w) => ({
+              id: w.id,
+              entityType: "WorkPermit" as const,
+              projectName: projectName.get(w.projectId) ?? "—",
+              when: w.deletedAt,
+              who: w.requester?.name ?? "—",
+              line: `${w.type} · ${w.title.slice(0, 80)}`,
+            }))}
+          />
         </>
       )}
     </div>
@@ -228,7 +249,7 @@ export default async function TrashPage() {
     title: string;
     items: Array<{
       id: string;
-      entityType: "ProgressEntry" | "Issue" | "Hindrance" | "Concern" | "Inspection" | "Rfi" | "ManpowerEntry" | "Permit";
+      entityType: "ProgressEntry" | "Issue" | "Hindrance" | "Concern" | "Inspection" | "Rfi" | "ManpowerEntry" | "Permit" | "WorkPermit";
       projectName: string;
       when: Date | null | undefined;
       who: string;
