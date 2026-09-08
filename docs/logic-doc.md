@@ -146,8 +146,32 @@ In the Python model, Villa 10 and Villa 11 are treated as a single unit `"Villa 
 
 ---
 
+## Access control — who sees what
+
+Every user has a `modules` field that's either NULL (internal White Lotus staff — full access) or a JSON array of module keys like `["QAQC"]` (external contractor scoped to that module).
+
+The seven module keys are: `PROGRESS`, `QAQC`, `SAFETY`, `HINDRANCE`, `CONCERN`, `RFI`, `PERMIT`.
+
+### The three gates
+
+**1. Module gate** — `canAccessModule(userModules, moduleKey)`.
+Full-access users always pass. Scoped users must have the module in their scope. Applied at the API layer on module-owning endpoints: HINDRANCE endpoints require HINDRANCE module, RFI endpoints require RFI module, etc.
+
+**2. Scoped-row gate** — `canAccessScopedRow(userModules, rowModule)`.
+Applied to individual rows that carry a `module` tag (Issue, Inspection). A QAQC-scoped user can act on QAQC rows but NOT SAFETY rows or general (module=null) rows. Full-access users always pass. Used by every `PATCH /api/issues/[id]` and `PATCH /api/inspections/[id]`.
+
+**3. Page-level scope gate** — `isScopedUser(userModules)`.
+Applied at the Server Component layer on planning-side pages (all reports, gantt, timeline, snags, bills, look-ahead, add-progress, contractor-assign, insights) — any scoped user hitting the URL directly gets redirected to `/mobile`. Defense-in-depth even for scoped users with a non-SITE_ENGINEER role.
+
+### Cross-project FK guard
+
+`assertWbsNodeInProject(wbsNodeId, projectId)` — every POST that accepts both projectId and a wbsNodeId (issues, hindrances, concerns, inspections, RFI, bill lines) verifies the wbsNodeId's owning project matches. Blocks a client from posting `{ projectId: A, wbsNodeId: node-in-B }`.
+
+---
+
 ## Files (source of truth in code)
 
+**Report computation**
 - `src/lib/scorecardServer.ts` — daily scorecard aggregation
 - `src/lib/weeklyReportServer.ts` — weekly report aggregation
 - `src/lib/currentStage.ts` — current stage per villa
@@ -157,5 +181,17 @@ In the Python model, Villa 10 and Villa 11 are treated as a single unit `"Villa 
 - `src/lib/colabSync.ts` — Colab CSV → Siddhi ingest (baselines + weightPct + progress entries)
 - `src/lib/colabSyncMapping.ts` — Sub_Location → MilestoneSection, reason code mapping
 - `src/lib/manpower.ts` — headcount aggregation
+
+**Access control + integrity**
+- `src/lib/modules.ts` — module keys, `canAccessModule`, `canAccessScopedRow`, `isScopedUser`
+- `src/lib/roles.ts` — role definitions, `isAdmin`, `canReview`, `canSeeDesktop`, etc.
+- `src/lib/projectFkGuards.ts` — `assertWbsNodeInProject`, `assertWbsNodesInProject`
+- `src/lib/optimisticLock.ts` — `checkConflict` used by every PATCH endpoint
+- `src/lib/dates.ts` — IST-pinned date formatters (`formatDayMonthYear`, `formatDayMonthYearTime`)
+
+**Ops**
+- `scripts/verify-backup.ts` — nightly backup verifier
+- `scripts/smoke-prod.ts` — post-deploy smoke test
+- `src/app/api/health/route.ts` — public liveness probe
 
 For a rules diff, read the git log on those files.

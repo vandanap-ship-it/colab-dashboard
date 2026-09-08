@@ -228,6 +228,47 @@ concerns, issues, hindrances, rfi, progress, drawings, permits, projects, inspec
 
 **Client side: still to do.** Every edit form on desktop + mobile needs to (a) capture the `updatedAt` returned from the read, and (b) echo it back on save. Track adoption via presence of `expectedUpdatedAt` in the payload; the server logs a warning inside `checkConflict` when clients don't send it. Once every form is sending it, flip the helper from "no-op when absent" to "require present".
 
+### Pre-launch hardening sweep (2026-09-04 → 2026-09-08)
+
+Six-day pass covering correctness, security, ops safety, and pre-launch UX. **37 commits.** Everything below is on `main` and covered by tests (267 passing).
+
+**Access control — 12 gaps closed.**
+- Write paths: `/api/issues/[id]`, `/api/inspections/[id]`, `/api/expenses/[id]` PATCH+DELETE now gate on scoped-user module ownership. A QAQC-scoped contractor can no longer resolve a SAFETY snag by direct id.
+- Read paths: `/api/users` (assignee picker), `/api/projects/summary`, `/api/projects/[id]/drawings`, `/api/projects/[id]/trade-plans`, `/api/projects/[id]/activities/for-milestone`, `/api/inspections` GET, `/api/issues` GET all refuse scoped external contractors.
+- New helper `canAccessScopedRow(userModules, rowModule)` in `src/lib/modules.ts` with 4 unit tests.
+- 16 planning-side pages (all reports, gantt, timeline, snags, bills, look-ahead, add-progress, contractor-assign, insights) gated on `isScopedUser` — defense-in-depth in case a scoped user is provisioned with a non-mobile role.
+
+**Data integrity — 15 gaps closed.**
+- Soft-delete auto-filter extended to RFI, Permit, ManpowerEntry, TradePlan — was previously only 8 of 12 deletedAt models.
+- 4 multi-step writes wrapped in `$transaction`: Colab manpower trade-plan wipe+reinsert, Colab progress per-row (WBS update + entry write + photo attach), MSP project.create + sections/blocks/villas, WBS import contractor upserts.
+- 7 cross-project FK guards: `wbsNodeId` on POST rfi/hindrances/inspections/issues/concerns/bills, PATCH bills. Client can no longer post `projectId: A, wbsNodeId: node-in-B`. New helper `src/lib/projectFkGuards.ts` with 7 unit tests + e2e coverage.
+- `formatDayMonthYear` and new `formatDayMonthYearTime` pinned to Asia/Kolkata — closes the "snag raised at 03:00 IST shows on server-render as yesterday" bug (React hydration warnings + real user confusion). 11 unit tests.
+- Colab manpower import switched from findUnique-then-create to upsert-with-restore — trashed rows now restore-and-update instead of getting silently mutated OR crashing on the unique-composite key.
+
+**Traceability — 7 gaps closed.**
+- Audit trail added to: admin/users POST (user provisioning), admin/users/[id]/password POST (password reset — logs WHO reset WHOSE, never the hash), projects POST, projects/[id]/import (WBS bulk import — annotates replace-mode), projects/[id]/drawings POST, both colab imports (live runs only, not dry-run).
+- New `ProjectDrawing` entity type in the `AuditEntityType` union so drawings entries stop aliasing to `Project`.
+- Audit-log filter chips synced with the current entity/action union — admin can now filter by RFI, Permit, ManpowerEntry, TradePlan, and 5 other types that were missing from the chip list.
+- Audit filter project/user dropdowns actually work now — were orphan `<select>` elements without a form wrapper, picking a value did nothing.
+
+**Ops safety.**
+- `scripts/verify-backup.ts` — pulls the most recent nightly `.sql.gz` from private Blob store, gunzips, parses COPY blocks, counts rows per table. Fails loud if the backup is under 100 KB or if Project / User / WBSNode / Contractor come back with 0 rows. Wired as the last step of the backup workflow — a broken backup now surfaces inside the same run, not 10 days later. 7 unit tests for the parser.
+- `seed.ts` + `demo-seed.ts` refuse to run against a Neon host (URL pattern check) OR without an explicit `ALLOW_SEED=yes` / `ALLOW_DEMO_SEED=1` env var. CI opts in explicitly. Closes the "someone runs seed against prod and drops five weak-password accounts" failure mode.
+- `/api/admin/migrate?dryRun=true` returns the SQL that WOULD execute for every pending migration without running it. `?showSql=true` on GET does the same for inspection. Three-request flow: GET-showSql → POST-dryRun → POST-real.
+- `/api/health` — unauthenticated liveness probe for external uptime monitors. 200 with `db.latencyMs` on healthy, 503 with error on DB failure, no-store cache header.
+- `clear-test-data` extended from 6 to 20 tables — pre-launch reset now wipes RFIs, permits, manpower, trade plans, expenses, bills, drawings, and their photo/line children.
+- Login timing-attack channel closed — `authorize()` now always runs `bcrypt.compare` (against a DUMMY_HASH when the user doesn't exist), so response time no longer reveals which usernames are valid.
+- Sentry hooks in `error.tsx` + `global-error.tsx` — the `window.Sentry` pattern was dead code (modern `@sentry/nextjs` doesn't attach to window). Now imports directly; captures land the moment `NEXT_PUBLIC_SENTRY_DSN` is pasted into Vercel env.
+- `beforeunload` warning on `PendingSyncBadge` — site engineers with pending offline entries now get the browser's native "you have unsaved changes" prompt before closing the tab.
+- `smoke-prod.ts` expanded to cover RFI, Permit, ManpowerEntry, TradePlan — the four modules the previous smoke was blind to.
+
+**Pre-launch UX.**
+- `/my-actions` now shows snags AND RFIs assigned to me, not just concerns + inspections. Assignment emails link here and previously landed users on an empty page.
+- `⟳ Generate strong password` button on both the create-user form and the reset-password dialog. One click produces `mango-cedar-willow-4271`-shape memorable password, auto-fills both password + confirm, un-masks the input, offers Copy to clipboard. Real friction reduction for handing credentials to 15 team members without ending up with `password123` everywhere.
+- TrashButton wired to inspection + permit desktop lists (last two gaps).
+- Client concurrency echo wired to `admin/users`, `projects`, `progress` — the last three PATCH forms where the server guard existed but the client wasn't participating. Optimistic-lock coverage now complete on both sides for every mutable endpoint that has an `updatedAt` column.
+- Zod validation added to the three admin/import routes (`import-msp`, `import-colab-progress`, `import-colab-manpower`) — closes the write-endpoint validation gap for every remaining route.
+
 ## V2 — First quarter after launch (Sept–Nov 2026)
 
 ### QA/QC team
@@ -281,7 +322,10 @@ concerns, issues, hindrances, rfi, progress, drawings, permits, projects, inspec
 | 2026-08-26 | V0.5 | Daily Scorecard + Weekly Report shipped |
 | 2026-08-28 | V0.9 | Full Colab-parity work + brand match |
 | 2026-08-29 | V0.10 | Weekly Report parity, PDF export polish, PWA |
-| 2026-08-31 | **V1** | **Launch — Projects team live** |
+| 2026-08-31 | V1 | Code-complete for launch scope |
+| 2026-09-03 | V1.5 | Perf, DELETE endpoints, zod migration, concurrency helper |
+| 2026-09-08 | V1.6 | Pre-launch hardening sweep (access control, integrity, ops, UX) — 37 commits |
+| TBD (Sept 2026) | **V1.7** | **Actual launch — Projects team goes live on Amanvana** |
 | TBD | V2 | QA/QC + Safety + mobile polish |
 
 _This document should be updated whenever a scoped batch of features ships._
