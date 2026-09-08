@@ -6,6 +6,7 @@ import {
   ListChecks,
   PlusCircle,
   RefreshCw,
+  ShieldCheck,
   TrendingUp,
   Users,
   Wallet,
@@ -77,6 +78,13 @@ export default async function MobileProjectHome({
       href: `/mobile/${projectId}/hindrance/new`,
       label: "Log Hindrance",
       icon: CheckSquare,
+      tier: "primary",
+    },
+    {
+      key: "permit",
+      href: `/mobile/${projectId}/permit/new`,
+      label: "Raise Work Permit",
+      icon: ShieldCheck,
       tier: "primary",
     },
     {
