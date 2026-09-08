@@ -7,12 +7,17 @@ import { canAccessModule, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
+import { assignmentEmail, sendEmail } from "@/lib/email";
 import {
   WORK_PERMIT_TYPES,
+  WORK_PERMIT_TYPE_LABELS,
   isValidHhMm,
   serializeApproverIds,
   type WorkPermitStatus,
+  type WorkPermitType,
 } from "@/lib/workPermit";
+
+const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
 const PostWorkPermitSchema = z.object({
   projectId: z.string().min(1),
@@ -173,7 +178,31 @@ export async function POST(req: Request) {
       entityId: workPermit.id,
       summary: `Work permit raised: ${workPermit.type} · ${workPermit.title}`,
     });
-    // TODO: fire approver notification emails in Phase 5.
+
+    // Approver notification emails. Fire-and-forget after DB commit — silent
+    // no-op when a candidate has no email on file or RESEND_API_KEY isn't
+    // set on the deploy. Batched by Promise.allSettled so one bad address
+    // doesn't skip the rest.
+    const approverRecipients = await prisma.user.findMany({
+      where: { id: { in: body.approverIds }, email: { not: null } },
+      select: { name: true, email: true },
+    });
+    const permitUrl = `${SIDDHI_BASE_URL}/mobile/${body.projectId}/permit`;
+    await Promise.allSettled(
+      approverRecipients.map((u) =>
+        sendEmail(
+          assignmentEmail({
+            to: u.email!,
+            assigneeName: u.name,
+            itemType: "Work Permit",
+            itemTitle: `${WORK_PERMIT_TYPE_LABELS[workPermit.type as WorkPermitType] ?? workPermit.type} — ${workPermit.title}`,
+            itemUrl: permitUrl,
+            raisedByName: workPermit.requester?.name,
+            dueDate: workPermit.workDate,
+          }),
+        ),
+      ),
+    );
   }
 
   return NextResponse.json({ workPermit }, { status: duplicate ? 200 : 201 });

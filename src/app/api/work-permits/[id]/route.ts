@@ -14,7 +14,17 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/apiErrors";
-import { allowedWorkPermitTransition, isApprover, type WorkPermitStatus } from "@/lib/workPermit";
+import { sendEmail, workPermitDecisionEmail } from "@/lib/email";
+import { formatDayMonthYear } from "@/lib/dates";
+import {
+  allowedWorkPermitTransition,
+  isApprover,
+  WORK_PERMIT_TYPE_LABELS,
+  type WorkPermitStatus,
+  type WorkPermitType,
+} from "@/lib/workPermit";
+
+const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
 const PatchWorkPermitSchema = z.object({
   // Only status changes are supported on this endpoint. Editing an existing
@@ -145,6 +155,33 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         `${existing.type} "${existing.title.slice(0, 60)}" → ${newStatus}` +
         (kind === "reject" && rejectionReason ? ` (${rejectionReason.slice(0, 80)})` : ""),
     });
+
+    // Notify the requester on approve / reject. Skip close — that's a
+    // routine end-of-day action the requester either did themselves or
+    // knew was coming.
+    if ((kind === "approve" || kind === "reject") && updated.requester?.email) {
+      const actorName =
+        // The updated row includes `approver` (loaded via include). On
+        // reject the actor is the current session user, not the approver.
+        kind === "approve"
+          ? (updated.approver?.name ?? session.user.username)
+          : session.user.username;
+      const permitUrl = `${SIDDHI_BASE_URL}/mobile/${existing.projectId}/permit`;
+      await sendEmail(
+        workPermitDecisionEmail({
+          to: updated.requester.email,
+          requesterName: updated.requester.name,
+          permitTitle: existing.title,
+          permitTypeLabel:
+            WORK_PERMIT_TYPE_LABELS[existing.type as WorkPermitType] ?? existing.type,
+          workDate: formatDayMonthYear(existing.workDate),
+          decision: kind === "approve" ? "APPROVED" : "REJECTED",
+          actorName,
+          rejectionReason: kind === "reject" ? (rejectionReason?.trim() || undefined) : undefined,
+          permitUrl,
+        }),
+      );
+    }
 
     return NextResponse.json({ workPermit: updated });
   } catch (e) {

@@ -170,7 +170,7 @@ export function shell(opts: {
 export interface AssignmentEmailInput {
   to: string;
   assigneeName: string;
-  itemType: "Concern" | "Issue" | "Task" | "RFI";
+  itemType: "Concern" | "Issue" | "Task" | "RFI" | "Work Permit";
   itemTitle: string;
   itemUrl: string;
   raisedByName?: string;
@@ -201,6 +201,70 @@ export function assignmentEmail(input: AssignmentEmailInput): SendEmailInput {
         ${raisedByLine}
       `,
       cta: { text: `Open ${input.itemType.toLowerCase()}`, url: input.itemUrl },
+    }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Flow 1b — Work permit decision (goes back to the requester)
+// ---------------------------------------------------------------------------
+
+export interface WorkPermitDecisionInput {
+  to: string;
+  requesterName: string;
+  permitTitle: string;
+  permitTypeLabel: string;
+  workDate: string; // pre-formatted (from formatDayMonthYear)
+  decision: "APPROVED" | "REJECTED";
+  actorName: string; // approver / rejecter
+  rejectionReason?: string;
+  permitUrl: string;
+}
+
+/**
+ * Fires when an approver acts on a permit — either approved or rejected.
+ * The requester is the person who raised the permit and needs to know
+ * whether they can start the work. Kept separate from assignmentEmail
+ * because the framing is different (this is a DECISION not a NEW ITEM).
+ */
+export function workPermitDecisionEmail(input: WorkPermitDecisionInput): SendEmailInput {
+  const isApproved = input.decision === "APPROVED";
+  const chipBg = isApproved ? "#E4EFE8" : "#F3DFDF";
+  const chipFg = isApproved ? "#2E7D5B" : "#B33A3A";
+  const chipLabel = isApproved ? "Approved" : "Rejected";
+  const reasonBlock =
+    !isApproved && input.rejectionReason
+      ? `<p style="padding: 12px 14px; background: #F3DFDF; border-radius: 6px;
+                   border-left: 3px solid ${chipFg}; color: #6B1F1F;">
+          <strong>Reason:</strong> ${input.rejectionReason}
+        </p>`
+      : "";
+  return {
+    to: input.to,
+    subject: `[Siddhi] Work Permit ${chipLabel}: ${input.permitTitle}`,
+    html: shell({
+      preheader: `Your work permit was ${chipLabel.toLowerCase()} by ${input.actorName}.`,
+      headline: `Work Permit ${chipLabel}`,
+      bodyHtml: `
+        <p>Hi ${input.requesterName},</p>
+        <p>
+          <span style="display: inline-block; padding: 2px 10px; background: ${chipBg};
+                       color: ${chipFg}; border-radius: 999px; font-weight: 600;
+                       font-size: 12px; letter-spacing: .5px; text-transform: uppercase;">
+            ${chipLabel}
+          </span>
+        </p>
+        <p style="padding: 12px 14px; background: #F7F5EF; border-radius: 6px;
+                  border-left: 3px solid ${BRAND_AMBER};">
+          <strong>${input.permitTypeLabel} — ${input.permitTitle}</strong><br>
+          <span style="color: ${INK_2};">Work date: ${input.workDate}</span>
+        </p>
+        ${reasonBlock}
+        <p style="color: ${INK_2};">
+          ${isApproved ? "Approved" : "Rejected"} by <strong>${input.actorName}</strong>.
+        </p>
+      `,
+      cta: { text: "Open permit", url: input.permitUrl },
     }),
   };
 }
