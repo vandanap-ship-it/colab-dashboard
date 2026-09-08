@@ -30,6 +30,7 @@ const ENTITY_TYPES = [
   "Inspection",
   "Rfi",
   "Permit",
+  "WorkPermit",
   "ManpowerEntry",
   "TradePlan",
   "SubContractorBill",

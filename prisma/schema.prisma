@@ -41,6 +41,9 @@ model User {
   uploadedDrawingRevisions DesignDrawingRevision[] @relation("RevisionUploader")
   createdTradePlans        TradePlan[]             @relation("TradePlanCreator")
   loggedManpower           ManpowerEntry[]         @relation("ManpowerEntryCreator")
+  requestedWorkPermits     WorkPermit[]            @relation("WorkPermitRequester")
+  approvedWorkPermits      WorkPermit[]            @relation("WorkPermitApprover")
+  closedWorkPermits        WorkPermit[]            @relation("WorkPermitCloser")
 }
 
 model Project {
@@ -85,6 +88,7 @@ model Project {
   milestoneSections  MilestoneSection[]
   rfis               Rfi[]
   permits            Permit[]
+  workPermits        WorkPermit[]
   tradePlans         TradePlan[]
   manpowerEntries    ManpowerEntry[]
 
@@ -214,6 +218,7 @@ model Contractor {
   bills           SubContractorBill[]
   tradePlans      TradePlan[]
   manpowerEntries ManpowerEntry[]
+  workPermits     WorkPermit[]
 
   @@unique([projectId, name])
   @@index([projectId])
@@ -275,6 +280,7 @@ model WBSNode {
   issues          Issue[]
   inspections     Inspection[]
   rfis            Rfi[]
+  workPermits     WorkPermit[]
   billLines       SubContractorBillLine[]
 
   @@unique([projectId, taskCode])
@@ -550,6 +556,87 @@ model Permit {
   @@index([projectId])
   @@index([responsibleUserId])
   @@index([expiryDate])
+}
+
+// ---------------------------------------------------------------------------
+// WorkPermit — daily site permits (Hot Work, Night Work, De-shuttering, etc.).
+//
+// Different from `Permit` above (which is annual/multi-year regulatory
+// approvals). WorkPermits are per-day work authorizations raised by an HSE
+// Officer / Site Engineer / Safety Officer, approved by a Safety Manager
+// before work starts, and closed at end of day.
+//
+// State machine:
+//   PENDING → APPROVED → CLOSED      (happy path)
+//   PENDING → REJECTED               (approver refuses)
+//   APPROVED → REJECTED              (only until closed — approver realizes
+//                                     the setup is unsafe after all)
+//
+// First-approver-wins semantics: `approverIds` is a JSON array of user IDs
+// who CAN approve; whichever one clicks first stamps `approvedById` and the
+// row transitions to APPROVED. Matches the workflow the CSV import shows.
+// ---------------------------------------------------------------------------
+model WorkPermit {
+  id           String @id @default(cuid())
+  projectId    String
+  // Free-form so we can add new types (e.g. "Confined Space", "Excavation")
+  // without a schema migration. Display labels live in src/lib/workPermit.ts.
+  // Known set at v1: HOT_WORK | NIGHT_WORK | DESHUTTERING | GENERAL
+  type         String
+  title        String // one-line summary shown in lists
+  description  String? // free-form details about the work being permitted
+  // The day the work is authorized for. Time-of-day fields are separate so
+  // the same permit can span an evening-into-night without spanning dates.
+  workDate     DateTime
+  startTime    String // "HH:MM" 24-hour, e.g. "09:00"
+  endTime      String // "HH:MM" 24-hour, e.g. "18:00"
+  // Free-text location — Colab's export shows values like "Villa 14 / Gr Floor"
+  // or "All Locations". Free text is expressive enough without forcing every
+  // permit to bind to a WBSNode.
+  location     String?
+  contractorId String? // optional — some permits (Night Work) name a contractor
+  wbsNodeId    String? // optional link to a specific activity
+  requesterId  String
+  // JSON array of User.id strings that can approve. First-approver-wins.
+  approverIds  String
+  status       String    @default("PENDING") // PENDING | APPROVED | REJECTED | CLOSED
+  approvedById String?
+  approvedAt   DateTime?
+  closedById   String?
+  closedAt     DateTime?
+  rejectedById String?
+  rejectedAt   DateTime?
+  rejectionReason String?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  idempotencyKey String?   @unique // de-dupes offline-queue replays
+
+  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contractor Contractor?       @relation(fields: [contractorId], references: [id])
+  wbsNode    WBSNode?          @relation(fields: [wbsNodeId], references: [id])
+  requester  User              @relation("WorkPermitRequester", fields: [requesterId], references: [id])
+  approver   User?             @relation("WorkPermitApprover", fields: [approvedById], references: [id])
+  closer     User?             @relation("WorkPermitCloser", fields: [closedById], references: [id])
+  photos     WorkPermitPhoto[]
+
+  @@index([projectId])
+  @@index([requesterId])
+  @@index([approvedById])
+  @@index([status])
+  @@index([workDate])
+}
+
+model WorkPermitPhoto {
+  id           String   @id @default(cuid())
+  workPermitId String
+  url          String
+  uploadedAt   DateTime @default(now())
+
+  workPermit WorkPermit @relation(fields: [workPermitId], references: [id], onDelete: Cascade)
+
+  @@index([workPermitId])
 }
 
 model Inspection {

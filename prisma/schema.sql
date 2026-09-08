@@ -340,6 +340,47 @@ CREATE TABLE "Permit" (
 );
 
 -- CreateTable
+CREATE TABLE "WorkPermit" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "description" TEXT,
+    "workDate" TIMESTAMP(3) NOT NULL,
+    "startTime" TEXT NOT NULL,
+    "endTime" TEXT NOT NULL,
+    "location" TEXT,
+    "contractorId" TEXT,
+    "wbsNodeId" TEXT,
+    "requesterId" TEXT NOT NULL,
+    "approverIds" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "approvedById" TEXT,
+    "approvedAt" TIMESTAMP(3),
+    "closedById" TEXT,
+    "closedAt" TIMESTAMP(3),
+    "rejectedById" TEXT,
+    "rejectedAt" TIMESTAMP(3),
+    "rejectionReason" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
+    "idempotencyKey" TEXT,
+
+    CONSTRAINT "WorkPermit_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "WorkPermitPhoto" (
+    "id" TEXT NOT NULL,
+    "workPermitId" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "WorkPermitPhoto_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Inspection" (
     "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
@@ -740,6 +781,27 @@ CREATE INDEX "Permit_expiryDate_idx" ON "Permit"("expiryDate");
 CREATE UNIQUE INDEX "Permit_projectId_name_number_key" ON "Permit"("projectId", "name", "number");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "WorkPermit_idempotencyKey_key" ON "WorkPermit"("idempotencyKey");
+
+-- CreateIndex
+CREATE INDEX "WorkPermit_projectId_idx" ON "WorkPermit"("projectId");
+
+-- CreateIndex
+CREATE INDEX "WorkPermit_requesterId_idx" ON "WorkPermit"("requesterId");
+
+-- CreateIndex
+CREATE INDEX "WorkPermit_approvedById_idx" ON "WorkPermit"("approvedById");
+
+-- CreateIndex
+CREATE INDEX "WorkPermit_status_idx" ON "WorkPermit"("status");
+
+-- CreateIndex
+CREATE INDEX "WorkPermit_workDate_idx" ON "WorkPermit"("workDate");
+
+-- CreateIndex
+CREATE INDEX "WorkPermitPhoto_workPermitId_idx" ON "WorkPermitPhoto"("workPermitId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Inspection_idempotencyKey_key" ON "Inspection"("idempotencyKey");
 
 -- CreateIndex
@@ -954,6 +1016,27 @@ ALTER TABLE "Permit" ADD CONSTRAINT "Permit_projectId_fkey" FOREIGN KEY ("projec
 
 -- AddForeignKey
 ALTER TABLE "Permit" ADD CONSTRAINT "Permit_responsibleUserId_fkey" FOREIGN KEY ("responsibleUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkPermit" ADD CONSTRAINT "WorkPermit_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkPermit" ADD CONSTRAINT "WorkPermit_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkPermit" ADD CONSTRAINT "WorkPermit_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkPermit" ADD CONSTRAINT "WorkPermit_requesterId_fkey" FOREIGN KEY ("requesterId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkPermit" ADD CONSTRAINT "WorkPermit_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkPermit" ADD CONSTRAINT "WorkPermit_closedById_fkey" FOREIGN KEY ("closedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkPermitPhoto" ADD CONSTRAINT "WorkPermitPhoto_workPermitId_fkey" FOREIGN KEY ("workPermitId") REFERENCES "WorkPermit"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Inspection" ADD CONSTRAINT "Inspection_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;

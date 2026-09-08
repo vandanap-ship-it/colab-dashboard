@@ -48,6 +48,7 @@ export type AuditEntityType =
   | "DesignDrawing"
   | "Rfi"
   | "Permit"
+  | "WorkPermit"
   | "TradePlan"
   | "ManpowerEntry";
 
