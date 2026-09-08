@@ -1,66 +1,85 @@
-# Siddhi Logic Document
+# Siddhi Logic — Full Reference
 
-Every computed number in the two reports, in plain language, with the exact rule.
+Every business rule the app runs, in plain English. Use this doc when you want to know *why* a number came out the way it did.
+
+For a quick lookup (one line per rule), see `logic-crisp.md`.
 
 **Source of truth:** the code files listed at the end.
-**When to update this doc:** any time we change a computation.
+**Update this doc:** whenever we change how a number is calculated.
 
 ---
 
 ## Daily Scorecard
 
-### §1 Daily Site Snapshot — the 4 tiles
+### §1 The 4 tiles at the top
 
-**SITE PROGRESS UPDATED (Yes / No)** — was at least one progress entry logged anywhere today.
+Each tile is a today count vs the number that should have moved today.
 
-**CONTRACTORS UPDATED** — number of distinct contractors that had at least one progress entry logged today. Denominator = number of contractors that were expected to move today (i.e. had at least one activity in its planned window OR overdue-open).
+**Site Progress Updated (Yes / No)**
+Was anything logged today anywhere on the project? Yes or No.
 
-**BLOCKS UPDATED** — number of distinct physical blocks that had at least one progress entry today. Denominator = blocks that had any activity planned for today.
+**Contractors Updated**
+Numerator: contractors that logged at least one progress entry today.
+Denominator: contractors we expected to log today.
 
-**VILLAS UPDATED** — number of distinct villas that logged progress today. Denominator = villas that were expected to move today.
+**Blocks Updated**
+Numerator: blocks with at least one progress entry today.
+Denominator: blocks with any activity planned today.
 
-An activity counts as **"planned today"** if:
-- today falls inside its planned window (`baselineStart ≤ today ≤ baselineFinish`), **OR**
-- its planned finish has already passed and it's still open (`baselineFinish < today AND actualFinish is null`).
+**Villas Updated**
+Numerator: villas that logged today.
+Denominator: villas we expected to log today.
 
-A villa counts as **"planned today"** if it has at least one such activity.
+**What "expected today" means for an activity:**
 
-### Abraham-only view
+- Today falls inside its planned window (planned start ≤ today ≤ planned finish), OR
+- Its planned finish already passed and it's still open (not marked complete).
 
-When the contractor filter is set to Abraham Thomas, the "Abraham villas" universe is the **41 hardcoded villas** matching Shraddha's `BLOCKS` map in her Python toolkit (V3–8, V9–11, V12–14, V15–16, V17–19, V20–22, V23–24, V25–31, V32–37, V41–43, V44–46). This mirrors Python exactly and is independent of wbsNode contractor tagging.
+**A villa counts as expected today** if it has at least one such activity.
 
-Block-wise display for Abraham view uses the Colab convention:
-`{2:02, 3-8→02, 9-11→03, 12-14→04, 15-16→05, 17-19→06, 20-22→07, 23-24→08, 25-31→09, 32-37→10, 41-43→12, 44-46→13}`
+### Abraham Thomas view
 
-### §2 Daily Movement — Contractor-wise
+When the contractor filter is set to Abraham Thomas, the report uses a **hard-coded list of 41 villas** — the same list Shraddha's Python toolkit uses. These are V3–8, V9–11, V12–14, V15–16, V17–19, V20–22, V23–24, V25–31, V32–37, V41–43, V44–46.
 
-Per contractor:
-- **Villas in scope** = the contractor's total villa count (hardcoded: Abraham 41, Elegant 52).
-- **Executed / Planned** = villas that logged progress today / villas that were expected today.
+The block numbers Abraham's view displays come from a lookup:
+V2 shows as block 02, V3–8 as block 02, V9–11 as block 03, V12–14 as block 04, and so on up to V44–46 as block 13.
+
+This mirrors Python exactly. The `contractor` field on individual activities is IGNORED for this view — we go by the villa number alone.
+
+### §2 Daily Movement — per contractor
+
+For each contractor:
+- **Villas in scope** = the contractor's total villas (hard-coded: Abraham 41, Elegant 52).
+- **Executed / Planned** = villas that logged today / villas we expected today.
 - **Not updated** = planned − executed.
 
 ### §3 Planned Coverage by Block
 
 For each block with any activity planned today:
-- Chip is green if that villa logged progress today.
-- Chip is gold-edged if it logged today but wasn't expected today ("ahead of plan").
-- Plain chip = expected today, didn't log.
+- Green chip = villa logged today.
+- Gold-edged chip = villa logged today but wasn't expected today (ahead of plan).
+- Plain chip = we expected today, nothing logged.
 
 ### §5 Milestone Progress — per villa
 
-The **current stage** of each villa is the first (by section orderIndex) milestone that isn't closed (`actualFinish is null`).
+Every villa has 8 milestones (Foundation → Handover). This section shows how far along each villa is on each milestone.
 
-A milestone closes when:
-- If it has a ★ END-marker child (like "Footing RCC — Concreting ★"), the milestone closes when the ★ closes — even if other children are still open.
-- If no ★ exists, the milestone closes when every baselined child is done.
+**Current stage** of a villa = the first milestone that isn't closed yet.
 
-Milestone pctComplete = duration-weighted avg of children's pctComplete.
+**A milestone closes when either:**
+
+1. **The ★ END-marker rule.** If the milestone has a special "END" activity — like `Footing RCC — Concreting ★` — the milestone closes when that ★ activity finishes. Doesn't matter if other activities under it are still open.
+2. **The all-baselined-children rule.** If there's no ★, the milestone closes only when every planned activity under it is done.
+
+Whichever fires first wins.
+
+**Milestone % complete** = weighted average of the children's % complete, weighted by their planned duration.
 
 ### §7 Project Health
 
-- **Start / End date** = min / max of all baselined milestones.
-- **Actual / Projected** = actualStart / projectedFinish where set, otherwise the baseline.
-- **Progress to date** = sum of `wbsNode.weightPct` for wbsNodes with any ProgressEntry logged as of today.
+- **Start / End** = earliest / latest baseline date across all milestones.
+- **Actual / Projected** = actual start / projected finish where we have them, baseline otherwise.
+- **Progress to date** = sum of activity weights for activities where anything has been logged.
 - **Overall complete** = should be 100 % at project end.
 
 ---
@@ -69,103 +88,137 @@ Milestone pctComplete = duration-weighted avg of children's pctComplete.
 
 ### §1 Overall Progress
 
-At end of week:
-- **Planned %** = sum of `wbsNode.weightPct` for every activity whose `baselineFinish ≤ weekEnd`. This is "what % of the project should be done by now if we ran on plan".
-- **Actual %** = sum of `wbsNode.weightPct` for every activity that has any ProgressEntry logged by weekEnd. This is "what % of the project has been logged as done by now".
+At the end of the week:
+
+- **Planned %** = sum of activity weights for every activity that was SUPPOSED to be done by weekend. "What percentage of the project should be complete by now if we ran on plan."
+- **Actual %** = sum of activity weights for every activity where something has been logged. "What percentage the site has actually finished by now."
 - **Variance** = Actual − Planned.
 
-`weightPct` is the Colab CSV `Physical_Progress` column — per-activity weight, summing to ~100 % across the whole schedule. Loaded into Siddhi via the Colab progress import.
+**About activity weights.** Every activity has a weight — how much of the whole project it represents. All weights add up to about 100 % across the schedule. The weight comes from the Colab CSV's `Physical_Progress` column and gets loaded into Siddhi during the Colab import.
 
 ### §2 Milestone Plan (per contractor)
 
-Uses **current stage per villa** — each villa contributes at most one milestone to the buckets. Mirrors Shraddha's Python (`build_wk23.py`).
+Villas grouped by their current milestone, split by contractor. Tells you what stage each contractor's villas are at.
 
-**To Complete this week** (planned to finish this week):
-- Current stage where `weekStart ≤ baselineFinish ≤ weekEnd`, still open.
-- `closed` count = same window, actualFinish set (finished on time).
-- `spill` = current stage with `baselineFinish < weekStart` AND still open (should've finished before this week).
+### §3 Weekly Delivery (villas closed)
 
-**To Start this week** (planned to start this week):
-- Current stage where `weekStart ≤ baselineStart ≤ weekEnd`, still open.
-- `started` count = same, actualStart set (kicked off).
+Villas whose final activity finished inside the reporting week.
 
-**In Progress this week** (span overlaps the week):
-- Current stage where `baselineStart ≤ weekEnd AND baselineFinish ≥ weekStart` AND not done.
-- `moving` = has actualStart set (activity is under way).
-- `stalled` = span overlaps but no actualStart — should be in progress but hasn't started.
+### §4 Milestone Master
 
-**Overdue** — same as "To Complete spill" (kept as a separate section in the UI for emphasis).
+Grid: 8 milestones × all villas. Each cell shows a status — planned, achieved, delayed.
 
-### §3 Stalled aging bar
+### §5 Hindrance Log
 
-An in-progress milestone that hasn't logged anything in N days becomes "stalled". The panel shows how long each has been idle.
-
-### §4 Manpower
-
-- Weekly target = sum of tradePlans across the 7 days.
-- Weekly achieved = sum of ManpowerEntry.actualCount across the 7 days.
-- % of plan = achieved / target × 100.
-- Best day = the single day with the highest achieved headcount.
-- Holidays are excluded from both numerator and denominator.
-
-### §5 Delay Reasons
-
-Each delay reason mentioned on:
-- Any Hindrance opened this week or open going into the week, OR
-- Any ProgressEntry.reasonCode logged this week
-
-is bucketed by reason label. For each bucket:
-- **# activities** = number of distinct wbsNodes that carried this reason
-- **# villas** = number of distinct villas affected
-- **avg / worst delay** = days past baseline finish, averaged and max
-- **mitigation** = house-rules text mapped per reason code
+Every open hindrance, with how many days it has impacted the project and its current status.
 
 ---
 
-## Shared logic
+## Milestone rollup — the exact rules
 
-### IST day boundary
+Two ways a milestone can close. Whichever comes first wins.
 
-All "today" comparisons anchor to IST (`Asia/Kolkata`). A day starts 00:00 IST and ends 23:59:59 IST. Ensures a photo logged at 11:55 PM in Bangalore appears on that day's scorecard, not tomorrow's.
+**Rule 1: ★ END-marker.** The milestone has a leaf activity flagged as a sub-milestone AND categorized as `END`. When that leaf is marked complete, the milestone closes — even if other leaves under it are still open. Used when the END activity is the "signal" the milestone is done (like the ★ Concreting Complete step).
 
-### Holidays
+**Rule 2: All baselined children.** No ★ exists. The milestone closes when every leaf that has a baseline is at 100 % complete. Closing date is the latest actual finish across those leaves.
 
-The `INDIA_HOLIDAYS` list (2026–2027) excludes 11 + 10 dates. Used by:
-- Manpower denominator (holidays don't count against plan).
-- Any "expected today" computation that's near a holiday.
+If neither fires, the milestone stays open.
 
-### Contractor scope
+---
 
-- Abraham Thomas: 41 villas (per Shraddha's authoritative allocation).
-- Elegant Construction: 52 villas.
-- "To Be Decided": 52 villas (placeholder — a shift-elsewhere allocation).
+## Villa numbering (Amanvana)
 
-### Villa 10 & 11 grouped pair
+95 villas total, split across two active contractors and one placeholder:
 
-In the Python model, Villa 10 and Villa 11 are treated as a single unit `"Villa 10 & 11"`. In Siddhi they are separate Villa rows. The scorecard's Abraham universe includes both numbers so parity holds.
+| Contractor | Villa count | Notes |
+|---|---|---|
+| Abraham Thomas | 41 | Hard-coded list from the Python toolkit |
+| Elegant Construction | 52 | |
+| "To Be Decided" | 52 | Placeholder — will be reassigned during construction |
+
+**Villa 10 & 11 quirk.** Python treats these as a single unit `"Villa 10 & 11"`. Siddhi keeps them as two separate rows because that's how the DB is structured. Abraham's universe includes both villa numbers so the count matches Python (41 either way).
 
 ---
 
 ## Access control — who sees what
 
-Every user has a `modules` field that's either NULL (internal White Lotus staff — full access) or a JSON array of module keys like `["QAQC"]` (external contractor scoped to that module).
+Every user has a `modules` field. Two possibilities:
+- **NULL** = full access (internal White Lotus staff).
+- **A list like `["QAQC"]`** = scoped access (external contractor).
 
-The seven module keys are: `PROGRESS`, `QAQC`, `SAFETY`, `HINDRANCE`, `CONCERN`, `RFI`, `PERMIT`.
+**The seven modules:**
+
+`PROGRESS`, `QAQC`, `SAFETY`, `HINDRANCE`, `CONCERN`, `RFI`, `PERMIT`
 
 ### The three gates
 
-**1. Module gate** — `canAccessModule(userModules, moduleKey)`.
-Full-access users always pass. Scoped users must have the module in their scope. Applied at the API layer on module-owning endpoints: HINDRANCE endpoints require HINDRANCE module, RFI endpoints require RFI module, etc.
+Every access decision is one of these three checks:
 
-**2. Scoped-row gate** — `canAccessScopedRow(userModules, rowModule)`.
-Applied to individual rows that carry a `module` tag (Issue, Inspection). A QAQC-scoped user can act on QAQC rows but NOT SAFETY rows or general (module=null) rows. Full-access users always pass. Used by every `PATCH /api/issues/[id]` and `PATCH /api/inspections/[id]`.
+**1. Module gate — `canAccessModule(user.modules, moduleKey)`.**
+Applied at every module-owning endpoint. A scoped user must have the module in their scope. Full-access users always pass.
+Example: `/api/rfi` calls `canAccessModule(user.modules, "RFI")`. A user with `modules = ["QAQC"]` gets a 403.
 
-**3. Page-level scope gate** — `isScopedUser(userModules)`.
-Applied at the Server Component layer on planning-side pages (all reports, gantt, timeline, snags, bills, look-ahead, add-progress, contractor-assign, insights) — any scoped user hitting the URL directly gets redirected to `/mobile`. Defense-in-depth even for scoped users with a non-SITE_ENGINEER role.
+**2. Scoped-row gate — `canAccessScopedRow(user.modules, row.module)`.**
+Applied to rows that carry a `module` field (Issue, Inspection). A QAQC-scoped user can act on QAQC rows but NOT on SAFETY rows or on general (module = NULL) rows. Full-access users always pass.
+Example: a QAQC contractor gets a 403 when they try to PATCH a SAFETY snag by its ID, even though snag IDs aren't secret.
+
+**3. Page-level scope gate — `isScopedUser(user.modules)`.**
+Applied to planning-side pages (all reports, gantt, timeline, snags, bills, look-ahead, add-progress, contractor-assign, insights). Any scoped user hitting the URL gets redirected to `/mobile`. This is belt-and-suspenders — the API is already gated, but the page redirect prevents a confusing empty desktop UI for a scoped user with a non-mobile role.
 
 ### Cross-project FK guard
 
-`assertWbsNodeInProject(wbsNodeId, projectId)` — every POST that accepts both projectId and a wbsNodeId (issues, hindrances, concerns, inspections, RFI, bill lines) verifies the wbsNodeId's owning project matches. Blocks a client from posting `{ projectId: A, wbsNodeId: node-in-B }`.
+**Rule:** every POST that accepts both a `projectId` and a `wbsNodeId` (an activity ID) checks that the activity actually belongs to that project.
+
+**What it prevents:** a client posting `{ projectId: A, wbsNodeId: node-in-B }`. Without the guard, the row would land linked to a foreign project's activity — reports double-count, dashboards mis-attribute.
+
+Applied on: issues, hindrances, concerns, inspections, RFIs, and bill lines.
+
+---
+
+## Data integrity rules
+
+Rules that apply everywhere the app writes to the database.
+
+| Rule | What it does | Where it's enforced |
+|---|---|---|
+| Soft-delete filter | Reads never return trashed rows unless the caller asks explicitly | Prisma extension in `src/lib/prisma.ts` (12 models) |
+| Optimistic lock | Every PATCH refuses if the row changed since the client read it | `src/lib/optimisticLock.ts` |
+| Idempotency | Mobile POSTs de-dupe on `idempotencyKey`, so a network retry doesn't create two rows | Every mobile-facing POST endpoint |
+| Cross-project FK guard | Blocks cross-project activity links (above) | `src/lib/projectFkGuards.ts` |
+| Audit trail | Every mutation logged with WHO, WHEN, WHAT | `src/lib/audit.ts` → `AuditLog` table |
+| Timezone | Every human-readable date rendered in IST regardless of caller's local zone | `src/lib/dates.ts` |
+
+---
+
+## Backup + recovery
+
+**Nightly backup.** A GitHub Action runs at 02:00 IST every day. It calls `pg_dump` against the production database, gzips the output, and uploads to the private Vercel Blob store under `backups/YYYY-MM/`.
+
+**Verification.** Immediately after upload, `scripts/verify-backup.ts` runs. It downloads what was just uploaded, gunzips it, counts rows per table, and refuses if either:
+- The compressed file is under 100 KB (catches the "empty gzip" failure we saw in August).
+- Any of Project / User / WBSNode / Contractor comes back with zero rows (catches "backup ran against wrong DB").
+
+**Alert on failure.** If the workflow fails at any point, a "🚨 Siddhi backup FAILED" email goes to Vandana + Shraddha via Resend. Immediate signal, no silent failure.
+
+**Restore.** Two paths:
+- **Fast, low blast radius:** Neon Point-in-Time Restore. Create a branch from a timestamp, point Vercel's `DATABASE_URL` at it, done. Takes ~1 minute per restore.
+- **Slower, more control:** download the `.sql.gz` from Blob, gunzip, `pg_restore` against a fresh Neon branch, verify, cut over. Takes 15–30 minutes.
+
+**Retention.** No auto-cleanup — a manual `.github/workflows/backup-cleanup.yml` exists for the "purge everything" case. Storage cost is negligible at Siddhi's scale.
+
+---
+
+## Roles
+
+| Role | Sees desktop? | Sees mobile? | Can create project? | Admin? |
+|---|---|---|---|---|
+| ADMIN | ✓ | ✓ | ✓ | ✓ |
+| PLANNER | ✓ | ✗ | ✓ | ✗ |
+| PRODUCT_TEAM | ✓ | ✗ | ✗ | ✗ |
+| SITE_MANAGER | ✓ | ✓ | ✗ | ✗ |
+| SITE_ENGINEER | ✗ | ✓ | ✗ | ✗ |
+
+Scoped external contractors are typically assigned SITE_ENGINEER role. Scoped users with a non-SITE_ENGINEER role are still blocked from planning-side pages by the page-level scope gate (see access control above).
 
 ---
 
@@ -175,23 +228,26 @@ Applied at the Server Component layer on planning-side pages (all reports, gantt
 - `src/lib/scorecardServer.ts` — daily scorecard aggregation
 - `src/lib/weeklyReportServer.ts` — weekly report aggregation
 - `src/lib/currentStage.ts` — current stage per villa
-- `src/lib/milestoneRollup.ts` — milestone closure and pctComplete rules
+- `src/lib/milestoneRollup.ts` — milestone closure and % complete rules
 - `src/lib/istDay.ts` — IST day boundary
-- `src/lib/holidays.ts` — INDIA_HOLIDAYS list
-- `src/lib/colabSync.ts` — Colab CSV → Siddhi ingest (baselines + weightPct + progress entries)
-- `src/lib/colabSyncMapping.ts` — Sub_Location → MilestoneSection, reason code mapping
+- `src/lib/holidays.ts` — Indian public holidays list
 - `src/lib/manpower.ts` — headcount aggregation
+
+**Colab ingest**
+- `src/lib/colabSync.ts` — Colab progress CSV → Siddhi (baselines + activity weights + progress entries)
+- `src/lib/colabSyncMapping.ts` — Sub_Location → milestone section, reason code mapping
 
 **Access control + integrity**
 - `src/lib/modules.ts` — module keys, `canAccessModule`, `canAccessScopedRow`, `isScopedUser`
-- `src/lib/roles.ts` — role definitions, `isAdmin`, `canReview`, `canSeeDesktop`, etc.
-- `src/lib/projectFkGuards.ts` — `assertWbsNodeInProject`, `assertWbsNodesInProject`
+- `src/lib/roles.ts` — role definitions, `isAdmin`, `canReview`, `canSeeDesktop`
+- `src/lib/projectFkGuards.ts` — cross-project FK guards
 - `src/lib/optimisticLock.ts` — `checkConflict` used by every PATCH endpoint
-- `src/lib/dates.ts` — IST-pinned date formatters (`formatDayMonthYear`, `formatDayMonthYearTime`)
+- `src/lib/dates.ts` — IST-pinned date formatters
+- `src/lib/audit.ts` — `recordAudit` used by every mutation
 
 **Ops**
 - `scripts/verify-backup.ts` — nightly backup verifier
 - `scripts/smoke-prod.ts` — post-deploy smoke test
 - `src/app/api/health/route.ts` — public liveness probe
 
-For a rules diff, read the git log on those files.
+For change history on any rule, `git log` on the file above.
