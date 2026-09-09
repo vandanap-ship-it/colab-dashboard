@@ -46,11 +46,12 @@ type BackupSummary = {
   perTable: Map<string, number>;
 };
 
-async function findNewestBackup(): Promise<{ url: string; pathname: string; size: number } | null> {
+async function findNewestBackup(): Promise<{ url: string; downloadUrl: string; pathname: string; size: number } | null> {
   // Walk the backups/ prefix. Vercel Blob's list() paginates; the API returns
   // items sorted by upload time descending by default, but we sort defensively
-  // in case that changes.
-  const results: Array<{ url: string; pathname: string; size: number; uploadedAt: Date }> = [];
+  // in case that changes. `downloadUrl` is a signed URL that works on both
+  // private and public stores — `url` on a private store 403s without auth.
+  const results: Array<{ url: string; downloadUrl: string; pathname: string; size: number; uploadedAt: Date }> = [];
   let cursor: string | undefined;
   do {
     const page = await list({
@@ -62,6 +63,7 @@ async function findNewestBackup(): Promise<{ url: string; pathname: string; size
       if (!b.pathname.endsWith(".sql.gz")) continue;
       results.push({
         url: b.url,
+        downloadUrl: b.downloadUrl,
         pathname: b.pathname,
         size: b.size,
         uploadedAt: new Date(b.uploadedAt),
@@ -73,12 +75,12 @@ async function findNewestBackup(): Promise<{ url: string; pathname: string; size
   if (results.length === 0) return null;
   results.sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime());
   const newest = results[0];
-  return { url: newest.url, pathname: newest.pathname, size: newest.size };
+  return { url: newest.url, downloadUrl: newest.downloadUrl, pathname: newest.pathname, size: newest.size };
 }
 
-async function fetchBlob(url: string): Promise<Buffer> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Fetch ${url} → ${res.status} ${res.statusText}`);
+async function fetchBlob(downloadUrl: string): Promise<Buffer> {
+  const res = await fetch(downloadUrl);
+  if (!res.ok) throw new Error(`Fetch ${downloadUrl} → ${res.status} ${res.statusText}`);
   const buf = Buffer.from(await res.arrayBuffer());
   return buf;
 }
@@ -166,7 +168,7 @@ async function main(): Promise<BackupSummary> {
   }
 
   console.log("→ Downloading …");
-  const gz = await fetchBlob(newest.url);
+  const gz = await fetchBlob(newest.downloadUrl);
   console.log(`  ${fmtBytes(gz.length)} compressed`);
 
   console.log("→ Gunzipping …");
