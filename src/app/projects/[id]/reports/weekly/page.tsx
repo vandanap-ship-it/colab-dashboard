@@ -45,10 +45,10 @@ export default async function WeeklyReportPage({
   })();
 
   // Widen the error boundary to cover both the aggregation AND the render.
-  // The prior try/catch only wrapped getWeeklyReport, but the WeeklyReportView
-  // component itself has several dozen `.map()` calls on nested arrays — a
-  // missing property in the report shape bubbles up as a 500 instead of a
-  // friendly "we couldn't render this week" screen.
+  // Distinct log signature so grep in Vercel logs can tell us this code path
+  // actually ran (previous debugging suggested my earlier try/catch fixes
+  // weren't picking up in production).
+  console.info(`[weekly:v3] rendering for ${projectId} weekEnd=${weekEnd.toISOString()}`);
   try {
     const report = await getWeeklyReport(projectId, weekEnd);
     if (!report) notFound();
@@ -60,13 +60,19 @@ export default async function WeeklyReportPage({
       />
     );
   } catch (err) {
-    // notFound() throws a special NEXT_NOT_FOUND — let it propagate so the
-    // 404 page renders correctly. Any OTHER throw shows the friendly
-    // fallback instead of a bare 500.
-    if (err && typeof err === "object" && "digest" in err && (err as { digest: unknown }).digest === "NEXT_NOT_FOUND") {
+    // notFound() throws with digest "NEXT_HTTP_ERROR_FALLBACK;404" (the
+    // correct constant — earlier I used the wrong one and my catch was
+    // treating notFound as a regular error). Re-throw those so Next.js
+    // renders the 404 page.
+    if (
+      err && typeof err === "object" && "digest" in err &&
+      typeof (err as { digest: unknown }).digest === "string" &&
+      ((err as { digest: string }).digest.startsWith("NEXT_HTTP_ERROR_FALLBACK") ||
+       (err as { digest: string }).digest.startsWith("NEXT_REDIRECT"))
+    ) {
       throw err;
     }
-    console.error("[weekly] failed", err);
+    console.error("[weekly:v3] failed", err);
     return (
       <ReportErrorFallback
         title="Weekly Report could not be generated"
