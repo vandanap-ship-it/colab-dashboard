@@ -185,7 +185,7 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
     const myIssues = allSafetyIssues.filter((i) => i.wbsNode?.contractorId === c.id);
     let closed = 0, inReview = 0, tatSum = 0, tatN = 0;
     for (const insp of myInspections) {
-      if (insp.status === "APPROVED" || insp.status === "REJECTED") {
+      if (insp.status === "PASSED" || insp.status === "REJECTED") {
         closed++;
         if (insp.reviewedAt) {
           tatSum += daysBetween(insp.createdAt, insp.reviewedAt);

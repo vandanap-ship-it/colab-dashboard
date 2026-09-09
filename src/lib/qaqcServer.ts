@@ -171,7 +171,7 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
     const total = inspections.length;
     let passed = 0, rejected = 0, inReview = 0;
     for (const i of inspections) {
-      if (i.status === "APPROVED") passed++;
+      if (i.status === "PASSED") passed++;
       else if (i.status === "REJECTED") rejected++;
       else inReview++;
     }
@@ -277,7 +277,7 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
 
     let iNew = 0, iIR = 0, iCl = 0, iTatSum = 0, iTatN = 0;
     for (const insp of myInspections) {
-      if (insp.status === "APPROVED" || insp.status === "REJECTED") {
+      if (insp.status === "PASSED" || insp.status === "REJECTED") {
         iCl++;
         if (insp.reviewedAt) {
           iTatSum += daysBetween(insp.createdAt, insp.reviewedAt);
@@ -320,7 +320,7 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
   // ------------- §8 TAT trend (rolling 30 days) -------------
   const tatTrend: TATPoint[] = (() => {
     const closedInWindow = inspections.filter(
-      (i) => i.reviewedAt && i.reviewedAt >= monthAgo && (i.status === "APPROVED" || i.status === "REJECTED"),
+      (i) => i.reviewedAt && i.reviewedAt >= monthAgo && (i.status === "PASSED" || i.status === "REJECTED"),
     );
     const points: TATPoint[] = [];
     for (let i = 29; i >= 0; i--) {
