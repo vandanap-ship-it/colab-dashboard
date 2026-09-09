@@ -349,13 +349,19 @@ async function computeDashboardBag(projectId: string): Promise<DashboardBag | nu
   return { project, sections, rollup };
 }
 
+// Wrap the computation ONCE at module load. Next.js's unstable_cache uses the
+// argument list + the key array to build a cache key, so `cached(projectId)`
+// gives per-project cache entries. Wrapping inside the exported function
+// (as I did in the first pass) creates a new cached fn per call and defeats
+// the whole point.
+const cachedDashboardBag = unstable_cache(
+  (projectId: string) => computeDashboardBag(projectId),
+  ["dashboardBag-v1"],
+  { revalidate: 60, tags: ["dashboardBag"] },
+);
+
 export async function getDashboardBag(projectId: string): Promise<DashboardBag | null> {
-  const cached = unstable_cache(
-    () => computeDashboardBag(projectId),
-    ["dashboardBag", projectId],
-    { revalidate: 60, tags: [`dashboardBag:${projectId}`, "dashboardBag"] },
-  );
-  return cached();
+  return cachedDashboardBag(projectId);
 }
 
 // (No manual invalidation hook yet — 60-second TTL is enough for launch;

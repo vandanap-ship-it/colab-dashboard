@@ -44,10 +44,28 @@ export default async function WeeklyReportPage({
     return t;
   })();
 
-  let report;
+  // Widen the error boundary to cover both the aggregation AND the render.
+  // The prior try/catch only wrapped getWeeklyReport, but the WeeklyReportView
+  // component itself has several dozen `.map()` calls on nested arrays — a
+  // missing property in the report shape bubbles up as a 500 instead of a
+  // friendly "we couldn't render this week" screen.
   try {
-    report = await getWeeklyReport(projectId, weekEnd);
+    const report = await getWeeklyReport(projectId, weekEnd);
+    if (!report) notFound();
+    return (
+      <WeeklyReportView
+        report={report}
+        projectId={projectId}
+        weekEndingStr={weekEnd.toISOString().slice(0, 10)}
+      />
+    );
   } catch (err) {
+    // notFound() throws a special NEXT_NOT_FOUND — let it propagate so the
+    // 404 page renders correctly. Any OTHER throw shows the friendly
+    // fallback instead of a bare 500.
+    if (err && typeof err === "object" && "digest" in err && (err as { digest: unknown }).digest === "NEXT_NOT_FOUND") {
+      throw err;
+    }
     console.error("[weekly] failed", err);
     return (
       <ReportErrorFallback
@@ -57,9 +75,4 @@ export default async function WeeklyReportPage({
       />
     );
   }
-  if (!report) notFound();
-
-  return (
-    <WeeklyReportView report={report} projectId={projectId} weekEndingStr={weekEnd.toISOString().slice(0, 10)} />
-  );
 }
