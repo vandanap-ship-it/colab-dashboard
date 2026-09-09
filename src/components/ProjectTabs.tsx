@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, ScanEye, Sparkles } from "lucide-react";
+import { BarChart3, ClipboardCheck, HardHat, ScanEye, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 type Tab = {
@@ -23,10 +23,10 @@ export default function ProjectTabs({
 }) {
   const pathname = usePathname();
 
-  // V1 nav — 3 tabs: Dashboard, Progress, My Actions. QA/QC, Safety, and
-  // Insights are deferred to V2 (Shraddha's 28 Aug launch scope call) —
-  // their routes still resolve via direct URL, but they don't clutter the
-  // primary nav during launch when the site team is learning the tool.
+  // Five tabs matching the Colab-Tools layout the team is used to: Dashboard,
+  // Progress, QA/QC, EHS, My Actions. EHS is the display label for the SAFETY
+  // module (matches the team's vocabulary — Environment, Health & Safety).
+  // Insights is deferred to V2 (Shraddha, 09 Sep 2026).
   const tabs: Tab[] = [
     {
       key: "overview",
@@ -39,6 +39,18 @@ export default function ProjectTabs({
       label: "Progress",
       href: `/projects/${projectId}/progress`,
       icon: BarChart3,
+    },
+    {
+      key: "qaqc",
+      label: "QA/QC",
+      href: `/projects/${projectId}/qaqc`,
+      icon: ClipboardCheck,
+    },
+    {
+      key: "safety",
+      label: "EHS",
+      href: `/projects/${projectId}/safety`,
+      icon: HardHat,
     },
     {
       key: "my-actions",
