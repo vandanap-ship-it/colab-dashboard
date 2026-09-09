@@ -79,7 +79,15 @@ async function findNewestBackup(): Promise<{ url: string; downloadUrl: string; p
 }
 
 async function fetchBlob(downloadUrl: string): Promise<Buffer> {
-  const res = await fetch(downloadUrl);
+  // Private Blob store: even the downloadUrl 403s without a bearer token.
+  // The list() call returned a URL, but authentication has to be re-asserted
+  // per request. Public stores would work with a naked fetch — kept the
+  // Authorization header conditional so this same script still works if we
+  // ever move to a public store.
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(downloadUrl, { headers });
   if (!res.ok) throw new Error(`Fetch ${downloadUrl} → ${res.status} ${res.statusText}`);
   const buf = Buffer.from(await res.arrayBuffer());
   return buf;
