@@ -51,6 +51,11 @@ export default function ReportForm({
   });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // After a successful save we swap the form for a "Saved!" success view
+  // with clear next-action buttons (Add another / Home). Redirecting straight
+  // to /mobile was disorienting — the toast flashed briefly and users
+  // couldn't tell if their report actually saved.
+  const [saved, setSaved] = useState<null | { queued: boolean }>(null);
 
   const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
@@ -163,8 +168,71 @@ export default function ReportForm({
       toast.warning(photoWarning);
     }
 
-    router.push(successPath);
+    // Instead of redirecting immediately, show the success view. The
+    // "Add another" / "Home" buttons let the user confirm the save
+    // consciously — a redirect-flash was easy to miss on mobile.
+    setSaved({ queued });
     router.refresh();
+  }
+
+  function startAnother() {
+    // Reset the form fields to their defaults so the user can log the next
+    // entry without leaving the page.
+    setDescription("");
+    setActivityId("");
+    setActivitySearch("");
+    setPhotos([]);
+    const reset: Record<string, string | number> = {};
+    for (const f of extraFields) {
+      if (f.kind === "select") reset[f.key] = f.default;
+      if (f.kind === "date") reset[f.key] = f.defaultToday ? new Date().toISOString().slice(0, 10) : "";
+      if (f.kind === "number") reset[f.key] = "";
+      if (f.kind === "text") reset[f.key] = f.default ?? "";
+    }
+    setExtras(reset);
+    setError(null);
+    setSaved(null);
+  }
+
+  if (saved) {
+    return (
+      <div className="px-4 py-8 space-y-6">
+        <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-6 text-center">
+          <div className="w-14 h-14 mx-auto rounded-full bg-emerald-500 text-white flex items-center justify-center text-2xl mb-3">
+            ✓
+          </div>
+          <h2 className="text-xl font-semibold text-emerald-900">
+            {title} saved
+          </h2>
+          {saved.queued ? (
+            <p className="text-sm text-emerald-800 mt-2">
+              You're offline — it's stored on this device and will sync as
+              soon as you're back on signal.
+            </p>
+          ) : (
+            <p className="text-sm text-emerald-800 mt-2">
+              Saved to Amanvana. Your team can now see it.
+            </p>
+          )}
+        </div>
+        <div className="grid grid-cols-1 gap-2.5">
+          <button
+            type="button"
+            onClick={startAnother}
+            className="rounded-xl bg-stone-900 text-white text-base font-medium py-4 active:scale-[0.99] transition-all"
+          >
+            Add another
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push(successPath)}
+            className="rounded-xl bg-white border border-stone-200 text-stone-900 text-base font-medium py-4 active:scale-[0.99] transition-all"
+          >
+            Back to home
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -1,7 +1,57 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Camera, X } from "lucide-react";
+
+/**
+ * Resize + re-encode an image on the client before it hits the network.
+ * Site phones take 3-5 MB JPEGs; a 1600-px, quality-0.8 JPEG is around
+ * 200-400 KB with no visible loss for construction inspection photos.
+ * That's an ~85-90% bandwidth + storage saving for the Vercel Blob store.
+ *
+ * HEIC / HEIF from iPhone: browsers can't decode these in a canvas, so
+ * they fall through and upload as-is (Vercel Blob accepts them; the
+ * server converts on read).
+ *
+ * Any failure falls back to the original file — never lose the photo.
+ */
+async function compressImage(file: File): Promise<File> {
+  const isHeic =
+    file.type === "image/heic" ||
+    file.type === "image/heif" ||
+    /\.(heic|heif)$/i.test(file.name);
+  if (isHeic || !file.type.startsWith("image/")) return file;
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const maxDim = 1600;
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    const w = Math.round(bitmap.width * scale);
+    const h = Math.round(bitmap.height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    bitmap.close?.();
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.8),
+    );
+    if (!blob) return file;
+    // Only accept the compressed version if it actually reduced size —
+    // small phone shots taken in low light can compress LARGER at q=0.8
+    // than the original OS-level compression.
+    if (blob.size >= file.size * 0.95) return file;
+    const compressed = new File([blob], file.name.replace(/\.(png|webp|gif|heic|heif|tiff)$/i, ".jpg"), {
+      type: "image/jpeg",
+      lastModified: file.lastModified,
+    });
+    return compressed;
+  } catch {
+    return file;
+  }
+}
 
 /**
  * Photo picker with inline thumbnail previews + remove-one.
@@ -41,10 +91,18 @@ export default function PhotoPicker({
     };
   }, [previewUrls]);
 
-  function add(incoming: FileList | null) {
+  const [compressing, setCompressing] = useState(false);
+
+  async function add(incoming: FileList | null) {
     if (!incoming) return;
-    const merged = [...photos, ...Array.from(incoming)].slice(0, max);
-    setPhotos(merged);
+    setCompressing(true);
+    try {
+      const compressed = await Promise.all(Array.from(incoming).map(compressImage));
+      const merged = [...photos, ...compressed].slice(0, max);
+      setPhotos(merged);
+    } finally {
+      setCompressing(false);
+    }
   }
 
   function removeAt(idx: number) {
@@ -83,7 +141,11 @@ export default function PhotoPicker({
           <label className="aspect-square rounded-lg border-2 border-dashed border-stone-300 flex flex-col items-center justify-center text-stone-400 hover:border-stone-500 hover:text-stone-700 active:bg-stone-50 cursor-pointer transition-colors min-h-11">
             <Camera className="w-6 h-6" />
             <span className="text-[11px] mt-1.5 font-medium">
-              {photos.length === 0 ? "Add photo" : `+${max - photos.length} more`}
+              {compressing
+                ? "Compressing…"
+                : photos.length === 0
+                  ? "Add photo"
+                  : `+${max - photos.length} more`}
             </span>
             <input
               type="file"
