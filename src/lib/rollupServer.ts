@@ -15,6 +15,7 @@
 
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import {
   rollupBlock,
@@ -331,8 +332,14 @@ export interface DashboardBag {
  * Fetches everything the executive Overview + Layout tabs need in one call.
  * Returns null if the project has no imported schedule yet — callers should
  * render an empty-state instead of an executive dashboard.
+ *
+ * Cached for 60 seconds keyed by projectId — the aggregation runs 6+ Prisma
+ * queries over ~14k WBSNodes and takes ~2s uncached. Cache is safe because
+ * this function reads no user-scoped data (only projectId in, project-wide
+ * rollup out); it's re-invalidated by revalidateTag on any write that
+ * affects the rollup shape.
  */
-export async function getDashboardBag(projectId: string): Promise<DashboardBag | null> {
+async function computeDashboardBag(projectId: string): Promise<DashboardBag | null> {
   const [project, sections, rollup] = await Promise.all([
     getProjectMeta(projectId),
     getSections(projectId),
@@ -341,3 +348,16 @@ export async function getDashboardBag(projectId: string): Promise<DashboardBag |
   if (!project || !rollup) return null;
   return { project, sections, rollup };
 }
+
+export async function getDashboardBag(projectId: string): Promise<DashboardBag | null> {
+  const cached = unstable_cache(
+    () => computeDashboardBag(projectId),
+    ["dashboardBag", projectId],
+    { revalidate: 60, tags: [`dashboardBag:${projectId}`, "dashboardBag"] },
+  );
+  return cached();
+}
+
+// (No manual invalidation hook yet — 60-second TTL is enough for launch;
+// add revalidateTag on write endpoints once staleness feedback tells us the
+// window is too long.)
