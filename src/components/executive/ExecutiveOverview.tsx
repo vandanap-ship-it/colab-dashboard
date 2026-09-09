@@ -61,27 +61,32 @@ export default function ExecutiveOverview({
 
   return (
     <div className={styles.wrap}>
-      {/* Scope strip — context */}
+      {/* Scope strip — context. Each cell carries a title tooltip so someone
+          hovering the label sees a one-sentence explanation of what it means
+          — Shraddha's Sep 9 note: "how do I understand the dashboard? Even
+          for me to explain to someone, I'm not sure." Title is a plain-text
+          native browser tooltip — no new deps, works on desktop, and screen
+          readers pick it up as an accessible name. */}
       <div className={styles.scopeStrip}>
-        <div className={`${styles.scopeCell} ${styles.hi}`}>
+        <div className={`${styles.scopeCell} ${styles.hi}`} title="Total villas across all phases of this project. 'In scope' is how many are currently being tracked here; model villas are the display / sample units.">
           <div className={styles.lb}>Total Project</div>
           <div className={styles.vl}>
             {h.totalPlots} <span className={styles.sm}>plots · {h.inScope} in scope · {h.modelVillas} model villas</span>
           </div>
         </div>
-        <div className={styles.scopeCell}>
+        <div className={styles.scopeCell} title="Primary contractor executing the current phase, plus the villas and blocks they're responsible for.">
           <div className={styles.lb}>Contractor · Abraham Thomas</div>
           <div className={styles.vl}>
             {h.atVillas} <span className={styles.sm}>villas · {h.atBlocks} blocks</span>
           </div>
         </div>
-        <div className={styles.scopeCell}>
+        <div className={styles.scopeCell} title="Villas currently under construction in Phase 1 and how many of their blocks are actively being worked on.">
           <div className={styles.lb}>Phase 1 · In Execution</div>
           <div className={styles.vl}>
             {h.phase1Villas} <span className={styles.sm}>villas · {h.phase1BlocksActive} blocks active</span>
           </div>
         </div>
-        <div className={styles.scopeCell}>
+        <div className={styles.scopeCell} title="Planned start and end dates from the master schedule. This is the reference the 'Total Delay' KPI is measured against.">
           <div className={styles.lb}>Baseline Window</div>
           <div className={styles.vl}>
             {fmtDate(h.baselineStart)} <span className={styles.sm}>→ {fmtDate(h.baselineEnd)}</span>
@@ -91,7 +96,10 @@ export default function ExecutiveOverview({
 
       {/* KPI row — 4 headline stats */}
       <div className={styles.kpiRow}>
-        <div className={`${styles.kpi} ${h.totalDelayDays > 0 ? styles.bad : styles.good}`}>
+        <div
+          className={`${styles.kpi} ${h.totalDelayDays > 0 ? styles.bad : styles.good}`}
+          title="How many days behind (or ahead of) the baseline finish date the project is. Positive number means the projected handover is later than planned. 0 means on track."
+        >
           <div className={styles.kpiLbl}>Total Delay</div>
           <div className={`${styles.kpiVal} ${h.totalDelayDays > 0 ? styles.bad : styles.good}`}>
             {h.totalDelayDays}
@@ -102,13 +110,19 @@ export default function ExecutiveOverview({
           </div>
         </div>
 
-        <div className={`${styles.kpi} ${styles.info}`}>
+        <div
+          className={`${styles.kpi} ${styles.info}`}
+          title="The date we currently expect to finish based on progress logged so far. Compares to the planned baseline date below."
+        >
           <div className={styles.kpiLbl}>Projected Handover</div>
           <div className={styles.kpiVal}>{fmtDate(h.projectedEnd)}</div>
           <div className={styles.kpiSub}>Planned {fmtDate(h.baselineEnd)}</div>
         </div>
 
-        <div className={`${styles.kpi} ${h.hindrances > 0 ? styles.warn : styles.good}`}>
+        <div
+          className={`${styles.kpi} ${h.hindrances > 0 ? styles.warn : styles.good}`}
+          title="Open blockers logged by the site team. A hindrance stays 'active' until someone marks it resolved."
+        >
           <div className={styles.kpiLbl}>Active Hindrances</div>
           <div className={`${styles.kpiVal} ${h.hindrances > 0 ? styles.warn : styles.good}`}>
             {h.hindrances}
@@ -116,7 +130,10 @@ export default function ExecutiveOverview({
           <div className={styles.kpiSub}>Open blockers on site</div>
         </div>
 
-        <div className={`${styles.kpi} ${h.criticalBlocks > 0 ? styles.bad : styles.good}`}>
+        <div
+          className={`${styles.kpi} ${h.criticalBlocks > 0 ? styles.bad : styles.good}`}
+          title="Blocks running more than 30 days behind their baseline. These need escalation to the site manager. 0 is good."
+        >
           <div className={styles.kpiLbl}>Critical Blocks</div>
           <div className={`${styles.kpiVal} ${h.criticalBlocks > 0 ? styles.bad : styles.good}`}>
             {h.criticalBlocks}
