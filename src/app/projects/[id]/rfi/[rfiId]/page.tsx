@@ -170,6 +170,7 @@ export default async function RfiDetailPage({
               </h2>
               <RfiActions
                 rfiId={rfi.id}
+                projectId={rfi.projectId}
                 currentStatus={status}
                 currentAssigneeId={rfi.assignedToId}
                 assignableUsers={assignableUsers}

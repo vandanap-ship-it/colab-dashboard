@@ -7,6 +7,7 @@ import TrashButton from "./TrashButton";
 
 export interface RfiActionsProps {
   rfiId: string;
+  projectId: string;
   currentStatus: RfiStatus;
   currentAssigneeId: string | null;
   assignableUsers: Array<{ id: string; name: string }>;
@@ -20,6 +21,7 @@ export interface RfiActionsProps {
 
 export default function RfiActions({
   rfiId,
+  projectId,
   currentStatus,
   currentAssigneeId,
   assignableUsers,
@@ -141,7 +143,7 @@ export default function RfiActions({
         <TrashButton
           url={`/api/rfi/${rfiId}`}
           kind="RFI"
-          onDeleted={() => router.push("../rfi")}
+          onDeleted={() => router.push(`/projects/${projectId}/rfi`)}
           showLabel
         />
       </div>
