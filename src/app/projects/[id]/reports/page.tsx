@@ -54,15 +54,20 @@ export default async function ReportsLandingPage({
       icon: FileBarChart,
       cadence: "Daily",
     },
-    {
-      key: "weekly",
-      title: "Weekly Progress Report",
-      description:
-        "The weekly summary — overall progress, per-contractor milestone plan (to complete / to start / in progress / stalled), manpower chart + trade breakdown, delay reasons with mitigation plans. Matches the Amanvana weekly PDF layout.",
-      href: `/projects/${id}/reports/weekly`,
-      icon: FileBarChart,
-      cadence: "Weekly",
-    },
+    // Weekly Progress Report tile hidden for launch — page throws a 500 on
+    // a data-shape mismatch that requires a real debugging pass to fix.
+    // Restore this entry once the bug is chased down. Report file itself is
+    // still deployed at /projects/[id]/reports/weekly, just not linked from
+    // the reports index so the walkthrough doesn't hit it accidentally.
+    // {
+    //   key: "weekly",
+    //   title: "Weekly Progress Report",
+    //   description:
+    //     "The weekly summary — overall progress, per-contractor milestone plan (to complete / to start / in progress / stalled), manpower chart + trade breakdown, delay reasons with mitigation plans. Matches the Amanvana weekly PDF layout.",
+    //   href: `/projects/${id}/reports/weekly`,
+    //   icon: FileBarChart,
+    //   cadence: "Weekly",
+    // },
     {
       key: "dpr",
       title: "Daily Progress Report",
