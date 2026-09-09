@@ -15,7 +15,6 @@
 
 import "server-only";
 
-import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import {
   rollupBlock,
@@ -333,13 +332,16 @@ export interface DashboardBag {
  * Returns null if the project has no imported schedule yet — callers should
  * render an empty-state instead of an executive dashboard.
  *
- * Cached for 60 seconds keyed by projectId — the aggregation runs 6+ Prisma
- * queries over ~14k WBSNodes and takes ~2s uncached. Cache is safe because
- * this function reads no user-scoped data (only projectId in, project-wide
- * rollup out); it's re-invalidated by revalidateTag on any write that
- * affects the rollup shape.
+ * NOT cached with unstable_cache: an earlier revision wrapped this in a 60s
+ * cache and the Dashboard tab immediately crashed with "We hit a snag" on
+ * every load. Root cause: unstable_cache JSON-serialises the returned value
+ * for storage, so Date fields (baselineStart, baselineFinish, etc.) come
+ * back as strings on cache hit, and every .getUTCDate() / .getTime() call
+ * downstream throws TypeError. Reintroducing a cache here needs a real
+ * revive-dates transform before the cached bag is returned. Left uncached
+ * for launch — 2s response is acceptable, correctness beats cache-hit.
  */
-async function computeDashboardBag(projectId: string): Promise<DashboardBag | null> {
+export async function getDashboardBag(projectId: string): Promise<DashboardBag | null> {
   const [project, sections, rollup] = await Promise.all([
     getProjectMeta(projectId),
     getSections(projectId),
@@ -348,22 +350,3 @@ async function computeDashboardBag(projectId: string): Promise<DashboardBag | nu
   if (!project || !rollup) return null;
   return { project, sections, rollup };
 }
-
-// Wrap the computation ONCE at module load. Next.js's unstable_cache uses the
-// argument list + the key array to build a cache key, so `cached(projectId)`
-// gives per-project cache entries. Wrapping inside the exported function
-// (as I did in the first pass) creates a new cached fn per call and defeats
-// the whole point.
-const cachedDashboardBag = unstable_cache(
-  (projectId: string) => computeDashboardBag(projectId),
-  ["dashboardBag-v1"],
-  { revalidate: 60, tags: ["dashboardBag"] },
-);
-
-export async function getDashboardBag(projectId: string): Promise<DashboardBag | null> {
-  return cachedDashboardBag(projectId);
-}
-
-// (No manual invalidation hook yet — 60-second TTL is enough for launch;
-// add revalidateTag on write endpoints once staleness feedback tells us the
-// window is too long.)
