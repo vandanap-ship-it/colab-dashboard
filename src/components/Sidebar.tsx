@@ -14,6 +14,7 @@ import {
   Bug,
   MessageSquareQuote,
   ShieldCheck,
+  HardHat,
   ClipboardCheck,
   FileBarChart,
   FileStack,
@@ -101,9 +102,10 @@ export default function Sidebar(props: SidebarProps) {
     {
       title: "Records",
       items: [
-        { label: "Snag Master", href: `/projects/${props.projectId}/snags`,   icon: Bug },
-        { label: "RFI",         href: `/projects/${props.projectId}/rfi`,     icon: MessageSquareQuote },
-        { label: "Permits",     href: `/projects/${props.projectId}/permits`, icon: ShieldCheck },
+        { label: "Snag Master",  href: `/projects/${props.projectId}/snags`,         icon: Bug },
+        { label: "RFI",          href: `/projects/${props.projectId}/rfi`,           icon: MessageSquareQuote },
+        { label: "Work Permits", href: `/projects/${props.projectId}/work-permits`,  icon: HardHat },
+        { label: "Permits",      href: `/projects/${props.projectId}/permits`,       icon: ShieldCheck },
       ],
     },
     {
