@@ -158,48 +158,64 @@ export default async function MyActionsTabPage({
   ]);
 
   // ---- Map results to card items ----
+  // Every row needs an href so the card is clickable. Detail pages don't
+  // exist for every record type yet; route to the closest list page so the
+  // user at least lands somewhere they can find the record. Better than a
+  // dead click, and the list pages surface each row's own detail drawer.
+  const concernsHref = `/projects/${projectId}/snapshot#concerns`;
+  const snagsHref = `/projects/${projectId}/snags`;
+  const inspectionsHref = `/projects/${projectId}/inspections`;
+
   const taskAssignedItems: CardItem[] = tasksAssignedToMe.map((c) => ({
     id: c.id,
     title: clip(c.description),
     subtitle: `${c.wbsNode?.name ?? "—"} · updated ${fmt(c.updatedAt)}`,
+    href: concernsHref,
   }));
   const taskAssignedByMeItems: CardItem[] = tasksAssignedByMe.map((c) => ({
     id: c.id,
     title: clip(c.description),
     subtitle: `${c.assignedTo?.name ? `→ ${c.assignedTo.name} · ` : ""}${c.wbsNode?.name ?? "—"} · updated ${fmt(c.updatedAt)}`,
+    href: concernsHref,
   }));
 
   const issuesAssignedItems: CardItem[] = issuesAssignedToMe.map((it) => ({
     id: it.id,
     title: clip(it.description),
     subtitle: `${it.severity ? it.severity + " · " : ""}${it.wbsNode?.name ?? "—"} · updated ${fmt(it.updatedAt)}`,
+    href: snagsHref,
   }));
   const issuesCreatedItems: CardItem[] = issuesCreatedByMe.map((it) => ({
     id: it.id,
     title: clip(it.description),
     subtitle: `${it.severity ? it.severity + " · " : ""}${it.wbsNode?.name ?? "—"} · updated ${fmt(it.updatedAt)}`,
+    href: snagsHref,
   }));
 
   const concernAssignedItems: CardItem[] = concernsAssignedToMe.map((c) => ({
     id: c.id,
     title: clip(c.description),
     subtitle: `${c.status} · ${c.wbsNode?.name ?? "—"} · updated ${fmt(c.updatedAt)}`,
+    href: concernsHref,
   }));
   const concernCreatedItems: CardItem[] = concernsCreatedByMe.map((c) => ({
     id: c.id,
     title: clip(c.description),
     subtitle: `${c.status} · ${c.wbsNode?.name ?? "—"} · updated ${fmt(c.updatedAt)}`,
+    href: concernsHref,
   }));
 
   const inspectionByMeItems: CardItem[] = inspectionsByMe.map((ins) => ({
     id: ins.id,
     title: clip(ins.title),
     subtitle: `${ins.status} · ${ins.wbsNode?.name ?? "—"} · updated ${fmt(ins.updatedAt)}`,
+    href: inspectionsHref,
   }));
   const inspectionReviewItems: CardItem[] = inspectionsPendingReview.map((ins) => ({
     id: ins.id,
     title: clip(ins.title),
     subtitle: `${ins.filledBy?.name ? "by " + ins.filledBy.name + " · " : ""}${ins.wbsNode?.name ?? "—"} · updated ${fmt(ins.updatedAt)}`,
+    href: inspectionsHref,
   }));
 
   // ---- Card configs ----

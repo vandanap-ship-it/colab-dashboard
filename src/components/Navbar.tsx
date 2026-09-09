@@ -7,7 +7,6 @@ import { Inbox, Smartphone, ShieldCheck, Users, History, Trash2 } from "lucide-r
 import { canSeeMobile, isAdmin } from "@/lib/roles";
 import BrandMark from "./BrandMark";
 import SwitchProjectButton from "./SwitchProjectButton";
-import NotificationBell from "./NotificationBell";
 import UserAvatarMenu from "./UserAvatarMenu";
 
 export default function Navbar() {
@@ -48,7 +47,9 @@ export default function Navbar() {
           )}
           {session?.user && (
             <div className="flex items-center gap-2 ml-2 pl-3 border-l border-stone-200">
-              <NotificationBell />
+              {/* NotificationBell hidden for launch — always renders empty
+                  ("You're all caught up") because no /api/notifications
+                  endpoint exists yet. Restore in v1.1 with a real fetch. */}
               <UserAvatarMenu />
             </div>
           )}
