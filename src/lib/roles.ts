@@ -36,7 +36,19 @@ export function canSeeDesktop(role: string): boolean {
 }
 
 export function canSeeMobile(role: string): boolean {
-  return role === ROLES.SITE_ENGINEER || role === ROLES.SITE_MANAGER || role === ROLES.ADMIN;
+  // Every internal role can reach the mobile UI. Site engineers land there
+  // by default; planners and product-team members reach it on purpose to
+  // approve Work Permits raised by site staff, which currently only exist
+  // in the mobile surface. Restricting to site roles used to make sense
+  // when mobile carried only field-log flows, but the Work Permit approval
+  // workflow needs planner access too.
+  return (
+    role === ROLES.SITE_ENGINEER ||
+    role === ROLES.SITE_MANAGER ||
+    role === ROLES.PLANNER ||
+    role === ROLES.PRODUCT_TEAM ||
+    role === ROLES.ADMIN
+  );
 }
 
 export function canCreateProject(role: string): boolean {
