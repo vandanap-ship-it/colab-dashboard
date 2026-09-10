@@ -374,7 +374,18 @@ export default function NewProgressForm({
             ))}
           </div>
 
-          <PhotoPicker photos={photos} setPhotos={setPhotos} max={4} label="Photos" />
+          <div>
+            <PhotoPicker photos={photos} setPhotos={setPhotos} max={4} label="Photos" />
+            {/* Guidance under the picker only when the engineer hasn't
+                started adding photos yet. Once they have at least one,
+                the tip disappears — it's a nudge, not a lecture. */}
+            {photos.length === 0 && (
+              <p className="mt-2 text-[11px] text-stone-500 leading-snug">
+                Tip: 3 quick photos help — one of the activity, one of the
+                workers on it, and one of any issue or defect.
+              </p>
+            )}
+          </div>
 
           <label className="block">
             <span className="text-sm font-medium text-stone-700">Notes</span>
