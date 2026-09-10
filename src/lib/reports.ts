@@ -663,10 +663,14 @@ export type MasterReportData = {
  */
 async function getMasterReportUncached(
   projectId: string,
-  _fromIso: string,
-  _toIso: string,
+  fromIso: string,
+  toIso: string,
   today = new Date(),
 ): Promise<MasterReportData> {
+  // Period-relevance filter — see the Section 04 filter below. Parse once,
+  // treat missing / invalid dates as "no filter" so the report still renders.
+  const rangeFrom = fromIso ? new Date(fromIso + "T00:00:00Z") : null;
+  const rangeTo = toIso ? new Date(toIso + "T23:59:59Z") : null;
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: { startDate: true, endDate: true, reraEndDate: true },
@@ -851,7 +855,27 @@ async function getMasterReportUncached(
     return parts.reverse().join(" / ") || "—";
   }
 
+  // Filter to activities that overlap the report window. Amanvana has ~7000
+  // leaves, and the pre-filter version rendered them all — a 44 MB HTML page
+  // that took 10s to load and choked print-to-PDF. An activity is "in play"
+  // during [from, to] if its planned OR actual/projected window overlaps the
+  // range. Fully-complete-before-range and not-yet-started-after-range rows
+  // both drop out. Falls back to all leaves when no range is provided so
+  // downstream callers without dates still get a sensible list.
+  function overlapsRange(l: (typeof leaves)[number]): boolean {
+    if (!rangeFrom || !rangeTo) return true;
+    const start = l.baselineStart ?? l.actualStart;
+    const end = l.actualFinish ?? l.projectedFinish ?? l.baselineFinish;
+    // "Unknown either bound" is treated as overlapping — safer to include
+    // than silently drop.
+    if (!start && !end) return true;
+    if (start && start.getTime() > rangeTo.getTime()) return false;
+    if (end && end.getTime() < rangeFrom.getTime()) return false;
+    return true;
+  }
+
   const totalActivities: MasterReportData["totalActivities"] = leaves
+    .filter(overlapsRange)
     .map((l) => ({
       id: l.id,
       name: l.name,
