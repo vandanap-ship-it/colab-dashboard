@@ -15,6 +15,7 @@
 
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import {
   rollupBlock,
@@ -331,17 +332,8 @@ export interface DashboardBag {
  * Fetches everything the executive Overview + Layout tabs need in one call.
  * Returns null if the project has no imported schedule yet — callers should
  * render an empty-state instead of an executive dashboard.
- *
- * NOT cached with unstable_cache: an earlier revision wrapped this in a 60s
- * cache and the Dashboard tab immediately crashed with "We hit a snag" on
- * every load. Root cause: unstable_cache JSON-serialises the returned value
- * for storage, so Date fields (baselineStart, baselineFinish, etc.) come
- * back as strings on cache hit, and every .getUTCDate() / .getTime() call
- * downstream throws TypeError. Reintroducing a cache here needs a real
- * revive-dates transform before the cached bag is returned. Left uncached
- * for launch — 2s response is acceptable, correctness beats cache-hit.
  */
-export async function getDashboardBag(projectId: string): Promise<DashboardBag | null> {
+async function getDashboardBagUncached(projectId: string): Promise<DashboardBag | null> {
   const [project, sections, rollup] = await Promise.all([
     getProjectMeta(projectId),
     getSections(projectId),
@@ -349,4 +341,71 @@ export async function getDashboardBag(projectId: string): Promise<DashboardBag |
   ]);
   if (!project || !rollup) return null;
   return { project, sections, rollup };
+}
+
+// --------------------------------------------------------------------------
+// Date revival — see the getDashboardBag jsdoc below for context.
+// --------------------------------------------------------------------------
+
+/**
+ * Match strict ISO-8601 with mandatory Z timezone (what Date.prototype.toJSON
+ * emits). Deliberately does not accept "YYYY-MM-DD" alone or unzoned strings,
+ * so a legitimate string like "2026-09-15" that happens to appear in a name
+ * or code field is not converted to a Date.
+ */
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
+
+function reviveDatesInPlace(value: unknown): void {
+  if (value === null || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      const v = value[i];
+      if (typeof v === "string" && ISO_DATE_RE.test(v)) {
+        value[i] = new Date(v);
+      } else if (v && typeof v === "object") {
+        reviveDatesInPlace(v);
+      }
+    }
+    return;
+  }
+  const obj = value as Record<string, unknown>;
+  for (const k of Object.keys(obj)) {
+    const v = obj[k];
+    if (typeof v === "string" && ISO_DATE_RE.test(v)) {
+      obj[k] = new Date(v);
+    } else if (v && typeof v === "object") {
+      reviveDatesInPlace(v);
+    }
+  }
+}
+
+/**
+ * 60-second cached wrapper around getDashboardBagUncached.
+ *
+ * Why the wrapping is non-trivial: an earlier revision naively wrapped
+ * getDashboardBag in unstable_cache and the Dashboard immediately crashed
+ * with "We hit a snag" on every second load. Root cause — unstable_cache
+ * JSON-serialises the cached value for storage, so Date fields
+ * (project.startDate, rollup.blocks[…].villas[…].milestones[…].baselineStart,
+ * etc.) come back as ISO STRINGS on cache hit, and downstream .getUTCDate() /
+ * .getTime() calls in the executive components throw TypeError.
+ *
+ * The fix: run reviveDatesInPlace on the cache result on the way OUT.
+ * We look for strict ISO-8601 with a Z suffix (what Date.prototype.toJSON
+ * emits) so legitimate strings like "V12" or "2026-09-15" (date-only) are
+ * not accidentally converted.
+ */
+const _cachedDashboardBag = unstable_cache(
+  async (projectId: string): Promise<DashboardBag | null> => {
+    return getDashboardBagUncached(projectId);
+  },
+  ["dashboard-bag"],
+  { revalidate: 60 },
+);
+
+export async function getDashboardBag(projectId: string): Promise<DashboardBag | null> {
+  const bag = await _cachedDashboardBag(projectId);
+  if (!bag) return null;
+  reviveDatesInPlace(bag);
+  return bag;
 }
