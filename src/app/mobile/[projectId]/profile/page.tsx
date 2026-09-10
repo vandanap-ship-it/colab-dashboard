@@ -1,9 +1,10 @@
-import { Camera, LogOut, RefreshCw, ShieldAlert, UserCog } from "lucide-react";
+import { Camera, RefreshCw, ShieldAlert, UserCog } from "lucide-react";
 import { signOut } from "@/lib/auth";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ROLE_LABELS } from "@/lib/roles";
 import SwitchProjectButton from "@/components/SwitchProjectButton";
+import SignOutButton from "@/components/SignOutButton";
 
 function initials(name: string | null | undefined, fallback = "?") {
   if (!name) return fallback;
@@ -130,15 +131,7 @@ export default async function MobileProfilePage() {
         />
       </Section>
 
-      <form action={handleSignOut}>
-        <button
-          type="submit"
-          className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-stone-200 bg-white py-3 text-sm font-medium text-stone-900 hover:bg-stone-50 hover:border-stone-300 transition-colors"
-        >
-          <LogOut className="w-4 h-4 text-stone-400" />
-          Sign out
-        </button>
-      </form>
+      <SignOutButton action={handleSignOut} />
     </div>
   );
 }
