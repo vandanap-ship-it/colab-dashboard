@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getPendingActionCount } from "@/lib/pendingActions";
 import BrandMark from "@/components/BrandMark";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import MobileOnboarding from "@/components/MobileOnboarding";
 import PendingSyncBadge from "@/components/PendingSyncBadge";
 
 export default async function MobileProjectLayout({
@@ -62,6 +63,9 @@ export default async function MobileProjectLayout({
       >
         <MobileBottomNav projectId={project.id} pendingActions={pendingActions} />
       </div>
+      {/* First-run 3-slide tour. Renders nothing after the engineer has
+          dismissed it once (localStorage-gated on the device). */}
+      <MobileOnboarding />
     </div>
   );
 }
