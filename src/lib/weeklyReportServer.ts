@@ -10,7 +10,6 @@
 //
 // All aggregation over existing tables. Zero new schema.
 
-import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { rangeSummary, type DaySummary, type ManpowerEntryRow, type TradePlanRow } from "@/lib/manpower";
 import { reasonLabel } from "@/lib/hindranceReasons";
@@ -725,18 +724,19 @@ async function getWeeklyReportUncached(projectId: string, weekEnding: Date): Pro
 }
 
 /**
- * Cached wrapper — 60-second edge cache. Weekly report aggregates over the
- * whole project; underlying queries are heavy. The 60s window is invisible
- * for weekly-cadence reads but drops repeat views to <100ms. Serialise the
- * `weekEnding` Date to an ISO string internally so the cache key is stable.
+ * NOT cached with unstable_cache — same trap that took down the Dashboard
+ * (see rollupServer.ts:335). This module's WeeklyReport shape carries Date
+ * instances everywhere (fmtDayShort / fmtDayFull expect `.toLocaleDateString`),
+ * and WeeklyReportView is a client component that receives them via SSR
+ * serialisation. unstable_cache JSON-serialises the cached value, so on
+ * cache HIT the Dates come back as strings and every d.toLocaleDateString
+ * call in the client component throws — which is why the Weekly Report
+ * page 500ed on every second load and my earlier try/catch fixes couldn't
+ * catch it (the crash was in the client render, not the server aggregation).
+ *
+ * Reintroducing a cache here needs a real revive-dates transform first, or
+ * the client component switched to accept ISO strings and parse locally.
  */
-const _cachedWeekly = unstable_cache(
-  async (projectId: string, weekEndingIso: string): Promise<WeeklyReport | null> => {
-    return getWeeklyReportUncached(projectId, new Date(weekEndingIso));
-  },
-  ["weekly-report"],
-  { revalidate: 60 },
-);
 export async function getWeeklyReport(projectId: string, weekEnding: Date): Promise<WeeklyReport | null> {
-  return _cachedWeekly(projectId, weekEnding.toISOString());
+  return getWeeklyReportUncached(projectId, weekEnding);
 }
