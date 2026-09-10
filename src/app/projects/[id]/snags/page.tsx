@@ -104,7 +104,7 @@ export default async function SnagMasterPage({
   return (
     <div className="flex-1 flex flex-col bg-ivory">
       <Navbar />
-      <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-8 space-y-6">
+      <main className="flex-1 w-full max-w-[1600px] mx-auto px-6 py-8 space-y-6">
         <div>
           <Link
             href={`/projects/${project.id}/snapshot`}

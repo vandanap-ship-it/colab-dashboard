@@ -81,7 +81,7 @@ export default async function RfiListPage({
   return (
     <div className="flex-1 flex flex-col bg-ivory">
       <Navbar />
-      <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-8 space-y-6">
+      <main className="flex-1 w-full max-w-[1600px] mx-auto px-6 py-8 space-y-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <Link

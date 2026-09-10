@@ -161,7 +161,7 @@ export default async function DlrUpdatesPage({
   return (
     <div className="flex-1 flex flex-col bg-ivory">
       {isDesktop && <Navbar />}
-      <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-8 space-y-6">
+      <main className="flex-1 w-full max-w-[1600px] mx-auto px-6 py-8 space-y-6">
         <div>
           <Link
             href={isDesktop ? `/projects/${project.id}/snapshot` : `/mobile/${project.id}`}
