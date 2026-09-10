@@ -133,7 +133,26 @@ export default function ReportForm({
     }
 
     // Network-first; on offline / 5xx, queue locally and let it sync later.
+    // If the enqueue itself throws (Safari private mode, storage quota full,
+    // IndexedDB blocked), surface an actual error instead of leaving the
+    // button stuck on "Saving…" forever — that failure mode used to look to
+    // the user like "the page hung then went away".
     let queued = false;
+    async function queueOrFail(reason: string): Promise<boolean> {
+      try {
+        const { enqueue } = await import("@/lib/offlineQueue");
+        await enqueue({ endpoint, method: "POST", body: payload, label: title });
+        return true;
+      } catch (qe) {
+        setPending(false);
+        setError(
+          `Couldn't save (${reason}) and this device can't hold it offline: ${
+            qe instanceof Error ? qe.message : "storage unavailable"
+          }. Please try again or check the browser storage settings.`,
+        );
+        return false;
+      }
+    }
     try {
       const res = await fetch(endpoint, {
         method: "POST",
@@ -148,13 +167,13 @@ export default function ReportForm({
         setError(data?.error ?? `Save failed (${res.status})`);
         return;
       } else {
-        const { enqueue } = await import("@/lib/offlineQueue");
-        await enqueue({ endpoint, method: "POST", body: payload, label: title });
+        const ok = await queueOrFail(`server error ${res.status}`);
+        if (!ok) return;
         queued = true;
       }
     } catch {
-      const { enqueue } = await import("@/lib/offlineQueue");
-      await enqueue({ endpoint, method: "POST", body: payload, label: title });
+      const ok = await queueOrFail("network error");
+      if (!ok) return;
       queued = true;
     }
     setPending(false);
