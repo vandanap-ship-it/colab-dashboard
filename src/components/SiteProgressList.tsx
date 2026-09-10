@@ -57,12 +57,27 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
   const filtered = useMemo(() => {
     if (!activities) return [];
     const today = new Date();
-    return activities.filter((a) => {
+    const rows = activities.filter((a) => {
       if (statusOf(a, today) !== tab) return false;
       if (!search.trim()) return true;
       const q = search.toLowerCase();
       return a.name.toLowerCase().includes(q) || a.path.join(" / ").toLowerCase().includes(q);
     });
+    // Sort so the top of the list is what the engineer would want first:
+    //   • In Progress: highest %-complete on top (nearing finish → attention)
+    //   • Upcoming: nearest planned start on top (what's about to begin)
+    //   • Done: most recently finished on top
+    // Previously the list came back in WBS-index order — sensible for a
+    // Gantt but not for a phone that renders one screen at a time.
+    const key = (a: Activity): number => {
+      if (tab === "UPCOMING") return a.baselineStart ? new Date(a.baselineStart).getTime() : Infinity;
+      if (tab === "QUEUE") {
+        const f = a.actualFinish ?? a.projectedFinish ?? a.baselineFinish;
+        return f ? -new Date(f).getTime() : Infinity;
+      }
+      return -(a.percentComplete ?? 0); // ONGOING
+    };
+    return rows.sort((a, b) => key(a) - key(b));
   }, [activities, tab, search]);
 
   const counts = useMemo(() => {
@@ -89,7 +104,7 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
                 : "bg-white border border-stone-200 text-stone-600"
             }`}
           >
-            {t === "UPCOMING" ? "UpComing" : t === "ONGOING" ? "On Going" : "In Queue"} ({counts[t]})
+            {t === "UPCOMING" ? "Upcoming" : t === "ONGOING" ? "In Progress" : "Done"} ({counts[t]})
           </button>
         ))}
       </div>
