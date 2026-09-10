@@ -18,13 +18,22 @@ export interface WeeklyReportViewProps {
   weekEndingStr: string; // YYYY-MM-DD
 }
 
-function fmtDayShort(d: Date): string {
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+// This component is a client component. WeeklyReport props are passed by the
+// server component parent (page.tsx) but Next.js JSON-serialises props across
+// the RSC boundary, so any Date field arrives as an ISO string at runtime —
+// the TypeScript types still say `Date`. The two formatters below accept
+// either shape and normalise, and the render code below wraps `weekStart` /
+// `weekEnd` in `toDate()` before any Date-only method call.
+function toDate(v: Date | string): Date {
+  return v instanceof Date ? v : new Date(v);
+}
+function fmtDayShort(d: Date | string): string {
+  return toDate(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 /** "Sun 23 Aug" — Python's wk_end format for narrative sentences (§1 subtitle,
  *  §3 footnote, foot). Card labels keep the day-only form. */
-function fmtDayFull(d: Date): string {
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
+function fmtDayFull(d: Date | string): string {
+  return toDate(d).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
 }
 function fmtPct(n: number): string { return `${n.toFixed(2)}%`; }
 function itemsLbl(list: string[], n = 8): string {
@@ -71,15 +80,18 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
     if (typeof window !== "undefined") window.print();
   }, []);
 
+  // Normalise the two Dates once up front — see the toDate() comment above.
+  const wkStart = toDate(report.weekStart);
+  const wkEnd = toDate(report.weekEnd);
   // Python-parity: "17–23 Aug 2026" when the month is the same on both sides,
   // otherwise "27 Aug – 2 Sep 2026" style. Second hero line always renders
   // "Week ending Sun 23 Aug".
-  const sameMonth = report.weekStart.getUTCMonth() === report.weekEnd.getUTCMonth();
+  const sameMonth = wkStart.getUTCMonth() === wkEnd.getUTCMonth();
   const wkLabel = sameMonth
-    ? `${report.weekStart.getUTCDate()}–${report.weekEnd.getUTCDate()} ${report.weekEnd.toLocaleDateString("en-GB", { month: "short" })} ${report.weekEnd.getFullYear()}`
-    : `${fmtDayShort(report.weekStart)} – ${fmtDayShort(report.weekEnd)} ${report.weekEnd.getFullYear()}`;
-  const wkEndStr = fmtDayShort(report.weekEnd);
-  const wkEndStrFull = fmtDayFull(report.weekEnd); // "Sun 23 Aug" — narrative form
+    ? `${wkStart.getUTCDate()}–${wkEnd.getUTCDate()} ${wkEnd.toLocaleDateString("en-GB", { month: "short" })} ${wkEnd.getFullYear()}`
+    : `${fmtDayShort(wkStart)} – ${fmtDayShort(wkEnd)} ${wkEnd.getFullYear()}`;
+  const wkEndStr = fmtDayShort(wkEnd);
+  const wkEndStrFull = fmtDayFull(wkEnd); // "Sun 23 Aug" — narrative form
   // Project display name: DB stores "Amanvana - Phase 1" but Python's PDF
   // uses "Amanvana · Phase 1" (interpunct) in the header eyebrow.
   const projectDisplay = report.project.name.replace(/\s+-\s+/g, " · ");
@@ -104,7 +116,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
           />
           <span className={styles.toolbarLbl} style={{ marginLeft: 14 }}>Range</span>
           <span className={styles.toolbarDate} style={{ fontVariantNumeric: "tabular-nums" }}>
-            {fmtDayFull(report.weekStart)} – {fmtDayFull(report.weekEnd)} {report.weekEnd.getFullYear()}
+            {fmtDayFull(wkStart)} – {fmtDayFull(wkEnd)} {wkEnd.getFullYear()}
           </span>
         </div>
         <button type="button" onClick={onDownload} className={styles.toolbarBtn}>
@@ -279,7 +291,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
                 <div className={weekly.nmt2}>Stalled <span>· needs a push</span></div>
                 <div className={weekly.nms2}>Planned to be under way but <b>zero progress logged</b> — stalled, not slow. Bar length = days idle.</div>
               </div>
-              <StalledPanelV2 items={p1.inProgress.stalledItems} weekEnd={report.weekEnd} />
+              <StalledPanelV2 items={p1.inProgress.stalledItems} weekEnd={wkEnd} />
             </div>
 
             <div className={weekly.mnote}>
@@ -432,7 +444,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
         </div>
 
         <div className={weekly.foot}>
-          Week defined Mon–Sun, ending {wkEndStrFull} {report.weekEnd.getFullYear()}. Contractor 1 (Abraham Thomas) is the only party with a loaded schedule; Contractor 2 (Elegant Construction) is awarded with 52 villas across 12 blocks; its schedule has been received and integration with the collab tools is under process, so it carries no milestones here yet. Milestone dates are stage-level (all activities in a stage), not the tracker&apos;s single END-marker date, so they reflect true stage finish.
+          Week defined Mon–Sun, ending {wkEndStrFull} {wkEnd.getFullYear()}. Contractor 1 (Abraham Thomas) is the only party with a loaded schedule; Contractor 2 (Elegant Construction) is awarded with 52 villas across 12 blocks; its schedule has been received and integration with the collab tools is under process, so it carries no milestones here yet. Milestone dates are stage-level (all activities in a stage), not the tracker&apos;s single END-marker date, so they reflect true stage finish.
         </div>
       </div>
     </>
