@@ -116,6 +116,31 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
   ];
 
   // Build the top-of-page ProjectHealthSummary from real project metadata + rollup numbers.
+  // Total Delay definition: signed days between the schedule's latest
+  // projected finish and the project's declared end date. Positive = the
+  // schedule extends past the declared end (either an outlier villa
+  // baseline that predates a re-baseline, or actual slip that hasn't been
+  // reconciled into project.endDate). Negative = schedule ends before the
+  // declared end (project overshot its own committed date and should
+  // shorten its declared end). Zero = they agree.
+  //
+  // Was: rollup.handoverSlipDays — which is a per-villa milestone-slip
+  // rollup (max across villas of handover milestone delayDays). That
+  // metric can read 0 while the schedule's latest villa finish sits
+  // months past project.endDate (villa 63 in Amanvana P1 has a baseline
+  // handover of 20 Mar 29 vs a project.endDate of 25 Sept 27 — no
+  // milestone is "slipping", but the project as a whole IS 541 days
+  // beyond its own declared end date). The hero card would say
+  // "0 days / on track" and hide the 18-month gap. The audit for the
+  // Sept 15 walkthrough surfaced this as the single most confusing
+  // number on the dashboard.
+  const projectedEnd = rollup.projectedEnd ?? project.projectedEndDate ?? project.endDate ?? new Date();
+  const declaredEnd = project.endDate ?? new Date();
+  const totalDelayDays =
+    projectedEnd && declaredEnd
+      ? Math.round((projectedEnd.getTime() - declaredEnd.getTime()) / 86_400_000)
+      : 0;
+
   const health: ProjectHealthSummary = {
     totalPlots: totalVillas,
     inScope: totalVillas,
@@ -125,9 +150,9 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
     atVillas: totalVillas,
     atBlocks: rollup.blocks.length,
     baselineStart: project.startDate ?? new Date(),
-    baselineEnd: project.endDate ?? new Date(),
-    projectedEnd: rollup.projectedEnd ?? project.projectedEndDate ?? project.endDate ?? new Date(),
-    totalDelayDays: rollup.handoverSlipDays,
+    baselineEnd: declaredEnd,
+    projectedEnd,
+    totalDelayDays,
     reraDelayDays: computeReraDelay(project.reraEndDate, rollup.projectedEnd),
     hindrances: extras?.hindranceCount ?? 0,
     criticalBlocks: rollup.criticalBlocks,

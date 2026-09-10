@@ -86,29 +86,32 @@ export function computeProjectStats(
     achievedPercent = achievedSum / leaves.length;
   }
 
-  // Total delay: prefer live-computed slippage from the leaves — Project.
-  // projectedEndDate goes stale unless someone manually updates it. Take the
-  // max slip across leaves (projected/actual finish − baseline finish).
-  // Falls back to the project-level override only when no leaves have both
-  // baseline + projected/actual.
-  let totalDelayDays = 0;
-  let anyLeafDelay = false;
-  for (const a of leaves) {
-    if (a.baselineFinish) {
-      const finish = a.projectedFinish ?? a.actualFinish ?? null;
-      if (finish) {
-        anyLeafDelay = true;
-        const d = Math.round((finish.getTime() - a.baselineFinish.getTime()) / 86400000);
-        if (d > totalDelayDays) totalDelayDays = d;
-      }
-    }
-  }
-  if (!anyLeafDelay && meta.endDate && meta.projectedEndDate) {
-    totalDelayDays = Math.max(
-      0,
-      Math.round((meta.projectedEndDate.getTime() - meta.endDate.getTime()) / 86400000),
-    );
-  }
+  // Total delay: days between the schedule's latest projected/actual/baseline
+  // finish and the project's declared end date. Positive = schedule extends
+  // past the declared end (either an outlier villa baseline that predates a
+  // re-baseline, or actual slip that hasn't been reconciled into
+  // project.endDate). Signed so "ahead" projects can register negative.
+  //
+  // Previously this took `max(finish - baseline)` per leaf — that's a valid
+  // "worst-leaf-slip" number, but it reads 0 when every leaf is on its own
+  // baseline even though the schedule as a whole sits past the declared end
+  // (villa 63's baseline handover of 20 Mar 29 vs project.endDate of 25 Sept
+  // 27 on Amanvana P1). Reconciled to the same math the Overview KPI now
+  // uses so Snapshot's "Total Delay" and Overview's "Total Delay" always
+  // report the same number.
+  const latestFinishAcrossLeaves = leaves.reduce<Date | null>((max, a) => {
+    const cand = a.actualFinish ?? a.projectedFinish ?? a.baselineFinish;
+    if (!cand) return max;
+    return !max || cand > max ? cand : max;
+  }, null);
+  const projectedEndForDelay =
+    latestFinishAcrossLeaves ?? meta.projectedEndDate ?? meta.endDate ?? null;
+  const totalDelayDays =
+    projectedEndForDelay && meta.endDate
+      ? Math.round(
+          (projectedEndForDelay.getTime() - meta.endDate.getTime()) / 86400000,
+        )
+      : 0;
 
   return {
     totalActivities: leaves.length,

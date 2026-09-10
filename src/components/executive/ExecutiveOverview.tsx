@@ -119,15 +119,17 @@ export default function ExecutiveOverview({
           <div className={styles.kpiHeroLeft}>
             <div className={styles.kpiLbl}>Total Delay</div>
             <div className={`${styles.kpiHeroVal} ${h.totalDelayDays > 0 ? styles.bad : styles.good}`}>
-              {h.totalDelayDays}
-              <span className={styles.unit}>{h.totalDelayDays === 1 ? "day" : "days"}</span>
+              {/* Show absolute value + direction word in the subtitle so a
+                  "-30 days" leading minus doesn't read weirdly. */}
+              {Math.abs(h.totalDelayDays)}
+              <span className={styles.unit}>{Math.abs(h.totalDelayDays) === 1 ? "day" : "days"}</span>
             </div>
             <div className={styles.kpiSub}>
               {h.totalDelayDays === 0
-                ? "On track vs baseline"
+                ? `On track vs declared end ${fmtDate(h.baselineEnd)}`
                 : h.totalDelayDays > 0
-                  ? `Behind ${fmtDate(h.baselineEnd)} plan`
-                  : "Ahead of baseline"}
+                  ? `Past declared end ${fmtDate(h.baselineEnd)}`
+                  : `Ahead of declared end ${fmtDate(h.baselineEnd)}`}
             </div>
           </div>
           <div className={styles.kpiHeroDiv} aria-hidden />
