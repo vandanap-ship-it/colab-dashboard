@@ -151,6 +151,7 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
     atBlocks: rollup.blocks.length,
     baselineStart: project.startDate ?? new Date(),
     baselineEnd: declaredEnd,
+    reraEndDate: project.reraEndDate ?? null,
     projectedEnd,
     totalDelayDays,
     reraDelayDays: computeReraDelay(project.reraEndDate, rollup.projectedEnd),

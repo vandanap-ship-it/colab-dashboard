@@ -41,11 +41,7 @@ const ITEMS: { term: string; def: string }[] = [
   },
   {
     term: "On-Time Probability",
-    def: "High / Medium / Low likelihood we hit the RERA date given current trajectory.",
-  },
-  {
-    term: "RERA Delay",
-    def: "Days between projected finish and the RERA-committed date. Positive = late vs RERA.",
+    def: "High / Medium / Low likelihood we finish by the declared end date given current trajectory.",
   },
   {
     term: "Physical Progress",

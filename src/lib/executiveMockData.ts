@@ -325,6 +325,10 @@ export interface ProjectHealthSummary {
   atBlocks: number;
   baselineStart: Date;
   baselineEnd: Date;
+  /** Legally-committed RERA completion date. null when the project doesn't
+   *  track a RERA date — Overview / Snapshot use this to hide RERA rows
+   *  entirely (rather than reporting an ambiguous "0 days" or "—"). */
+  reraEndDate: Date | null;
   projectedEnd: Date;
   totalDelayDays: number;
   reraDelayDays: number;
@@ -349,6 +353,7 @@ export function healthSummary(): ProjectHealthSummary {
     atBlocks: 12,
     baselineStart: PHASE_START,
     baselineEnd: PHASE_END,
+    reraEndDate: null,
     projectedEnd: new Date(PHASE_END.getTime() + maxSlip * 86400000),
     totalDelayDays: maxSlip,
     reraDelayDays: 0,

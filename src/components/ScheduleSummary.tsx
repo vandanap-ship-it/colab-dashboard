@@ -34,7 +34,11 @@ export default function ScheduleSummary({
       <div className="space-y-2">
         <Row label="Project Start Date" value={fmt(startDate)} />
         <Row label="Project End Date" value={fmt(endDate)} />
-        <Row label="RERA End Date" value={fmt(reraEndDate)} />
+        {/* RERA rows only render when the project actually tracks a RERA
+            date. On Amanvana Phase 1 (and other projects that skip RERA
+            entry) showing "RERA End Date: —" and "RERA Delay: —" just
+            adds two empty rows to the card — hide instead. */}
+        {reraEndDate && <Row label="RERA End Date" value={fmt(reraEndDate)} />}
         <Row
           label="Planned Duration"
           value={plannedDuration != null ? `${plannedDuration} Days` : "—"}
@@ -54,17 +58,13 @@ export default function ScheduleSummary({
           value={`${totalDelayDays} Days`}
           color={totalDelayDays > 0 ? "text-red-600" : "text-emerald-600"}
         />
-        <Stat
-          label="RERA Delay"
-          value={reraDelayDays == null ? "—" : `${reraDelayDays} Days`}
-          color={
-            reraDelayDays == null
-              ? "text-stone-400"
-              : reraDelayDays > 0
-                ? "text-red-600"
-                : "text-emerald-600"
-          }
-        />
+        {reraDelayDays != null && (
+          <Stat
+            label="RERA Delay"
+            value={`${reraDelayDays} Days`}
+            color={reraDelayDays > 0 ? "text-red-600" : "text-emerald-600"}
+          />
+        )}
         <Stat
           label="Hindrances"
           value={`${hindranceCount} open`}
