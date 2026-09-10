@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, UserPlus, X } from "lucide-react";
 import PhotoStrip from "./PhotoStrip";
+import EmptyAllClear from "./EmptyAllClear";
 
 type User = { id: string; name: string; username: string };
 
@@ -102,7 +103,10 @@ export default function IssuesCard({
       {issues === null ? (
         <p className="text-sm text-stone-500">Loading…</p>
       ) : issues.length === 0 ? (
-        <p className="text-sm text-stone-500">No open snags.</p>
+        <EmptyAllClear
+          title="No open snags"
+          detail={showResolved ? "Nothing on record." : "Quality inspections that fail create snags here."}
+        />
       ) : (
         <ul className="space-y-2">
           {issues.map((i) => (

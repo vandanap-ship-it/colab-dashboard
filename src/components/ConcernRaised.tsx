@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import PhotoStrip from "./PhotoStrip";
 import TrashButton from "./TrashButton";
+import EmptyAllClear from "./EmptyAllClear";
 
 type Concern = {
   id: string;
@@ -93,7 +94,18 @@ export default function ConcernRaised({ projectId, canManage }: { projectId: str
       {concerns === null ? (
         <p className="text-sm text-stone-500">Loading…</p>
       ) : concerns.length === 0 ? (
-        <p className="text-sm text-stone-500">No concerns in this status.</p>
+        <EmptyAllClear
+          title={
+            tab === "PENDING"
+              ? "Nothing pending"
+              : tab === "READ"
+                ? "Nothing waiting to be read"
+                : tab === "TASK_ASSIGNED"
+                  ? "No tasks assigned yet"
+                  : "No resolved items"
+          }
+          detail="Areas of concern raised from mobile land here for triage."
+        />
       ) : (
         <ul className="space-y-2">
           {concerns.map((c) => (

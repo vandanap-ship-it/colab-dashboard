@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import PhotoStrip from "./PhotoStrip";
 import TrashButton from "./TrashButton";
+import EmptyAllClear from "./EmptyAllClear";
 import { formatDayMonthYear as fmt } from "@/lib/dates";
 
 type Hindrance = {
@@ -65,7 +66,10 @@ export default function HindranceSummary({ projectId, canResolve }: { projectId:
       {hindrances === null ? (
         <p className="text-sm text-stone-500">Loading…</p>
       ) : hindrances.length === 0 ? (
-        <p className="text-stone-400 text-2xl font-semibold uppercase opacity-30">No Hindrance Registered</p>
+        <EmptyAllClear
+          title="No open hindrances"
+          detail={showResolved ? "Nothing on record." : "Site is unblocked. Hindrances raised from mobile show here."}
+        />
       ) : (
         <ul className="space-y-2">
           {hindrances.map((h) => (
