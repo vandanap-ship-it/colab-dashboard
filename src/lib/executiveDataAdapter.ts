@@ -12,8 +12,10 @@
 
 import "server-only";
 
+import { prisma } from "@/lib/prisma";
 import type { DashboardBag, MatrixRow } from "@/lib/rollupServer";
 import type { BlockRollup as ClientBlock, VillaRollup as ClientVilla, ContractorRollup, MilestoneCell, ProjectHealthSummary } from "@/lib/executiveMockData";
+import { getProjectStats } from "@/lib/projectStats";
 
 export interface AdaptedOverview {
   health: ProjectHealthSummary;
@@ -23,8 +25,33 @@ export interface AdaptedOverview {
   sections: string[];
 }
 
+/**
+ * Extras the adapter needs but a plain DashboardBag doesn't carry:
+ * hindrance count and planned/achieved % from the shared projectStats math.
+ * Fetch these alongside the bag so the Overview page can hand a complete
+ * bundle to `adaptDashboardBag` — otherwise those cells fall back to 0
+ * silently, which is the pre-launch audit's "always-zero KPI" complaint.
+ */
+export interface ExecutiveExtras {
+  hindranceCount: number;
+  plannedPct: number;
+  achievedPct: number;
+}
+
+export async function getExecutiveExtras(projectId: string): Promise<ExecutiveExtras> {
+  const [hindranceCount, stats] = await Promise.all([
+    prisma.hindrance.count({ where: { projectId, status: "OPEN" } }),
+    getProjectStats(projectId),
+  ]);
+  return {
+    hindranceCount,
+    plannedPct: stats.plannedPercent,
+    achievedPct: stats.achievedPercent,
+  };
+}
+
 /** Fold a DashboardBag into the shape ExecutiveOverview / ExecutiveLayout expect. */
-export function adaptDashboardBag(bag: DashboardBag): AdaptedOverview {
+export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): AdaptedOverview {
   const { project, sections: dbSections, rollup } = bag;
 
   const sections = dbSections.map((s) => s.name);
@@ -102,11 +129,16 @@ export function adaptDashboardBag(bag: DashboardBag): AdaptedOverview {
     projectedEnd: rollup.projectedEnd ?? project.projectedEndDate ?? project.endDate ?? new Date(),
     totalDelayDays: rollup.handoverSlipDays,
     reraDelayDays: computeReraDelay(project.reraEndDate, rollup.projectedEnd),
-    hindrances: 0,                              // TODO: query Hindrance table
+    hindrances: extras?.hindranceCount ?? 0,
     criticalBlocks: rollup.criticalBlocks,
     probability: probabilityBand(project.reraEndDate, rollup.projectedEnd),
-    plannedPct: 0,                              // TODO: compute from tasks (needs Task-level query)
-    achievedPct: Math.round(rollup.percentComplete * 100) / 100,
+    // plannedPct/achievedPct come from projectStats when the caller passes
+    // extras — that's the same math the Snapshot page's gauge uses, so the
+    // two views agree. When no extras are passed the achievedPct falls back
+    // to the rollup's own percentComplete (which is close but not identical
+    // — projectStats handles the ColabActivity override).
+    plannedPct: extras?.plannedPct ?? 0,
+    achievedPct: extras?.achievedPct ?? Math.round(rollup.percentComplete * 100) / 100,
     asOf: new Date(),
   };
 

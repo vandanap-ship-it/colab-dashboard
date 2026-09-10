@@ -4,7 +4,7 @@ import { UrlDetailDrawer } from "@/components/executive/DetailDrawer";
 import VillaDetailContent from "@/components/executive/VillaDetailContent";
 import BlockDetailContent from "@/components/executive/BlockDetailContent";
 import { getDashboardBag } from "@/lib/rollupServer";
-import { adaptDashboardBag } from "@/lib/executiveDataAdapter";
+import { adaptDashboardBag, getExecutiveExtras } from "@/lib/executiveDataAdapter";
 import { getBlockDetail, getVillaDetailByNumber } from "@/lib/detailServer";
 import { getContractorDelayReasonGroups, getDelayReasonClusters } from "@/lib/delayReasons";
 import { getDashboardManpowerStrip } from "@/lib/manpowerServer";
@@ -28,7 +28,10 @@ export default async function OverviewPage({
   const { id } = await params;
   const { vn, bd } = await searchParams;
   const villaNumber = vn ? parseInt(vn, 10) : null;
-  const bag = await getDashboardBag(id);
+  const [bag, extras] = await Promise.all([
+    getDashboardBag(id),
+    getExecutiveExtras(id).catch(() => undefined),
+  ]);
 
   // Drawer detail data + delay-reason aggregation + manpower strip — fetched
   // in parallel with the main bag so opening a drawer costs at most one extra
@@ -55,7 +58,7 @@ export default async function OverviewPage({
 
   const overview = bag
     ? (() => {
-        const adapted = adaptDashboardBag(bag);
+        const adapted = adaptDashboardBag(bag, extras);
         return (
           <ExecutiveOverview
             health={adapted.health}

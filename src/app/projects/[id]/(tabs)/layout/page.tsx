@@ -4,7 +4,7 @@ import { UrlDetailDrawer } from "@/components/executive/DetailDrawer";
 import VillaDetailContent from "@/components/executive/VillaDetailContent";
 import BlockDetailContent from "@/components/executive/BlockDetailContent";
 import { getDashboardBag } from "@/lib/rollupServer";
-import { adaptDashboardBag } from "@/lib/executiveDataAdapter";
+import { adaptDashboardBag, getExecutiveExtras } from "@/lib/executiveDataAdapter";
 import { getBlockDetail, getVillaDetailByNumber } from "@/lib/detailServer";
 import { BLOCKS, SECTIONS, VILLA_SLIPS } from "@/lib/executiveMockData";
 
@@ -20,7 +20,10 @@ export default async function LayoutTabPage({
   const { id } = await params;
   const { vn, bd } = await searchParams;
   const villaNumber = vn ? parseInt(vn, 10) : null;
-  const bag = await getDashboardBag(id);
+  const [bag, extras] = await Promise.all([
+    getDashboardBag(id),
+    getExecutiveExtras(id).catch(() => undefined),
+  ]);
 
   const [villaDetail, blockDetail] = await Promise.all([
     villaNumber && !isNaN(villaNumber)
@@ -31,7 +34,7 @@ export default async function LayoutTabPage({
 
   const layout = bag
     ? (() => {
-        const adapted = adaptDashboardBag(bag);
+        const adapted = adaptDashboardBag(bag, extras);
         const villaSlips: Record<number, { slip: number; section: number }> = {};
         for (const v of adapted.villas) {
           villaSlips[v.number] = { slip: v.slipDays, section: v.currentSection };

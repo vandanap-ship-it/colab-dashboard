@@ -16,14 +16,7 @@ import InteractiveDrawings from "@/components/InteractiveDrawings";
 import { isAdmin, ROLES, canCreateProject } from "@/lib/roles";
 import { getMilestoneMatrix, getSections } from "@/lib/rollupServer";
 import { adaptMatrixRows } from "@/lib/executiveDataAdapter";
-import {
-  CONTRACTORS,
-  MATRIX_VILLA_ORDER,
-  SECTIONS,
-  SECTION_HEADERS,
-  milestonesForVilla,
-  BLOCKS,
-} from "@/lib/executiveMockData";
+import { CONTRACTORS, milestonesForVilla } from "@/lib/executiveMockData";
 
 export default async function SnapshotPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -87,8 +80,8 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
           </h2>
           <PhysicalProgressGauge achieved={stats.achievedPercent} planned={stats.plannedPercent} />
           <p className="mt-3 text-[11px] leading-snug text-stone-400">
-            Averaged across activities that have started. The Master Report averages across
-            all activities (not-yet-started counted as 0%), so its figure reads lower.
+            Duration-weighted % across activities that have started. The Master Report
+            uses the same tracked-only math, so its topline agrees with this gauge.
           </p>
         </section>
         <section className="lg:col-span-2 rounded-xl border border-stone-200 bg-white p-6">
@@ -172,10 +165,22 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
 }
 
 async function renderMilestoneMatrix(projectId: string) {
-  // Try live DB first — if the executive schema hasn't been migrated / imported
-  // yet, fall back to the placeholder mock data so the section still renders.
-  const rows = await getMilestoneMatrix(projectId).catch(() => [] as never[]);
-  const sections = await getSections(projectId).catch(() => [] as never[]);
+  // Previous behaviour on any error / missing data silently rendered a
+  // hand-authored Amanvana mock matrix (villa numbers, contractors, CRM
+  // amounts) which looked indistinguishable from real data — the single
+  // highest deception risk on Snapshot per the Sept-launch audit. Now:
+  // when the live query fails or comes back empty, we surface an explicit
+  // empty state so no one mistakes placeholder numbers for the project.
+  let rows: Awaited<ReturnType<typeof getMilestoneMatrix>> = [];
+  let sections: Awaited<ReturnType<typeof getSections>> = [];
+  try {
+    [rows, sections] = await Promise.all([
+      getMilestoneMatrix(projectId),
+      getSections(projectId),
+    ]);
+  } catch (err) {
+    console.error("[snapshot] milestone matrix load failed", err);
+  }
 
   if (rows.length > 0 && sections.length > 0) {
     const adapted = adaptMatrixRows(rows, sections);
@@ -195,24 +200,19 @@ async function renderMilestoneMatrix(projectId: string) {
     );
   }
 
-  // Fallback — mock. Same shape, so the UI is identical.
-  const villaLabels: Record<number, string> = {};
-  const cellsByVilla: Record<number, ReturnType<typeof milestonesForVilla>> = {};
-  for (const b of BLOCKS) {
-    for (const n of b.villas) {
-      const idx = b.villas.indexOf(n);
-      villaLabels[n] = b.villaLabels[idx] ?? `Villa ${n}`;
-      cellsByVilla[n] = milestonesForVilla(n);
-    }
-  }
   return (
-    <MilestoneMatrix
-      villaOrder={MATRIX_VILLA_ORDER}
-      villaLabels={villaLabels}
-      sections={SECTIONS}
-      sectionHeaders={SECTION_HEADERS}
-      cellsByVilla={cellsByVilla}
-      contractors={CONTRACTORS}
-    />
+    <section className="rounded-xl border border-dashed border-stone-300 bg-white/40 p-8 text-center">
+      <p className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">
+        Milestone Matrix
+      </p>
+      <h3 className="text-sm font-semibold text-stone-700">
+        No schedule loaded yet
+      </h3>
+      <p className="text-xs text-stone-500 mt-1.5 max-w-md mx-auto">
+        Import the project schedule (MSP or the Colab planner export) to see
+        the villa-by-milestone matrix. Nothing here is placeholder data —
+        this section is intentionally blank until real dates are in.
+      </p>
+    </section>
   );
 }

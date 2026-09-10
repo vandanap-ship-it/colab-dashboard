@@ -23,6 +23,11 @@ export default function ScheduleSummary({
   const plannedDuration = startDate && endDate ? diffDays(endDate, startDate) : null;
   const projectedDuration =
     startDate && projectedEndDate ? diffDays(projectedEndDate, startDate) : plannedDuration;
+  // RERA Delay: positive = late vs the RERA-committed date. Only computed when
+  // both dates are present; falls back to "—" so we don't fake a green "0 Days"
+  // for a project that hasn't set its RERA date. Previously hardcoded to "0 Days".
+  const reraDelayDays: number | null =
+    reraEndDate && projectedEndDate ? diffDays(projectedEndDate, reraEndDate) : null;
 
   return (
     <div className="grid grid-cols-2 gap-4 text-sm">
@@ -49,7 +54,17 @@ export default function ScheduleSummary({
           value={`${totalDelayDays} Days`}
           color={totalDelayDays > 0 ? "text-red-600" : "text-emerald-600"}
         />
-        <Stat label="RERA Delay" value="0 Days" color="text-emerald-600" />
+        <Stat
+          label="RERA Delay"
+          value={reraDelayDays == null ? "—" : `${reraDelayDays} Days`}
+          color={
+            reraDelayDays == null
+              ? "text-stone-400"
+              : reraDelayDays > 0
+                ? "text-red-600"
+                : "text-emerald-600"
+          }
+        />
         <Stat
           label="Hindrances"
           value={`${hindranceCount} open`}
