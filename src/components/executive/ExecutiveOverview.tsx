@@ -11,6 +11,7 @@ import {
 } from "@/lib/executiveMockData";
 import type { ContractorDelayReasonGroup, DelayReasonCluster } from "@/lib/delayReasons";
 import DelayReasonsCard from "./DelayReasonsCard";
+import DashboardLegend from "./DashboardLegend";
 import type { MilestoneProgressRow, SiteActivityBlockGroup } from "@/lib/dashboardSectionsServer";
 
 export interface ManpowerStrip {
@@ -61,6 +62,14 @@ export default function ExecutiveOverview({
 
   return (
     <div className={styles.wrap}>
+      {/* Collapsible one-line-per-metric glossary at the top. Answers
+          Shraddha's "how do I explain this to someone" directly — she
+          (or the person she's walking through the tool) can open this
+          and read the vocabulary before scanning the numbers below. */}
+      <div className={styles.legendWrap}>
+        <DashboardLegend />
+      </div>
+
       {/* Scope strip — context. Each cell carries a title tooltip so someone
           hovering the label sees a one-sentence explanation of what it means
           — Shraddha's Sep 9 note: "how do I understand the dashboard? Even
@@ -94,53 +103,66 @@ export default function ExecutiveOverview({
         </div>
       </div>
 
-      {/* KPI row — 4 headline stats */}
-      <div className={styles.kpiRow}>
+      {/* KPI row — asymmetric so the number Shraddha (or a director)
+          looks at FIRST is visibly biggest. Left headline card carries
+          both Total Delay and Projected Handover paired together —
+          answers "are we late" and "when do we finish" in one glance.
+          Right rail carries Hindrances + Critical Blocks stacked and
+          smaller (they're supporting numbers). Daily Manpower absorbed
+          in as the fourth cell so today's headcount stays visible on
+          the initial fold without its own full-width section. */}
+      <div className={styles.kpiRowV2}>
         <div
-          className={`${styles.kpi} ${h.totalDelayDays > 0 ? styles.bad : styles.good}`}
-          title="How many days behind (or ahead of) the baseline finish date the project is. Positive number means the projected handover is later than planned. 0 means on track."
+          className={`${styles.kpiHero} ${h.totalDelayDays > 0 ? styles.bad : styles.good}`}
+          title="Delay: days behind baseline finish. Handover: when we currently expect to finish based on progress logged so far."
         >
-          <div className={styles.kpiLbl}>Total Delay</div>
-          <div className={`${styles.kpiVal} ${h.totalDelayDays > 0 ? styles.bad : styles.good}`}>
-            {h.totalDelayDays}
-            <span className={styles.unit}>{h.totalDelayDays === 1 ? "day" : "days"}</span>
+          <div className={styles.kpiHeroLeft}>
+            <div className={styles.kpiLbl}>Total Delay</div>
+            <div className={`${styles.kpiHeroVal} ${h.totalDelayDays > 0 ? styles.bad : styles.good}`}>
+              {h.totalDelayDays}
+              <span className={styles.unit}>{h.totalDelayDays === 1 ? "day" : "days"}</span>
+            </div>
+            <div className={styles.kpiSub}>
+              {h.totalDelayDays === 0
+                ? "On track vs baseline"
+                : h.totalDelayDays > 0
+                  ? `Behind ${fmtDate(h.baselineEnd)} plan`
+                  : "Ahead of baseline"}
+            </div>
           </div>
-          <div className={styles.kpiSub}>
-            {h.totalDelayDays === 0 ? "No slippage vs baseline" : `Behind ${fmtDate(h.baselineEnd)} baseline`}
+          <div className={styles.kpiHeroDiv} aria-hidden />
+          <div className={styles.kpiHeroRight}>
+            <div className={styles.kpiLbl}>Projected Handover</div>
+            <div className={styles.kpiHeroDate}>{fmtDate(h.projectedEnd)}</div>
+            <div className={styles.kpiSub}>Planned {fmtDate(h.baselineEnd)}</div>
           </div>
         </div>
 
-        <div
-          className={`${styles.kpi} ${styles.info}`}
-          title="The date we currently expect to finish based on progress logged so far. Compares to the planned baseline date below."
-        >
-          <div className={styles.kpiLbl}>Projected Handover</div>
-          <div className={styles.kpiVal}>{fmtDate(h.projectedEnd)}</div>
-          <div className={styles.kpiSub}>Planned {fmtDate(h.baselineEnd)}</div>
+        <div className={styles.kpiRail}>
+          <div
+            className={`${styles.kpiSmall} ${h.hindrances > 0 ? styles.warn : styles.good}`}
+            title="Blockers logged by the site team that are still open."
+          >
+            <div className={styles.kpiLbl}>Active Hindrances</div>
+            <div className={`${styles.kpiSmallVal} ${h.hindrances > 0 ? styles.warn : styles.good}`}>
+              {h.hindrances}
+            </div>
+            <div className={styles.kpiSub}>Open on site</div>
+          </div>
+          <div
+            className={`${styles.kpiSmall} ${h.criticalBlocks > 0 ? styles.bad : styles.good}`}
+            title="Blocks running more than 30 days behind baseline."
+          >
+            <div className={styles.kpiLbl}>Critical Blocks</div>
+            <div className={`${styles.kpiSmallVal} ${h.criticalBlocks > 0 ? styles.bad : styles.good}`}>
+              {h.criticalBlocks}
+              <span className={styles.unit}>/ {activeBlocks.length}</span>
+            </div>
+            <div className={styles.kpiSub}>Slip &gt; 30 days</div>
+          </div>
         </div>
 
-        <div
-          className={`${styles.kpi} ${h.hindrances > 0 ? styles.warn : styles.good}`}
-          title="Open blockers logged by the site team. A hindrance stays 'active' until someone marks it resolved."
-        >
-          <div className={styles.kpiLbl}>Active Hindrances</div>
-          <div className={`${styles.kpiVal} ${h.hindrances > 0 ? styles.warn : styles.good}`}>
-            {h.hindrances}
-          </div>
-          <div className={styles.kpiSub}>Open blockers on site</div>
-        </div>
-
-        <div
-          className={`${styles.kpi} ${h.criticalBlocks > 0 ? styles.bad : styles.good}`}
-          title="Blocks running more than 30 days behind their baseline. These need escalation to the site manager. 0 is good."
-        >
-          <div className={styles.kpiLbl}>Critical Blocks</div>
-          <div className={`${styles.kpiVal} ${h.criticalBlocks > 0 ? styles.bad : styles.good}`}>
-            {h.criticalBlocks}
-            <span className={styles.unit}>of {activeBlocks.length}</span>
-          </div>
-          <div className={styles.kpiSub}>Slip &gt; 30 days</div>
-        </div>
+        <ManpowerKpiCard strip={manpowerStrip} />
       </div>
 
       {/* Health Snapshot */}
@@ -245,8 +267,8 @@ export default function ExecutiveOverview({
         </div>
       </div>
 
-      {/* Daily Manpower strip */}
-      <ManpowerStripRow strip={manpowerStrip} />
+      {/* Daily Manpower moved into the KPI row above so it stays on the
+          initial fold as a headline metric instead of a full-width strip. */}
 
       {/* Milestone Progress */}
       <div className={styles.card}>
@@ -561,51 +583,53 @@ function VillaBucket({
   );
 }
 
-function ManpowerStripRow({ strip }: { strip: ManpowerStrip }) {
-  const statusLabel = (() => {
-    switch (strip.status) {
-      case "above":      return `+${strip.variance} above plan`;
-      case "on-plan":    return "On plan";
-      case "below":      return `${strip.variance} below plan`;
-      case "not-logged": return "Not logged today";
-      case "no-plan":    return "No plan set";
-    }
-  })();
-  const statusClass = (() => {
-    switch (strip.status) {
-      case "above":      return styles.mpStatusGood;
-      case "on-plan":    return styles.mpStatusOk;
-      case "below":      return styles.mpStatusBad;
-      case "not-logged": return styles.mpStatusWarn;
-      case "no-plan":    return styles.mpStatusMuted;
-    }
-  })();
-
+/**
+ * Compact KPI-sized manpower card that sits inside the top KPI row
+ * (replaces the old full-width ManpowerStripRow). Same underlying
+ * ManpowerStrip data — just condensed to fit the small-card slot.
+ * Semantics kept identical to the old strip so anyone reading the
+ * card sees the same numbers they did before.
+ */
+function ManpowerKpiCard({ strip }: { strip: ManpowerStrip }) {
+  const tone: "good" | "warn" | "info" =
+    strip.status === "above"
+      ? "good"
+      : strip.status === "on-plan"
+        ? "good"
+        : strip.status === "below"
+          ? "warn"
+          : strip.status === "not-logged"
+            ? "warn"
+            : "info";
+  const toneClass =
+    tone === "good" ? styles.good : tone === "warn" ? styles.warn : styles.info;
+  const bigNumber =
+    strip.status === "no-plan"
+      ? "—"
+      : strip.status === "not-logged"
+        ? "—"
+        : String(strip.actual);
+  const sub =
+    strip.status === "no-plan"
+      ? "No plan set today"
+      : strip.status === "not-logged"
+        ? `Plan ${strip.planned} · not logged yet`
+        : strip.status === "above"
+          ? `+${strip.variance} above ${strip.planned}`
+          : strip.status === "on-plan"
+            ? `On ${strip.planned} plan`
+            : `${strip.variance} below ${strip.planned}`;
   return (
-    <div className={`${styles.card} ${styles.mpStrip}`}>
-      <div className={styles.mpStripBody}>
-        <div className={styles.mpMetric}>
-          <div className={styles.mpLbl}>Daily Manpower</div>
-          <div className={styles.mpMeta}>Today · planned vs actual</div>
-        </div>
-        <div className={styles.mpFig}>
-          <div className={styles.mpFigLbl}>Planned</div>
-          <div className={styles.mpFigVl}>{strip.planned}</div>
-        </div>
-        <div className={styles.mpFig}>
-          <div className={styles.mpFigLbl}>Actual</div>
-          <div className={`${styles.mpFigVl} ${strip.status === "above" ? styles.mpGood : strip.status === "below" ? styles.mpBad : ""}`}>
-            {strip.status === "not-logged" ? "—" : strip.actual}
-          </div>
-        </div>
-        <div className={styles.mpFig}>
-          <div className={styles.mpFigLbl}>% of plan</div>
-          <div className={`${styles.mpFigVl} ${strip.status === "above" ? styles.mpGood : strip.status === "below" ? styles.mpBad : ""}`}>
-            {strip.pctOfPlan == null ? "—" : `${strip.pctOfPlan}%`}
-          </div>
-        </div>
-        <div className={`${styles.mpStatusPill} ${statusClass}`}>{statusLabel}</div>
+    <div
+      className={`${styles.kpiSmall} ${styles.kpiManpower} ${toneClass}`}
+      title="Today's site headcount vs the planned target. Green = on/above plan, amber = below or not logged."
+    >
+      <div className={styles.kpiLbl}>Daily Manpower</div>
+      <div className={`${styles.kpiSmallVal} ${toneClass}`}>
+        {bigNumber}
+        {bigNumber !== "—" && <span className={styles.unit}>workers</span>}
       </div>
+      <div className={styles.kpiSub}>{sub}</div>
     </div>
   );
 }

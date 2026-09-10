@@ -1386,3 +1386,140 @@
   cursor: default;
 }
 .villaBox.stOos:hover { transform: none; box-shadow: none; }
+
+/* ---------- Dashboard legend (collapsible glossary) ---------- */
+.legendWrap {
+  margin-bottom: 14px;
+}
+
+/* ---------- KPI row v2 — asymmetric hero + rail + manpower ---------- */
+/* Layout: [big Hero (2fr)] [Rail: 2 stacked small (1fr)] [Manpower (1fr)] */
+.kpiRowV2 {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 18px;
+  align-items: stretch;
+}
+@media (max-width: 1100px) {
+  .kpiRowV2 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 720px) {
+  .kpiRowV2 { grid-template-columns: 1fr; }
+}
+
+/* Hero — Total Delay + Projected Handover paired */
+.kpiHero {
+  background: var(--ex-paper);
+  border: 1px solid var(--ex-border);
+  border-radius: 8px;
+  padding: 18px 22px;
+  box-shadow: var(--ex-shadow-sm);
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 20px;
+  align-items: center;
+}
+.kpiHero::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--ex-ink-4);
+}
+.kpiHero.bad::before { background: var(--ex-bad); }
+.kpiHero.warn::before { background: var(--ex-warn); }
+.kpiHero.good::before { background: var(--ex-good); }
+.kpiHero.info::before { background: var(--ex-accent); }
+
+.kpiHeroLeft, .kpiHeroRight {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.kpiHeroRight { padding-left: 4px; }
+
+.kpiHeroDiv {
+  width: 1px;
+  height: 68%;
+  background: var(--ex-border);
+}
+
+.kpiHeroVal {
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--ex-ink);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.kpiHeroVal.bad { color: var(--ex-bad); }
+.kpiHeroVal.warn { color: var(--ex-warn); }
+.kpiHeroVal.good { color: var(--ex-good); }
+
+.kpiHeroDate {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ex-ink);
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Rail — Hindrances + Critical Blocks stacked */
+.kpiRail {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Small KPI cards (rail + manpower share these styles) */
+.kpiSmall {
+  background: var(--ex-paper);
+  border: 1px solid var(--ex-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  box-shadow: var(--ex-shadow-sm);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kpiSmall::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--ex-ink-4);
+}
+.kpiSmall.bad::before { background: var(--ex-bad); }
+.kpiSmall.warn::before { background: var(--ex-warn); }
+.kpiSmall.good::before { background: var(--ex-good); }
+.kpiSmall.info::before { background: var(--ex-accent); }
+.kpiSmallVal {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ex-ink);
+  letter-spacing: -0.01em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.kpiSmallVal.bad { color: var(--ex-bad); }
+.kpiSmallVal.warn { color: var(--ex-warn); }
+.kpiSmallVal.good { color: var(--ex-good); }
+
+.kpiManpower {
+  /* Just tags the manpower card for future targeting; carries no
+     styling of its own beyond the base .kpiSmall shape. */
+}
