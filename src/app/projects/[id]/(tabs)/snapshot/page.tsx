@@ -134,14 +134,19 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
         />
       </div>
 
-      <ConcernRaised
-        projectId={id}
-        canManage={
-          session.user.role === ROLES.PLANNER ||
-          session.user.role === ROLES.PRODUCT_TEAM ||
-          isAdmin(session.user.role)
-        }
-      />
+      {/* id="concerns" so /my-actions rows can deep-link (#concerns) directly
+          to the Areas of Concern section instead of landing at the top of
+          the snapshot. */}
+      <div id="concerns" className="scroll-mt-20">
+        <ConcernRaised
+          projectId={id}
+          canManage={
+            session.user.role === ROLES.PLANNER ||
+            session.user.role === ROLES.PRODUCT_TEAM ||
+            isAdmin(session.user.role)
+          }
+        />
+      </div>
 
       <MilestoneSummary projectId={id} />
 

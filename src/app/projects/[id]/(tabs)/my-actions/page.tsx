@@ -164,7 +164,10 @@ export default async function MyActionsTabPage({
   // dead click, and the list pages surface each row's own detail drawer.
   const concernsHref = `/projects/${projectId}/snapshot#concerns`;
   const snagsHref = `/projects/${projectId}/snags`;
-  const inspectionsHref = `/projects/${projectId}/inspections`;
+  // Inspections have no standalone list page yet — route to the QA/QC tab,
+  // which shows the same records with filters. Previously pointed to
+  // /inspections which 404'd.
+  const inspectionsHref = `/projects/${projectId}/qaqc`;
 
   const taskAssignedItems: CardItem[] = tasksAssignedToMe.map((c) => ({
     id: c.id,

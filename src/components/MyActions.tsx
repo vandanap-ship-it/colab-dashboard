@@ -122,7 +122,7 @@ export default function MyActions({ projectId }: { projectId?: string }) {
                     </p>
                   </div>
                   <Link
-                    href={`/projects/${insp.project.id}#qaqc`}
+                    href={`/projects/${insp.project.id}/qaqc`}
                     className="text-xs rounded-full border border-stone-300 px-3 py-1 hover:bg-stone-100 whitespace-nowrap"
                   >
                     Review →
