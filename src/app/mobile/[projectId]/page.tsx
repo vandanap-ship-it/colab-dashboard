@@ -15,6 +15,8 @@ import type { LucideIcon } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TOOL_MODULES, canAccessTool, isScopedUser } from "@/lib/modules";
+import { getDashboardManpowerStrip } from "@/lib/manpowerServer";
+import { istDayStart } from "@/lib/istDay";
 
 export default async function MobileProjectHome({
   params,
@@ -30,16 +32,21 @@ export default async function MobileProjectHome({
   });
   if (!project) notFound();
 
-  const wbsCount = await prisma.wBSNode.count({ where: { projectId } });
-  const myProgressToday = session?.user
-    ? await prisma.progressEntry.count({
-        where: {
-          projectId,
-          createdById: session.user.id,
-          date: { gte: new Date(new Date().toDateString()) },
-        },
-      })
-    : 0;
+  // Anchor "today" to IST so a phone opened at 23:30 IST still lands on the
+  // same date the site engineer just worked, not a UTC-rollover next day.
+  const todayIst = istDayStart();
+  const [myProgressToday, manpower] = await Promise.all([
+    session?.user
+      ? prisma.progressEntry.count({
+          where: {
+            projectId,
+            createdById: session.user.id,
+            date: { gte: todayIst },
+          },
+        })
+      : Promise.resolve(0),
+    getDashboardManpowerStrip(projectId, todayIst),
+  ]);
 
   const userModules = session?.user?.modules ?? null;
 
@@ -223,20 +230,110 @@ export default async function MobileProjectHome({
             </h2>
             <TrendingUp className="w-4 h-4 text-stone-300" />
           </div>
+
+          {/* Left: personal progress. Right: site plan-vs-actual manpower.
+              The two together answer "what have I done today" and "is the
+              site staffed to plan today" without leaving the home. */}
           <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
             <div>
               <div className="text-2xl font-semibold text-stone-900 tabular-nums">
                 {myProgressToday}
               </div>
-              <div className="text-xs text-stone-500 mt-0.5">Progress entries logged</div>
+              <div className="text-xs text-stone-500 mt-0.5">
+                {myProgressToday === 0
+                  ? "No progress logged yet"
+                  : `Progress ${myProgressToday === 1 ? "entry" : "entries"} logged`}
+              </div>
             </div>
             <div>
-              <div className="text-2xl font-semibold text-stone-900 tabular-nums">{wbsCount}</div>
-              <div className="text-xs text-stone-500 mt-0.5">Activities in scope</div>
+              <PlanVsActualStat manpower={manpower} />
             </div>
           </div>
+
+          {/* Plan-vs-actual bar (only when there IS a plan for today —
+              rendering a bar against a "no plan" state would just be a
+              flat gray line and clutter the card). */}
+          {manpower.status !== "no-plan" && manpower.planned > 0 && (
+            <div className="mt-3 space-y-1.5">
+              <div className="flex items-baseline justify-between text-[10px] uppercase tracking-wider text-stone-500">
+                <span>Plan {manpower.planned}</span>
+                <span>Actual {manpower.actual}</span>
+              </div>
+              <div className="relative h-2 rounded-full bg-stone-100 overflow-hidden">
+                {/* Planned bar (light) — full width represents 100% of plan */}
+                <div className="absolute inset-0 bg-amber-100" />
+                {/* Actual bar (bold) — capped at 110% of plan so a wildly-
+                    over-plan day doesn't visually blow out the card */}
+                <div
+                  className={
+                    manpower.actual >= manpower.planned
+                      ? "absolute inset-y-0 left-0 bg-emerald-500"
+                      : "absolute inset-y-0 left-0 bg-amber-500"
+                  }
+                  style={{
+                    width: `${Math.min(110, (manpower.actual / manpower.planned) * 100)}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </section>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Presentational helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Compact right-side stat on the "Today" card. Shows planned vs actual
+ * headcount as a single figure ("48 / 52" style) with a coloured tone
+ * depending on delivery vs plan:
+ *   - no plan yet  → "—" in muted grey
+ *   - no manpower logged against a plan → "0" red, "Not logged yet" caption
+ *   - actual < 90% of plan → amber "below"
+ *   - 90% ≤ actual ≤ 110% of plan → emerald "on plan"
+ *   - actual > 110% of plan → emerald "above plan"
+ */
+function PlanVsActualStat({
+  manpower,
+}: {
+  manpower: {
+    planned: number;
+    actual: number;
+    pctOfPlan: number | null;
+    status: "no-plan" | "above" | "on-plan" | "below" | "not-logged";
+  };
+}) {
+  if (manpower.status === "no-plan") {
+    return (
+      <div>
+        <div className="text-2xl font-semibold text-stone-400 tabular-nums">—</div>
+        <div className="text-xs text-stone-500 mt-0.5">No manpower plan set</div>
+      </div>
+    );
+  }
+  const toneClass =
+    manpower.status === "below" || manpower.status === "not-logged"
+      ? "text-amber-600"
+      : "text-emerald-600";
+  const caption =
+    manpower.status === "not-logged"
+      ? "Not logged yet"
+      : manpower.status === "above"
+        ? `Above plan (${manpower.planned} planned)`
+        : manpower.status === "below"
+          ? `Below plan (${manpower.planned} planned)`
+          : `On plan (${manpower.planned} planned)`;
+  return (
+    <div>
+      <div className={`text-2xl font-semibold tabular-nums ${toneClass}`}>
+        {manpower.actual}
+        <span className="text-sm text-stone-400 font-normal ml-1">workers</span>
+      </div>
+      <div className="text-xs text-stone-500 mt-0.5">{caption}</div>
     </div>
   );
 }
