@@ -5,7 +5,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { isAdmin } from "@/lib/roles";
+import { canSeeDesktop } from "@/lib/roles";
 import { getWeeklyReport } from "@/lib/weeklyReportServer";
 import { istDayStart } from "@/lib/istDay";
 
@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   const session = await auth();
-  if (!session?.user || !isAdmin(session.user.role)) {
-    return NextResponse.json({ error: "admin only" }, { status: 403 });
+  if (!session?.user || !canSeeDesktop(session.user.role)) {
+    return NextResponse.json({ error: "staff only" }, { status: 403 });
   }
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");
