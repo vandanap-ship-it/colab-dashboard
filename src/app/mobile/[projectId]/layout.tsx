@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canSeeMobile } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
+import { getPendingActionCount } from "@/lib/pendingActions";
 import BrandMark from "@/components/BrandMark";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import PendingSyncBadge from "@/components/PendingSyncBadge";
@@ -23,6 +24,16 @@ export default async function MobileProjectLayout({
     select: { id: true, name: true, code: true },
   });
   if (!project) notFound();
+
+  // Pending-action count for the bottom-nav "Info" badge. Small count query,
+  // runs once per layout render. Kept optional — if the query fails, the
+  // nav still renders without a badge (defensive: never block the mobile
+  // shell from loading on account of a nav ornament).
+  const pendingActions = await getPendingActionCount(
+    project.id,
+    session.user.id,
+    session.user.role,
+  ).catch(() => 0);
 
   return (
     <div className="flex-1 flex flex-col bg-ivory">
@@ -49,7 +60,7 @@ export default async function MobileProjectLayout({
         className="fixed bottom-0 inset-x-0 max-w-md mx-auto bg-white border-t border-stone-200"
         style={{ boxShadow: "0 -2px 8px rgba(28, 25, 23, 0.04)" }}
       >
-        <MobileBottomNav projectId={project.id} />
+        <MobileBottomNav projectId={project.id} pendingActions={pendingActions} />
       </div>
     </div>
   );

@@ -5,13 +5,22 @@ import { usePathname } from "next/navigation";
 import { Home, FolderClosed, Inbox, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export default function MobileBottomNav({ projectId }: { projectId: string }) {
+export default function MobileBottomNav({
+  projectId,
+  pendingActions = 0,
+}: {
+  projectId: string;
+  /** Total items assigned to the current user that need action — shown as
+   *  a small badge on the "Info" tab so an engineer opening the app sees
+   *  work waiting without having to explore. Zero → no badge. */
+  pendingActions?: number;
+}) {
   const pathname = usePathname();
   const home = `/mobile/${projectId}`;
-  const items: { href: string; label: string; icon: LucideIcon }[] = [
+  const items: { href: string; label: string; icon: LucideIcon; badge?: number }[] = [
     { href: home, label: "Home", icon: Home },
     { href: `${home}/documents`, label: "Documents", icon: FolderClosed },
-    { href: `${home}/info`, label: "Info", icon: Inbox },
+    { href: `${home}/info`, label: "Info", icon: Inbox, badge: pendingActions },
     { href: `${home}/profile`, label: "Profile", icon: User },
   ];
 
@@ -47,10 +56,20 @@ export default function MobileBottomNav({ projectId }: { projectId: string }) {
                 className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-brand-500 rounded-full"
               />
             )}
-            <Icon
-              className={`w-5 h-5 ${active ? "text-stone-900" : "text-stone-400"}`}
-              strokeWidth={active ? 2.25 : 2}
-            />
+            <span className="relative">
+              <Icon
+                className={`w-5 h-5 ${active ? "text-stone-900" : "text-stone-400"}`}
+                strokeWidth={active ? 2.25 : 2}
+              />
+              {it.badge != null && it.badge > 0 && (
+                <span
+                  aria-label={`${it.badge} pending`}
+                  className="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-semibold leading-4 text-center tabular-nums shadow"
+                >
+                  {it.badge > 99 ? "99+" : it.badge}
+                </span>
+              )}
+            </span>
             <span
               className={`mt-1 text-[10px] font-medium ${
                 active ? "text-stone-900" : "text-stone-500"
