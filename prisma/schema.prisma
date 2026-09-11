@@ -44,6 +44,29 @@ model User {
   requestedWorkPermits     WorkPermit[]            @relation("WorkPermitRequester")
   approvedWorkPermits      WorkPermit[]            @relation("WorkPermitApprover")
   closedWorkPermits        WorkPermit[]            @relation("WorkPermitCloser")
+  pushSubscriptions        PushSubscription[]
+}
+
+/// Web Push subscriptions per user. One user may have multiple entries when
+/// they enable Siddhi on both a phone and a desktop, or reinstall the app.
+/// The `endpoint` from the browser is globally unique per device+origin, so
+/// resubscribing from the same device just updates the row via upsert.
+///
+/// Deleted on the server the first time we try to send to a 404/410 endpoint
+/// (the browser has unsubscribed the user permanently — no point holding a
+/// dead subscription).
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Project {
