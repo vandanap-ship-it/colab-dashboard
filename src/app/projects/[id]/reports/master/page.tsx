@@ -302,7 +302,26 @@ export default async function MasterReportPage({
                     {fmt(e.date)}
                   </span>
                 </div>
-                <PhotoStrip photos={e.photos} size="lg" maxInline={6} />
+                {/* Meta-enriched so the Lightbox Download composes a
+                    descriptive filename. */}
+                <PhotoStrip
+                  photos={e.photos.map((ph) => ({
+                    ...ph,
+                    meta: {
+                      kind: "progress",
+                      project: project.name,
+                      villa: locationFor(e.wbsNode.id),
+                      activity: e.wbsNode.name,
+                      date: e.date.toISOString().slice(0, 10),
+                      percent:
+                        e.wbsNode.totalQuantity && e.wbsNode.totalQuantity > 0
+                          ? Math.round((e.cumulativeQuantity / e.wbsNode.totalQuantity) * 100)
+                          : undefined,
+                    },
+                  }))}
+                  size="lg"
+                  maxInline={6}
+                />
                 <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                   <KV label="Achieved" value={String(e.achievedQuantity)} />
                   <KV label="Cumulative" value={String(e.cumulativeQuantity)} />

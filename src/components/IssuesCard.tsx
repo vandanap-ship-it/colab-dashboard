@@ -146,7 +146,19 @@ export default function IssuesCard({
                   </p>
                   {i.photos.length > 0 && (
                     <div className="mt-2">
-                      <PhotoStrip photos={i.photos} size="md" maxInline={6} />
+                      <PhotoStrip
+                        photos={i.photos.map((ph) => ({
+                          ...ph,
+                          meta: {
+                            kind: "snag",
+                            activity: i.description?.slice(0, 60),
+                            villa: i.wbsNode?.name ?? undefined,
+                            date: i.createdAt,
+                          },
+                        }))}
+                        size="md"
+                        maxInline={6}
+                      />
                     </div>
                   )}
                 </div>

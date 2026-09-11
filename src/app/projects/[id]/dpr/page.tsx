@@ -132,7 +132,27 @@ export default async function DprPage({
 
                 {p.photos.length > 0 && (
                   <div className="mt-3">
-                    <PhotoStrip photos={p.photos} size="md" maxInline={6} />
+                    {/* Enrich photos with per-entry meta so the Lightbox's
+                        Download button composes a filename like
+                        siddhi-progress-amanvana-villa-14-foundation-concreting-
+                        2026-09-11-45pct-01.jpg. Location may be a compact string
+                        like "Block 3A · Villa 14 · Foundation" — passed as
+                        `activity` since we don't split it on the DPR page. */}
+                    <PhotoStrip
+                      photos={p.photos.map((ph) => ({
+                        ...ph,
+                        meta: {
+                          kind: "progress",
+                          project: dpr.project.name,
+                          villa: p.location ?? undefined,
+                          activity: p.activityName,
+                          date,
+                          percent: p.activityPercentComplete,
+                        },
+                      }))}
+                      size="md"
+                      maxInline={6}
+                    />
                   </div>
                 )}
 

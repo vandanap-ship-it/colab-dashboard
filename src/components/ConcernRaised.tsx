@@ -120,7 +120,19 @@ export default function ConcernRaised({ projectId, canManage }: { projectId: str
                   </p>
                   {c.photos.length > 0 && (
                     <div className="mt-2">
-                      <PhotoStrip photos={c.photos} size="md" maxInline={6} />
+                      <PhotoStrip
+                        photos={c.photos.map((ph) => ({
+                          ...ph,
+                          meta: {
+                            kind: "concern",
+                            activity: c.description?.slice(0, 60),
+                            villa: c.wbsNode?.name ?? undefined,
+                            date: c.createdAt,
+                          },
+                        }))}
+                        size="md"
+                        maxInline={6}
+                      />
                     </div>
                   )}
                 </div>

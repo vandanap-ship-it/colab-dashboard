@@ -100,7 +100,19 @@ export default function HindranceSummary({ projectId, canResolve }: { projectId:
                   </p>
                   {h.photos.length > 0 && (
                     <div className="mt-2">
-                      <PhotoStrip photos={h.photos} size="md" maxInline={6} />
+                      <PhotoStrip
+                        photos={h.photos.map((ph) => ({
+                          ...ph,
+                          meta: {
+                            kind: "hindrance",
+                            activity: h.description?.slice(0, 60),
+                            villa: h.wbsNode?.name ?? undefined,
+                            date: h.startDate,
+                          },
+                        }))}
+                        size="md"
+                        maxInline={6}
+                      />
                     </div>
                   )}
                 </div>

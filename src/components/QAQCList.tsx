@@ -160,7 +160,18 @@ export default function QAQCList({ projectId, canReview }: { projectId: string; 
                       ))}
                     </ul>
                     {insp.photos.length > 0 && (
-                      <PhotoStrip photos={insp.photos} size="lg" maxInline={8} />
+                      <PhotoStrip
+                        photos={insp.photos.map((ph) => ({
+                          ...ph,
+                          meta: {
+                            kind: "inspection",
+                            activity: insp.title,
+                            date: insp.createdAt,
+                          },
+                        }))}
+                        size="lg"
+                        maxInline={8}
+                      />
                     )}
                     {insp.rejectionReason && (
                       <p className="text-xs text-red-700 bg-red-50 rounded px-2 py-1">
