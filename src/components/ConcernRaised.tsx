@@ -125,8 +125,7 @@ export default function ConcernRaised({ projectId, canManage }: { projectId: str
                           ...ph,
                           meta: {
                             kind: "concern",
-                            activity: c.description?.slice(0, 60),
-                            villa: c.wbsNode?.name ?? undefined,
+                            activity: c.wbsNode?.name ?? c.description?.slice(0, 60),
                             date: c.createdAt,
                           },
                         }))}

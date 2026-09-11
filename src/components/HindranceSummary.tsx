@@ -105,8 +105,10 @@ export default function HindranceSummary({ projectId, canResolve }: { projectId:
                           ...ph,
                           meta: {
                             kind: "hindrance",
-                            activity: h.description?.slice(0, 60),
-                            villa: h.wbsNode?.name ?? undefined,
+                            // Prefer the tagged activity for filenames — cleaner
+                            // than the free-text description. Fall back to the
+                            // description only when no activity was tagged.
+                            activity: h.wbsNode?.name ?? h.description?.slice(0, 60),
                             date: h.startDate,
                           },
                         }))}

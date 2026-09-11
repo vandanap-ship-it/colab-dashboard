@@ -151,8 +151,7 @@ export default function IssuesCard({
                           ...ph,
                           meta: {
                             kind: "snag",
-                            activity: i.description?.slice(0, 60),
-                            villa: i.wbsNode?.name ?? undefined,
+                            activity: i.wbsNode?.name ?? i.description?.slice(0, 60),
                             date: i.createdAt,
                           },
                         }))}
