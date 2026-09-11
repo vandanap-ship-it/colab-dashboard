@@ -22,23 +22,6 @@ function fmtLong(d: Date | null | undefined): string {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
-function fmtShort(d: Date | null | undefined): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" });
-}
-function fmtDays(n: number | null | undefined): string {
-  if (n == null) return "—";
-  return `${n.toLocaleString()} d`;
-}
-function fmtDaysSigned(n: number | null | undefined): string {
-  if (n == null) return "—";
-  if (n === 0) return "0 d";
-  return n > 0 ? `+${n} d` : `${n} d`;
-}
-function fmtPct(n: number | null | undefined): string {
-  if (n == null) return "—";
-  return `${n.toFixed(2)}%`;
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -377,6 +360,7 @@ export default function ScorecardView({
                       {v.activities.length} {v.activities.length === 1 ? "activity" : "activities"}
                     </span>
                   </div>
+                  <div className={styles.actCards}>
                   {v.activities.map((a) => (
                     <div key={a.progressEntryId} className={styles.actCard}>
                       {a.photoUrl ? (
@@ -443,6 +427,7 @@ export default function ScorecardView({
                       </div>
                     </div>
                   ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -450,159 +435,10 @@ export default function ScorecardView({
         )}
       </Section>
 
-      {/* §5 Milestone Progress */}
-      <Section
-        num="05"
-        title="Milestone Progress"
-        meta={`line items whose planned finish is on or before ${asOfLabel}`}
-      >
-        <table className={styles.tbl}>
-          <thead>
-            <tr>
-              <th>Milestone</th>
-              <th className={styles.tblRight}>Line items due</th>
-              <th className={styles.tblRight}>Done</th>
-              <th className={styles.tblRight}>Pending</th>
-              <th className={styles.tblRight}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {s.milestoneProgress.map((row) => (
-              <tr key={row.code}>
-                <td className={styles.tblName}>{row.name}</td>
-                <td className={styles.tblRight}>{row.due === 0 ? "—" : row.due}</td>
-                <td className={styles.tblRight}>{row.due === 0 ? "—" : row.done}</td>
-                <td className={styles.tblRight}>{row.due === 0 ? "—" : row.pending}</td>
-                <td className={styles.tblRight}>
-                  {row.status === "not-started" ? (
-                    <span className={styles.pillMuted}>Not started</span>
-                  ) : row.status === "all-done" ? (
-                    <span className={styles.pillGood}>All done</span>
-                  ) : (
-                    <span className={styles.pillBad}>{row.pending} pending</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {s.milestoneProgress.length === 0 && (
-              <tr><td colSpan={5} className={styles.empty}>No milestones defined yet.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </Section>
-
-      {/* §6 Block-wise Progress */}
-      <Section
-        num="06"
-        title="Block-wise Progress"
-        meta="planned vs actual dates + delta per block"
-      >
-        {s.blockProgress.filter((b) => b.villaCount > 0).length === 0 ? (
-          <div className={styles.empty}>No blocks defined yet.</div>
-        ) : (
-          s.blockProgress
-            .filter((b) => b.villaCount > 0)
-            .map((b) => (
-              <div key={b.blockCode} className={styles.bpRow}>
-                <div className={styles.bpHead}>
-                  <div>
-                    <span className={styles.bpTitle}>Block {b.blockCode}</span>
-                    <span className={styles.bpSub}>
-                      {b.villaCount} villas · {b.activitiesClosed} of {b.activitiesDue} due closed
-                    </span>
-                  </div>
-                  <div className={`${styles.bpDelay} ${b.delayDays === 0 ? styles.bpDelayZero : ""}`}>
-                    {b.delayDays === 0 ? "—" : `+${b.delayDays}d delay`}
-                  </div>
-                </div>
-                <table className={styles.bpTbl}>
-                  <thead>
-                    <tr>
-                      <th>Kind</th>
-                      <th className={styles.tblRight}>Progress</th>
-                      <th>Start</th>
-                      <th>Finish</th>
-                      <th className={styles.tblRight}>Duration</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>Planned</td>
-                      <td className={styles.tblRight}>{fmtPct(b.plannedPct)}</td>
-                      <td>{fmtShort(b.plannedStart)}</td>
-                      <td>{fmtShort(b.plannedFinish)}</td>
-                      <td className={styles.tblRight}>{fmtDays(b.plannedDurationDays)}</td>
-                    </tr>
-                    <tr>
-                      <td>Actual</td>
-                      <td className={styles.tblRight}>{fmtPct(b.actualPct)}</td>
-                      <td>{fmtShort(b.actualStart)}</td>
-                      <td>{fmtShort(b.projectedFinish)}</td>
-                      <td className={styles.tblRight}>{fmtDays(b.actualDurationDays)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                {b.villas.length > 0 && (
-                  <div className={styles.bpVillaRow}>
-                    {b.villas.map((n) => (
-                      <span key={n} className={styles.bpVillaChip}>V{n}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))
-        )}
-      </Section>
-
-      {/* §7 Project Health footer */}
-      <Section num="07" title="Project Health" meta={`as of ${asOfLabel}`}>
-        <table className={styles.phTbl}>
-          <thead>
-            <tr>
-              <th>Measure</th>
-              <th>Planned</th>
-              <th>Actual / Projected</th>
-              <th className={styles.tblRight}>Variance</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Start date</td>
-              <td>{fmtLong(s.projectHealth.plannedStart)}</td>
-              <td>{fmtLong(s.projectHealth.actualStart)}</td>
-              <td className={styles.tblRight}>{fmtDaysSigned(s.projectHealth.startVarianceDays)}</td>
-            </tr>
-            <tr>
-              <td>End date</td>
-              <td>{fmtLong(s.projectHealth.plannedEnd)}</td>
-              <td>{fmtLong(s.projectHealth.projectedEnd)}</td>
-              <td className={styles.tblRight}>{fmtDaysSigned(s.projectHealth.endVarianceDays)}</td>
-            </tr>
-            <tr>
-              <td>Duration</td>
-              <td>{fmtDays(s.projectHealth.plannedDurationDays)}</td>
-              <td>{fmtDays(s.projectHealth.actualDurationDays)}</td>
-              <td className={styles.tblRight}>
-                {s.projectHealth.plannedDurationDays != null && s.projectHealth.actualDurationDays != null
-                  ? fmtDaysSigned(s.projectHealth.actualDurationDays - s.projectHealth.plannedDurationDays)
-                  : "—"}
-              </td>
-            </tr>
-            <tr>
-              <td>Progress to date</td>
-              <td>{fmtPct(s.projectHealth.plannedProgressPct)}</td>
-              <td>{fmtPct(s.projectHealth.actualProgressPct)}</td>
-              <td className={styles.tblRight}>{fmtPct(s.projectHealth.progressVariancePct)}</td>
-            </tr>
-            <tr>
-              <td>Overall complete</td>
-              <td>100.00%</td>
-              <td>{fmtPct(s.projectHealth.overallCompletePct)}</td>
-              <td className={styles.tblRight}>{fmtPct(-1 * (100 - s.projectHealth.overallCompletePct))}</td>
-            </tr>
-          </tbody>
-        </table>
-      </Section>
+      {/* §5, §6, §7 removed per template — Milestone Progress and Project
+          Health live on the Overview / Snapshot tabs; Block-wise Progress
+          lives on the Layout tab. The daily Scorecard is the four sections
+          above only, matching the Amanvana template. */}
     </div>
   );
 }

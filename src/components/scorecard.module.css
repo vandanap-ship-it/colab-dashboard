@@ -355,32 +355,47 @@
   color: var(--sc-ink);
   margin: 8px 0 4px;
 }
+/* 2-column grid of activity cards — matches Amanvana scorecard template */
+.actCards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+@media (max-width: 640px) {
+  .actCards { grid-template-columns: 1fr; }
+}
 .actCard {
   border: 1px solid var(--sc-border);
-  border-radius: 5px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  display: grid;
-  grid-template-columns: 90px 1fr;
-  gap: 12px;
-  align-items: start;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #FFFFFF;
   break-inside: avoid;
   page-break-inside: avoid;
 }
-.actPhoto { width: 90px; height: 68px; object-fit: cover; border-radius: 4px; background: var(--sc-rule-soft); }
+.actPhoto {
+  width: 100%;
+  height: auto;
+  min-height: 150px;
+  max-height: 420px;
+  object-fit: contain;
+  background: var(--sc-rule-soft);
+  display: block;
+}
 .actPhotoStub {
-  width: 90px;
-  height: 68px;
-  border-radius: 4px;
+  width: 100%;
+  min-height: 150px;
   background: var(--sc-rule-soft);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--sc-ink-3);
-  font-size: 9.5px;
+  font-size: 11px;
   font-style: italic;
 }
-.actInfo { min-width: 0; }
+.actInfo { min-width: 0; padding: 10px 12px 12px; }
 .actEyebrow {
   font-size: 9.5px;
   letter-spacing: 0.14em;
