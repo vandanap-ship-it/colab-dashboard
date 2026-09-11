@@ -349,87 +349,84 @@ export default function ScorecardView({
         ) : (
           s.activityHighlights.map((g) => (
             <div key={g.blockCode} className={styles.actGroup}>
-              <div className={styles.actBlockHd}>
-                Block {g.blockCode} · {g.villas.reduce((n, v) => n + v.activities.length, 0)} activities
-              </div>
-              {g.villas.map((v) => (
-                <div key={v.villaNumber}>
-                  <div className={styles.actVillaHd}>
-                    <span>{v.villaLabel}</span>
-                    <span style={{ fontSize: 10.5, color: "#8B93A0", fontWeight: 500 }}>
-                      {v.activities.length} {v.activities.length === 1 ? "activity" : "activities"}
-                    </span>
-                  </div>
-                  <div className={styles.actCards}>
-                  {v.activities.map((a) => (
-                    <div key={a.progressEntryId} className={styles.actCard}>
-                      {a.photoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={a.photoUrl} alt="" className={styles.actPhoto} />
-                      ) : (
-                        <div className={styles.actPhotoStub}>📷 Photo not uploaded</div>
-                      )}
-                      <div className={styles.actInfo}>
-                        {/* Title: "MilestoneSection · Activity" — matches Colab's 3-part format
-                            (as close as we can get; Colab's raw Sub_Location/Head/Name aren't stored). */}
-                        <div className={styles.actName}>
-                          {a.milestoneName} · {a.activityName}
-                        </div>
-                        {/* Cumulative status */}
-                        <div className={styles.actMeta}>
-                          {a.achievedPct != null && (
-                            <span className={styles.actPct}>{Math.round(a.achievedPct)}% complete</span>
-                          )}
-                          <span className={styles.actStatus}>
-                            {a.achievedPct != null && a.achievedPct >= 100 ? "· done" : "· in progress"}
-                          </span>
-                        </div>
-                        {/* Daily delta */}
-                        {a.dailyDeltaPct != null && a.dailyDeltaPct > 0 && (
-                          <div className={styles.actDelta}>
-                            +{a.dailyDeltaPct}% completed on {new Date(a.entryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
-                          </div>
-                        )}
-                        {/* Planned end + overdue/ahead */}
-                        {a.plannedEndDate && (
-                          <div className={styles.actPlanned}>
-                            Planned end {new Date(a.plannedEndDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                            {a.daysToPlannedEnd != null && a.daysToPlannedEnd < 0 && (
-                              <span className={styles.actOverdue}> · {Math.abs(a.daysToPlannedEnd)} days overdue</span>
-                            )}
-                            {a.daysToPlannedEnd != null && a.daysToPlannedEnd > 0 && (
-                              <span className={styles.actAhead}> · {a.daysToPlannedEnd} days to planned end</span>
-                            )}
-                            {a.daysToPlannedEnd === 0 && (
-                              <span className={styles.actOverdue}> · due today</span>
-                            )}
-                          </div>
-                        )}
-                        {/* REMARK block (labeled per Colab format) */}
-                        {a.notes && (
-                          <div className={styles.actBlock}>
-                            <div className={styles.actBlockLbl}>REMARK</div>
-                            <div className={styles.actBlockVal}>{a.notes}</div>
-                          </div>
-                        )}
-                        {/* DELAY REASON block (always labeled — dash if none) */}
-                        <div className={styles.actBlock}>
-                          <div className={styles.actBlockLbl}>DELAY REASON</div>
-                          <div className={styles.actBlockVal}>
-                            {(a.reasonLabel || a.reasonNote)
-                              ? [a.reasonLabel, a.reasonNote].filter(Boolean).join(" · ")
-                              : "—"}
-                          </div>
-                        </div>
-                        <div className={styles.actFoot}>
-                          {a.contractorName ?? "Untagged"} · {new Date(a.entryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                        </div>
-                      </div>
+              <div className={styles.actBlockHd}>Block {g.blockCode}</div>
+              {g.villas.map((v) => {
+                const count = v.activities.length;
+                return (
+                  <div key={v.villaNumber}>
+                    <div className={styles.actVillaHd}>
+                      <span className={styles.actVillaName}>{v.villaLabel}</span>
+                      <span className={styles.actVillaCount}>
+                        {count} {count === 1 ? "activity" : "activities"} logged
+                      </span>
                     </div>
-                  ))}
+                    <div className={styles.actCards}>
+                      {v.activities.map((a) => {
+                        const done = a.achievedPct != null && a.achievedPct >= 100;
+                        const entryDay = new Date(a.entryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+                        const entryFull = new Date(a.entryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+                        const reason = [a.reasonLabel, a.reasonNote].filter(Boolean).join(" · ");
+                        return (
+                          <div key={a.progressEntryId} className={styles.actCard}>
+                            {a.photoUrl ? (
+                              <div className={styles.actPhoto}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={a.photoUrl} alt="" />
+                              </div>
+                            ) : (
+                              <div className={styles.actPhotoStub}>Photo not uploaded</div>
+                            )}
+                            <div className={styles.actInfo}>
+                              <div className={styles.actName}>
+                                {a.milestoneName} · {a.activityName}
+                              </div>
+                              {a.achievedPct != null && (
+                                <div className={styles.actStatus}>
+                                  <span className={`${styles.actPill} ${done ? styles.done : styles.wip}`}>
+                                    {Math.round(a.achievedPct)}% complete · {done ? "done" : "in progress"}
+                                  </span>
+                                </div>
+                              )}
+                              {a.dailyDeltaPct != null && a.dailyDeltaPct > 0 && (
+                                <div className={styles.actDay}>
+                                  {a.dailyDeltaPct}% completed on {entryDay}
+                                </div>
+                              )}
+                              {a.plannedEndDate && (
+                                <div className={styles.actDelay}>
+                                  Planned end {new Date(a.plannedEndDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                                  {a.daysToPlannedEnd != null && a.daysToPlannedEnd < 0 && (
+                                    <> · <b className={styles.actDelayBad}>{done ? "completed" : ""} {Math.abs(a.daysToPlannedEnd)} days {done ? "late" : "overdue"}</b></>
+                                  )}
+                                  {a.daysToPlannedEnd != null && a.daysToPlannedEnd > 0 && (
+                                    <> · {a.daysToPlannedEnd} days to planned end</>
+                                  )}
+                                  {a.daysToPlannedEnd === 0 && (
+                                    <> · <b className={styles.actDelayBad}>due today</b></>
+                                  )}
+                                </div>
+                              )}
+                              {a.notes && (
+                                <div className={styles.actField}>
+                                  <span className={styles.actFieldLbl}>Remark</span>
+                                  {a.notes}
+                                </div>
+                              )}
+                              <div className={styles.actField}>
+                                <span className={styles.actFieldLbl}>Delay Reason</span>
+                                {reason || "—"}
+                              </div>
+                              <div className={styles.actFoot}>
+                                {a.contractorName ?? "Untagged"} · {entryFull}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ))
         )}
