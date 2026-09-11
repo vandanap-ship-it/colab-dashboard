@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { ROLE_LABELS } from "@/lib/roles";
 import SwitchProjectButton from "@/components/SwitchProjectButton";
 import SignOutButton from "@/components/SignOutButton";
+import PushTestButton from "@/components/PushTestButton";
 
 function initials(name: string | null | undefined, fallback = "?") {
   if (!name) return fallback;
@@ -146,6 +147,11 @@ export default async function MobileProfilePage() {
           icon={<Camera className="w-3.5 h-3.5 text-stone-400" />}
         />
       </Section>
+
+      {/* Test push — one-tap verification the phone is actually receiving
+          notifications. Empty-state text nudges the user to Turn on
+          notifications first if they haven't. */}
+      <PushTestButton />
 
       <SignOutButton action={handleSignOut} />
     </div>

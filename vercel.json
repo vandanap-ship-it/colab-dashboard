@@ -5,6 +5,10 @@
     {
       "path": "/api/cron/overdue-digest",
       "schedule": "30 21 * * *"
+    },
+    {
+      "path": "/api/cron/progress-nudge",
+      "schedule": "0 6 * * 1-6"
     }
   ]
 }
