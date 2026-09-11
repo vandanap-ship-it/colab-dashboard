@@ -181,6 +181,11 @@ export default function MobileExpenseForm({ projectId }: { projectId: string }) 
         />
       </label>
 
+      {/* Receipt photo directly under Description — the actual receipt
+          is the evidence expenses need; scroll-hunting for the camera at
+          the bottom of the form led to missed receipts. */}
+      <PhotoPicker photos={photos} setPhotos={setPhotos} max={4} label="Receipt photo (optional)" />
+
       <div className="grid grid-cols-2 gap-3">
         <label className="block">
           <span className="text-sm font-medium text-stone-700">Date</span>
@@ -203,8 +208,6 @@ export default function MobileExpenseForm({ projectId }: { projectId: string }) 
           />
         </label>
       </div>
-
-      <PhotoPicker photos={photos} setPhotos={setPhotos} max={4} label="Receipt photo (optional)" />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 

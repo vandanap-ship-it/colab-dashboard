@@ -276,6 +276,13 @@ export default function ReportForm({
         </div>
       </label>
 
+      {/* Photos sit right below Description on every mobile form — a photo
+          taken now is the strongest evidence a site engineer can produce.
+          Was previously at the bottom of the form; engineers scrolling
+          through metadata often lost the moment before reaching the
+          camera. */}
+      <PhotoPicker photos={photos} setPhotos={setPhotos} max={4} label="Photos" />
+
       {extraFields.length > 0 && (
         <div className="grid grid-cols-2 gap-3">
           {extraFields.map((f) => (
@@ -363,8 +370,6 @@ export default function ReportForm({
           </div>
         )}
       </div>
-
-      <PhotoPicker photos={photos} setPhotos={setPhotos} max={4} label="Photos" />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 

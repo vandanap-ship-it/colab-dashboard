@@ -275,6 +275,18 @@ export default function WorkPermitForm({
         />
       </label>
 
+      {/* Photos moved up from bottom of form — a permit request photo is
+          often the fastest way to give the approver context (drawing
+          markup, site condition, blocked area). */}
+      <div>
+        <span className="text-sm font-medium text-stone-700">
+          Photos <span className="text-stone-400 text-xs">(optional — max 6)</span>
+        </span>
+        <div className="mt-2">
+          <PhotoPicker photos={photos} setPhotos={setPhotos} max={6} />
+        </div>
+      </div>
+
       <div className="grid grid-cols-3 gap-2">
         <label className="block">
           <span className="text-sm font-medium text-stone-700">Work date</span>
@@ -372,15 +384,6 @@ export default function WorkPermitForm({
               );
             })
           )}
-        </div>
-      </div>
-
-      <div>
-        <span className="text-sm font-medium text-stone-700">
-          Photos <span className="text-stone-400 text-xs">(optional — max 6)</span>
-        </span>
-        <div className="mt-2">
-          <PhotoPicker photos={photos} setPhotos={setPhotos} max={6} />
         </div>
       </div>
 

@@ -142,15 +142,15 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[10px] text-stone-500 uppercase tracking-wider">ID: {a.taskCode}</p>
                     <h3 className="font-medium text-stone-900 truncate">{a.name}</h3>
-                    <p className="text-[10px] text-stone-500 truncate">{a.path.slice(0, -1).join(" / ")}</p>
+                    <p className="text-[10px] text-stone-500 truncate mt-0.5">{a.path.slice(0, -1).join(" / ")}</p>
                   </div>
-                  <div className="text-right">
-                    <div className="relative h-12 w-12 rounded-full border-4 border-stone-200 flex items-center justify-center text-[10px] font-bold">
-                      {Math.round(a.percentComplete)}
-                    </div>
-                  </div>
+                  {/* Bigger % complete indicator — 64px instead of 48px, and
+                      colour-coded by state so an engineer scanning the list
+                      can find their in-flight rows without reading each %.
+                      Killed the "ID: R3" line above the title — no one uses
+                      the WBS ID to find their row. */}
+                  <PctBadge percent={a.percentComplete} />
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                   <div>
@@ -175,6 +175,34 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * Big circular %-complete badge for a Site Progress row. Colour maps to state
+ * so a site engineer scrolling the "In Progress" tab can eyeball what's
+ * nearing finish (green), what's in the middle (amber), and what hasn't
+ * started (grey) without reading numbers.
+ */
+function PctBadge({ percent }: { percent: number }) {
+  const p = Math.max(0, Math.min(100, Math.round(percent)));
+  // Grey for 0 (not started), green for 100 (done), amber ramp in between.
+  // Deliberately no red: this list is view-only status, not urgency.
+  const ring =
+    p === 0
+      ? "border-stone-200 text-stone-400"
+      : p >= 100
+        ? "border-emerald-500 text-emerald-700"
+        : p >= 50
+          ? "border-amber-500 text-amber-700"
+          : "border-amber-300 text-amber-700";
+  return (
+    <div
+      className={`shrink-0 h-16 w-16 rounded-full border-[3px] flex items-center justify-center text-sm font-bold tabular-nums ${ring}`}
+      aria-label={`${p} percent complete`}
+    >
+      {p}%
     </div>
   );
 }

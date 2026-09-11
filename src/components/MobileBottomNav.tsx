@@ -20,7 +20,7 @@ export default function MobileBottomNav({
   const items: { href: string; label: string; icon: LucideIcon; badge?: number }[] = [
     { href: home, label: "Home", icon: Home },
     { href: `${home}/documents`, label: "Documents", icon: FolderClosed },
-    { href: `${home}/info`, label: "Info", icon: Inbox, badge: pendingActions },
+    { href: `${home}/info`, label: "Inbox", icon: Inbox, badge: pendingActions },
     { href: `${home}/profile`, label: "Profile", icon: User },
   ];
 

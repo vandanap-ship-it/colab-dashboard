@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  CheckSquare,
+  AlertTriangle,
   ClipboardCheck,
   ListChecks,
   PlusCircle,
-  RefreshCw,
   ShieldCheck,
   TrendingUp,
   Users,
@@ -84,7 +83,9 @@ export default async function MobileProjectHome({
       key: "hindrance",
       href: `/mobile/${projectId}/hindrance/new`,
       label: "Log Hindrance",
-      icon: CheckSquare,
+      // AlertTriangle reads as "blocker / attention" — CheckSquare read as
+      // "task done" which was semantically wrong for a hindrance.
+      icon: AlertTriangle,
       tier: "primary",
     },
     {
@@ -140,26 +141,16 @@ export default async function MobileProjectHome({
 
   return (
     <div className="px-4 py-6 space-y-6">
-      <div>
-        <p className="text-sm text-stone-500">Welcome back,</p>
-        <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">
+      {/* Compact identity line — engineer + project on one row. Removed the
+          full "Welcome back, {name}" block and the "Loaded X" timestamp
+          chip in the design pass: neither helped a site engineer opening
+          the app to log work, and both pushed the primary CTA below the
+          fold on smaller phones. */}
+      <div className="flex items-baseline justify-between gap-2">
+        <h1 className="text-lg font-semibold text-stone-900 tracking-tight truncate">
           {session?.user?.name}
         </h1>
-        <p className="text-xs text-stone-400 mt-1">{project.name}</p>
-        {/* "Last sync" was misleading — this page is a Server Component, so
-            the timestamp is the moment the server rendered the response, not
-            when the offline queue last synced. "Loaded" is the honest label:
-            the data on screen is as fresh as this render. */}
-        <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-stone-500 bg-white border border-stone-200 rounded-full px-2.5 py-1">
-          <RefreshCw className="w-3 h-3 text-stone-400" />
-          Loaded{" "}
-          {new Date().toLocaleString(undefined, {
-            day: "2-digit",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </div>
+        <p className="text-xs text-stone-500 truncate">{project.name}</p>
       </div>
 
       <section>
