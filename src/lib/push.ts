@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
  * Web Push notifications from server → user's device.
  *
  * Setup requires two VAPID keys in Vercel env:
- *   NEXT_PUBLIC_VAPID_PUBLIC_KEY   — safe in client bundle, given to the
+ *   VAPID_PUBLIC_KEY   — safe in client bundle, given to the
  *                                    browser at subscribe time.
  *   VAPID_PRIVATE_KEY              — server only, signs each push request.
  *
@@ -22,13 +22,13 @@ import { prisma } from "@/lib/prisma";
  */
 
 const CONFIGURED = Boolean(
-  process.env.VAPID_PRIVATE_KEY && process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY && process.env.VAPID_PUBLIC_KEY,
 );
 if (CONFIGURED) {
   webpush.setVapidDetails(
     // Contact email so push services can reach us if something goes wrong.
     "mailto:product@whitelotusgroup.in",
-    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PUBLIC_KEY!,
     process.env.VAPID_PRIVATE_KEY!,
   );
 }

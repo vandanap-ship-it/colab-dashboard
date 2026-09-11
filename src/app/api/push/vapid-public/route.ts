@@ -2,7 +2,7 @@
 // call pushManager.subscribe(). Safe to expose — VAPID public keys are
 // intentionally shareable; only the private half needs to stay secret.
 //
-// A tiny dedicated endpoint (rather than inlining NEXT_PUBLIC_VAPID_PUBLIC_KEY
+// A tiny dedicated endpoint (rather than inlining VAPID_PUBLIC_KEY
 // into the client bundle) keeps the mobile bundle unchanged for viewers
 // who never opt in, and centralises the "not configured yet" fallback.
 
@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const key = process.env.VAPID_PUBLIC_KEY;
   if (!key) {
     return NextResponse.json(
       { error: "Push notifications not configured on this deployment." },
