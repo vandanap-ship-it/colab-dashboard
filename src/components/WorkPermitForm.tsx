@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import PhotoPicker from "./PhotoPicker";
+import SaveSuccessCard from "./SaveSuccessCard";
 import { useToast } from "./Toast";
 import {
   WORK_PERMIT_TYPES,
@@ -65,6 +66,9 @@ export default function WorkPermitForm({
   const [photos, setPhotos] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // After save: in-place success card (Add another / Back to home) so
+  // engineers raising back-to-back permits don't get bounced home each time.
+  const [saved, setSaved] = useState<null | { queued: boolean; title: string }>(null);
 
   function toggleApprover(id: string) {
     setSelectedApprovers((prev) => {
@@ -173,8 +177,35 @@ export default function WorkPermitForm({
     }
     if (photoWarning) toast.warning(photoWarning);
 
-    router.push(`/mobile/${projectId}`);
+    setSaved({ queued, title: title.trim() });
     router.refresh();
+  }
+
+  function resetForm() {
+    setType("GENERAL");
+    setTitle("");
+    setDescription("");
+    setWorkDate(new Date().toISOString().slice(0, 10));
+    setStartTime("09:00");
+    setEndTime("18:00");
+    setLocation("");
+    setContractorId("");
+    setSelectedApprovers(new Set());
+    setPhotos([]);
+    setError(null);
+    setSaved(null);
+  }
+
+  if (saved) {
+    return (
+      <SaveSuccessCard
+        title="Permit raised"
+        detail={`${saved.title} — approvers notified.`}
+        projectId={projectId}
+        onAddAnother={resetForm}
+        queued={saved.queued}
+      />
+    );
   }
 
   const inputCls =

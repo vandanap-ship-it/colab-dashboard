@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
+import SaveSuccessCard from "./SaveSuccessCard";
 
 type Activity = { id: string; name: string; taskCode: string; path: string[] };
 
@@ -50,6 +51,8 @@ export default function InspectionForm({
   const [error, setError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [templateId, setTemplateId] = useState("");
+  // After save: in-place success card instead of redirect. See SaveSuccessCard.
+  const [saved, setSaved] = useState<null | { queued: boolean; title: string }>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -205,8 +208,31 @@ export default function InspectionForm({
       toast.warning(photoWarning);
     }
 
-    router.push(redirectTo ?? `/mobile/${projectId}`);
+    setSaved({ queued, title: title.trim() });
     router.refresh();
+  }
+
+  function resetForm() {
+    setActivityId("");
+    setActivitySearch("");
+    setTitle("");
+    setItems(DEFAULT_ITEMS.map((label) => ({ label, passed: null, notes: "" })));
+    setPhotos([]);
+    setTemplateId("");
+    setError(null);
+    setSaved(null);
+  }
+
+  if (saved) {
+    return (
+      <SaveSuccessCard
+        title="Inspection saved"
+        detail={`${saved.title} — sent for planner review.`}
+        projectId={projectId}
+        onAddAnother={resetForm}
+        queued={saved.queued}
+      />
+    );
   }
 
   return (

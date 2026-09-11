@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "./Toast";
+import SaveSuccessCard from "./SaveSuccessCard";
 import { istDayString } from "@/lib/istDay";
 
 export interface ContractorOption {
@@ -47,6 +48,9 @@ export default function ManpowerEntryForm({
   const [notes, setNotes] = useState<string>("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // After save: in-place success card so an engineer logging trade-by-trade
+  // doesn't get bounced home after every entry. See SaveSuccessCard.
+  const [saved, setSaved] = useState<null | { queued: boolean; trade: string; count: number }>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -100,8 +104,32 @@ export default function ManpowerEntryForm({
       toast.success("Manpower logged.");
     }
 
-    router.push(`/mobile/${projectId}`);
+    setSaved({ queued, trade, count: Math.floor(n) });
     router.refresh();
+  }
+
+  function resetForm() {
+    setEntryDate(today);
+    // Keep contractorId/trade so the engineer can quickly log the next trade
+    // for the same contractor without re-picking. Reset just count + notes.
+    setActualCount("");
+    setNotes("");
+    setError(null);
+    setSaved(null);
+  }
+
+  if (saved) {
+    const contractorName =
+      contractors.find((c) => c.id === contractorId)?.name ?? "contractor";
+    return (
+      <SaveSuccessCard
+        title="Manpower logged"
+        detail={`${saved.count} ${saved.trade}${saved.count === 1 ? "" : "s"} · ${contractorName}`}
+        projectId={projectId}
+        onAddAnother={resetForm}
+        queued={saved.queued}
+      />
+    );
   }
 
   return (

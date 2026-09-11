@@ -7,6 +7,7 @@ import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
 import ActivityPicker from "./ActivityPicker";
+import SaveSuccessCard from "./SaveSuccessCard";
 import { HINDRANCE_REASONS } from "@/lib/hindranceReasons";
 import { istDayString } from "@/lib/istDay";
 
@@ -54,6 +55,10 @@ export default function NewProgressForm({
   const [notes, setNotes] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // After save: show an in-place "Saved · Add another / Back to home" card
+  // instead of redirecting to /mobile/{id}. Site engineers log many entries
+  // per shift — booting them home every time forced 2 extra taps per entry.
+  const [saved, setSaved] = useState<null | { queued: boolean }>(null);
 
   useEffect(() => {
     (async () => {
@@ -150,7 +155,7 @@ export default function NewProgressForm({
       });
       setPending(false);
       toast.info("Saved on this device. Photos will upload when you're back online.");
-      router.push(`/mobile/${projectId}`);
+      setSaved({ queued: true });
       router.refresh();
       return;
     }
@@ -192,8 +197,35 @@ export default function NewProgressForm({
     } else {
       toast.info("Saved on this device. It will sync when you're back online.");
     }
-    router.push(`/mobile/${projectId}`);
+    setSaved({ queued: !saved });
     router.refresh();
+  }
+
+  function resetForm() {
+    setSelected(null);
+    setDate(today);
+    setAchieved(0);
+    setCumulative(0);
+    setContractorId("");
+    setReasonCode("");
+    setReasonNote("");
+    setLabour([{ category: "Skilled", count: 0 }]);
+    setPhotos([]);
+    setNotes("");
+    setError(null);
+    setSaved(null);
+  }
+
+  if (saved) {
+    return (
+      <SaveSuccessCard
+        title="Progress saved"
+        detail={`Logged for ${selected?.name ?? "activity"}.`}
+        projectId={projectId}
+        onAddAnother={resetForm}
+        queued={saved.queued}
+      />
+    );
   }
 
   return (

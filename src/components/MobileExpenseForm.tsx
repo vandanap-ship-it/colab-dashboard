@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { EXPENSE_CATEGORIES } from "@/lib/expenses";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
+import SaveSuccessCard from "./SaveSuccessCard";
 
 export default function MobileExpenseForm({ projectId }: { projectId: string }) {
   const router = useRouter();
@@ -17,6 +18,9 @@ export default function MobileExpenseForm({ projectId }: { projectId: string }) 
   const [photos, setPhotos] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // After save: in-place success card so an engineer logging several
+  // receipts in a row doesn't get bounced home each time.
+  const [saved, setSaved] = useState<null | { queued: boolean; amount: number; description: string }>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -100,8 +104,31 @@ export default function MobileExpenseForm({ projectId }: { projectId: string }) 
       toast.warning(photoWarning);
     }
 
-    router.push(`/mobile/${projectId}`);
+    setSaved({ queued, amount: Number(amount), description: description.trim() });
     router.refresh();
+  }
+
+  function resetForm() {
+    setCategory(EXPENSE_CATEGORIES[0]);
+    setAmount("");
+    setDescription("");
+    setDate(new Date().toISOString().slice(0, 10));
+    setPaidTo("");
+    setPhotos([]);
+    setError(null);
+    setSaved(null);
+  }
+
+  if (saved) {
+    return (
+      <SaveSuccessCard
+        title="Expense saved"
+        detail={`₹${saved.amount.toLocaleString("en-IN")} · ${saved.description}`}
+        projectId={projectId}
+        onAddAnother={resetForm}
+        queued={saved.queued}
+      />
+    );
   }
 
   return (
