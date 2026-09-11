@@ -6,7 +6,6 @@ import { getPendingActionCount } from "@/lib/pendingActions";
 import BrandMark from "@/components/BrandMark";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import MobileOnboarding from "@/components/MobileOnboarding";
-import MobileInstallBanner from "@/components/MobileInstallBanner";
 import PendingSyncBadge from "@/components/PendingSyncBadge";
 
 export default async function MobileProjectLayout({
@@ -53,9 +52,6 @@ export default async function MobileProjectLayout({
         </div>
       </header>
       <main className="flex-1 overflow-y-auto pb-20">
-        {/* Install-to-home-screen nudge — hides itself when already
-            installed, previously dismissed, or the browser can't install. */}
-        <MobileInstallBanner />
         <div className="px-4 pt-2 flex justify-center">
           <PendingSyncBadge />
         </div>
