@@ -6,6 +6,7 @@ import { canAccessScopedRow } from "@/lib/modules";
 import { z } from "zod";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { assignmentEmail, sendEmail } from "@/lib/email";
+import { sendPushToUser } from "@/lib/push";
 import { checkConflict } from "@/lib/optimisticLock";
 import { parseBody } from "@/lib/parseBody";
 
@@ -91,25 +92,32 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
       },
     });
 
-    // Assignment email — silent no-op when the assignee has no email or
-    // RESEND_API_KEY isn't set on the deploy.
+    // Assignment email + push — fires on any assign, including reassign
+    // to a different person.
     if (
       issue.assignedToId &&
-      issue.assignedToId !== before.assignedToId &&
-      issue.assignedTo?.email
+      issue.assignedToId !== before.assignedToId
     ) {
       const desc = (await prisma.issue.findUnique({ where: { id }, select: { description: true } }))?.description ?? "Snag";
       const title = desc.length > 80 ? desc.slice(0, 80) + "…" : desc;
-      await sendEmail(
-        assignmentEmail({
-          to: issue.assignedTo.email,
-          assigneeName: issue.assignedTo.name,
-          itemType: "Issue",
-          itemTitle: title,
-          itemUrl: `${SIDDHI_BASE_URL}/projects/${issue.projectId}/my-actions`,
-          raisedByName: issue.createdBy.name,
-        }),
-      );
+      if (issue.assignedTo?.email) {
+        await sendEmail(
+          assignmentEmail({
+            to: issue.assignedTo.email,
+            assigneeName: issue.assignedTo.name,
+            itemType: "Issue",
+            itemTitle: title,
+            itemUrl: `${SIDDHI_BASE_URL}/projects/${issue.projectId}/my-actions`,
+            raisedByName: issue.createdBy.name,
+          }),
+        );
+      }
+      void sendPushToUser(issue.assignedToId, {
+        title: "Snag assigned to you",
+        body: `${title} · from ${issue.createdBy.name}`,
+        url: `/mobile/${issue.projectId}/info`,
+        tag: `snag-${issue.id}`,
+      });
     }
     {
       const diff = diffSummary(

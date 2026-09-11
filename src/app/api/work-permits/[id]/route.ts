@@ -15,6 +15,7 @@ import {
   unauthorized,
 } from "@/lib/apiErrors";
 import { sendEmail, workPermitDecisionEmail } from "@/lib/email";
+import { sendPushToUser } from "@/lib/push";
 import { formatDayMonthYear } from "@/lib/dates";
 import {
   allowedWorkPermitTransition,
@@ -159,7 +160,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     // Notify the requester on approve / reject. Skip close — that's a
     // routine end-of-day action the requester either did themselves or
     // knew was coming.
-    if ((kind === "approve" || kind === "reject") && updated.requester?.email) {
+    if ((kind === "approve" || kind === "reject") && updated.requester) {
       const actorName =
         // The updated row includes `approver` (loaded via include). On
         // reject the actor is the current session user, not the approver.
@@ -167,20 +168,37 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
           ? (updated.approver?.name ?? session.user.username)
           : session.user.username;
       const permitUrl = `${SIDDHI_BASE_URL}/mobile/${existing.projectId}/permit`;
-      await sendEmail(
-        workPermitDecisionEmail({
-          to: updated.requester.email,
-          requesterName: updated.requester.name,
-          permitTitle: existing.title,
-          permitTypeLabel:
-            WORK_PERMIT_TYPE_LABELS[existing.type as WorkPermitType] ?? existing.type,
-          workDate: formatDayMonthYear(existing.workDate),
-          decision: kind === "approve" ? "APPROVED" : "REJECTED",
-          actorName,
-          rejectionReason: kind === "reject" ? (rejectionReason?.trim() || undefined) : undefined,
-          permitUrl,
-        }),
-      );
+      if (updated.requester.email) {
+        await sendEmail(
+          workPermitDecisionEmail({
+            to: updated.requester.email,
+            requesterName: updated.requester.name,
+            permitTitle: existing.title,
+            permitTypeLabel:
+              WORK_PERMIT_TYPE_LABELS[existing.type as WorkPermitType] ?? existing.type,
+            workDate: formatDayMonthYear(existing.workDate),
+            decision: kind === "approve" ? "APPROVED" : "REJECTED",
+            actorName,
+            rejectionReason: kind === "reject" ? (rejectionReason?.trim() || undefined) : undefined,
+            permitUrl,
+          }),
+        );
+      }
+      // Push notification alongside the email — reaches the requester's
+      // phone even when Siddhi is closed and email is unread. Tap opens
+      // the mobile permit page.
+      void sendPushToUser(existing.requesterId, {
+        title:
+          kind === "approve"
+            ? `Permit approved · ${existing.title.slice(0, 40)}`
+            : `Permit rejected · ${existing.title.slice(0, 40)}`,
+        body:
+          kind === "approve"
+            ? `${WORK_PERMIT_TYPE_LABELS[existing.type as WorkPermitType] ?? existing.type} for ${formatDayMonthYear(existing.workDate)} approved by ${actorName}.`
+            : `${WORK_PERMIT_TYPE_LABELS[existing.type as WorkPermitType] ?? existing.type} rejected by ${actorName}${rejectionReason?.trim() ? `. Reason: ${rejectionReason.slice(0, 100)}` : "."}`,
+        url: `/mobile/${existing.projectId}/permit`,
+        tag: `permit-${existing.id}`,
+      });
     }
 
     return NextResponse.json({ workPermit: updated });

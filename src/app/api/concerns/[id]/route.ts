@@ -6,6 +6,7 @@ import { canReview, isAdmin } from "@/lib/roles";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { assignmentEmail, sendEmail } from "@/lib/email";
+import { sendPushToUser } from "@/lib/push";
 import { checkConflict } from "@/lib/optimisticLock";
 import { parseBody } from "@/lib/parseBody";
 
@@ -94,25 +95,36 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/concerns/[id]"
       },
     });
 
-    // Assignment email — silent no-op when the assignee has no email or
-    // RESEND_API_KEY isn't set on the deploy.
+    // Assignment email + push — silent no-op when the assignee has no
+    // email (email path) or no push subscription (push path). Fires on
+    // any assign, including reassignment to a different person.
     if (
       concern.assignedToId &&
-      concern.assignedToId !== before.assignedToId &&
-      concern.assignedTo?.email
+      concern.assignedToId !== before.assignedToId
     ) {
       const desc = (await prisma.concern.findUnique({ where: { id }, select: { description: true } }))?.description ?? "Concern";
       const title = desc.length > 80 ? desc.slice(0, 80) + "…" : desc;
-      await sendEmail(
-        assignmentEmail({
-          to: concern.assignedTo.email,
-          assigneeName: concern.assignedTo.name,
-          itemType: "Concern",
-          itemTitle: title,
-          itemUrl: `${SIDDHI_BASE_URL}/projects/${concern.projectId}/my-actions`,
-          raisedByName: concern.raisedBy.name,
-        }),
-      );
+      if (concern.assignedTo?.email) {
+        await sendEmail(
+          assignmentEmail({
+            to: concern.assignedTo.email,
+            assigneeName: concern.assignedTo.name,
+            itemType: "Concern",
+            itemTitle: title,
+            itemUrl: `${SIDDHI_BASE_URL}/projects/${concern.projectId}/my-actions`,
+            raisedByName: concern.raisedBy.name,
+          }),
+        );
+      }
+      // Push: fire-and-forget. Push failures never block the API response.
+      void sendPushToUser(concern.assignedToId, {
+        title: "Concern assigned to you",
+        body: `${title} · from ${concern.raisedBy.name}`,
+        // Deep-link to the Snapshot page's #concerns section on desktop
+        // and the mobile home for engineers (they'll see it in Inbox).
+        url: `/mobile/${concern.projectId}/info`,
+        tag: `concern-${concern.id}`,
+      });
     }
     {
       const diff = diffSummary(

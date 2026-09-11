@@ -13,6 +13,7 @@ import {
 } from "@/lib/apiErrors";
 import { parseBody } from "@/lib/parseBody";
 import { checkConflict } from "@/lib/optimisticLock";
+import { sendPushToUser } from "@/lib/push";
 
 const PatchInspectionSchema = z.object({
   status: z.enum(["IN_REVIEW", "PASSED", "REJECTED"]),
@@ -36,7 +37,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
   try {
     const before = await prisma.inspection.findUnique({
       where: { id },
-      select: { id: true, projectId: true, status: true, title: true, updatedAt: true, module: true },
+      select: { id: true, projectId: true, status: true, title: true, updatedAt: true, module: true, filledById: true },
     });
     if (!before) return notFound();
     // Module gate — QAQC-scoped contractor cannot pass/reject a SAFETY
@@ -71,6 +72,23 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
         summary: `Inspection "${before.title}" → ${status}${
           status === "REJECTED" && rejectionReason ? ` (${rejectionReason.slice(0, 60)})` : ""
         }`,
+      });
+    }
+    // Push the engineer who filled it — they care most about the outcome.
+    // Skip IN_REVIEW (no decision made yet); notify on PASSED + REJECTED.
+    if (status !== "IN_REVIEW" && before.filledById) {
+      const reviewer = inspection.reviewedBy?.name ?? session.user.username;
+      void sendPushToUser(before.filledById, {
+        title:
+          status === "PASSED"
+            ? `Inspection passed · ${before.title.slice(0, 40)}`
+            : `Inspection failed · ${before.title.slice(0, 40)}`,
+        body:
+          status === "PASSED"
+            ? `Reviewed by ${reviewer}. No rework needed.`
+            : `Reviewed by ${reviewer}.${rejectionReason?.trim() ? ` Reason: ${rejectionReason.slice(0, 100)}` : " Check the failed rows and re-submit."}`,
+        url: `/mobile/${inspection.projectId}/info`,
+        tag: `inspection-${inspection.id}`,
       });
     }
     return NextResponse.json({ inspection });
