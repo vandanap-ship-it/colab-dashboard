@@ -7,6 +7,7 @@ import BrandMark from "@/components/BrandMark";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import MobileOnboarding from "@/components/MobileOnboarding";
 import PendingSyncBadge from "@/components/PendingSyncBadge";
+import PushOptIn from "@/components/PushOptIn";
 
 export default async function MobileProjectLayout({
   children,
@@ -52,6 +53,9 @@ export default async function MobileProjectLayout({
         </div>
       </header>
       <main className="flex-1 overflow-y-auto pb-20">
+        {/* Push-notification opt-in — hides itself when permission is
+            already granted or denied, or when previously dismissed. */}
+        <PushOptIn />
         <div className="px-4 pt-2 flex justify-center">
           <PendingSyncBadge />
         </div>
