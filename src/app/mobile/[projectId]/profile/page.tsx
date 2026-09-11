@@ -1,4 +1,4 @@
-import { Camera, RefreshCw, ShieldAlert, UserCog } from "lucide-react";
+import { Camera, KeyRound, Mail, Phone, RefreshCw, User as UserIcon } from "lucide-react";
 import { signOut } from "@/lib/auth";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -23,8 +23,12 @@ export default async function MobileProfilePage() {
   }
 
   const userId = session.user.id;
-  const [latestProgress, latestHindrance, latestIssue, latestConcern, photoCount] =
+  const [user, latestProgress, latestHindrance, latestIssue, latestConcern, photoCount] =
     await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      }),
       prisma.progressEntry.findFirst({
         where: { createdById: userId },
         orderBy: { updatedAt: "desc" },
@@ -84,37 +88,50 @@ export default async function MobileProfilePage() {
         </div>
       </section>
 
-      {/* Action row */}
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          disabled
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-stone-200 bg-white py-2 text-sm font-medium text-stone-400 cursor-not-allowed"
-          title="Edit profile coming in v1.1"
-        >
-          <UserCog className="w-4 h-4" />
-          Edit Profile
-        </button>
-        <SwitchProjectButton compact />
-      </div>
+      {/* Switch project — only edit-facing action shipped in V1. Any
+          change to contact fields or password below routes through the
+          product team, matching the support model in the release notes. */}
+      <SwitchProjectButton compact />
 
-      {/* Personal details */}
-      <Section title="Personal details">
-        <Row label="Status" value="Active" />
-        <Row label="Date of Birth" value="—" subtle="v1.1" />
+      {/* Account — the four fields Shraddha said actually matter:
+          phone, email, username, password. Fields we don't have data
+          for (phone) show a friendly "not on file" line rather than a
+          dashed v1.1 stub, and clearly point at the product team as the
+          one door for changes. */}
+      <Section title="Account" icon={<UserIcon className="w-3.5 h-3.5" />}>
+        <RowWithIcon
+          label="Phone"
+          value="Not on file"
+          muted
+          icon={<Phone className="w-3.5 h-3.5 text-stone-400" />}
+        />
+        <RowWithIcon
+          label="Email"
+          value={user?.email ?? "Not on file"}
+          muted={!user?.email}
+          icon={<Mail className="w-3.5 h-3.5 text-stone-400" />}
+        />
+        <RowWithIcon
+          label="Username"
+          value={session.user.username ?? "—"}
+          icon={<UserIcon className="w-3.5 h-3.5 text-stone-400" />}
+        />
+        <RowWithIcon
+          label="Password"
+          value="••••••••"
+          icon={<KeyRound className="w-3.5 h-3.5 text-stone-400" />}
+        />
+        <p className="text-[11px] text-stone-500 leading-relaxed pt-1">
+          To change your phone, email, or password, ask the product team.
+        </p>
       </Section>
 
-      {/* Emergency contact (stubs for v1.1) */}
-      <Section title="Emergency Contact" icon={<ShieldAlert className="w-3.5 h-3.5" />}>
-        <Row label="Person" value="—" subtle="v1.1" />
-        <Row label="Mobile" value="—" subtle="v1.1" />
-        <Row label="Alternate mobile" value="—" subtle="v1.1" />
-      </Section>
-
-      {/* Sync status */}
+      {/* Sync status — kept, useful signal. Renamed "Available for Sync"
+          off the misleading "0 offline queue v1.1" line; PendingSyncBadge
+          in the header already carries the live count. */}
       <Section title="Sync" icon={<RefreshCw className="w-3.5 h-3.5" />}>
         <Row
-          label="Last sync"
+          label="Last activity"
           value={lastSync.toLocaleString(undefined, {
             day: "2-digit",
             month: "short",
@@ -123,7 +140,6 @@ export default async function MobileProfilePage() {
             minute: "2-digit",
           })}
         />
-        <Row label="Available for Sync" value="0" subtle="offline queue v1.1" />
         <RowWithIcon
           label="Photos uploaded"
           value={String(photoCount)}
@@ -184,18 +200,28 @@ function RowWithIcon({
   label,
   value,
   icon,
+  muted = false,
 }: {
   label: string;
   value: string;
   icon: React.ReactNode;
+  /** Muted value styling for "Not on file" placeholders — signals absent
+   *  data without a v1.1 tag lecture. */
+  muted?: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between text-sm gap-2">
-      <span className="text-stone-500 flex items-center gap-1.5">
+    <div className="flex items-baseline justify-between text-sm gap-3">
+      <span className="text-stone-500 flex items-center gap-1.5 shrink-0">
         {icon}
         {label}
       </span>
-      <span className="font-medium text-stone-900 tabular-nums">{value}</span>
+      <span
+        className={`font-medium text-right truncate min-w-0 ${
+          muted ? "text-stone-400 italic font-normal" : "text-stone-900"
+        }`}
+      >
+        {value}
+      </span>
     </div>
   );
 }
