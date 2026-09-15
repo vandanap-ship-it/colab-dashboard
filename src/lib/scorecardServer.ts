@@ -53,9 +53,9 @@ export interface ScorecardDailySnapshot {
   progressUpdatedToday: boolean;    // "Yes / No" — was anyone logged today?
   contractorsUpdated: number;       // # contractors that had at least one log today
   contractorsExpected: number;      // # contractors that had scope planned today
-  blocksUpdated: number;            // # blocks with at least one progress entry today
+  blocksUpdated: number;            // # planned blocks that ALSO had a progress entry today (matches Colab)
   blocksExpected: number;           // # blocks with scope planned today (fallback: active blocks)
-  villasUpdated: number;            // # villas with at least one progress entry today
+  villasUpdated: number;            // # planned villas that ALSO had a progress entry today (matches Colab)
   villasExpected: number;           // # villas with scope planned today (fallback: active villas)
 }
 
@@ -343,14 +343,31 @@ async function computeDailySnapshotAndMovement(
     updatedByContractor.get(key)!.add(villaId);
   }
 
-  // §1 counts
+  // §1 counts.
+  //
+  // Colab's snapshot ratios (blocks / villas updated) are PLANNED-VS-UPDATED,
+  // not "any update today". A villa that logged progress today counts toward
+  // the numerator only if it was in the planned window today; ahead-of-plan
+  // villas surface separately in §2's gap panel (gold-edged chip) but do NOT
+  // move the §1 tile. Same for blocks. Intersect the updated sets with the
+  // expected sets before sizing, so we match the Colab template exactly.
+  //
+  // Historical bug: we were sending `updatedVillaIds.size` and
+  // `updatedBlockCodes.size` raw — that inflated the ratio on any day with
+  // ahead-of-plan work (e.g. 10 Sep 2026 Amanvana logged 11 villas, but only
+  // 8 were planned — Colab showed 8/22, Siddhi was showing 11/22).
+  const plannedUpdatedVillaIds = new Set<string>();
+  for (const id of updatedVillaIds) if (expectedVillaIds.has(id)) plannedUpdatedVillaIds.add(id);
+  const plannedUpdatedBlockCodes = new Set<string>();
+  for (const code of updatedBlockCodes) if (expectedBlockCodes.has(code)) plannedUpdatedBlockCodes.add(code);
+
   const snapshot: ScorecardDailySnapshot = {
     progressUpdatedToday: entriesToday.length > 0,
     contractorsUpdated: new Set(entriesToday.map((e) => e.contractorId).filter((x): x is string => !!x)).size,
     contractorsExpected: contractors.length,
-    blocksUpdated: updatedBlockCodes.size,
+    blocksUpdated: plannedUpdatedBlockCodes.size,
     blocksExpected: expectedBlockCodes.size || blocks.length,
-    villasUpdated: updatedVillaIds.size,
+    villasUpdated: plannedUpdatedVillaIds.size,
     villasExpected: expectedVillaIds.size,
   };
 
