@@ -2,12 +2,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { canAccessBilling, canLogExpense, canSeeDesktop, isAdmin, ROLES } from "@/lib/roles";
+import { canSeeDesktop, ROLES } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
 import ProjectTabs from "@/components/ProjectTabs";
 import HighlightsButton from "@/components/HighlightsButton";
-import Sidebar from "@/components/Sidebar";
 
 export default async function ProjectLayout({
   children,
@@ -80,18 +79,12 @@ export default async function ProjectLayout({
               <p className="text-sm text-stone-500 mt-1">{project.address}</p>
             )}
           </div>
-          {/* Collapsed action row: sidebar has everything else. Only the
-              highest-frequency "Project Highlights" stays inline (it's a modal,
-              opens without page nav — belongs with the header not the sidebar). */}
+          {/* Menu (Sidebar) moved to the top-left of the main Navbar so it
+              sits next to the Siddhi brand mark. Only the highest-frequency
+              "Project Highlights" stays inline (it's a modal, opens without
+              page nav — belongs with the header not the navbar). */}
           <div className="flex gap-2 shrink-0 items-center">
             <HighlightsButton projectId={project.id} />
-            <Sidebar
-              projectId={project.id}
-              canAccessBilling={canAccessBilling(role)}
-              canLogExpense={canLogExpense(role)}
-              canImport={isAdmin(role)}
-              canManageUsers={isAdmin(role)}
-            />
           </div>
         </div>
 

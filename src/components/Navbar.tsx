@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Inbox, Smartphone, ShieldCheck, Users, History, Trash2 } from "lucide-react";
-import { canSeeMobile, isAdmin } from "@/lib/roles";
+import { canAccessBilling, canLogExpense, canSeeMobile, isAdmin } from "@/lib/roles";
 import BrandMark from "./BrandMark";
+import Sidebar from "./Sidebar";
 import SwitchProjectButton from "./SwitchProjectButton";
 import UserAvatarMenu from "./UserAvatarMenu";
 
@@ -13,6 +15,14 @@ export default function Navbar() {
   const { data: session } = useSession();
   const role = session?.user?.role ?? "";
   const [actionCount, setActionCount] = useState<number | null>(null);
+
+  // Detect current project id from URL so the project-scoped Menu can live in
+  // the top-left of the navbar (next to the Siddhi brand) instead of the
+  // project header's right side. Matches /projects/<id>/... only — routes
+  // like /projects/import don't take an id.
+  const pathname = usePathname();
+  const projectIdMatch = pathname?.match(/^\/projects\/([^/]+)\//);
+  const projectId = projectIdMatch?.[1];
 
   useEffect(() => {
     if (!session?.user) return;
@@ -24,8 +34,17 @@ export default function Navbar() {
   return (
     <header className="w-full border-b border-stone-200 bg-white/80 backdrop-blur-md sticky top-0 z-30">
       <div className="max-w-[1600px] mx-auto flex items-center justify-between px-6 h-14 gap-4">
-        <div className="flex items-center gap-4 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
           <BrandMark />
+          {session?.user && projectId && (
+            <Sidebar
+              projectId={projectId}
+              canAccessBilling={canAccessBilling(role)}
+              canLogExpense={canLogExpense(role)}
+              canImport={isAdmin(role)}
+              canManageUsers={isAdmin(role)}
+            />
+          )}
           {session?.user && (
             <span className="hidden md:inline-block w-px h-6 bg-stone-200" aria-hidden />
           )}
