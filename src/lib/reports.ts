@@ -691,6 +691,7 @@ async function getMasterReportUncached(
       percentComplete: true,
       progressEntered: true,
       delayReason: true,
+      weightPct: true, // per-activity weight from Colab's Physical_Progress column
     },
   });
 
@@ -736,26 +737,47 @@ async function getMasterReportUncached(
     .filter((d): d is Date => Boolean(d))
     .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
 
-  const latestProjected = leaves
-    .map((l) => l.projectedFinish ?? l.actualFinish)
-    .filter((d): d is Date => Boolean(d))
-    .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+  // Latest projected end across ALL leaves. Priority: actualFinish (already
+  // done) → projectedFinish (schedule-based estimate) → baselineFinish
+  // (planned, for unstarted activities). Ignoring baselineFinish (as the
+  // old code did) let all the future baselineFinish dates drop out — the
+  // "latest" then became whatever was the most recently completed activity,
+  // which is why Amanvana's Master Report was showing a Sep 28 2026
+  // projected end even though the schedule extends to 2029.
+  const latestProjected = leaves.reduce<Date | null>((max, l) => {
+    const cand = l.actualFinish ?? l.projectedFinish ?? l.baselineFinish;
+    if (!cand) return max;
+    return !max || cand > max ? cand : max;
+  }, null);
 
-  // Tracked-only rollup — same denominator as the live dashboard
-  // (src/lib/projectStats.ts). Unstarted leaves (progressEntered=false) drop
-  // out of both numerator and denominator so the Master Report no longer
-  // reports a different number than the dashboard for the same project.
-  // Falls back to all-leaves when nothing is tracked yet so a brand-new
-  // project still gets a sensible "planned vs achieved" rather than 0/0.
-  const tracked = leaves.filter((l) => l.progressEntered);
-  const denom = tracked.length || leaves.length;
-  const plannedSum = tracked.reduce(
-    (s, l) => s + plannedPercentFor(l.baselineStart, l.baselineFinish, today),
-    0,
-  );
-  const achievedSum = tracked.reduce((s, l) => s + (l.percentComplete ?? 0), 0);
-  const overallPlanned = denom === 0 ? 0 : plannedSum / denom;
-  const overallAchieved = denom === 0 ? 0 : achievedSum / denom;
+  // Overall progress % — Colab-parity weighted math when weightPct is
+  // available (post-Colab-import), equal-weighted fallback across ALL
+  // leaves otherwise. This mirrors src/lib/projectStats.ts so the Master
+  // Report agrees with the dashboard's Physical Progress gauge.
+  //
+  // Historical bug: this used to average across TRACKED-only leaves — the
+  // denominator was ~230 progressed activities instead of ~15,000 total,
+  // so achieved% would balloon (89.5% on Amanvana this afternoon while the
+  // real weighted progress is ~1.5%). Fixed by reading weightPct and
+  // summing across every leaf, same as the dashboard.
+  const weightedLeaves = leaves.filter((l) => l.weightPct != null);
+  let overallPlanned = 0;
+  let overallAchieved = 0;
+  if (weightedLeaves.length > 0) {
+    for (const l of weightedLeaves) {
+      const w = l.weightPct ?? 0;
+      overallAchieved += (w * (l.percentComplete ?? 0)) / 100;
+      overallPlanned  += (w * plannedPercentFor(l.baselineStart, l.baselineFinish, today)) / 100;
+    }
+  } else if (leaves.length > 0) {
+    let plannedSum = 0, achievedSum = 0;
+    for (const l of leaves) {
+      achievedSum += l.percentComplete ?? 0;
+      plannedSum  += plannedPercentFor(l.baselineStart, l.baselineFinish, today);
+    }
+    overallPlanned = plannedSum / leaves.length;
+    overallAchieved = achievedSum / leaves.length;
+  }
 
   // Signed: positive = days late, negative = days ahead, 0 = on the day.
   // Previously clamped at 0 which made "ahead of schedule" look identical to
