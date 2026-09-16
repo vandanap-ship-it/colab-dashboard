@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Download, Image as ImageIcon, X } from "lucide-react";
 
 export interface PhotoMeta {
@@ -183,6 +184,9 @@ export function Lightbox({
 }) {
   const [i, setI] = useState(index);
   const [downloading, setDownloading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -197,61 +201,88 @@ export function Lightbox({
   const current = photos[i];
   const meta = current?.meta;
 
-  return (
+  const overlay = (
     <div
-      className="fixed inset-0 z-50 bg-stone-900/90 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[10000] bg-stone-900/95 flex flex-col"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Photo viewer"
     >
-      {/* Top-left counter + metadata caption. Meta appears when the caller
-          supplied it — block, villa, activity, date, %-complete. */}
-      <div className="absolute top-4 left-4 max-w-[70vw] text-white/70 text-xs space-y-1">
-        {photos.length > 1 && <div className="text-white/60 text-sm">{i + 1} / {photos.length}</div>}
-        {meta && (
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/60">
-            {meta.block && <span>Block <b className="text-white/90">{meta.block}</b></span>}
-            {meta.villa && <span>Villa <b className="text-white/90">{meta.villa}</b></span>}
-            {meta.activity && <span className="truncate">{meta.activity}</span>}
-            {meta.date && <span>{new Date(meta.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>}
-            {meta.percent != null && <span><b className="text-white/90">{Math.round(meta.percent)}%</b> complete</span>}
-          </div>
-        )}
-      </div>
-
-      {/* Top-right: Download + Close */}
-      <div className="absolute top-4 right-4 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={async (e) => {
-            e.stopPropagation();
-            if (!current || downloading) return;
-            setDownloading(true);
-            try { await downloadPhoto(current, i); } finally { setDownloading(false); }
-          }}
-          disabled={downloading}
-          className="inline-flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white text-sm font-medium px-3 py-1.5 transition-colors disabled:opacity-60"
-          aria-label="Download photo"
-          title="Download photo"
-        >
-          <Download className="w-4 h-4" />
-          {downloading ? "Downloading…" : "Download"}
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-white/70 hover:text-white p-2"
-          aria-label="Close"
-        >
-          <X className="w-6 h-6" />
-        </button>
-      </div>
-
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={current?.url}
-        alt=""
-        className="max-w-full max-h-full object-contain"
+      {/* Top strip — caption on the left, download + close on the right. Its
+          own solid-tinted band so the caption never overlaps the image or
+          the navbar under it, and reads cleanly on any photo colour. */}
+      <div
+        className="flex items-start justify-between gap-4 px-5 py-4 border-b border-white/10 bg-stone-950/70 backdrop-blur-sm"
         onClick={(e) => e.stopPropagation()}
-      />
+      >
+        <div className="min-w-0 flex-1 text-white space-y-1.5">
+          {photos.length > 1 && (
+            <div className="text-white/60 text-xs font-medium tabular-nums">
+              {i + 1} / {photos.length}
+            </div>
+          )}
+          {meta ? (
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm text-white/80">
+              {meta.block && <span>Block <b className="text-white">{meta.block}</b></span>}
+              {meta.villa && <span>Villa <b className="text-white">{meta.villa}</b></span>}
+              {meta.activity && <span className="text-white/95 truncate max-w-[46ch]">{meta.activity}</span>}
+              {meta.date && (
+                <span className="text-white/70">
+                  {new Date(meta.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                </span>
+              )}
+              {meta.percent != null && (
+                <span><b className="text-white">{Math.round(meta.percent)}%</b> complete</span>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm text-white/70">Photo</div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (!current || downloading) return;
+              setDownloading(true);
+              try { await downloadPhoto(current, i); } finally { setDownloading(false); }
+            }}
+            disabled={downloading}
+            className="inline-flex items-center gap-1.5 rounded-full bg-white/12 hover:bg-white/20 text-white text-sm font-medium px-3.5 py-2 transition-colors disabled:opacity-60"
+            aria-label="Download photo"
+            title="Download photo"
+          >
+            <Download className="w-4 h-4" />
+            {downloading ? "Downloading…" : "Download"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-white/80 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Image strip — fills the remaining viewport, centred. Photo stays clear
+          of both the top caption bar and (when present) the side arrows. */}
+      <div
+        className="flex-1 flex items-center justify-center p-4 min-h-0"
+        onClick={onClose}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={current?.url}
+          alt=""
+          className="max-w-full max-h-full object-contain"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
       {photos.length > 1 && (
         <>
           <button
@@ -260,7 +291,7 @@ export function Lightbox({
               e.stopPropagation();
               setI((x) => (x - 1 + photos.length) % photos.length);
             }}
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white text-3xl px-3 py-2"
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white text-3xl px-3 py-2 rounded-full bg-black/30 hover:bg-black/50 transition-colors"
             aria-label="Previous"
           >
             ‹
@@ -271,7 +302,7 @@ export function Lightbox({
               e.stopPropagation();
               setI((x) => (x + 1) % photos.length);
             }}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white text-3xl px-3 py-2"
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white text-3xl px-3 py-2 rounded-full bg-black/30 hover:bg-black/50 transition-colors"
             aria-label="Next"
           >
             ›
@@ -280,4 +311,11 @@ export function Lightbox({
       )}
     </div>
   );
+
+  // Portal so we escape any parent stacking context (e.g. the sticky navbar
+  // with z-30 that would otherwise render on top of us and bleed through the
+  // caption strip). Falls back to null on the SSR pass; the first client
+  // render mounts and paints.
+  if (!mounted || typeof document === "undefined") return null;
+  return createPortal(overlay, document.body);
 }
