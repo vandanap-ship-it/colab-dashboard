@@ -72,10 +72,10 @@ export default function InteractiveDrawings({ projectId, canManage }: { projectI
   const active = drawings?.find((d) => d.id === activeId) ?? null;
 
   return (
-    <section className="rounded-xl border border-stone-200 bg-white p-6">
+    <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h2 className="text-sm font-semibold text-stone-700 uppercase tracking-wider">Interactive Drawings</h2>
+          <h2 className="text-[11px] font-semibold text-stone-500 uppercase tracking-[0.14em]">Interactive Drawings</h2>
           {drawings && drawings.length > 0 && (
             <p className="text-xs text-stone-500 mt-0.5">Select Image</p>
           )}

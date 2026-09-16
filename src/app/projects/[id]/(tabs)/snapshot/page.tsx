@@ -72,10 +72,10 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <section className="rounded-xl border border-stone-200 bg-white p-6">
-          <h2 className="text-sm font-semibold text-stone-700 uppercase tracking-wider mb-4">
+        <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm">
+          <h2 className="text-[11px] font-semibold text-stone-500 uppercase tracking-[0.14em] mb-4">
             Physical Progress
           </h2>
           <PhysicalProgressGauge achieved={stats.achievedPercent} planned={stats.plannedPercent} />
@@ -84,8 +84,8 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
             uses the same tracked-only math, so its topline agrees with this gauge.
           </p>
         </section>
-        <section className="lg:col-span-2 rounded-xl border border-stone-200 bg-white p-6">
-          <h2 className="text-sm font-semibold text-stone-700 uppercase tracking-wider mb-4">
+        <section className="lg:col-span-2 rounded-xl border border-stone-200 bg-white p-6 shadow-sm">
+          <h2 className="text-[11px] font-semibold text-stone-500 uppercase tracking-[0.14em] mb-4">
             Schedule Summary
           </h2>
           <ScheduleSummary
@@ -99,7 +99,7 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
         </section>
       </div>
 
-      <section className="rounded-xl border border-stone-200 bg-white p-6">
+      <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm">
         <TimelineBar
           plannedStart={project.startDate}
           plannedEnd={project.endDate}

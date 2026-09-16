@@ -19,12 +19,16 @@ export default function EmptyAllClear({
   title: string;
   detail?: string;
 }) {
+  // Calm neutral card with a small green semantic check — reads as
+  // "clean state" rather than a celebratory success wash. Green stays
+  // on the icon so the meaning survives; the surrounding surface is
+  // stone so it doesn't compete with the KPI band above.
   return (
-    <div className="flex items-center gap-3 rounded-lg bg-emerald-50/60 border border-emerald-100 px-4 py-3">
-      <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" strokeWidth={2} />
+    <div className="flex items-center gap-3 rounded-lg bg-stone-50 border border-stone-200 px-4 py-3">
+      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" strokeWidth={2} />
       <div className="min-w-0">
-        <p className="text-sm font-medium text-emerald-900">{title}</p>
-        {detail && <p className="text-xs text-emerald-700 mt-0.5">{detail}</p>}
+        <p className="text-sm font-medium text-stone-700">{title}</p>
+        {detail && <p className="text-xs text-stone-500 mt-0.5">{detail}</p>}
       </div>
     </div>
   );

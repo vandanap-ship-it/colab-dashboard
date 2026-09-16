@@ -100,9 +100,9 @@ export default function IssuesCard({
   }
 
   return (
-    <section className="rounded-xl border border-stone-200 bg-white p-6">
+    <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-stone-700 uppercase tracking-wider">
+        <h2 className="text-[11px] font-semibold text-stone-500 uppercase tracking-[0.14em]">
           Snags &amp; Defects
         </h2>
         <label className="flex items-center gap-2 text-xs text-stone-500">
@@ -137,13 +137,18 @@ export default function IssuesCard({
                         {i.severity}
                       </span>
                     )}
+                    {/* Status pill kept as an OUTLINE chip (ring-only, no
+                        tinted fill) so the row's dominant colour signal is
+                        the SEVERITY pill next to it, not two chips fighting
+                        for attention. State is still colour-coded (red /
+                        sky / emerald), just quieter. */}
                     <span
-                      className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ring-1 ${
+                      className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ring-1 bg-white ${
                         i.status === "OPEN"
-                          ? "bg-red-50 text-red-700 ring-red-200"
+                          ? "text-red-700 ring-red-300"
                           : i.status === "IN_REINSPECTION"
-                          ? "bg-sky-50 text-sky-700 ring-sky-200"
-                          : "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                          ? "text-sky-700 ring-sky-300"
+                          : "text-emerald-700 ring-emerald-300"
                       }`}
                     >
                       {i.status === "IN_REINSPECTION" ? "IN RE-INSPECTION" : i.status}

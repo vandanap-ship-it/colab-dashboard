@@ -71,8 +71,8 @@ export default function ConcernRaised({ projectId, canManage }: { projectId: str
   }
 
   return (
-    <section className="rounded-xl border border-stone-200 bg-white p-6">
-      <h2 className="text-sm font-semibold text-stone-700 uppercase tracking-wider mb-3">
+    <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm">
+      <h2 className="text-[11px] font-semibold text-stone-500 uppercase tracking-[0.14em] mb-3">
         Concern Raised
       </h2>
       <div className="flex flex-wrap gap-2 mb-3">
