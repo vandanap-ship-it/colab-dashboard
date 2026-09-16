@@ -26,9 +26,15 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!session?.user) return;
+    // The .catch() swallows network errors that fire during page transitions
+    // and Vercel deploys — the request gets aborted, fetch rejects with
+    // "TypeError: Failed to fetch", and without a handler Sentry catches it
+    // via onunhandledrejection. It's a badge count, not a critical path;
+    // stale is fine.
     fetch("/api/my-actions", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setActionCount(d.total));
+      .then((d) => d && setActionCount(d.total))
+      .catch(() => { /* aborted or offline — leave the badge stale */ });
   }, [session?.user]);
 
   return (
