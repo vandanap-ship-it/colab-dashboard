@@ -76,6 +76,15 @@ async function main() {
   console.log();
 
   // 3. Identify canonical + duplicate.
+  //
+  // Whichever row has MORE FKs pointing at it wins — that's the real historical
+  // row with all the data. Then we rename the winner to the clean canonical
+  // label ("Abraham Thomas") and drop the loser. This handles both cases:
+  //   - The plain "Abraham Thomas" is the original and "(A&T)" is stale
+  //     (delete A&T, canonical name already correct — no rename needed).
+  //   - The "(A&T)" row is the original and plain "Abraham Thomas" is a
+  //     fresh empty duplicate the importer created (rename A&T → plain,
+  //     delete the fresh row).
   const abrahams = allContractors.filter((c) =>
     c.name.toLowerCase().includes(CANONICAL_NAME_SUBSTR),
   );
@@ -83,15 +92,36 @@ async function main() {
     console.log(`Only ${abrahams.length} Abraham row(s) found — nothing to merge. Exiting.`);
     return;
   }
-  const duplicate = abrahams.find((c) => c.name.toLowerCase().includes(DUPLICATE_NAME_SUBSTR));
-  const canonical = abrahams.find((c) => !c.name.toLowerCase().includes(DUPLICATE_NAME_SUBSTR));
-  if (!duplicate || !canonical) {
-    throw new Error(
-      `Could not classify canonical vs duplicate among Abrahams: ${abrahams.map((c) => c.name).join(" | ")}`,
-    );
+  const CLEAN_NAME = "Abraham Thomas"; // final label after merge
+  // Score each candidate by total FK count so we keep the row carrying data.
+  async function scoreFks(cId: string): Promise<number> {
+    const [a, b, c, d, e, f] = await Promise.all([
+      prisma.wBSNode.count({ where: { contractorId: cId } }),
+      prisma.progressEntry.count({ where: { contractorId: cId } }),
+      prisma.workPermit.count({ where: { contractorId: cId } }),
+      prisma.subContractorBill.count({ where: { contractorId: cId } }),
+      prisma.tradePlan.count({ where: { contractorId: cId } }),
+      prisma.manpowerEntry.count({ where: { contractorId: cId } }),
+    ]);
+    return a + b + c + d + e + f;
   }
-  console.log(`CANONICAL: ${canonical.id}  "${canonical.name}"`);
-  console.log(`DUPLICATE: ${duplicate.id}  "${duplicate.name}"\n`);
+  const scored = await Promise.all(
+    abrahams.map(async (c) => ({ ...c, fkTotal: await scoreFks(c.id) })),
+  );
+  scored.sort((a, b) => b.fkTotal - a.fkTotal); // highest first
+  const canonical = scored[0];
+  const duplicate = scored[1];
+  console.log(`Candidate scores:`);
+  for (const s of scored) console.log(`  ${s.fkTotal.toString().padStart(6)} FKs  ${s.id}  "${s.name}"`);
+  console.log();
+  console.log(`CANONICAL: ${canonical.id}  "${canonical.name}"  (${canonical.fkTotal} FKs)`);
+  console.log(`DUPLICATE: ${duplicate.id}  "${duplicate.name}"  (${duplicate.fkTotal} FKs)`);
+  if (canonical.name !== CLEAN_NAME) {
+    console.log(`Rename planned: "${canonical.name}" → "${CLEAN_NAME}"`);
+  }
+  console.log();
+  // Reference `DUPLICATE_NAME_SUBSTR` so tsc doesn't warn about an unused const.
+  void DUPLICATE_NAME_SUBSTR;
 
   // 4. Count FKs on the duplicate. Prisma has six models with contractorId:
   //    WBSNode, ProgressEntry, WorkPermit, SubContractorBill, TradePlan,
@@ -120,34 +150,34 @@ async function main() {
     return;
   }
 
-  // 5. Apply the merge in one transaction so nothing goes half-done. Note:
-  //    ManpowerEntry has a unique (projectId, contractorId, trade, entryDate)
-  //    constraint. If both contractors logged manpower for the same trade on
-  //    the same day, the repoint would collide. Delete duplicate-side rows
-  //    that would collide first; the canonical side's row wins.
+  // 5. Compute ManpowerEntry collisions OUTSIDE the transaction — the
+  //    unique (projectId, contractorId, trade, entryDate) constraint means
+  //    if both contractors logged the same trade on the same day, the
+  //    repoint would collide. Build a key-set of what canonical already has,
+  //    then figure out which of duplicate's rows would collide.
+  const canonicalMeRows = await prisma.manpowerEntry.findMany({
+    where: { contractorId: canonical.id },
+    select: { projectId: true, trade: true, entryDate: true },
+  });
+  const canonicalMeKeys = new Set(
+    canonicalMeRows.map((r) => `${r.projectId}|${r.trade}|${r.entryDate.toISOString()}`),
+  );
+  const dupMeRows = await prisma.manpowerEntry.findMany({
+    where: { contractorId: duplicate.id },
+    select: { id: true, projectId: true, trade: true, entryDate: true },
+  });
+  const meIdsToDrop = dupMeRows
+    .filter((r) => canonicalMeKeys.has(`${r.projectId}|${r.trade}|${r.entryDate.toISOString()}`))
+    .map((r) => r.id);
+  console.log(`  ManpowerEntry collisions to drop before repoint: ${meIdsToDrop.length}`);
+
+  // Now apply the merge in one transaction. 90-second timeout leaves plenty
+  // of headroom over the ~3300 FK updates that follow.
   await prisma.$transaction(async (tx) => {
-    // ManpowerEntry pre-clean: drop the duplicate's rows that would collide.
-    const dupMeRows = await tx.manpowerEntry.findMany({
-      where: { contractorId: duplicate.id },
-      select: { id: true, projectId: true, trade: true, entryDate: true },
-    });
-    let meDropped = 0;
-    for (const row of dupMeRows) {
-      const collides = await tx.manpowerEntry.findFirst({
-        where: {
-          projectId: row.projectId,
-          contractorId: canonical.id,
-          trade: row.trade,
-          entryDate: row.entryDate,
-        },
-        select: { id: true },
-      });
-      if (collides) {
-        await tx.manpowerEntry.delete({ where: { id: row.id } });
-        meDropped++;
-      }
+    if (meIdsToDrop.length > 0) {
+      const del = await tx.manpowerEntry.deleteMany({ where: { id: { in: meIdsToDrop } } });
+      console.log(`  ManpowerEntry: dropped ${del.count} colliding rows`);
     }
-    console.log(`  ManpowerEntry: dropped ${meDropped} colliding rows before repoint`);
 
     // Repoint all six tables.
     const upd = await Promise.all([
@@ -165,6 +195,19 @@ async function main() {
     // Delete the duplicate contractor row.
     await tx.contractor.delete({ where: { id: duplicate.id } });
     console.log(`  Deleted duplicate contractor row ${duplicate.id}`);
+
+    // Rename the canonical row to the clean label so the final data reads
+    // just "Abraham Thomas" — no "(A&T)" suffix.
+    if (canonical.name !== CLEAN_NAME) {
+      await tx.contractor.update({
+        where: { id: canonical.id },
+        data: { name: CLEAN_NAME },
+      });
+      console.log(`  Renamed canonical: "${canonical.name}" → "${CLEAN_NAME}"`);
+    }
+  }, {
+    maxWait: 10_000,
+    timeout: 120_000, // Prisma's default is 5s — way too short for ~3300 FK writes.
   });
 
   console.log(`\n✓ Merge complete. Re-run with MERGE_CONFIRM=yes to verify (should be a no-op).\n`);
