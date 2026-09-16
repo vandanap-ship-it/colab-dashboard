@@ -12,6 +12,7 @@ import {
 import type { ContractorDelayReasonGroup, DelayReasonCluster } from "@/lib/delayReasons";
 import DelayReasonsCard from "./DelayReasonsCard";
 import DashboardLegend from "./DashboardLegend";
+import SiteActivityHighlightsClient from "./SiteActivityHighlightsClient";
 import type { MilestoneProgressRow, SiteActivityBlockGroup } from "@/lib/dashboardSectionsServer";
 
 export interface ManpowerStrip {
@@ -32,6 +33,10 @@ export interface ExecutiveOverviewProps {
   manpowerStrip: ManpowerStrip;
   milestoneProgress: MilestoneProgressRow[];
   siteActivity: SiteActivityBlockGroup[];
+  /** Project display name — used in the Site Activity lightbox's caption
+   *  strip and in composed download filenames. Optional so callers that
+   *  don't have it fall back to a plain-project label. */
+  projectName?: string;
 }
 
 // Executive project rollup — the "Dashboard" tab of the new dashboard IA.
@@ -47,6 +52,7 @@ export default function ExecutiveOverview({
   manpowerStrip,
   milestoneProgress,
   siteActivity,
+  projectName,
 }: ExecutiveOverviewProps) {
   const activeVillas = villas.filter((v) => v.currentSection >= 0);
   const villasDelayed = activeVillas.filter((v) => v.slipDays > 0).length;
@@ -404,7 +410,10 @@ export default function ExecutiveOverview({
           </span>
         </div>
         <div className={styles.cardBd}>
-          <SiteActivityHighlights groups={siteActivity} />
+          <SiteActivityHighlightsClient
+            groups={siteActivity}
+            projectName={projectName ?? "Project"}
+          />
         </div>
       </div>
     </div>
@@ -695,85 +704,9 @@ function MilestoneStatusPill({ row }: { row: MilestoneProgressRow }) {
   return <span className={`${styles.mpPill} ${styles.mpPillBad}`}>{row.pending} pending</span>;
 }
 
-function SiteActivityHighlights({ groups }: { groups: SiteActivityBlockGroup[] }) {
-  if (groups.length === 0) {
-    return (
-      <div className={styles.sahEmpty}>
-        Nothing logged today. Site activities will appear here as engineers
-        submit progress on their phones.
-      </div>
-    );
-  }
-  return (
-    <div className={styles.sahList}>
-      {groups.map((g) => (
-        <div key={g.blockCode} className={styles.sahBlockGroup}>
-          <div className={styles.sahBlockHd}>
-            Block {g.blockCode}
-            <span className={styles.sahBlockCount}>
-              {g.villas.reduce((n, v) => n + v.activities.length, 0)} activities · {g.villas.length} villas
-            </span>
-          </div>
-          {g.villas.map((v) => (
-            <div key={v.villaNumber} className={styles.sahVillaBlock}>
-              <div className={styles.sahVillaHd}>
-                <Link
-                  href={`?vn=${v.villaNumber}`}
-                  scroll={false}
-                  style={{ color: "inherit", textDecoration: "none" }}
-                >
-                  {v.villaLabel}
-                </Link>
-                <span className={styles.sahActCount}>
-                  {v.activities.length} {v.activities.length === 1 ? "activity" : "activities"}
-                </span>
-              </div>
-              <div className={styles.sahCardGrid}>
-                {v.activities.map((a) => (
-                  <SiteActivityCard key={a.progressEntryId} activity={a} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SiteActivityCard({ activity: a }: { activity: import("@/lib/dashboardSectionsServer").SiteActivity }) {
-  return (
-    <div className={styles.sahCard}>
-      {a.photoUrl ? (
-        <div className={styles.sahPhotoWrap}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={a.photoUrl} alt="" className={styles.sahPhoto} />
-        </div>
-      ) : (
-        <div className={styles.sahPhotoStub}>No photo</div>
-      )}
-      <div className={styles.sahCardBody}>
-        <div className={styles.sahEyebrow}>{a.milestoneName}</div>
-        <div className={styles.sahActName}>{a.activityName}</div>
-        <div className={styles.sahMeta}>
-          {a.achievedPct != null && <span className={styles.sahPct}>{Math.round(a.achievedPct)}%</span>}
-          {a.overdueDays != null && <span className={styles.sahOverdue}>{a.overdueDays}d overdue</span>}
-        </div>
-        {a.notes && <div className={styles.sahRemark}>“{a.notes}”</div>}
-        {(a.reasonLabel || a.reasonNote) && (
-          <div className={styles.sahReason}>
-            <span className={styles.sahReasonLbl}>Delay reason:</span>{" "}
-            {a.reasonLabel ?? ""}{a.reasonLabel && a.reasonNote ? " · " : ""}
-            {a.reasonNote ? <span className={styles.sahReasonNote}>{a.reasonNote}</span> : null}
-          </div>
-        )}
-        <div className={styles.sahFoot}>
-          {a.contractorName ?? "—"} · {a.loggedByName} · {fmtTime(a.loggedAt)}
-        </div>
-      </div>
-    </div>
-  );
-}
+// SiteActivityHighlights + SiteActivityCard moved to
+// SiteActivityHighlightsClient.tsx — those cards need lightbox state
+// (a "use client" concern) and this file stays a Server Component.
 
 function fmtTime(iso: string): string {
   const d = new Date(iso);

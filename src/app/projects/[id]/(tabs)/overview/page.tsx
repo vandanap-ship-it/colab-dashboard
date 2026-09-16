@@ -70,6 +70,7 @@ export default async function OverviewPage({
             manpowerStrip={manpowerStrip}
             milestoneProgress={milestoneProgress}
             siteActivity={siteActivity}
+            projectName={bag.project.name}
           />
         );
       })()
