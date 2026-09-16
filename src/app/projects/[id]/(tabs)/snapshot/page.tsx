@@ -124,6 +124,7 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
             session.user.role === ROLES.PRODUCT_TEAM ||
             isAdmin(session.user.role)
           }
+          currentUserId={session.user.id}
         />
       </div>
 

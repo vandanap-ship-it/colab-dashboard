@@ -20,7 +20,7 @@ const PostIssueSchema = z.object({
   assignedToId: z.string().min(1).optional(),
   idempotencyKey: z.string().max(120).optional(),
 });
-const STATUSES = new Set(["OPEN", "RESOLVED"]);
+const STATUSES = new Set(["OPEN", "RESOLVED", "IN_REINSPECTION"]);
 
 export async function GET(req: Request) {
   const session = await auth();

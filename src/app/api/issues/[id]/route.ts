@@ -11,7 +11,7 @@ import { checkConflict } from "@/lib/optimisticLock";
 import { parseBody } from "@/lib/parseBody";
 
 const PatchIssueSchema = z.object({
-  status: z.enum(["OPEN", "RESOLVED"]).optional(),
+  status: z.enum(["OPEN", "RESOLVED", "IN_REINSPECTION"]).optional(),
   assignedToId: z.string().min(1).nullable().optional(),
   expectedUpdatedAt: z.string().optional(),
 });
@@ -35,8 +35,19 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
   if (!parsed.ok) return parsed.response;
   const { status, assignedToId, expectedUpdatedAt } = parsed.data;
 
-  // Status changes (OPEN → RESOLVED, etc.) and reassignment are reviewer-only.
-  if ((status !== undefined || assignedToId !== undefined) && !canReview(session.user.role)) {
+  // Status changes and reassignment are reviewer-only, with one exception:
+  // the ASSIGNEE (the contractor who has to rectify the snag) can flip
+  // OPEN → IN_REINSPECTION themselves once they've fixed the defect. That's
+  // how the "please come re-check" hand-off back to the inspector works —
+  // the contractor doesn't have canReview, so gate this narrower path
+  // separately and check ownership after we've loaded the row below.
+  const isReviewer = canReview(session.user.role);
+  const isRequestReinspection = status === "IN_REINSPECTION";
+  if ((status !== undefined || assignedToId !== undefined) && !isReviewer && !isRequestReinspection) {
+    return forbidden();
+  }
+  // Reassignment stays reviewer-only even in the reinspection carve-out.
+  if (assignedToId !== undefined && !isReviewer) {
     return forbidden();
   }
 
@@ -72,6 +83,17 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
     // SAFETY snag, and no scoped contractor can touch a general (module=null)
     // snag. Full-access internal users always pass this check.
     if (!canAccessScopedRow(session.user.modules, before.module)) return forbidden();
+    // Re-inspection carve-out — verify the two conditions we couldn't check
+    // before loading the row:
+    //   (a) the current user is the current assignee (contractor rectifying);
+    //   (b) the current status is OPEN (only OPEN → IN_REINSPECTION allowed
+    //       through this path — the reverse comes from a reviewer).
+    if (isRequestReinspection && !isReviewer) {
+      if (before.assignedToId !== session.user.id) return forbidden();
+      if (before.status !== "OPEN") {
+        return badRequest("Snag is not in OPEN state — cannot request re-inspection.");
+      }
+    }
     // Optimistic-lock guard — reject if someone else edited between the
     // client's read and this write. No-op when the client didn't send
     // expectedUpdatedAt (backward compat during rollout).
