@@ -323,6 +323,10 @@ export interface ProjectHealthSummary {
   phase1BlocksActive: number;
   atVillas: number;
   atBlocks: number;
+  /** Second-contractor scope tile — Elegant Construction on Amanvana.
+   *  0 on projects that don't have a second contractor mapped. */
+  elegantVillas: number;
+  elegantBlocks: number;
   baselineStart: Date;
   baselineEnd: Date;
   /** Legally-committed RERA completion date. null when the project doesn't
@@ -351,6 +355,8 @@ export function healthSummary(): ProjectHealthSummary {
     phase1BlocksActive: active.length,
     atVillas: 41,
     atBlocks: 12,
+    elegantVillas: 52,
+    elegantBlocks: 12,
     baselineStart: PHASE_START,
     baselineEnd: PHASE_END,
     reraEndDate: null,

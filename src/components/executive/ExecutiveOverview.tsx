@@ -89,13 +89,22 @@ export default function ExecutiveOverview({
             {h.atVillas} <span className={styles.sm}>villas · {h.atBlocks} blocks</span>
           </div>
         </div>
-        <div className={styles.scopeCell} title="Villas currently under construction in Phase 1 and how many of their blocks are actively being worked on.">
-          <div className={styles.lb}>Phase 1 · In Execution</div>
-          <div className={styles.vl}>
-            {h.phase1Villas} <span className={styles.sm}>villas · {h.phase1BlocksActive} blocks active</span>
+        {h.elegantVillas > 0 ? (
+          <div className={styles.scopeCell} title="Second contractor executing the project, plus the villas and blocks they're responsible for.">
+            <div className={styles.lb}>Contractor · Elegant Construction</div>
+            <div className={styles.vl}>
+              {h.elegantVillas} <span className={styles.sm}>villas · {h.elegantBlocks} blocks</span>
+            </div>
           </div>
-        </div>
-        <div className={styles.scopeCell} title="Planned start and end dates from the master schedule. This is the reference the 'Total Delay' KPI is measured against.">
+        ) : (
+          <div className={styles.scopeCell} title="Villas currently under construction in Phase 1 and how many of their blocks are actively being worked on.">
+            <div className={styles.lb}>Phase 1 · In Execution</div>
+            <div className={styles.vl}>
+              {h.phase1Villas} <span className={styles.sm}>villas · {h.phase1BlocksActive} blocks active</span>
+            </div>
+          </div>
+        )}
+        <div className={styles.scopeCell} title="Earliest planned start and latest planned finish across BOTH contractors' schedules. This is the reference the 'Total Delay' KPI is measured against.">
           <div className={styles.lb}>Baseline Window</div>
           <div className={styles.vl}>
             {fmtDate(h.baselineStart)} <span className={styles.sm}>→ {fmtDate(h.baselineEnd)}</span>

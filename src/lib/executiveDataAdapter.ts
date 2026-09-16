@@ -50,10 +50,18 @@ export interface ExecutiveExtras {
    *  but without unitCount expansion. Kept for callers that want the row
    *  count (e.g. the "Villa records" metric). */
   totalVillaRecords: number;
+  /** Earliest villa-milestone baselineStart across the whole project — the
+   *  actual first day of work on any villa. Used as the "Baseline Window"
+   *  start so it spans BOTH contractors' schedules, not just Project.startDate. */
+  scheduleStart: Date | null;
+  /** Latest villa-milestone baselineFinish across the whole project — the
+   *  actual last day of planned work. Paired with scheduleStart to form the
+   *  Baseline Window. */
+  scheduleEnd: Date | null;
 }
 
 export async function getExecutiveExtras(projectId: string): Promise<ExecutiveExtras> {
-  const [hindranceCount, stats, sumUnits, rowCount] = await Promise.all([
+  const [hindranceCount, stats, sumUnits, rowCount, milestoneWindow] = await Promise.all([
     prisma.hindrance.count({ where: { projectId, status: "OPEN" } }),
     getProjectStats(projectId),
     prisma.villa.aggregate({
@@ -61,6 +69,11 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
       _sum: { unitCount: true },
     }),
     prisma.villa.count({ where: { projectId, inScope: true } }),
+    prisma.villaMilestone.aggregate({
+      where: { villa: { projectId, inScope: true } },
+      _min: { baselineStart: true },
+      _max: { baselineFinish: true },
+    }),
   ]);
   return {
     hindranceCount,
@@ -68,6 +81,8 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     achievedPct: stats.achievedPercent,
     totalPhysicalVillas: sumUnits._sum.unitCount ?? rowCount,
     totalVillaRecords: rowCount,
+    scheduleStart: milestoneWindow._min.baselineStart ?? null,
+    scheduleEnd:   milestoneWindow._max.baselineFinish ?? null,
   };
 }
 
@@ -88,6 +103,17 @@ function amanvanaAbrahamOverride(): { villaCount: number; blockCount: number } |
     villaCount: abrahamVillaCount,
     blockCount: Math.max(blockCountFromRegistry, AMANVANA_ABRAHAM_ACTUAL_BLOCK_COUNT),
   };
+}
+
+/** Elegant Construction's contracted villa + block count for Amanvana.
+ *  Per the contract:
+ *    52 villas across 12 blocks (Blocks 11, 14, 15, 16, 17, 18, 19, 20, 21,
+ *    22, 23, 24). Returns null for other projects. */
+function amanvanaElegantOverride(): { villaCount: number; blockCount: number } | null {
+  const elegantVillaCount = AMANVANA_CONTRACTOR_SCOPE[AMANVANA_CONTRACTORS.elegant.toLowerCase()];
+  if (elegantVillaCount == null) return null;
+  const AMANVANA_ELEGANT_CONTRACT_BLOCK_COUNT = 12;
+  return { villaCount: elegantVillaCount, blockCount: AMANVANA_ELEGANT_CONTRACT_BLOCK_COUNT };
 }
 
 /** Is this the Amanvana project the AMANVANA_ constants describe? We can't
@@ -162,9 +188,17 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
   // 3B, 4-10, 12, 13). Use the override; other projects fall back to the
   // whole-project totals as before.
   const blockCodes = rollup.blocks.map((b) => b.code);
-  const amanvanaAbraham = isAmanvanaByBlockShape(blockCodes) ? amanvanaAbrahamOverride() : null;
+  const isAmanvana = isAmanvanaByBlockShape(blockCodes);
+  const amanvanaAbraham = isAmanvana ? amanvanaAbrahamOverride() : null;
   const atVillaCount = amanvanaAbraham?.villaCount ?? totalVillas;
   const atBlockCount = amanvanaAbraham?.blockCount ?? rollup.blocks.length;
+
+  // Elegant Construction — the "Contractor 2" hero cell. On Amanvana this
+  // reads 52 villas · 12 blocks. On non-Amanvana projects it's 0/0 (view
+  // hides the tile). This replaces the old "Phase 1 · In Execution" cell.
+  const amanvanaElegant = isAmanvana ? amanvanaElegantOverride() : null;
+  const elegantVillaCount = amanvanaElegant?.villaCount ?? 0;
+  const elegantBlockCount = amanvanaElegant?.blockCount ?? 0;
 
   const avgSlip = activeVillas.length === 0
     ? 0
@@ -206,6 +240,14 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
   // number on the dashboard.
   const projectedEnd = rollup.projectedEnd ?? project.projectedEndDate ?? project.endDate ?? new Date();
   const declaredEnd = project.endDate ?? new Date();
+
+  // Baseline Window — earliest villa-milestone baselineStart across the
+  // WHOLE project, and latest baselineFinish across the whole project.
+  // Spans both contractors' schedules (previously used project.startDate /
+  // .endDate which was Abraham-only). Falls back to project.startDate /
+  // .endDate when the DB doesn't have milestone dates yet.
+  const baselineStart = extras?.scheduleStart ?? project.startDate ?? new Date();
+  const baselineEnd = extras?.scheduleEnd ?? declaredEnd;
   const totalDelayDays =
     projectedEnd && declaredEnd
       ? Math.round((projectedEnd.getTime() - declaredEnd.getTime()) / 86_400_000)
@@ -219,8 +261,10 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
     phase1BlocksActive: activeBlocks.length,
     atVillas: atVillaCount,
     atBlocks: atBlockCount,
-    baselineStart: project.startDate ?? new Date(),
-    baselineEnd: declaredEnd,
+    elegantVillas: elegantVillaCount,
+    elegantBlocks: elegantBlockCount,
+    baselineStart,
+    baselineEnd,
     reraEndDate: project.reraEndDate ?? null,
     projectedEnd,
     totalDelayDays,
