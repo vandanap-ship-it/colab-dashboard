@@ -106,23 +106,22 @@ async function importManpower(projectId: string, adminId: string): Promise<void>
   console.log(`\n=== Manpower: ${rows.length} rows ===`);
   const contractorCache = new Map<string, string | null>();
   const stats = { created: 0, skipped: 0, noContractor: 0, noData: 0 };
+  // TradePlan rows come from the Planned_Labour column on the same CSV row.
+  // Colab's export carries the plan on every day (one row per contractor+
+  // trade+date), so we mirror that shape — one single-day TradePlan per row.
+  // Scorecard §03's "26 present / 25 planned" ratio needs this to render.
+  const planStats = { created: 0, skipped: 0, noData: 0 };
+  const seenPlanKeys = new Set<string>();
 
   for (const row of rows) {
     const labourId = row.Labour_ID?.trim();
     const dateRaw = row.Date?.trim();
     const trade = row.Trade_Name?.trim();
-    const actualStr = row.Actual_Labour?.trim();
-    if (!labourId || !dateRaw || !trade || !actualStr) { stats.noData++; continue; }
+    if (!labourId || !dateRaw || !trade) { stats.noData++; continue; }
 
-    const actualCount = Math.round(Number(actualStr));
-    if (!Number.isFinite(actualCount) || actualCount <= 0) { stats.noData++; continue; }
-
-    const idempotencyKey = `colab-manpower:${labourId}`;
-    const existing = await prisma.manpowerEntry.findUnique({
-      where: { idempotencyKey }, select: { id: true },
-    });
-    if (existing) { stats.skipped++; continue; }
-
+    // Resolve contractor + date up-front — both are needed for TradePlan
+    // (which we seed regardless of whether the ManpowerEntry row is new)
+    // and for the ManpowerEntry itself. If either can't be resolved, skip.
     const contractorNameRaw = row.Contractor_Name?.replace(/^NA-/i, "").trim();
     if (!contractorNameRaw) { stats.noContractor++; continue; }
     let contractorId = contractorCache.get(contractorNameRaw);
@@ -135,9 +134,58 @@ async function importManpower(projectId: string, adminId: string): Promise<void>
       contractorCache.set(contractorNameRaw, contractorId);
     }
     if (!contractorId) { stats.noContractor++; continue; }
-
     const entryDate = parseSlashDate(dateRaw);
     if (!entryDate) { stats.noData++; continue; }
+
+    // Seed the planned side FIRST (before the ManpowerEntry dedup) so
+    // that re-running the importer fills in TradePlan rows even for days
+    // whose ManpowerEntry already exists.
+    const plannedStr = row.Planned_Labour?.trim();
+    const plannedCount = plannedStr ? Math.round(Number(plannedStr)) : NaN;
+    if (Number.isFinite(plannedCount) && plannedCount > 0) {
+      const planKey = `${contractorId}|${trade}|${entryDate.toISOString().slice(0, 10)}`;
+      if (!seenPlanKeys.has(planKey)) {
+        seenPlanKeys.add(planKey);
+        const nextDay = new Date(entryDate.getTime() + 86_400_000);
+        const existingPlan = await prisma.tradePlan.findFirst({
+          where: { projectId, contractorId, trade, startDate: entryDate, endDate: nextDay, deletedAt: null },
+          select: { id: true, plannedCount: true },
+        });
+        if (existingPlan) {
+          if (existingPlan.plannedCount !== plannedCount) {
+            await prisma.tradePlan.update({ where: { id: existingPlan.id }, data: { plannedCount } });
+          }
+          planStats.skipped++;
+        } else {
+          await prisma.tradePlan.create({
+            data: {
+              projectId, contractorId, trade,
+              plannedCount,
+              startDate: entryDate,
+              endDate: nextDay,
+              createdById: adminId,
+              createdAt: entryDate,
+            },
+          });
+          planStats.created++;
+        }
+      }
+    } else {
+      planStats.noData++;
+    }
+
+    // Now the ManpowerEntry (actual) — this side is idempotent by
+    // Labour_ID and skips already-imported rows.
+    const actualStr = row.Actual_Labour?.trim();
+    if (!actualStr) { stats.noData++; continue; }
+    const actualCount = Math.round(Number(actualStr));
+    if (!Number.isFinite(actualCount) || actualCount <= 0) { stats.noData++; continue; }
+
+    const idempotencyKey = `colab-manpower:${labourId}`;
+    const existing = await prisma.manpowerEntry.findUnique({
+      where: { idempotencyKey }, select: { id: true },
+    });
+    if (existing) { stats.skipped++; continue; }
 
     await prisma.manpowerEntry.create({
       data: {
@@ -155,6 +203,7 @@ async function importManpower(projectId: string, adminId: string): Promise<void>
   }
 
   console.log(`Created ${stats.created} · Skipped ${stats.skipped} · No contractor ${stats.noContractor} · No data ${stats.noData}`);
+  console.log(`TradePlan · Created ${planStats.created} · Skipped ${planStats.skipped} · No data ${planStats.noData}`);
 }
 
 async function importHindrances(projectId: string, adminId: string): Promise<void> {
