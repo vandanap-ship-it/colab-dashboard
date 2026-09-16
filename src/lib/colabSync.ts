@@ -550,7 +550,28 @@ export async function importColabProgress(
     const reasonNote  = r.Reason_for_Delay?.trim() || null;
     const notes       = r.Remark?.trim() || null;
     const weightPct   = toFloat(r.Physical_Progress) ?? null;
-    const imageUrl    = r.Image_Link && r.Image_Link.includes("/uploads/") ? r.Image_Link.trim() : null;
+    // Colab's CSV export has a bug — Image_Link comes through as
+    // "None/uploads/progress_upload/PROGRESS_UPLOAD-<uuid>.jpg" when the
+    // export helper failed to substitute the CDN base URL. Storing that
+    // verbatim renders as a broken image (browser treats "None/..." as a
+    // relative URL against Siddhi's origin → 404). Two-part fix:
+    //   1. Reject any Image_Link that doesn't at least contain "/uploads/".
+    //   2. Rewrite the "None/" prefix to Colab's node CDN so the image
+    //      actually resolves. If Colab changes hosts we'll see 404s on
+    //      the client — cleaner failure than a blank <img>.
+    const COLAB_UPLOAD_BASE = "https://node.colabtools.com/";
+    let imageUrl: string | null = null;
+    if (r.Image_Link && r.Image_Link.includes("/uploads/")) {
+      const raw = r.Image_Link.trim();
+      if (raw.startsWith("None/")) {
+        imageUrl = COLAB_UPLOAD_BASE + raw.slice("None/".length);
+      } else if (raw.startsWith("http://") || raw.startsWith("https://")) {
+        imageUrl = raw;
+      } else {
+        // Bare "/uploads/..." — prepend the CDN base.
+        imageUrl = COLAB_UPLOAD_BASE + raw.replace(/^\/+/, "");
+      }
+    }
     const activityId  = r.Activity_ID?.trim();
 
     // Queue the Colab row for bulk ColabActivity write at end of chunk —
@@ -645,6 +666,37 @@ export async function importColabProgress(
             },
           });
           perRowCounters.progressEntriesUpdated++;
+
+          // Heal broken photo URLs from a previous import (Colab's export bug
+          // stored "None/uploads/..." as the URL — see comment above where
+          // imageUrl is parsed). Only touches photos whose URL clearly matches
+          // the broken pattern; leaves any other photos on the entry alone.
+          const brokenPhotos = await tx.progressPhoto.findMany({
+            where: { progressEntryId: existing.id, url: { startsWith: "None/" } },
+            select: { id: true, url: true },
+          });
+          for (const bp of brokenPhotos) {
+            const fixed = COLAB_UPLOAD_BASE + bp.url.slice("None/".length);
+            await tx.progressPhoto.update({
+              where: { id: bp.id },
+              data: { url: fixed },
+            });
+          }
+
+          // If the entry has NO photos at all yet and this row has one, attach
+          // it. Covers entries created before Image_Link parsing was fixed.
+          if (imageUrl && brokenPhotos.length === 0) {
+            const anyPhoto = await tx.progressPhoto.findFirst({
+              where: { progressEntryId: existing.id },
+              select: { id: true },
+            });
+            if (!anyPhoto) {
+              await tx.progressPhoto.create({
+                data: { progressEntryId: existing.id, url: imageUrl },
+              });
+              perRowCounters.photosCreated++;
+            }
+          }
         } else {
           const created = await tx.progressEntry.create({
             data: {
