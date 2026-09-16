@@ -15,10 +15,11 @@ export default function BrandMark({
   // When showWordmark is false (tight spots like mobile project header) we
   // render the square "S." monogram.
 
-  // Heights chosen so the brand still feels small and refined in the chrome,
-  // not a full-bleed banner.
-  const wordmarkH = size === "lg" ? 44 : 26;
-  const monoH = size === "lg" ? 40 : 28;
+  // Heights: 32 in the chrome (up from 26 — Shraddha wanted more presence),
+  // 44 in the login / marketing "lg" contexts. Monogram tracks close so the
+  // "S." reads as the same brand at either size.
+  const wordmarkH = size === "lg" ? 48 : 32;
+  const monoH = size === "lg" ? 44 : 32;
 
   const inner = showWordmark ? (
     <Image

@@ -48,14 +48,14 @@ export default async function ProjectLayout({
   return (
     <div className="flex-1 flex flex-col bg-ivory">
       <Navbar />
-      {/* Widened from max-w-6xl (1152px) to max-w-[1600px] to match the
+      {/* Widened from max-w-6xl (1152px) to max-w-[1800px] to match the
           Projects table page. On a typical 1920px+ desktop the old
           constraint left ~380px of blank margin on each side of the
           Dashboard — Shraddha's specific complaint. 1600px keeps line
           lengths reasonable in table rows without wasting screen real
           estate on the KPI + Timeline row that has real information to
           fit. */}
-      <main className="flex-1 w-full max-w-[1600px] mx-auto px-6 py-8 space-y-6">
+      <main className="flex-1 w-full max-w-[1800px] mx-auto px-8 py-8 space-y-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
             <Link

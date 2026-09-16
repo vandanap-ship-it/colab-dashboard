@@ -17,7 +17,7 @@ export default async function Home() {
       {/* Widen from max-w-6xl to full width — the projects table has 14
           columns and needs the extra room; horizontal scroll kicks in only
           on very narrow viewports. */}
-      <main className="flex-1 w-full max-w-[1600px] mx-auto px-6 py-10">
+      <main className="flex-1 w-full max-w-[1800px] mx-auto px-8 py-10">
         <ProjectTable canCreate={canCreateProject(role)} />
       </main>
     </div>

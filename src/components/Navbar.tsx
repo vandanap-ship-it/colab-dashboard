@@ -33,7 +33,7 @@ export default function Navbar() {
 
   return (
     <header className="w-full border-b border-stone-200 bg-white/80 backdrop-blur-md sticky top-0 z-30">
-      <div className="max-w-[1600px] mx-auto flex items-center justify-between px-6 h-14 gap-4">
+      <div className="max-w-[1800px] mx-auto flex items-center justify-between px-8 h-16 gap-4">
         <div className="flex items-center gap-2 min-w-0">
           <BrandMark />
           {session?.user && projectId && (
