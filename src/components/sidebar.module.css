@@ -43,8 +43,8 @@
 .drawer {
   position: fixed;
   top: 0; left: 0; bottom: 0;
-  width: 320px;
-  max-width: 90vw;
+  width: 400px;
+  max-width: 92vw;
   background: #FBF7EE;
   border-right: 1px solid #E7E5E4;
   transform: translateX(-105%);
@@ -117,18 +117,20 @@
 
 .link {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 12px;
-  border-radius: 6px;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
   color: #44403C;
-  font-size: 14px;
   text-decoration: none;
   transition: background 0.12s, color 0.12s;
 }
 .link:hover {
   background: rgba(28, 25, 23, 0.06);
   color: #1C1917;
+}
+.link:hover .linkDesc {
+  color: #57534E;
 }
 .link:focus-visible {
   outline: 2px solid #F59E0B;
@@ -137,18 +139,39 @@
 .linkActive {
   background: #1C1917;
   color: #FBF7EE;
-  font-weight: 500;
 }
 .linkActive:hover {
   background: #292524;
   color: #FBF7EE;
 }
 .linkIcon {
-  width: 16px;
-  height: 16px;
-  color: #A8A29E;
+  width: 22px;
+  height: 22px;
+  color: #78716C;
   flex-shrink: 0;
+  margin-top: 1px;
 }
 .linkActive .linkIcon {
   color: #FBF7EE;
+}
+.linkText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.linkLabel {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  line-height: 1.25;
+}
+.linkDesc {
+  font-size: 12px;
+  color: #78716C;
+  line-height: 1.4;
+  transition: color 0.12s;
+}
+.linkActive .linkDesc {
+  color: rgba(251, 247, 238, 0.72);
 }
