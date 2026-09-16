@@ -1,24 +1,28 @@
 // ---------------------------------------------------------------------------
-// Daily progress-nudge push — Vercel Cron endpoint.
+// Daily progress + manpower nudge — Vercel Cron endpoint.
 //
 // Fires at 11:30 IST Monday to Saturday (06:00 UTC Mon-Sat, per
-// vercel.json). For every active SITE_ENGINEER on every project with
-// a schedule loaded, checks whether they've logged any ProgressEntry
-// today (IST calendar). If not, sends a friendly push nudge to their
-// device(s).
+// vercel.json). Two named users log daily site progress + manpower
+// for White Lotus — Harish BS and Madhavarajan Soundararajan.
+// Either one may log; the nudge treats them as a team: if either
+// has logged a ProgressEntry OR a ManpowerEntry today (IST calendar),
+// neither gets pushed. If neither has logged, both get a friendly
+// push nudge on any subscribed device.
 //
-// Skips Sundays (site off-days) and skips engineers with no push
-// subscription (no phone opted in yet → no nudge to receive).
+// Skips Sundays (site off-days). When the team grows past the two
+// named loggers, replace NUDGE_USERNAMES with a `User.receivesDailyNudge`
+// flag rather than growing this list.
 // ---------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendPushToUser } from "@/lib/push";
 import { istDayStart } from "@/lib/istDay";
-import { ROLES } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const NUDGE_USERNAMES = ["harish.bs", "madhavarajan.s"];
 
 export async function GET(req: NextRequest) {
   // Same fail-closed CRON_SECRET pattern as the overdue-digest endpoint.
@@ -35,60 +39,65 @@ export async function GET(req: NextRequest) {
   }
 
   const today = istDayStart();
-  const dayOfWeek = today.getUTCDay(); // 0 = Sunday in IST (since istDayStart returns UTC midnight of the IST day)
+  const dayOfWeek = today.getUTCDay(); // 0 = Sunday in IST (istDayStart returns UTC midnight of the IST day)
   if (dayOfWeek === 0) {
     return NextResponse.json({ skipped: "Sunday", sentTo: 0 });
   }
 
-  // Every site engineer on every active project with schedule + push subs.
-  // The `pushSubscriptions: { some: {} }` filter drops users with no opted-in
-  // device — nothing to send to them anyway, saves a query.
+  // Only projects that actually have a schedule loaded — landing them on a
+  // shell project would just be noise.
   const projects = await prisma.project.findMany({
     where: { villas: { some: { milestones: { some: {} } } } },
     select: { id: true, name: true },
   });
-
-  const engineers = await prisma.user.findMany({
-    where: {
-      active: true,
-      role: ROLES.SITE_ENGINEER,
-      pushSubscriptions: { some: {} },
-    },
-    select: {
-      id: true,
-      name: true,
-      // Progress entries logged today across ANY project. A single "you've
-      // logged today" check across the org is fine for launch — an engineer
-      // typically works one project.
-      progressEntries: {
-        where: { date: { gte: today } },
-        select: { id: true },
-        take: 1,
-      },
-    },
-  });
-
-  let sentTo = 0;
-  const perUser: { userId: string; sent: number; pruned: number }[] = [];
-  const perProjectUrl = (pid: string) => `/mobile/${pid}`;
-
-  // Pick the first project we know about for the tap-through URL. In V1
-  // every engineer uses Amanvana P1; when we go multi-project we'll
-  // resolve the user's home project properly.
   const primaryProjectId = projects[0]?.id;
   if (!primaryProjectId) {
     return NextResponse.json({ skipped: "no active projects", sentTo: 0 });
   }
 
-  for (const eng of engineers) {
-    if (eng.progressEntries.length > 0) continue; // already logged today
-    const outcome = await sendPushToUser(eng.id, {
-      title: "Log today's progress",
-      body: `Nothing logged yet today. Open Siddhi and add a Progress entry.`,
-      url: perProjectUrl(primaryProjectId) + "/progress/new",
+  const loggers = await prisma.user.findMany({
+    where: {
+      active: true,
+      username: { in: NUDGE_USERNAMES },
+    },
+    select: { id: true, name: true, username: true },
+  });
+  if (loggers.length === 0) {
+    return NextResponse.json({ skipped: "no matching loggers", sentTo: 0 });
+  }
+
+  // Team-level dedup — one entry from either logger, either kind, is enough
+  // for the day. Cheapest way is two `findFirst`s that stop at the first row.
+  const loggerIds = loggers.map((u) => u.id);
+  const [progressLogged, manpowerLogged] = await Promise.all([
+    prisma.progressEntry.findFirst({
+      where: { createdById: { in: loggerIds }, date: { gte: today } },
+      select: { id: true },
+    }),
+    prisma.manpowerEntry.findFirst({
+      where: { createdById: { in: loggerIds }, entryDate: { gte: today } },
+      select: { id: true },
+    }),
+  ]);
+  if (progressLogged || manpowerLogged) {
+    return NextResponse.json({
+      ranAt: new Date().toISOString(),
+      dateIST: today.toISOString().slice(0, 10),
+      skipped: progressLogged ? "progress already logged today" : "manpower already logged today",
+      sentTo: 0,
+    });
+  }
+
+  let sentTo = 0;
+  const perUser: { userId: string; name: string; sent: number; pruned: number }[] = [];
+  for (const u of loggers) {
+    const outcome = await sendPushToUser(u.id, {
+      title: "Log today's site update",
+      body: "Nothing logged yet today. Open Siddhi and add progress + manpower.",
+      url: `/mobile/${primaryProjectId}/progress/new`,
       tag: `progress-nudge-${today.toISOString().slice(0, 10)}`,
     });
-    perUser.push({ userId: eng.id, sent: outcome.sent, pruned: outcome.pruned });
+    perUser.push({ userId: u.id, name: u.name, sent: outcome.sent, pruned: outcome.pruned });
     if (outcome.sent > 0) sentTo += 1;
   }
 
@@ -96,7 +105,7 @@ export async function GET(req: NextRequest) {
     ranAt: new Date().toISOString(),
     dateIST: today.toISOString().slice(0, 10),
     dayOfWeek,
-    engineersChecked: engineers.length,
+    loggersChecked: loggers.length,
     sentTo,
     perUser,
   });
