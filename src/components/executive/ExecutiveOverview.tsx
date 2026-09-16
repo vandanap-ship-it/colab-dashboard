@@ -128,12 +128,15 @@ export default function ExecutiveOverview({
           the initial fold without its own full-width section. */}
       <div className={styles.kpiRowV2}>
         <div
-          className={`${styles.kpiHero} ${h.totalDelayDays > 0 ? styles.bad : styles.good}`}
+          className={`${styles.kpiHero} ${h.totalDelayDays > 0 ? styles.bad : styles.neutral}`}
           title="Delay: days behind baseline finish. Handover: when we currently expect to finish based on progress logged so far."
         >
           <div className={styles.kpiHeroLeft}>
             <div className={styles.kpiLbl}>Total Delay</div>
-            <div className={`${styles.kpiHeroVal} ${h.totalDelayDays > 0 ? styles.bad : styles.good}`}>
+            {/* Zero delay is baseline, not a win — render in ink, not green.
+                Green is reserved for actual gains (villas completed, etc).
+                Only late (positive delay) turns red. */}
+            <div className={`${styles.kpiHeroVal} ${h.totalDelayDays > 0 ? styles.bad : styles.neutral}`}>
               {/* Show absolute value + direction word in the subtitle so a
                   "-30 days" leading minus doesn't read weirdly. */}
               {Math.abs(h.totalDelayDays)}
@@ -157,21 +160,21 @@ export default function ExecutiveOverview({
 
         <div className={styles.kpiRail}>
           <div
-            className={`${styles.kpiSmall} ${h.hindrances > 0 ? styles.warn : styles.good}`}
+            className={`${styles.kpiSmall} ${h.hindrances > 0 ? styles.warn : styles.neutral}`}
             title="Blockers logged by the site team that are still open."
           >
             <div className={styles.kpiLbl}>Active Hindrances</div>
-            <div className={`${styles.kpiSmallVal} ${h.hindrances > 0 ? styles.warn : styles.good}`}>
+            <div className={`${styles.kpiSmallVal} ${h.hindrances > 0 ? styles.warn : styles.neutral}`}>
               {h.hindrances}
             </div>
             <div className={styles.kpiSub}>Open on site</div>
           </div>
           <div
-            className={`${styles.kpiSmall} ${h.criticalBlocks > 0 ? styles.bad : styles.good}`}
+            className={`${styles.kpiSmall} ${h.criticalBlocks > 0 ? styles.bad : styles.neutral}`}
             title="Blocks running more than 30 days behind baseline."
           >
             <div className={styles.kpiLbl}>Critical Blocks</div>
-            <div className={`${styles.kpiSmallVal} ${h.criticalBlocks > 0 ? styles.bad : styles.good}`}>
+            <div className={`${styles.kpiSmallVal} ${h.criticalBlocks > 0 ? styles.bad : styles.neutral}`}>
               {h.criticalBlocks}
               <span className={styles.unit}>/ {activeBlocks.length}</span>
             </div>

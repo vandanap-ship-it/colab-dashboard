@@ -114,28 +114,23 @@
   margin-top: 2px;
 }
 
-/* ---------- PROJECT HEALTH PILL (green/orange/red oval) ---------- */
+/* ---------- PROJECT HEALTH PILL (flat solid, brand-token) ---------- */
 .projectHealthPill {
   display: inline-block;
   padding: 4px 12px;
   border-radius: 20px;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #FFFFFF;
   margin-left: 4px;
   vertical-align: middle;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
-.projectHealthPill.high {
-  background: linear-gradient(135deg, #369669, var(--ex-st-healthy));
-}
-.projectHealthPill.med {
-  background: linear-gradient(135deg, #DA9040, var(--ex-st-warning));
-}
-.projectHealthPill.low {
-  background: linear-gradient(135deg, #C74A4A, var(--ex-st-critical));
-}
+.projectHealthPill.high { background: var(--ex-st-healthy); }
+.projectHealthPill.med  { background: var(--ex-st-warning); }
+.projectHealthPill.low  { background: var(--ex-st-critical); }
 
 /* ---------- SCOPE STRIP ---------- */
 .scopeStrip {
@@ -144,16 +139,17 @@
   gap: 0;
   background: var(--ex-paper);
   border: 1px solid var(--ex-border);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
-  margin-bottom: 18px;
+  margin-bottom: 22px;
+  box-shadow: var(--ex-shadow-sm);
 }
 .scopeCell {
-  padding: 14px 18px;
+  padding: 16px 20px;
   border-right: 1px solid var(--ex-rule);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 .scopeCell:last-child { border-right: 0; }
 .scopeCell .lb {
@@ -180,9 +176,9 @@
 .card {
   background: var(--ex-paper);
   border: 1px solid var(--ex-border);
-  border-radius: 8px;
+  border-radius: 10px;
   box-shadow: var(--ex-shadow-sm);
-  margin-bottom: 18px;
+  margin-bottom: 22px;
   overflow: hidden;
 }
 .cardHd {
@@ -205,7 +201,7 @@
 .cardBd { padding: 16px 18px 18px; }
 
 /* ---------- HEALTH SNAPSHOT ---------- */
-.hs { margin-bottom: 20px; }
+.hs { margin-bottom: 24px; }
 .hsHd {
   padding: 16px 22px 12px;
   display: flex;
@@ -259,11 +255,11 @@
   .hsCell:last-child { border-bottom: 0; }
 }
 .hsLbl {
-  font-size: 10.5px;
-  letter-spacing: 0.18em;
+  font-size: 10px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ex-ink-2);
-  font-weight: 600;
+  color: var(--ex-ink-3);
+  font-weight: 700;
   margin-bottom: 14px;
 }
 
@@ -275,7 +271,7 @@
 }
 .ptSecHd {
   font-size: 10px;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ex-ink-3);
   font-weight: 700;
@@ -307,11 +303,11 @@
   margin-left: 1px;
 }
 .ptBig .lb {
-  font-size: 9.5px;
+  font-size: 10px;
   color: var(--ex-ink-3);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.14em;
   margin-top: 6px;
 }
 .ptBarList { display: flex; flex-direction: column; gap: 10px; }
@@ -421,7 +417,7 @@
 }
 .ssCol { display: flex; flex-direction: column; }
 .ssColHd {
-  font-size: 9.5px;
+  font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ex-ink-3);
@@ -493,11 +489,11 @@
   gap: 8px;
 }
 .tfLb {
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
+  font-size: 10px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ex-ink-3);
-  font-weight: 600;
+  font-weight: 700;
 }
 .tfVl {
   font-size: 15px;
@@ -1398,7 +1394,7 @@
   display: grid;
   grid-template-columns: 2fr 1fr 1fr;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 22px;
   align-items: stretch;
 }
 @media (max-width: 1100px) {
@@ -1412,8 +1408,8 @@
 .kpiHero {
   background: var(--ex-paper);
   border: 1px solid var(--ex-border);
-  border-radius: 8px;
-  padding: 18px 22px;
+  border-radius: 10px;
+  padding: 20px 24px;
   box-shadow: var(--ex-shadow-sm);
   position: relative;
   overflow: hidden;
@@ -1433,6 +1429,7 @@
 .kpiHero.warn::before { background: var(--ex-warn); }
 .kpiHero.good::before { background: var(--ex-good); }
 .kpiHero.info::before { background: var(--ex-accent); }
+.kpiHero.neutral::before { background: var(--ex-ink-4); }
 
 .kpiHeroLeft, .kpiHeroRight {
   display: flex;
@@ -1462,6 +1459,7 @@
 .kpiHeroVal.bad { color: var(--ex-bad); }
 .kpiHeroVal.warn { color: var(--ex-warn); }
 .kpiHeroVal.good { color: var(--ex-good); }
+.kpiHeroVal.neutral { color: var(--ex-ink); }
 
 .kpiHeroDate {
   font-size: 26px;
@@ -1484,8 +1482,8 @@
 .kpiSmall {
   background: var(--ex-paper);
   border: 1px solid var(--ex-border);
-  border-radius: 8px;
-  padding: 12px 14px;
+  border-radius: 10px;
+  padding: 14px 16px;
   box-shadow: var(--ex-shadow-sm);
   position: relative;
   overflow: hidden;
@@ -1504,6 +1502,7 @@
 .kpiSmall.warn::before { background: var(--ex-warn); }
 .kpiSmall.good::before { background: var(--ex-good); }
 .kpiSmall.info::before { background: var(--ex-accent); }
+.kpiSmall.neutral::before { background: var(--ex-ink-4); }
 .kpiSmallVal {
   font-size: 22px;
   font-weight: 700;
@@ -1518,6 +1517,7 @@
 .kpiSmallVal.bad { color: var(--ex-bad); }
 .kpiSmallVal.warn { color: var(--ex-warn); }
 .kpiSmallVal.good { color: var(--ex-good); }
+.kpiSmallVal.neutral { color: var(--ex-ink); }
 
 .kpiManpower {
   /* Just tags the manpower card for future targeting; carries no
