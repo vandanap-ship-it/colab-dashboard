@@ -17,7 +17,7 @@ import { mitigationForLabel } from "@/lib/reasonMitigations";
 import { istDayStart } from "@/lib/istDay";
 import { isHoliday } from "@/lib/holidays";
 import { aggregateDelayReasons, normalizeReason } from "@/lib/rules/weeklyRules";
-import { AMANVANA_VILLA_NUMBER_TO_BLOCK } from "@/lib/projects/amanvana";
+import { AMANVANA_VILLA_NUMBER_TO_BLOCK, AMANVANA_CONTRACTORS } from "@/lib/projects/amanvana";
 
 // ---------------------------------------------------------------------------
 // Shapes
@@ -432,6 +432,30 @@ async function getWeeklyReportUncached(projectId: string, weekEnding: Date): Pro
   const untaggedBucket: Bucket = emptyBucket();
   let untaggedHasAny = false;
 
+  // Amanvana override: the Colab progress CSV uses fine-grained sub-locations
+  // ("Retaining Wall", "Footing", "Pedastal") that don't map onto Siddhi's
+  // coarser section names ("Plinth Level", "Foundation / Substructure"). The
+  // MSP-imported milestones therefore have 0 WBS activities, and contractor
+  // tagging is empty — a milestone that's clearly Abraham's work ends up in
+  // the "untagged" bucket, invisible to Abraham's row in §2.
+  //
+  // Same rule the daily scorecard already applies (§02 Contractor Movement):
+  // if the villa number is in Abraham's contracted block set, attribute the
+  // milestone to Abraham regardless of what the WBS tagging says.
+  //
+  // Long-term fix is at the Colab import level (Sub_Location → Section
+  // mapping). This override closes the gap until then without touching
+  // non-Amanvana projects (their villa numbers won't be in the map).
+  const abrahamContractor = contractors.find(
+    (c) => c.name.trim().toLowerCase() === AMANVANA_CONTRACTORS.abraham.toLowerCase(),
+  );
+  const attributeUntagged = (villaNumber: number): string | null => {
+    if (!abrahamContractor) return null;
+    return AMANVANA_VILLA_NUMBER_TO_BLOCK[villaNumber] !== undefined
+      ? abrahamContractor.id
+      : null;
+  };
+
   // Python-parity: bucket by the villa's CURRENT stage (earliest not-done
   // milestone by section orderIndex), not every milestone. Otherwise a villa
   // with V15 Foundation active + V15 Plinth planned counts in both "in
@@ -454,13 +478,28 @@ async function getWeeklyReportUncached(projectId: string, weekEnding: Date): Pro
           .map((cid) => contractorItems.get(cid))
           .filter((b): b is Bucket => !!b);
         if (buckets.length === 0) {
-          // Tagged to contractor(s) that aren't active — fall back to untagged.
+          // Tagged to contractor(s) that aren't active — try the Amanvana
+          // villa-scope override before dropping to untagged.
+          const attrId = attributeUntagged(v.number);
+          const attrBucket = attrId ? contractorItems.get(attrId) : null;
+          if (attrBucket) {
+            buckets = [attrBucket];
+          } else {
+            buckets = [untaggedBucket];
+            untaggedHasAny = true;
+          }
+        }
+      } else {
+        // Nothing tagged. Try the Amanvana override first — see block above
+        // where attributeUntagged is defined.
+        const attrId = attributeUntagged(v.number);
+        const attrBucket = attrId ? contractorItems.get(attrId) : null;
+        if (attrBucket) {
+          buckets = [attrBucket];
+        } else {
           buckets = [untaggedBucket];
           untaggedHasAny = true;
         }
-      } else {
-        buckets = [untaggedBucket];
-        untaggedHasAny = true;
       }
 
       const reason = reasonByMilestone.get(m.id);
