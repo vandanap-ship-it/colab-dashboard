@@ -144,7 +144,7 @@ export default async function MasterReportPage({
       <ReportSection index={1} title="Overall Project Health">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 print:grid-cols-4">
           {/* Physical Progress */}
-          <div className="rounded-lg border border-stone-200 p-4">
+          <div className="rounded-xl border border-stone-200 p-4 shadow-sm print:shadow-none print:rounded-lg">
             <p className="text-[10px] uppercase tracking-widest text-stone-400">
               Physical Progress
             </p>
@@ -164,7 +164,7 @@ export default async function MasterReportPage({
           </div>
 
           {/* Timeline */}
-          <div className="rounded-lg border border-stone-200 p-4">
+          <div className="rounded-xl border border-stone-200 p-4 shadow-sm print:shadow-none print:rounded-lg">
             <p className="text-[10px] uppercase tracking-widest text-stone-400">
               Timeline
             </p>
@@ -187,7 +187,7 @@ export default async function MasterReportPage({
           </div>
 
           {/* Schedule Summary */}
-          <div className="rounded-lg border border-stone-200 p-4">
+          <div className="rounded-xl border border-stone-200 p-4 shadow-sm print:shadow-none print:rounded-lg">
             <p className="text-[10px] uppercase tracking-widest text-stone-400">
               Schedule Summary
             </p>
@@ -221,7 +221,7 @@ export default async function MasterReportPage({
           </div>
 
           {/* Key Metrics */}
-          <div className="rounded-lg border border-stone-200 p-4">
+          <div className="rounded-xl border border-stone-200 p-4 shadow-sm print:shadow-none print:rounded-lg">
             <p className="text-[10px] uppercase tracking-widest text-stone-400">
               Key Metrics
             </p>
@@ -287,7 +287,7 @@ export default async function MasterReportPage({
             {highlightEntries.map((e) => (
               <div
                 key={e.id}
-                className="break-inside-avoid rounded-lg border border-stone-200 p-4 space-y-3"
+                className="break-inside-avoid rounded-xl border border-stone-200 p-4 space-y-3 shadow-sm print:shadow-none print:rounded-lg"
               >
                 <div className="flex items-baseline justify-between gap-2 flex-wrap">
                   <div className="min-w-0">
