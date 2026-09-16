@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download } from "lucide-react";
 import styles from "./scorecard.module.css";
 import type { Scorecard } from "@/lib/scorecardServer";
+import { Lightbox, type Photo } from "./PhotoStrip";
 
 export interface ScorecardViewProps {
   scorecard: Scorecard;
@@ -35,6 +36,11 @@ export default function ScorecardView({
   contractorFilterId,
 }: ScorecardViewProps) {
   const router = useRouter();
+
+  // Click-to-zoom lightbox for §04 activity photos. The lightbox already
+  // ships with a Download button + metadata caption, so no extra chrome
+  // is needed on the scorecard card itself.
+  const [lightbox, setLightbox] = useState<{ photos: Photo[]; index: number } | null>(null);
 
   const buildHref = useCallback((next: { date?: string; contractor?: string | null }) => {
     const qs = new URLSearchParams();
@@ -366,13 +372,34 @@ export default function ScorecardView({
                         const entryDay = new Date(a.entryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
                         const entryFull = new Date(a.entryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
                         const reason = [a.reasonLabel, a.reasonNote].filter(Boolean).join(" · ");
+                        const cardPhotos: Photo[] = (a.photos ?? []).map((p) => ({
+                          id: p.id,
+                          url: p.url,
+                          meta: {
+                            kind: "progress",
+                            project: s.project.name,
+                            block: g.blockCode,
+                            villa: v.villaLabel,
+                            activity: `${a.milestoneName}-${a.activityName}`,
+                            date: a.entryDate,
+                            percent: a.achievedPct ?? undefined,
+                          },
+                        }));
                         return (
                           <div key={a.progressEntryId} className={styles.actCard}>
-                            {a.photoUrl ? (
-                              <div className={styles.actPhoto}>
+                            {cardPhotos.length > 0 ? (
+                              <button
+                                type="button"
+                                className={styles.actPhoto}
+                                onClick={() => setLightbox({ photos: cardPhotos, index: 0 })}
+                                aria-label="Open photo"
+                              >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={a.photoUrl} alt="" />
-                              </div>
+                                <img src={cardPhotos[0].url} alt="" />
+                                {cardPhotos.length > 1 && (
+                                  <span className={styles.actPhotoCount}>+{cardPhotos.length - 1}</span>
+                                )}
+                              </button>
                             ) : (
                               <div className={styles.actPhotoStub}>Photo not uploaded</div>
                             )}
@@ -436,6 +463,14 @@ export default function ScorecardView({
           Health live on the Overview / Snapshot tabs; Block-wise Progress
           lives on the Layout tab. The daily Scorecard is the four sections
           above only, matching the Amanvana template. */}
+
+      {lightbox && (
+        <Lightbox
+          photos={lightbox.photos}
+          index={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </div>
   );
 }

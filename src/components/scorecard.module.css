@@ -397,14 +397,26 @@
 }
 
 /* Photo strip — full width, natural aspect (never cropped), charcoal ground
-   when a photo is present so any letterboxing reads as intentional. */
+   when a photo is present so any letterboxing reads as intentional. Rendered
+   as a <button> so clicking opens the fullscreen lightbox (with a Download
+   button and metadata caption baked in). */
 .actPhoto {
   width: 100%;
   min-height: 150px;
   background: #161926;
+  border: 0;
   border-bottom: 1px solid var(--sc-border);
+  padding: 0;
   display: block;
   overflow: hidden;
+  cursor: zoom-in;
+  position: relative;
+  transition: filter 0.15s ease;
+}
+.actPhoto:hover { filter: brightness(1.06); }
+.actPhoto:focus-visible {
+  outline: 2px solid var(--sc-gold);
+  outline-offset: -2px;
 }
 .actPhoto img {
   width: 100%;
@@ -412,6 +424,27 @@
   max-height: 420px;
   object-fit: contain;
   display: block;
+}
+/* "+N" chip in the top-right corner when the entry has multiple photos, so
+   the reader knows there is more behind this thumbnail. */
+.actPhotoCount {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(22, 25, 38, 0.72);
+  color: #FFFFFF;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+@media print {
+  .actPhoto { cursor: default; }
+  .actPhoto:hover { filter: none; }
+  .actPhotoCount { display: none; }
 }
 .actPhotoStub {
   width: 100%;

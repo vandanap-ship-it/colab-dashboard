@@ -118,6 +118,7 @@ export interface SiteActivity {
   loggedByName: string;
   contractorName: string | null;
   photoUrl: string | null;
+  photos: { id: string; url: string }[]; // full set, for click-to-zoom lightbox
   notes: string | null;
   reasonLabel: string | null;
   reasonNote: string | null;
@@ -177,7 +178,7 @@ export async function getSiteActivityHighlights(
           },
         },
       },
-      photos: { select: { url: true }, take: 1 },
+      photos: { select: { id: true, url: true }, orderBy: { uploadedAt: "asc" } },
       contractor: { select: { name: true } },
       createdBy: { select: { name: true } },
     },
@@ -200,7 +201,7 @@ export async function getSiteActivityHighlights(
         villa: { number: number; label: string | null; block: { code: string } } | null;
       } | null;
     };
-    photos: { url: string }[];
+    photos: { id: string; url: string }[];
     contractor: { name: string } | null;
     createdBy: { name: string };
   }>;
@@ -269,6 +270,7 @@ export async function getSiteActivityHighlights(
       loggedByName: e.createdBy.name,
       contractorName: e.contractor?.name ?? null,
       photoUrl: e.photos[0]?.url ?? null,
+      photos: e.photos,
       notes: e.notes,
       reasonLabel: effectiveReasonCode ? reasonLabel(effectiveReasonCode) : null,
       reasonNote: effectiveReasonNote,
