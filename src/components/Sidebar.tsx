@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -140,6 +141,73 @@ export default function Sidebar(props: SidebarProps) {
 
   const visibleGroups = groups.filter((g) => g.items.some((i) => !i.hidden));
 
+  // The scrim + drawer must escape the Navbar's stacking context (Navbar has
+  // sticky top-0 z-30, which creates a local context — a nested z-61 sorts
+  // only inside that context, so the drawer would render behind page content
+  // even though visually correct in the Navbar). Portal them to document.body.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  const overlay = mounted && typeof document !== "undefined"
+    ? createPortal(
+        <>
+          <div
+            className={`${styles.scrim} ${open ? styles.scrimOpen : ""}`}
+            onClick={() => setOpen(false)}
+            aria-hidden="true"
+          />
+          <aside
+            ref={drawerRef}
+            id="project-sidebar"
+            className={`${styles.drawer} ${open ? styles.drawerOpen : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Project menu"
+            aria-hidden={!open}
+          >
+            <div className={styles.header}>
+              <div className={styles.headerText}>Menu</div>
+              <button
+                ref={closeBtnRef}
+                type="button"
+                className={styles.closeBtn}
+                onClick={() => setOpen(false)}
+                aria-label="Close menu"
+              >
+                <X className={styles.closeIcon} />
+              </button>
+            </div>
+
+            <nav className={styles.body}>
+              {visibleGroups.map((group) => (
+                <div key={group.title} className={styles.group}>
+                  <div className={styles.groupTitle}>{group.title}</div>
+                  <ul className={styles.list}>
+                    {group.items.filter((i) => !i.hidden).map((item) => {
+                      const Icon = item.icon;
+                      const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                      return (
+                        <li key={item.href}>
+                          <Link
+                            href={item.href}
+                            className={`${styles.link} ${active ? styles.linkActive : ""}`}
+                          >
+                            <Icon className={styles.linkIcon} />
+                            <span>{item.label}</span>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </nav>
+          </aside>
+        </>,
+        document.body,
+      )
+    : null;
+
   return (
     <>
       <button
@@ -154,59 +222,7 @@ export default function Sidebar(props: SidebarProps) {
         <Menu className={styles.triggerIcon} />
         <span className={styles.triggerLabel}>Menu</span>
       </button>
-
-      <div
-        className={`${styles.scrim} ${open ? styles.scrimOpen : ""}`}
-        onClick={() => setOpen(false)}
-        aria-hidden="true"
-      />
-      <aside
-        ref={drawerRef}
-        id="project-sidebar"
-        className={`${styles.drawer} ${open ? styles.drawerOpen : ""}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Project menu"
-        aria-hidden={!open}
-      >
-        <div className={styles.header}>
-          <div className={styles.headerText}>Menu</div>
-          <button
-            ref={closeBtnRef}
-            type="button"
-            className={styles.closeBtn}
-            onClick={() => setOpen(false)}
-            aria-label="Close menu"
-          >
-            <X className={styles.closeIcon} />
-          </button>
-        </div>
-
-        <nav className={styles.body}>
-          {visibleGroups.map((group) => (
-            <div key={group.title} className={styles.group}>
-              <div className={styles.groupTitle}>{group.title}</div>
-              <ul className={styles.list}>
-                {group.items.filter((i) => !i.hidden).map((item) => {
-                  const Icon = item.icon;
-                  const active = pathname === item.href || pathname.startsWith(item.href + "/");
-                  return (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        className={`${styles.link} ${active ? styles.linkActive : ""}`}
-                      >
-                        <Icon className={styles.linkIcon} />
-                        <span>{item.label}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-        </nav>
-      </aside>
+      {overlay}
     </>
   );
 }
