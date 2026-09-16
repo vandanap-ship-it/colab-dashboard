@@ -65,8 +65,8 @@ export default async function ProjectLayout({
               <ArrowLeft className="w-3 h-3" />
               All projects
             </Link>
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">
+            <div className="flex items-center gap-3 mt-3 flex-wrap">
+              <h1 className="text-3xl font-semibold text-stone-900 tracking-tight leading-none">
                 {project.name}
               </h1>
               {project.code && (

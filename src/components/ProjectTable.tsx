@@ -337,7 +337,7 @@ export default function ProjectTable({ canCreate }: { canCreate: boolean }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">Projects</h1>
+          <h1 className="text-3xl font-semibold text-stone-900 tracking-tight leading-none">Projects</h1>
           <p className="text-sm text-stone-500 mt-1">
             All projects in your portfolio. Click a row to open the project dashboard.
           </p>
