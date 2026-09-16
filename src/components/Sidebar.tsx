@@ -32,7 +32,6 @@ interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
-  description?: string;     // one-line explanation, shown under the label
   hidden?: boolean;         // conditional visibility (permissions)
 }
 
@@ -88,58 +87,42 @@ export default function Sidebar(props: SidebarProps) {
     {
       title: "Schedule",
       items: [
-        { label: "Timeline",   href: `/projects/${props.projectId}/timeline`,   icon: CalendarRange,
-          description: "Villa-by-villa milestone dates on a printable strip." },
-        { label: "Look-ahead", href: `/projects/${props.projectId}/look-ahead`, icon: CalendarClock,
-          description: "Two-week window of what starts, finishes, or is overdue." },
-        { label: "Gantt",      href: `/projects/${props.projectId}/gantt`,      icon: GanttChartSquare,
-          description: "Full schedule as a scrollable Gantt chart." },
+        { label: "Timeline",   href: `/projects/${props.projectId}/timeline`,   icon: CalendarRange },
+        { label: "Look-ahead", href: `/projects/${props.projectId}/look-ahead`, icon: CalendarClock },
+        { label: "Gantt",      href: `/projects/${props.projectId}/gantt`,      icon: GanttChartSquare },
       ],
     },
     {
       title: "Data entry",
       items: [
-        { label: "Add Progress",    href: `/projects/${props.projectId}/add-progress`, icon: ListPlus,
-          description: "Log today's progress against an activity with a photo." },
-        { label: "Manpower",        href: `/projects/${props.projectId}/manpower`,     icon: Users,
-          description: "Enter or edit daily headcount per trade." },
-        { label: "Import schedule", href: `/projects/${props.projectId}/import-msp`,   icon: Upload, hidden: !props.canImport,
-          description: "Upload a fresh MSP CSV to refresh baselines." },
+        { label: "Add Progress",    href: `/projects/${props.projectId}/add-progress`, icon: ListPlus },
+        { label: "Manpower",        href: `/projects/${props.projectId}/manpower`,     icon: Users },
+        { label: "Import schedule", href: `/projects/${props.projectId}/import-msp`,   icon: Upload, hidden: !props.canImport },
       ],
     },
     {
       title: "Records",
       items: [
-        { label: "Snag Master",  href: `/projects/${props.projectId}/snags`,         icon: Bug,
-          description: "Quality snags raised from the field with photos and severity." },
-        { label: "RFI",          href: `/projects/${props.projectId}/rfi`,           icon: MessageSquareQuote,
-          description: "Requests for information — questions from site to design." },
-        { label: "Work Permits", href: `/projects/${props.projectId}/work-permits`,  icon: HardHat,
-          description: "Hot Work, De-shuttering, Night, and General work permits." },
-        { label: "Permits",      href: `/projects/${props.projectId}/permits`,       icon: ShieldCheck,
-          description: "Approvals from local authorities — RERA, occupation, etc." },
+        { label: "Snag Master",  href: `/projects/${props.projectId}/snags`,         icon: Bug },
+        { label: "RFI",          href: `/projects/${props.projectId}/rfi`,           icon: MessageSquareQuote },
+        { label: "Work Permits", href: `/projects/${props.projectId}/work-permits`,  icon: HardHat },
+        { label: "Permits",      href: `/projects/${props.projectId}/permits`,       icon: ShieldCheck },
       ],
     },
     {
       title: "Reports & Docs",
       items: [
-        { label: "DLR",             href: `/projects/${props.projectId}/dlr`,     icon: ClipboardCheck,
-          description: "Daily Log Report — one page per day for the site engineer." },
-        { label: "Reports",         href: `/projects/${props.projectId}/reports`, icon: FileBarChart,
-          description: "Scorecard, Weekly, Master Report, and QA/QC digests." },
-        { label: "Drawings",        href: `/projects/${props.projectId}/drawings`, icon: FileStack,
-          description: "Site layouts, plans and elevations. Uploaded as PDF." },
-        { label: "Logic Reference", href: `/logic-reference`,                     icon: BookOpen,
-          description: "How every number in every report is computed, in plain English." },
+        { label: "DLR",             href: `/projects/${props.projectId}/dlr`,     icon: ClipboardCheck },
+        { label: "Reports",         href: `/projects/${props.projectId}/reports`, icon: FileBarChart },
+        { label: "Drawings",        href: `/projects/${props.projectId}/drawings`, icon: FileStack },
+        { label: "Logic Reference", href: `/logic-reference`,                     icon: BookOpen },
       ],
     },
     {
       title: "Finance",
       items: [
-        { label: "Billing",  href: `/projects/${props.projectId}/bills`,    icon: ReceiptIndianRupee, hidden: !props.canAccessBilling,
-          description: "Sub-contractor bills raised, approved and paid." },
-        { label: "Expenses", href: `/projects/${props.projectId}/expenses`, icon: Wallet, hidden: !props.canLogExpense,
-          description: "Site expenses tracked with receipts." },
+        { label: "Billing",  href: `/projects/${props.projectId}/bills`,    icon: ReceiptIndianRupee, hidden: !props.canAccessBilling },
+        { label: "Expenses", href: `/projects/${props.projectId}/expenses`, icon: Wallet, hidden: !props.canLogExpense },
       ],
     },
   ];
@@ -149,12 +132,9 @@ export default function Sidebar(props: SidebarProps) {
     groups.push({
       title: "Admin",
       items: [
-        { label: "Users",              href: `/admin/users`,       icon: UsersIcon,
-          description: "Add, remove and change roles across the team." },
-        { label: "Contractors",        href: `/admin/contractors`, icon: UsersIcon,
-          description: "Manage the contractor list and their metadata." },
-        { label: "Assign contractors", href: `/projects/${props.projectId}/admin/contractor-assign`, icon: Users,
-          description: "Bulk-assign WBS activities to a contractor." },
+        { label: "Users",              href: `/admin/users`,       icon: UsersIcon },
+        { label: "Contractors",        href: `/admin/contractors`, icon: UsersIcon },
+        { label: "Assign contractors", href: `/projects/${props.projectId}/admin/contractor-assign`, icon: Users },
       ],
     });
   }
@@ -212,13 +192,8 @@ export default function Sidebar(props: SidebarProps) {
                             href={item.href}
                             className={`${styles.link} ${active ? styles.linkActive : ""}`}
                           >
-                            <Icon className={styles.linkIcon} aria-hidden />
-                            <span className={styles.linkText}>
-                              <span className={styles.linkLabel}>{item.label}</span>
-                              {item.description && (
-                                <span className={styles.linkDesc}>{item.description}</span>
-                              )}
-                            </span>
+                            <Icon className={styles.linkIcon} />
+                            <span>{item.label}</span>
                           </Link>
                         </li>
                       );
