@@ -71,7 +71,13 @@ function parseSlashDate(raw: string): Date | null {
   if (!m) return null;
   const [, d, mo, y] = m;
   const yr = y.length === 2 ? 2000 + Number(y) : Number(y);
-  return new Date(Date.UTC(yr, +mo - 1, +d, 12, 0, 0) - (5 * 60 + 30) * 60_000);
+  // UTC midnight for the IST calendar day the CSV row belongs to. Matches
+  // the shape src/lib/istDay.ts's istDayStart returns, which is what every
+  // report ("dayStart" in scorecardServer, weeklyReportServer etc.) uses
+  // to filter ManpowerEntry / TradePlan. Storing at 06:30 UTC — the old
+  // "noon IST" convention — broke the exact-match `entryDate: dayStart`
+  // query the scorecard uses for §03 manpower.
+  return new Date(Date.UTC(yr, +mo - 1, +d, 0, 0, 0));
 }
 
 /** dd-mm-yyyy HH:MM:SS → Date (Colab hindrance format, IST-local) */
