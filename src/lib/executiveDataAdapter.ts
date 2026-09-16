@@ -16,6 +16,12 @@ import { prisma } from "@/lib/prisma";
 import type { DashboardBag, MatrixRow } from "@/lib/rollupServer";
 import type { BlockRollup as ClientBlock, VillaRollup as ClientVilla, ContractorRollup, MilestoneCell, ProjectHealthSummary } from "@/lib/executiveMockData";
 import { getProjectStats } from "@/lib/projectStats";
+import {
+  AMANVANA_ABRAHAM_ALL_VILLAS,
+  AMANVANA_CONTRACTOR_SCOPE,
+  AMANVANA_CONTRACTORS,
+  AMANVANA_VILLA_NUMBER_TO_BLOCK,
+} from "@/lib/projects/amanvana";
 
 export interface AdaptedOverview {
   health: ProjectHealthSummary;
@@ -36,18 +42,66 @@ export interface ExecutiveExtras {
   hindranceCount: number;
   plannedPct: number;
   achievedPct: number;
+  /** Sum of Villa.unitCount across every in-scope villa in the project.
+   *  Correct physical-villa count — a "Villa 10 & 11" row contributes 2, not 1.
+   *  On Amanvana this reads 93 rather than the 90 that `Villa.count()` returns. */
+  totalPhysicalVillas: number;
+  /** Number of Villa rows the DB actually holds — same shape as the sum,
+   *  but without unitCount expansion. Kept for callers that want the row
+   *  count (e.g. the "Villa records" metric). */
+  totalVillaRecords: number;
 }
 
 export async function getExecutiveExtras(projectId: string): Promise<ExecutiveExtras> {
-  const [hindranceCount, stats] = await Promise.all([
+  const [hindranceCount, stats, sumUnits, rowCount] = await Promise.all([
     prisma.hindrance.count({ where: { projectId, status: "OPEN" } }),
     getProjectStats(projectId),
+    prisma.villa.aggregate({
+      where: { projectId, inScope: true },
+      _sum: { unitCount: true },
+    }),
+    prisma.villa.count({ where: { projectId, inScope: true } }),
   ]);
   return {
     hindranceCount,
     plannedPct: stats.plannedPercent,
     achievedPct: stats.achievedPercent,
+    totalPhysicalVillas: sumUnits._sum.unitCount ?? rowCount,
+    totalVillaRecords: rowCount,
   };
+}
+
+/** Abraham's contracted villa + block count for Amanvana. Returns null for
+ *  other projects — those keep the row-count fallback. Uses the code
+ *  registry (AMANVANA_VILLA_NUMBER_TO_BLOCK) so it stays true even when the
+ *  MSP import happens to split combined pairs across two rows. */
+function amanvanaAbrahamOverride(): { villaCount: number; blockCount: number } | null {
+  const abrahamVillaCount = AMANVANA_CONTRACTOR_SCOPE[AMANVANA_CONTRACTORS.abraham.toLowerCase()];
+  if (abrahamVillaCount == null) return null;
+  const distinctBlocks = new Set(Object.values(AMANVANA_VILLA_NUMBER_TO_BLOCK));
+  // The registry currently groups Block 3A + 3B under one "03" code. Real
+  // block count per contract is 12 (Blocks 2, 3A, 3B, 4-10, 12, 13). Reflect
+  // that here rather than lie by silently returning 11.
+  const blockCountFromRegistry = distinctBlocks.size;
+  const AMANVANA_ABRAHAM_ACTUAL_BLOCK_COUNT = 12;
+  return {
+    villaCount: abrahamVillaCount,
+    blockCount: Math.max(blockCountFromRegistry, AMANVANA_ABRAHAM_ACTUAL_BLOCK_COUNT),
+  };
+}
+
+/** Is this the Amanvana project the AMANVANA_ constants describe? We can't
+ *  match on projectId (that varies per environment), so match on the villa
+ *  set — Abraham's Amanvana villas are a distinctive fingerprint that no
+ *  other project will accidentally share. */
+function isAmanvanaByBlockShape(blockCodes: string[]): boolean {
+  // If the project contains the block codes Abraham's Amanvana registry knows
+  // about ("02", "03", "04", ...), treat as Amanvana. False positives are
+  // acceptable — the overrides read the same shape everyone else would.
+  if (AMANVANA_ABRAHAM_ALL_VILLAS.length === 0) return false;
+  const registered = new Set(Object.values(AMANVANA_VILLA_NUMBER_TO_BLOCK));
+  const overlap = blockCodes.filter((c) => registered.has(c)).length;
+  return overlap >= Math.min(3, registered.size);
 }
 
 /** Fold a DashboardBag into the shape ExecutiveOverview / ExecutiveLayout expect. */
@@ -90,20 +144,36 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
       })),
   );
 
-  // Contractor rollup: for v1 we only track one contractor (A&T). Real
-  // per-contractor breakdown lives in a follow-up (needs Contractor↔Villa
-  // ownership modeling).
+  // Contractor rollup: for v1 we only track one contractor (Abraham Thomas).
+  // Real per-contractor breakdown lives in a follow-up (needs Contractor↔
+  // Villa ownership modeling).
   const activeBlocks = rollup.blocks.filter((b) => b.villas.some((v) => v.currentSection >= 0));
   const activeVillas = activeBlocks.flatMap((b) => b.villas.filter((v) => v.currentSection >= 0));
-  const totalVillas = rollup.blocks.reduce((n, b) => n + b.villas.length, 0);
+
+  // "Total villas" is the PHYSICAL count — 93 on Amanvana, not 90 —
+  // because a combined-pair Villa row ("Villa 10 & 11") represents two
+  // physical villas. Prefer the DB-derived sum(unitCount) from extras; fall
+  // back to a row-count sum if the caller didn't fetch extras.
+  const totalVillas =
+    extras?.totalPhysicalVillas ?? rollup.blocks.reduce((n, b) => n + b.villas.length, 0);
+
+  // Abraham's contracted scope — the "AT villas · X blocks" hero cell.
+  // On Amanvana the contract says 41 villas across 12 blocks (Blocks 2, 3A,
+  // 3B, 4-10, 12, 13). Use the override; other projects fall back to the
+  // whole-project totals as before.
+  const blockCodes = rollup.blocks.map((b) => b.code);
+  const amanvanaAbraham = isAmanvanaByBlockShape(blockCodes) ? amanvanaAbrahamOverride() : null;
+  const atVillaCount = amanvanaAbraham?.villaCount ?? totalVillas;
+  const atBlockCount = amanvanaAbraham?.blockCount ?? rollup.blocks.length;
+
   const avgSlip = activeVillas.length === 0
     ? 0
     : Math.round(activeVillas.reduce((s, v) => s + v.handoverSlipDays, 0) / activeVillas.length);
   const contractors: ContractorRollup[] = [
     {
-      name: "Abraham Thomas (A&T)",
+      name: AMANVANA_CONTRACTORS.abraham,
       category: "Civil / Structural — Phase 1 & 2 Lead",
-      scopeVillas: totalVillas,
+      scopeVillas: atVillaCount,
       activeVillas: activeVillas.length,
       completePct: Math.round(rollup.percentComplete),
       avgDelayDays: avgSlip,
@@ -147,8 +217,8 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
     modelVillas: 0,
     phase1Villas: activeVillas.length,
     phase1BlocksActive: activeBlocks.length,
-    atVillas: totalVillas,
-    atBlocks: rollup.blocks.length,
+    atVillas: atVillaCount,
+    atBlocks: atBlockCount,
     baselineStart: project.startDate ?? new Date(),
     baselineEnd: declaredEnd,
     reraEndDate: project.reraEndDate ?? null,
