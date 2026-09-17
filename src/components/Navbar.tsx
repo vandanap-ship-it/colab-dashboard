@@ -59,13 +59,16 @@ export default function Navbar() {
 
         <nav className="flex items-center gap-1">
           <NavLink href="/my-actions" icon={<Inbox className="w-4 h-4" />} label="My Actions" badge={actionCount} />
+          {/* Admin quick-links are hidden under sm — they'd overflow the
+              mobile top bar. Everything here is also reachable from the
+              Menu sidebar drawer, so mobile users don't lose access. */}
           {isAdmin(role) && (
-            <>
+            <div className="hidden sm:flex items-center gap-1">
               <NavLink href="/admin/users" icon={<Users className="w-4 h-4" />} label="Users" />
               <NavLink href="/admin/contractors" icon={<ShieldCheck className="w-4 h-4" />} label="Contractors" />
               <NavLink href="/admin/audit" icon={<History className="w-4 h-4" />} label="Audit" />
               <NavLink href="/admin/trash" icon={<Trash2 className="w-4 h-4" />} label="Trash" />
-            </>
+            </div>
           )}
           {canSeeMobile(role) && (
             <NavLink href="/mobile" icon={<Smartphone className="w-4 h-4" />} label="Mobile" />

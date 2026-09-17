@@ -25,6 +25,12 @@
 }
 .triggerIcon { width: 18px; height: 18px; color: #78716C; }
 .triggerLabel { line-height: 1; }
+/* On narrow phone widths the top bar has to fit Menu + Switch Project
+   + admin icons + avatar; drop the label so Menu is icon-only. */
+@media (max-width: 640px) {
+  .trigger { padding: 8px 10px; }
+  .triggerLabel { display: none; }
+}
 
 .scrim {
   position: fixed;
