@@ -26,6 +26,16 @@ export async function signIn(page: Page, role: Role): Promise<void> {
     .waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 20000 })
     .catch(() => {});
   await page.waitForLoadState("networkidle").catch(() => {});
+  // Dismiss the mobile onboarding modal for the rest of the session so tests
+  // don't trip on it. Safe on desktop paths — the flag is only read on
+  // /mobile/* pages. Fails silently in Safari-private-mode-like environments.
+  await page.evaluate(() => {
+    try {
+      localStorage.setItem("siddhi-mobile-onboarding-seen-v1", String(Date.now()));
+    } catch {
+      /* localStorage blocked — the onboarding is deliberately non-blocking too */
+    }
+  }).catch(() => {});
 }
 
 export async function getProjectId(page: Page, name = "Amanvana"): Promise<string> {

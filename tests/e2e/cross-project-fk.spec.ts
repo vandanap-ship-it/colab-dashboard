@@ -25,7 +25,7 @@ test.describe("Cross-project FK guards on wbsNodeId", () => {
         projectId,
         subject: "cross-project fk test",
         description: "should be rejected",
-        category: "DRAWING",
+        category: "STRUCTURAL",
         priority: "MEDIUM",
         wbsNodeId: bogusWbsNodeId,
       },
