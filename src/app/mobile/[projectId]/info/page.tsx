@@ -86,11 +86,17 @@ export default async function MobileInfoPage({
         <ArrowRight className="w-4 h-4 text-stone-300" />
       </Link>
 
+      {/* All four rows deep-link into the desktop Snapshot / QA/QC surfaces
+          via the same href pattern. Native mobile lists for each are a
+          follow-up; for now the desktop views work fine on a phone browser
+          and taking a dead-tap-row to a working target is a strict UX
+          upgrade over the pre-fix "nothing happens on tap". */}
       <ActionRow
         icon={Pin}
         title="Tasks Assigned To Me"
         sub="Concerns escalated to you"
         count={concernsAssigned}
+        href={`/projects/${projectId}/snapshot#concerns`}
       />
 
       <ActionRow
@@ -98,6 +104,7 @@ export default async function MobileInfoPage({
         title="Snags Assigned To Me"
         sub="Open snags you need to handle"
         count={issuesAssigned}
+        href={`/projects/${projectId}/snapshot#snags`}
       />
 
       <ActionRow
@@ -105,6 +112,7 @@ export default async function MobileInfoPage({
         title="Snags I Created"
         sub="Open snags you raised"
         count={issuesCreatedByMe}
+        href={`/projects/${projectId}/snapshot#snags`}
       />
 
       {canReviewInspections && (

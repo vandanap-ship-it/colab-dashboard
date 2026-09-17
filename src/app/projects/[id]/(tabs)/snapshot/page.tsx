@@ -108,7 +108,11 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
         />
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* id="snags" so the mobile My Actions rows (Snags Assigned To Me,
+          Snags I Created) can deep-link (#snags) directly to the Snags
+          card instead of landing at the top of Snapshot. Anchor is on the
+          outer grid so the Hindrance card next to Snags stays in view. */}
+      <div id="snags" className="grid grid-cols-1 lg:grid-cols-2 gap-6 scroll-mt-20">
         <HindranceSummary
           projectId={id}
           canResolve={
