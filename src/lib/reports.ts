@@ -692,6 +692,7 @@ async function getMasterReportUncached(
       progressEntered: true,
       delayReason: true,
       weightPct: true, // per-activity weight from Colab's Physical_Progress column
+      contractorId: true, // needed for the contractor-zone fallback below
     },
   });
 
@@ -857,6 +858,99 @@ async function getMasterReportUncached(
       totalDelayDays: phaseTotalDelay,
       hindrancesCount: hindranceCountsByPhase.get(phase.id) ?? 0,
     });
+  }
+
+  // ---- Contractor-zone fallback -----------------------------------------
+  // Amanvana (and many Colab-imported schedules) come in as a SINGLE level-1
+  // phase node — "Villa Set (V32, V33)" for us. That leaves §02 showing one
+  // row for the whole 93-villa project, which reads as if the report is
+  // broken.
+  //
+  // When we detect that pattern (<=1 phase but multiple contractors with
+  // leaves), rebuild perZone off contractor-attributed leaves instead. Every
+  // contractor becomes its own zone row with roll-up dates, %, delay and
+  // hindrance count — matches how the site team actually talks about the
+  // work anyway (Abraham's villas vs Elegant's villas).
+  //
+  // Kept the phase-based path above intact so multi-phase projects (Phase 1
+  // / Phase 2) still get proper phase rollups; the fallback replaces perZone
+  // only when the phase view has nothing useful to show.
+  const contractorGroups = new Map<string, { name: string; leaves: typeof leaves }>();
+  for (const l of leaves) {
+    if (!l.contractorId) continue;
+    if (!contractorGroups.has(l.contractorId)) {
+      contractorGroups.set(l.contractorId, { name: "", leaves: [] });
+    }
+    contractorGroups.get(l.contractorId)!.leaves.push(l);
+  }
+  if (phases.length <= 1 && contractorGroups.size >= 2) {
+    // Resolve contractor names in one round-trip.
+    const contractorRows = await prisma.contractor.findMany({
+      where: { id: { in: [...contractorGroups.keys()] } },
+      select: { id: true, name: true },
+    });
+    const nameByContractorId = new Map(contractorRows.map((c) => [c.id, c.name]));
+
+    // Hindrances grouped by contractor via the WBS leaf they hang off of.
+    const contractorByLeafId = new Map<string, string>();
+    for (const [cid, g] of contractorGroups) {
+      for (const l of g.leaves) contractorByLeafId.set(l.id, cid);
+    }
+    const hindranceCountsByContractor = new Map<string, number>();
+    for (const h of hindrances) {
+      if (!h.wbsNodeId) continue;
+      const cid = contractorByLeafId.get(h.wbsNodeId);
+      if (cid) hindranceCountsByContractor.set(cid, (hindranceCountsByContractor.get(cid) ?? 0) + 1);
+    }
+
+    // Replace perZone in place with contractor-attributed zones.
+    perZone.length = 0;
+    const contractorIds = [...contractorGroups.keys()].sort((a, b) =>
+      (nameByContractorId.get(a) ?? "").localeCompare(nameByContractorId.get(b) ?? ""),
+    );
+    for (const cid of contractorIds) {
+      const g = contractorGroups.get(cid)!;
+      const cLeaves = g.leaves;
+      const cName = nameByContractorId.get(cid) ?? "Untagged";
+
+      const plannedStart = cLeaves.reduce<Date | null>(
+        (min, l) => (l.baselineStart && (!min || l.baselineStart < min) ? l.baselineStart : min),
+        null,
+      );
+      const plannedFinish = cLeaves.reduce<Date | null>(
+        (max, l) => (l.baselineFinish && (!max || l.baselineFinish > max) ? l.baselineFinish : max),
+        null,
+      );
+      const actualStart = cLeaves.reduce<Date | null>(
+        (min, l) => (l.actualStart && (!min || l.actualStart < min) ? l.actualStart : min),
+        null,
+      );
+      const projectedFinish = cLeaves.reduce<Date | null>((max, l) => {
+        const cand = l.actualFinish ?? l.projectedFinish ?? l.baselineFinish;
+        if (!cand) return max;
+        return !max || cand > max ? cand : max;
+      }, null);
+      const actualPercent =
+        cLeaves.length === 0
+          ? 0
+          : cLeaves.reduce((s, l) => s + (l.percentComplete ?? 0), 0) / cLeaves.length;
+      const totalDelayDays =
+        plannedFinish && projectedFinish ? (diffDays(projectedFinish, plannedFinish) ?? 0) : 0;
+
+      perZone.push({
+        id: cid,
+        name: cName,
+        plannedStart,
+        plannedFinish,
+        plannedDurationDays: diffDays(plannedFinish, plannedStart),
+        actualStart,
+        projectedFinish,
+        actualDurationDays: diffDays(projectedFinish, actualStart ?? plannedStart),
+        actualPercent: Math.round(actualPercent * 100) / 100,
+        totalDelayDays,
+        hindrancesCount: hindranceCountsByContractor.get(cid) ?? 0,
+      });
+    }
   }
 
   // ---- Total activities (all leaves, with location breadcrumb) ----
