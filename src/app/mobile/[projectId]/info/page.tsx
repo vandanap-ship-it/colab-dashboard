@@ -121,7 +121,7 @@ export default async function MobileInfoPage({
           title="Inspections Pending Review"
           sub="Awaiting your sign-off"
           count={inspectionsToReview}
-          href={`/projects/${projectId}/qaqc`}
+          href={`/mobile/${projectId}/qaqc?tab=pending`}
         />
       )}
     </div>

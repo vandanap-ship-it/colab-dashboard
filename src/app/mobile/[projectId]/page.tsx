@@ -56,12 +56,11 @@ export default async function MobileProjectHome({
     primary?: boolean;
     tier: "primary" | "secondary";
   };
-  // V1 mobile home — three primary CTAs (Progress, Manpower, Hindrance) that
+  // Mobile home — primary CTAs (Progress, Manpower, Hindrance, Permit) that
   // the site team hits every day, plus a compact "More" section below for
-  // less-frequent flows. QA/QC surfaces (Snag, Areas of Concern, Inspection)
-  // are hidden entirely for V1 — those teams stay on their current tools
-  // (WhatsApp / Colab wind-down) and come to Siddhi in V2. Expense/DLR live
-  // in "More" only for staff (scoped contractors don't see them).
+  // less-frequent flows. QA/QC surfaces as its own tile on Sep 17 2026 —
+  // list + review-in-place ships alongside so an inspector or reviewer can
+  // do the whole flow from a phone instead of bouncing to desktop.
   const allTools: Tool[] = [
     {
       key: "new-progress",
@@ -106,6 +105,13 @@ export default async function MobileProjectHome({
       href: `/mobile/${projectId}/site-progress`,
       label: "Site Progress",
       icon: ListChecks,
+      tier: "secondary",
+    },
+    {
+      key: "inspection",
+      href: `/mobile/${projectId}/qaqc?tab=pending`,
+      label: "QA / QC",
+      icon: ClipboardCheck,
       tier: "secondary",
     },
     {
