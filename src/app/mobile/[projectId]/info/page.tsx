@@ -113,6 +113,7 @@ export default async function MobileInfoPage({
           title="Inspections Pending Review"
           sub="Awaiting your sign-off"
           count={inspectionsToReview}
+          href={`/projects/${projectId}/qaqc`}
         />
       )}
     </div>
@@ -124,14 +125,19 @@ function ActionRow({
   title,
   sub,
   count,
+  href,
 }: {
   icon: LucideIcon;
   title: string;
   sub: string;
   count: number;
+  /** Optional deep-link. When set the row renders as a Link with a caret;
+   *  when omitted it stays a static counter tile. Prevents dead-taps on
+   *  rows we don't have a mobile target for yet. */
+  href?: string;
 }) {
-  return (
-    <div className="rounded-xl border border-stone-200 bg-white p-4 flex items-center gap-3">
+  const body = (
+    <>
       <span className="w-10 h-10 rounded-lg bg-stone-100 text-stone-600 flex items-center justify-center shrink-0">
         <Icon className="w-5 h-5" />
       </span>
@@ -146,6 +152,16 @@ function ActionRow({
       ) : (
         <span className="text-xs text-stone-400">0</span>
       )}
-    </div>
+      {href && <ArrowRight className="w-4 h-4 text-stone-300 shrink-0" />}
+    </>
   );
+  const shell = "rounded-xl border border-stone-200 bg-white p-4 flex items-center gap-3";
+  if (href) {
+    return (
+      <Link href={href} className={`${shell} active:bg-stone-50`}>
+        {body}
+      </Link>
+    );
+  }
+  return <div className={shell}>{body}</div>;
 }
