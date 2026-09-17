@@ -38,15 +38,24 @@ export async function GET(req: NextRequest) {
   if (!isAdmin(session.user.role)) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
   }
-  if (!session.user.email) {
+  const url = new URL(req.url);
+  const projectIdParam = url.searchParams.get("projectId");
+  const emailParam = url.searchParams.get("email");
+
+  // Recipient: explicit ?email= param wins (useful when the caller is signed
+  // in as a shared test/demo account with no email on file), otherwise the
+  // caller's own email from the session. Basic RFC-ish shape check.
+  const rawTo = emailParam ?? session.user.email ?? null;
+  if (!rawTo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawTo)) {
     return NextResponse.json(
-      { error: "Your account has no email on file — set one in Admin > Users first." },
+      {
+        error:
+          "No email to send to. Either set an email on your account (Admin > Users) or pass ?email=you@company.com in the URL.",
+      },
       { status: 400 },
     );
   }
-
-  const url = new URL(req.url);
-  const projectIdParam = url.searchParams.get("projectId");
+  const to = rawTo;
 
   // Either a specific project via ?projectId=, or the first project that
   // has a schedule loaded — matches what the cron would pick if you had
@@ -127,7 +136,7 @@ export async function GET(req: NextRequest) {
       });
 
     const draft = dailyTasksEmail({
-      to: [session.user.email],
+      to: [to],
       projectName: `${project.name} (PREVIEW)`,
       dashboardUrl: `${SIDDHI_BASE_URL}/projects/${project.id}/overview`,
       items,
@@ -155,7 +164,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    sentTo: session.user.email,
+    sentTo: to,
     asOf: today.toISOString(),
     results,
   });
