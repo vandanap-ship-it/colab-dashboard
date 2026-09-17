@@ -360,10 +360,28 @@ export default function ScorecardView({
               <div className={styles.actBlockHd}>Block {g.blockCode}</div>
               {g.villas.map((v) => {
                 const count = v.activities.length;
+                // Milestone chip in the villa header — matches the
+                // reference PDF's `.sa-mile` label. Reads the FIRST
+                // activity's milestone; when activities on a villa
+                // straddle multiple milestones the chip shows the
+                // most-common one so the label stays informative.
+                const mileCounts = new Map<string, number>();
+                for (const a of v.activities) {
+                  if (!a.milestoneName || a.milestoneName === "—") continue;
+                  mileCounts.set(a.milestoneName, (mileCounts.get(a.milestoneName) ?? 0) + 1);
+                }
+                let milestoneLabel: string | null = null;
+                let best = 0;
+                for (const [name, n] of mileCounts) {
+                  if (n > best) { best = n; milestoneLabel = name; }
+                }
                 return (
                   <div key={v.villaNumber}>
                     <div className={styles.actVillaHd}>
                       <span className={styles.actVillaName}>{v.villaLabel}</span>
+                      {milestoneLabel && (
+                        <span className={styles.actMile}>{milestoneLabel}</span>
+                      )}
                       <span className={styles.actVillaCount}>
                         {count} {count === 1 ? "activity" : "activities"} logged
                       </span>

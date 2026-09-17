@@ -464,6 +464,24 @@
   white-space: nowrap;
 }
 
+/* Milestone chip in the villa header — matches reference .sa-mile.
+   Sits between villa name and activity count. Uses a slightly lighter
+   ivory ground so the chip separates from the sandstone villa header
+   (the reference PDF blends chip on sandstone; we lift a touch for
+   on-screen legibility while keeping the same shape and typography). */
+.actMile {
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sc-ink);
+  background: rgba(255, 250, 240, 0.75);
+  border: 1px solid rgba(202, 159, 73, 0.35);
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* 2-column grid of activity cards — one card per activity */
 .actCards {
   display: grid;
