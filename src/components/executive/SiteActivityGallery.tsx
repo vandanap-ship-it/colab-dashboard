@@ -1,9 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import styles from "./executive.module.css";
+import executiveStyles from "./executive.module.css";
+import galleryStyles from "./siteActivityGallery.module.css";
 import { Lightbox, type Photo } from "@/components/PhotoStrip";
 import type { GalleryDateGroup, GalleryItem } from "@/lib/dashboardSectionsServer";
+
+// Gallery has its own CSS module as of Phase B — 160-odd lines that used to
+// live at the bottom of executive.module.css. Empty-state falls back to the
+// shared .sahEmpty class over on executive.module.css.
+const styles = { ...executiveStyles, ...galleryStyles } as typeof executiveStyles & typeof galleryStyles;
 
 interface Props {
   groups: GalleryDateGroup[];
