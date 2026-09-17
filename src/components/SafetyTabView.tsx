@@ -228,20 +228,28 @@ function SdTile({ label, value, tone }: { label: string; value: number; tone: "g
 // ---------------------------------------------------------------------------
 
 function PermitsCard({ permits, projectId }: { permits: SafetyBundle["permits"]; projectId: string }) {
+  // Type-to-label map for the daily hazard permits surfaced here. Kept in
+  // sync with WORK_PERMIT_TYPE_LABELS in src/lib/workPermit.ts; duplicated
+  // to avoid pulling a client-side import here.
+  const TYPE_LABELS: Record<string, string> = {
+    HOT_WORK: "Hot Work",
+    NIGHT_WORK: "Night Work",
+    DESHUTTERING: "De-shuttering",
+  };
   return (
     <div className={styles.card}>
       <div className={styles.cardHd}>
         Active Safety Permits
         <span className={styles.cardMeta}>
-          {permits.totalActive} active · {permits.expiringSoon} expiring soon · {permits.expired} expired
+          {permits.active} approved · {permits.expiringSoon} awaiting approval · {permits.expired} closed / rejected
         </span>
       </div>
       <div className={styles.cardBd}>
         {permits.permits.length === 0 ? (
           <div className={styles.emptyWithAction}>
-            <div className={styles.empty}>No safety permits recorded yet.</div>
-            <Link href={`/projects/${projectId}/permits`} className={styles.actionBtn}>
-              Manage Permits →
+            <div className={styles.empty}>No safety-relevant work permits raised yet.</div>
+            <Link href={`/projects/${projectId}/work-permits`} className={styles.actionBtn}>
+              Open Work Permits →
             </Link>
           </div>
         ) : (
@@ -251,12 +259,12 @@ function PermitsCard({ permits, projectId }: { permits: SafetyBundle["permits"];
                 <div key={p.id} className={`${styles.permitRow} ${styles[`permitStatus_${p.status}` as keyof typeof styles] ?? ""}`}>
                   <div>
                     <div className={styles.permitName}>{p.name}</div>
-                    {p.number && <div className={styles.permitNumber}>#{p.number}</div>}
+                    <div className={styles.permitNumber}>{TYPE_LABELS[p.category] ?? p.category}</div>
                   </div>
                   <div className={styles.permitExpiry}>
                     {p.expiryDate
-                      ? "expires " + new Date(p.expiryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-                      : "no expiry"}
+                      ? "work day " + new Date(p.expiryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                      : ""}
                   </div>
                   <div className={`${styles.permitStatusPill} ${styles[`permitPill_${p.status}` as keyof typeof styles] ?? ""}`}>
                     {p.status.replace("_", " ")}
@@ -264,8 +272,8 @@ function PermitsCard({ permits, projectId }: { permits: SafetyBundle["permits"];
                 </div>
               ))}
             </div>
-            <Link href={`/projects/${projectId}/permits`} className={styles.actionBtnFullWidth}>
-              View Permit Detail Matrix →
+            <Link href={`/projects/${projectId}/work-permits`} className={styles.actionBtnFullWidth}>
+              Open Work Permits →
             </Link>
           </>
         )}

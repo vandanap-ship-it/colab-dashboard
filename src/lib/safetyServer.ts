@@ -132,15 +132,28 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
       where: { projectId, deletedAt: null },
       select: { actualCount: true, entryDate: true },
     }),
-    prisma.permit.findMany({
-      where: { projectId, deletedAt: null, category: "SAFETY" },
-      orderBy: [{ expiryDate: "asc" }, { name: "asc" }],
+    // §5 sources from WorkPermit — the daily hazard-controlled site permits
+    // (Hot Work, Night Work, De-shuttering) that a safety officer actually
+    // watches on a live project. The old code queried `Permit` with
+    // category="SAFETY", which is the compliance-permit model (fire safety
+    // cert, elevator cert, etc.). Amanvana has none of those in the pilot,
+    // so the tile always read 0 despite 100+ safety-relevant work permits
+    // sitting in the system.
+    //
+    // GENERAL work permits are excluded — they're routine work and don't
+    // carry safety controls.
+    prisma.workPermit.findMany({
+      where: {
+        projectId,
+        deletedAt: null,
+        type: { in: ["HOT_WORK", "NIGHT_WORK", "DESHUTTERING"] },
+      },
+      orderBy: [{ workDate: "desc" }, { createdAt: "desc" }],
       select: {
         id: true,
-        name: true,
-        number: true,
-        category: true,
-        expiryDate: true,
+        title: true,
+        type: true,
+        workDate: true,
         status: true,
       },
     }),
@@ -228,22 +241,40 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
   };
 
   // ------- §5 Active Permits -------
-  const active = permits.filter((p) => p.status === "ACTIVE").length;
-  const expiringSoon = permits.filter((p) => p.status === "EXPIRING_SOON").length;
-  const expired = permits.filter((p) => p.status === "EXPIRED").length;
+  // Map WorkPermit statuses onto the SafetyPermitSummary shape. Fields kept
+  // the same for downstream compatibility but semantics shift to what makes
+  // sense for daily hazard permits:
+  //   active         = APPROVED — currently allowed to work
+  //   expiringSoon   = PENDING  — needs an approver's attention
+  //   expired        = REJECTED + CLOSED — off the board
+  //   totalActive    = APPROVED + PENDING (things still in flight)
+  //
+  // The "expiryDate" column becomes workDate (the day the permit is
+  // authorized for) so the list still reads sensibly.
+  const active = permits.filter((p) => p.status === "APPROVED").length;
+  const pending = permits.filter((p) => p.status === "PENDING").length;
+  const rejectedOrClosed = permits.filter((p) => p.status === "REJECTED" || p.status === "CLOSED").length;
   const permitsOut: SafetyPermitSummary = {
     active,
-    expiringSoon,
-    expired,
-    totalActive: active + expiringSoon,
-    permits: permits.map((p) => ({
-      id: p.id,
-      name: p.name,
-      number: p.number,
-      category: p.category,
-      expiryDate: p.expiryDate?.toISOString() ?? null,
-      status: p.status,
-    })),
+    expiringSoon: pending,
+    expired: rejectedOrClosed,
+    totalActive: active + pending,
+    // Front-load PENDING (need attention) then APPROVED, then others.
+    permits: [...permits]
+      .sort((a, b) => {
+        const rank = (s: string) => (s === "PENDING" ? 0 : s === "APPROVED" ? 1 : 2);
+        const rd = rank(a.status) - rank(b.status);
+        if (rd !== 0) return rd;
+        return b.workDate.getTime() - a.workDate.getTime();
+      })
+      .map((p) => ({
+        id: p.id,
+        name: p.title,
+        number: null,
+        category: p.type,
+        expiryDate: p.workDate.toISOString(),
+        status: p.status,
+      })),
   };
 
   // ------- §6 Submissions trend (placeholder) -------
