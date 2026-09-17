@@ -20,6 +20,10 @@ const PatchUserSchema = z.object({
   // and Safety contractor-performance rollups when a WBS row has no
   // contractor tag on it (Colab imports).
   contractorId: z.string().min(1).nullable().optional(),
+  // Daily-automation opt-ins. Toggling either from Admin > Users grows or
+  // shrinks the recipient set for the two crons without any code change.
+  receivesDailyTaskEmail: z.boolean().optional(),
+  receivesDailyNudge: z.boolean().optional(),
   expectedUpdatedAt: z.string().optional(),
 });
 
@@ -31,7 +35,11 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
   const { id } = await ctx.params;
   const parsed = await parseBody(req, PatchUserSchema);
   if (!parsed.ok) return parsed.response;
-  const { name, role, active, designation, modules, contractorId, expectedUpdatedAt } = parsed.data;
+  const {
+    name, role, active, designation, modules, contractorId,
+    receivesDailyTaskEmail, receivesDailyNudge,
+    expectedUpdatedAt,
+  } = parsed.data;
 
   const data: {
     name?: string;
@@ -40,6 +48,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
     designation?: string | null;
     modules?: string | null;
     contractorId?: string | null;
+    receivesDailyTaskEmail?: boolean;
+    receivesDailyNudge?: boolean;
   } = {};
   if (name !== undefined) data.name = name.trim();
   if (role !== undefined) data.role = role;
@@ -49,6 +59,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
   }
   if (modules !== undefined) data.modules = serializeModules(modules);
   if (contractorId !== undefined) data.contractorId = contractorId;
+  if (receivesDailyTaskEmail !== undefined) data.receivesDailyTaskEmail = receivesDailyTaskEmail;
+  if (receivesDailyNudge !== undefined) data.receivesDailyNudge = receivesDailyNudge;
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });

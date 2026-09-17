@@ -2,16 +2,13 @@
 // Daily progress + manpower nudge — Vercel Cron endpoint.
 //
 // Fires at 11:30 IST Monday to Saturday (06:00 UTC Mon-Sat, per
-// vercel.json). Two named users log daily site progress + manpower
-// for White Lotus — Harish BS and Madhavarajan Soundararajan.
-// Either one may log; the nudge treats them as a team: if either
-// has logged a ProgressEntry OR a ManpowerEntry today (IST calendar),
-// neither gets pushed. If neither has logged, both get a friendly
-// push nudge on any subscribed device.
+// vercel.json). Recipient set is every active User with
+// receivesDailyNudge=true — Admin > Users owns the toggle. The nudge
+// treats the group as a team: if ANY recipient has logged a ProgressEntry
+// or ManpowerEntry today (IST calendar), NONE get pushed. If none has
+// logged, everyone gets a friendly push nudge on any subscribed device.
 //
-// Skips Sundays (site off-days). When the team grows past the two
-// named loggers, replace NUDGE_USERNAMES with a `User.receivesDailyNudge`
-// flag rather than growing this list.
+// Skips Sundays (site off-days).
 // ---------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
@@ -21,8 +18,6 @@ import { istDayStart } from "@/lib/istDay";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const NUDGE_USERNAMES = ["harish.bs", "madhavarajan.s"];
 
 export async function GET(req: NextRequest) {
   // Same fail-closed CRON_SECRET pattern as the overdue-digest endpoint.
@@ -58,7 +53,7 @@ export async function GET(req: NextRequest) {
   const loggers = await prisma.user.findMany({
     where: {
       active: true,
-      username: { in: NUDGE_USERNAMES },
+      receivesDailyNudge: true,
     },
     select: { id: true, name: true, username: true },
   });

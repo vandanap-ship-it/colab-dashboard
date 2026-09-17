@@ -18,6 +18,11 @@ type UserRow = {
   // and issues in QA/QC + EHS Contractor Performance matrices.
   contractorId: string | null;
   contractor: { id: string; name: string; project: { id: string; name: string } } | null;
+  // Opt-in flags for the daily site-team automations. Setting either from
+  // here adds or removes the user from the corresponding cron's recipient
+  // set without any code change.
+  receivesDailyTaskEmail: boolean;
+  receivesDailyNudge: boolean;
 };
 
 type ContractorOption = {
@@ -68,6 +73,29 @@ export default function UsersAdmin() {
     load();
     loadContractors();
   }, [load, loadContractors]);
+
+  async function toggleDailyFlag(
+    u: UserRow,
+    flag: "receivesDailyTaskEmail" | "receivesDailyNudge",
+    next: boolean,
+  ) {
+    const res = await fetch(`/api/admin/users/${u.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [flag]: next, expectedUpdatedAt: u.updatedAt }),
+    });
+    if (res.status === 409) {
+      alert("Another admin just edited this user. Refreshing so you see the latest.");
+      load();
+      return;
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setError(data?.error ?? "Failed");
+      return;
+    }
+    load();
+  }
 
   async function changeContractor(u: UserRow, newContractorId: string | null) {
     const res = await fetch(`/api/admin/users/${u.id}`, {
@@ -309,6 +337,12 @@ export default function UsersAdmin() {
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">Role</th>
                 <th className="px-4 py-2 font-medium">Contractor</th>
+                <th
+                  className="px-4 py-2 font-medium"
+                  title="Daily automations opt-in. TASK = 07:00 IST 'today's schedule' email. NUDGE = 11:30 IST push if progress/manpower not yet logged."
+                >
+                  Daily
+                </th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium text-right">Actions</th>
               </tr>
@@ -387,6 +421,26 @@ export default function UsersAdmin() {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-3 text-[10px] uppercase tracking-wider text-stone-600">
+                        <label className="inline-flex items-center gap-1 cursor-pointer" title="07:00 IST 'today's site tasks' email">
+                          <input
+                            type="checkbox"
+                            checked={u.receivesDailyTaskEmail}
+                            onChange={(e) => toggleDailyFlag(u, "receivesDailyTaskEmail", e.target.checked)}
+                          />
+                          Task
+                        </label>
+                        <label className="inline-flex items-center gap-1 cursor-pointer" title="11:30 IST 'log today's progress' push nudge">
+                          <input
+                            type="checkbox"
+                            checked={u.receivesDailyNudge}
+                            onChange={(e) => toggleDailyFlag(u, "receivesDailyNudge", e.target.checked)}
+                          />
+                          Nudge
+                        </label>
+                      </div>
                     </td>
                     <td className="px-4 py-2">
                       <span

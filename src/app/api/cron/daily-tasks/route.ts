@@ -7,10 +7,10 @@
 // and mails the list to Harish + Madhavarajan so the site team walks in
 // knowing what's on today's list.
 //
-// Recipient list matches the daily push-nudge allowlist (both endpoints
-// target the two site engineers who actually log for White Lotus). If the
-// team grows, replace TASK_RECIPIENT_USERNAMES with a User.receivesDailyTaskEmail
-// flag rather than growing the array.
+// Recipient set is now User.receivesDailyTaskEmail — toggled from
+// Admin > Users. Follow-up on Phase B: replaces the earlier hardcoded
+// ["harish.bs", "madhavarajan.s"] username allowlist so the team can grow
+// without editing shipped code.
 // ---------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
@@ -29,8 +29,6 @@ const SIDDHI_BASE_URL =
   process.env.NEXT_PUBLIC_APP_URL ??
   process.env.NEXTAUTH_URL ??
   "https://siddhi-whitelotus.vercel.app";
-
-const TASK_RECIPIENT_USERNAMES = ["harish.bs", "madhavarajan.s"];
 
 export async function GET(req: NextRequest) {
   // Same fail-closed auth as the other two cron endpoints.
@@ -52,12 +50,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ skipped: "Sunday", asOf: today.toISOString() });
   }
 
-  // Resolve recipient emails from the User table so a rename / deactivation
-  // in Admin doesn't leave us mailing to stale addresses.
+  // Recipient set is every active User with receivesDailyTaskEmail=true.
+  // Admin > Users owns the setting; no code change needed to add or drop
+  // recipients.
   const recipients = await prisma.user.findMany({
     where: {
       active: true,
-      username: { in: TASK_RECIPIENT_USERNAMES },
+      receivesDailyTaskEmail: true,
       email: { not: null },
     },
     select: { email: true, name: true, username: true },

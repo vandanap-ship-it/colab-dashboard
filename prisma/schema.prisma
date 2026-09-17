@@ -23,6 +23,13 @@ model User {
   // tag (Colab imports come in like that). Nullable for internal staff
   // and for any user we haven't tagged yet.
   contractorId String?
+  // Opt-in flags for daily site-team automations. Both replace hardcoded
+  // username allowlists in the cron endpoints — Admin > Users toggles
+  // the same setting so the set of recipients isn't buried in code.
+  //   receivesDailyTaskEmail = 07:00 IST "today's schedule" email
+  //   receivesDailyNudge     = 11:30 IST push if no progress/manpower logged
+  receivesDailyTaskEmail Boolean @default(false)
+  receivesDailyNudge     Boolean @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

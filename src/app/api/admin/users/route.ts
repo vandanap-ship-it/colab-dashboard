@@ -33,6 +33,8 @@ export async function GET() {
       modules: true, active: true, createdAt: true, updatedAt: true,
       contractorId: true,
       contractor: { select: { id: true, name: true, project: { select: { id: true, name: true } } } },
+      receivesDailyTaskEmail: true,
+      receivesDailyNudge: true,
     },
   });
   return NextResponse.json({ users });
@@ -64,6 +66,8 @@ export async function POST(req: Request) {
       modules: true, active: true, createdAt: true, updatedAt: true,
       contractorId: true,
       contractor: { select: { id: true, name: true, project: { select: { id: true, name: true } } } },
+      receivesDailyTaskEmail: true,
+      receivesDailyNudge: true,
     },
   });
 
