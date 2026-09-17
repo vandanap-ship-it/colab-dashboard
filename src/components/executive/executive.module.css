@@ -1525,30 +1525,59 @@
 }
 
 /* ---------- SITE ACTIVITY GALLERY ---------- */
-/* Full project photo wall — chronological grid, month-grouped for
-   scroll orientation. One tile per photo, not per progress entry. */
-.galleryWrap { display: flex; flex-direction: column; gap: 24px; }
+/* Full project photo wall — two-level grouping: DATE > BLOCK.
+   One tile per photo, not per progress entry. */
+.galleryWrap { display: flex; flex-direction: column; gap: 28px; }
 
-.gallerySection { display: flex; flex-direction: column; gap: 10px; }
+.galleryDateSection { display: flex; flex-direction: column; gap: 14px; }
 
-.galleryMonthHd {
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ex-ink-3);
+/* Date header — bold, dark, ferrous underline (matches scorecard §04's
+   .actBlockHd editorial treatment so the two surfaces read alike). */
+.galleryDateHd {
+  font-size: 15px;
   font-weight: 700;
+  color: var(--ex-ink);
+  letter-spacing: -0.005em;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--ex-rule);
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--ex-ferrous, #965532);
 }
-.galleryMonthCount {
+.galleryDateCount {
   font-size: 10.5px;
   color: var(--ex-ink-3);
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.galleryBlockSection { display: flex; flex-direction: column; gap: 8px; }
+
+/* Block sub-header — sandstone pill, quiet uppercase (matches
+   scorecard §04's .actVillaHd for consistency). */
+.galleryBlockHd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--ex-rule-soft);
+  border: 1px solid var(--ex-rule);
+  border-radius: 8px;
+  padding: 7px 12px;
+}
+.galleryBlockName {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ex-ink);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.galleryBlockCount {
+  font-size: 10.5px;
+  color: var(--ex-ink-3);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 

@@ -8,7 +8,7 @@ import { adaptDashboardBag, getExecutiveExtras } from "@/lib/executiveDataAdapte
 import { getBlockDetail, getVillaDetailByNumber } from "@/lib/detailServer";
 import { getContractorDelayReasonGroups, getDelayReasonClusters } from "@/lib/delayReasons";
 import { getDashboardManpowerStrip } from "@/lib/manpowerServer";
-import { getMilestoneProgress, getSiteActivityGallery } from "@/lib/dashboardSectionsServer";
+import { getMilestoneProgress, getSiteActivityGalleryGrouped } from "@/lib/dashboardSectionsServer";
 import {
   BLOCKS,
   CONTRACTORS,
@@ -53,7 +53,7 @@ export default async function OverviewPage({
     getContractorDelayReasonGroups(id).catch(() => []),
     getDashboardManpowerStrip(id),
     getMilestoneProgress(id).catch(() => []),
-    getSiteActivityGallery(id).catch(() => []),
+    getSiteActivityGalleryGrouped(id).catch(() => []),
   ]);
 
   const overview = bag

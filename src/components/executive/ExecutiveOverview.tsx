@@ -13,7 +13,7 @@ import type { ContractorDelayReasonGroup, DelayReasonCluster } from "@/lib/delay
 import DelayReasonsCard from "./DelayReasonsCard";
 import DashboardLegend from "./DashboardLegend";
 import SiteActivityGallery from "./SiteActivityGallery";
-import type { GalleryItem, MilestoneProgressRow } from "@/lib/dashboardSectionsServer";
+import type { GalleryDateGroup, MilestoneProgressRow } from "@/lib/dashboardSectionsServer";
 
 export interface ManpowerStrip {
   planned: number;
@@ -32,9 +32,9 @@ export interface ExecutiveOverviewProps {
   reasonClustersByContractor: ContractorDelayReasonGroup[];
   manpowerStrip: ManpowerStrip;
   milestoneProgress: MilestoneProgressRow[];
-  /** Flat, month-grouped list of every uploaded photo — replaces the
-   *  "today only" grouped highlights, per Shraddha's Sep 17 note. */
-  siteActivity: GalleryItem[];
+  /** Every uploaded photo on the project, grouped date > block. Replaces
+   *  the "today only" highlights, per Shraddha's Sep 17 note. */
+  siteActivity: GalleryDateGroup[];
   /** Project display name — used in the Site Activity lightbox's caption
    *  strip and in composed download filenames. Optional so callers that
    *  don't have it fall back to a plain-project label. */
@@ -419,7 +419,7 @@ export default function ExecutiveOverview({
         </div>
         <div className={styles.cardBd}>
           <SiteActivityGallery
-            items={siteActivity}
+            groups={siteActivity}
             projectName={projectName ?? "Project"}
           />
         </div>

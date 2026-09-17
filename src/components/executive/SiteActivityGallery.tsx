@@ -3,70 +3,76 @@
 import { useState } from "react";
 import styles from "./executive.module.css";
 import { Lightbox, type Photo } from "@/components/PhotoStrip";
-import type { GalleryItem } from "@/lib/dashboardSectionsServer";
+import type { GalleryDateGroup, GalleryItem } from "@/lib/dashboardSectionsServer";
 
 interface Props {
-  items: GalleryItem[];
+  groups: GalleryDateGroup[];
   projectName: string;
 }
 
 /**
- * Chronological grid of every site-activity photo in the project, newest
- * first. Replaces the older "today only" grouped highlights on the
- * Dashboard — Shraddha asked for a proper gallery of everything uploaded.
+ * Chronological photo wall of every site-activity image in the project.
+ * Two-level grouping per Shraddha's Sep 17 note: outer sections are DATE,
+ * inner sub-sections are BLOCK. Within a block, one tile per photo (a
+ * progress entry with 5 photos = 5 tiles, so the grid reads as a wall
+ * of shots rather than a stack of collapsed cards).
  *
- * One tile per photo, not per entry (an entry with 5 photos = 5 tiles), so
- * the grid reads as a photo wall rather than a stack of cards. Clicking a
- * tile opens the same PhotoStrip lightbox used on the scorecard §04 cards:
- * caption strip with block · villa · activity · date, arrow keys navigate
- * the entry's sibling photos, Download composes a descriptive filename.
- *
- * Grouping by month header keeps a long scroll orientable without paging.
+ * Clicking a tile opens the same PhotoStrip Lightbox used on scorecard
+ * §04: caption strip (block · villa · activity · date · %), arrow keys
+ * navigate the entry's sibling photos, Download composes a descriptive
+ * filename.
  */
-export default function SiteActivityGallery({ items, projectName }: Props) {
+export default function SiteActivityGallery({ groups, projectName }: Props) {
   const [lightbox, setLightbox] = useState<{ photos: Photo[]; index: number } | null>(null);
 
-  if (items.length === 0) {
+  if (groups.length === 0) {
     return (
       <div className={styles.sahEmpty}>
         No photos uploaded yet. As the site team logs progress on their
-        phones, every photo will surface here — newest first.
+        phones, every photo will surface here — grouped by date and block,
+        newest first.
       </div>
     );
   }
 
-  // Group by month for scroll orientation.
-  const monthBuckets = new Map<string, GalleryItem[]>();
-  for (const it of items) {
-    const key = monthKey(it.entryDate);
-    if (!monthBuckets.has(key)) monthBuckets.set(key, []);
-    monthBuckets.get(key)!.push(it);
-  }
-  const months = [...monthBuckets.keys()]; // insertion order = newest first
-
   return (
     <>
       <div className={styles.galleryWrap}>
-        {months.map((m) => (
-          <div key={m} className={styles.gallerySection}>
-            <div className={styles.galleryMonthHd}>
-              {monthLabel(m)}
-              <span className={styles.galleryMonthCount}>
-                {monthBuckets.get(m)!.length} photo{monthBuckets.get(m)!.length === 1 ? "" : "s"}
-              </span>
-            </div>
-            <div className={styles.galleryGrid}>
-              {monthBuckets.get(m)!.map((it) => (
-                <GalleryTile
-                  key={`${it.progressEntryId}::${it.photoId}`}
-                  item={it}
-                  projectName={projectName}
-                  onOpen={(photos, index) => setLightbox({ photos, index })}
-                />
+        {groups.map((dateGroup) => {
+          const totalPhotos = dateGroup.blocks.reduce((n, b) => n + b.items.length, 0);
+          return (
+            <div key={dateGroup.dateISO} className={styles.galleryDateSection}>
+              <div className={styles.galleryDateHd}>
+                {fmtDateLong(dateGroup.dateISO)}
+                <span className={styles.galleryDateCount}>
+                  {totalPhotos} photo{totalPhotos === 1 ? "" : "s"} · {dateGroup.blocks.length} block{dateGroup.blocks.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              {dateGroup.blocks.map((block) => (
+                <div key={block.blockCode} className={styles.galleryBlockSection}>
+                  <div className={styles.galleryBlockHd}>
+                    <span className={styles.galleryBlockName}>
+                      {block.blockCode === "Untagged" ? "Untagged" : `Block ${block.blockCode}`}
+                    </span>
+                    <span className={styles.galleryBlockCount}>
+                      {block.items.length} photo{block.items.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <div className={styles.galleryGrid}>
+                    {block.items.map((it) => (
+                      <GalleryTile
+                        key={`${it.progressEntryId}::${it.photoId}`}
+                        item={it}
+                        projectName={projectName}
+                        onOpen={(photos, index) => setLightbox({ photos, index })}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {lightbox && (
@@ -119,32 +125,21 @@ function GalleryTile({
       )}
       <div className={styles.galleryOverlay}>
         <div className={styles.galleryOverlayTop}>
-          {item.blockCode && (
-            <span className={styles.galleryChip}>Block {item.blockCode}</span>
-          )}
           <span className={styles.galleryChip}>{item.villaLabel}</span>
         </div>
         <div className={styles.galleryOverlayBot}>
           <div className={styles.galleryActivity}>{item.activityName}</div>
-          <div className={styles.galleryDate}>{fmtShortDate(item.entryDate)}</div>
         </div>
       </div>
     </button>
   );
 }
 
-function monthKey(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-function monthLabel(key: string): string {
-  const [y, m] = key.split("-").map(Number);
-  return `${MONTHS[m - 1]} ${y}`;
-}
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function fmtShortDate(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+function fmtDateLong(dateISO: string): string {
+  const [y, m, d] = dateISO.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return `${DAYS[dt.getUTCDay()]}, ${dt.getUTCDate()} ${MONTHS[dt.getUTCMonth()]} ${dt.getUTCFullYear()}`;
 }

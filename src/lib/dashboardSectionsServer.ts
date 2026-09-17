@@ -340,6 +340,45 @@ export interface GalleryItem {
   notes: string | null;
 }
 
+/** Two-level bucket used by the gallery view — date first, then block. */
+export interface GalleryDateGroup {
+  dateISO: string;   // YYYY-MM-DD (UTC midnight of the entry date)
+  blocks: {
+    blockCode: string;
+    items: GalleryItem[];
+  }[];
+}
+
+/** Two-level grouped variant of the gallery: date > block > items.
+ *  Returned in reverse-chronological order (newest date first, newest
+ *  block within date first by insertion). */
+export async function getSiteActivityGalleryGrouped(
+  projectId: string,
+  opts: { limit?: number } = {},
+): Promise<GalleryDateGroup[]> {
+  const items = await getSiteActivityGallery(projectId, opts);
+  const byDate = new Map<string, Map<string, GalleryItem[]>>();
+  for (const it of items) {
+    const dateISO = it.entryDate.slice(0, 10);
+    if (!byDate.has(dateISO)) byDate.set(dateISO, new Map());
+    const blocks = byDate.get(dateISO)!;
+    const block = it.blockCode ?? "Untagged";
+    if (!blocks.has(block)) blocks.set(block, []);
+    blocks.get(block)!.push(it);
+  }
+  return [...byDate.entries()].map(([dateISO, blocks]) => ({
+    dateISO,
+    blocks: [...blocks.entries()]
+      .sort(([a], [b]) => {
+        // Numeric-aware block sort ("Block 3A" before "Block 10"), Untagged last.
+        if (a === "Untagged") return 1;
+        if (b === "Untagged") return -1;
+        return a.localeCompare(b, undefined, { numeric: true });
+      })
+      .map(([blockCode, groupItems]) => ({ blockCode, items: groupItems })),
+  }));
+}
+
 export async function getSiteActivityGallery(
   projectId: string,
   opts: { limit?: number } = {},
