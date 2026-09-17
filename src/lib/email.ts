@@ -343,6 +343,116 @@ export interface OverdueDigestInput {
   asOf: Date;
 }
 
+// ---------------------------------------------------------------------------
+// Flow 4 — Today's site tasks (morning brief to site engineers)
+//
+// Fires at 07:00 IST Mon-Sat via /api/cron/daily-tasks. Recipient list is
+// scoped narrowly to the two people who actually log site progress for
+// White Lotus (Harish + Madhavarajan) — matches the daily push-nudge
+// allowlist so nobody gets pinged twice unless they own it.
+// ---------------------------------------------------------------------------
+
+export interface DailyTaskItem {
+  villaLabel: string;
+  blockCode: string | null;
+  activityName: string;
+  contractorName: string | null;
+  baselineFinish: Date | null;
+  percentComplete: number;
+}
+
+export interface DailyTasksInput {
+  to: string[];
+  projectName: string;
+  dashboardUrl: string;
+  items: DailyTaskItem[];
+  asOf: Date;
+}
+
+export function dailyTasksEmail(input: DailyTasksInput): SendEmailInput | null {
+  if (input.items.length === 0) return null;
+
+  const fmt = fmtDate;
+  // Group by block, then villa — same shape as the site activity report
+  // Shraddha already reads. Keeps the mail scannable when there are 50+
+  // rows (whole block worth of work) instead of a flat wall of lines.
+  const byBlock = new Map<string, Map<string, DailyTaskItem[]>>();
+  for (const it of input.items) {
+    const b = it.blockCode ?? "Untagged";
+    if (!byBlock.has(b)) byBlock.set(b, new Map());
+    const villas = byBlock.get(b)!;
+    if (!villas.has(it.villaLabel)) villas.set(it.villaLabel, []);
+    villas.get(it.villaLabel)!.push(it);
+  }
+  const blockOrder = [...byBlock.keys()].sort();
+
+  const blocks = blockOrder
+    .map((blockCode) => {
+      const villas = byBlock.get(blockCode)!;
+      const villaBlocks = [...villas.entries()]
+        .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+        .map(([villaLabel, rows]) => {
+          const rowsHtml = rows
+            .map(
+              (r) => `
+                <tr style="border-bottom:1px solid ${RULE};">
+                  <td style="padding:6px 8px; color:${INK};"><strong>${r.activityName}</strong></td>
+                  <td style="padding:6px 8px; color:${INK_2}; font-size:12px;">${r.contractorName ?? "—"}</td>
+                  <td style="padding:6px 8px; color:${INK_2}; font-size:12px; white-space:nowrap; text-align:right;">
+                    ${r.baselineFinish ? "ends " + fmt(r.baselineFinish) : "—"}
+                  </td>
+                  <td style="padding:6px 8px; text-align:right; color:${INK_2}; font-size:12px;">${Math.round(r.percentComplete)}%</td>
+                </tr>`,
+            )
+            .join("");
+          return `
+            <tr><td colspan="4" style="padding:12px 8px 4px; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:${INK_2}; font-weight:600;">
+              ${villaLabel}
+            </td></tr>
+            ${rowsHtml}
+          `;
+        })
+        .join("");
+      return `
+        <p style="margin: 18px 0 4px; font-size: 13.5px; font-weight: 700; color: ${INK};
+                  border-bottom: 2px solid ${BRAND_AMBER}; padding-bottom: 4px;">
+          Block ${blockCode}
+        </p>
+        <table role="presentation" cellpadding="0" cellspacing="0"
+               style="border-collapse: collapse; width: 100%; font-size: 12.5px;">
+          <tbody>${villaBlocks}</tbody>
+        </table>
+      `;
+    })
+    .join("");
+
+  const totalVillas = new Set(input.items.map((i) => i.villaLabel)).size;
+  const totalBlocks = byBlock.size;
+
+  return {
+    to: input.to,
+    subject: `[Siddhi] Today's site tasks · ${input.projectName} — ${fmt(input.asOf)}`,
+    html: shell({
+      preheader: `${input.items.length} activities planned across ${totalVillas} villas today.`,
+      headline: `Today's site tasks`,
+      bodyHtml: `
+        <p><strong>${input.projectName}</strong> · ${fmt(input.asOf)}</p>
+        <p style="color:${INK_2}; margin-top: 4px;">
+          <strong style="color:${INK};">${input.items.length}</strong> activities planned across
+          <strong style="color:${INK};">${totalVillas}</strong> villa${totalVillas === 1 ? "" : "s"} in
+          <strong style="color:${INK};">${totalBlocks}</strong> block${totalBlocks === 1 ? "" : "s"}.
+          These are the line items in today's schedule window.
+        </p>
+        ${blocks}
+      `,
+      cta: { text: "Open dashboard", url: input.dashboardUrl },
+      footer: `Automated from Siddhi — sent to Harish and Madhavarajan every weekday morning.<br>
+               Reply to this thread if the list looks off, or say "stop" to opt out.`,
+    }),
+  };
+}
+
+// Flow 3 builder — the interfaces above sit next to the shared cron file.
 export function overdueDigestEmail(input: OverdueDigestInput): SendEmailInput | null {
   if (input.items.length === 0) return null;  // nothing to send
 
