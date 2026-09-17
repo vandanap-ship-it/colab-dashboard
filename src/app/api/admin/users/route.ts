@@ -35,6 +35,7 @@ export async function GET() {
       contractor: { select: { id: true, name: true, project: { select: { id: true, name: true } } } },
       receivesDailyTaskEmail: true,
       receivesDailyNudge: true,
+      canApproveWorkPermits: true,
     },
   });
   return NextResponse.json({ users });
@@ -68,6 +69,7 @@ export async function POST(req: Request) {
       contractor: { select: { id: true, name: true, project: { select: { id: true, name: true } } } },
       receivesDailyTaskEmail: true,
       receivesDailyNudge: true,
+      canApproveWorkPermits: true,
     },
   });
 

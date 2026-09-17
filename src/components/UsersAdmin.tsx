@@ -23,6 +23,8 @@ type UserRow = {
   // set without any code change.
   receivesDailyTaskEmail: boolean;
   receivesDailyNudge: boolean;
+  // Shows this user in the mobile Raise Permit approver picker.
+  canApproveWorkPermits: boolean;
 };
 
 type ContractorOption = {
@@ -76,7 +78,7 @@ export default function UsersAdmin() {
 
   async function toggleDailyFlag(
     u: UserRow,
-    flag: "receivesDailyTaskEmail" | "receivesDailyNudge",
+    flag: "receivesDailyTaskEmail" | "receivesDailyNudge" | "canApproveWorkPermits",
     next: boolean,
   ) {
     const res = await fetch(`/api/admin/users/${u.id}`, {
@@ -339,9 +341,9 @@ export default function UsersAdmin() {
                 <th className="px-4 py-2 font-medium">Contractor</th>
                 <th
                   className="px-4 py-2 font-medium"
-                  title="Daily automations opt-in. TASK = 07:00 IST 'today's schedule' email. NUDGE = 11:30 IST push if progress/manpower not yet logged."
+                  title="TASK = 07:00 IST 'today's schedule' email. NUDGE = 11:30 IST push if nothing logged. APPROVE = shows up in the mobile Raise Permit approver picker."
                 >
-                  Daily
+                  Flags
                 </th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium text-right">Actions</th>
@@ -439,6 +441,14 @@ export default function UsersAdmin() {
                             onChange={(e) => toggleDailyFlag(u, "receivesDailyNudge", e.target.checked)}
                           />
                           Nudge
+                        </label>
+                        <label className="inline-flex items-center gap-1 cursor-pointer" title="Shown in the mobile Raise Permit approver picker">
+                          <input
+                            type="checkbox"
+                            checked={u.canApproveWorkPermits}
+                            onChange={(e) => toggleDailyFlag(u, "canApproveWorkPermits", e.target.checked)}
+                          />
+                          Approve
                         </label>
                       </div>
                     </td>

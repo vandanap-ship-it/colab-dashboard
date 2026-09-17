@@ -30,6 +30,11 @@ model User {
   //   receivesDailyNudge     = 11:30 IST push if no progress/manpower logged
   receivesDailyTaskEmail Boolean @default(false)
   receivesDailyNudge     Boolean @default(false)
+  // Whether this user is offered in the Work Permit approver picker. Replaces
+  // the old "every internal-staff user is an eligible approver" default so
+  // authority stays with the site manager(s) actually responsible for the
+  // approve/reject decision.
+  canApproveWorkPermits  Boolean @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

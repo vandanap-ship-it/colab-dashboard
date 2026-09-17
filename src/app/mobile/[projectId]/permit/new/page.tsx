@@ -29,11 +29,19 @@ export default async function NewWorkPermitPage({
   });
   if (!project) notFound();
 
-  // Approvers = active internal staff (modules is NULL — full access).
-  // Scoped external contractors are barred from being approvers, matching
-  // the API-side check that refuses approve/reject from a scoped user.
+  // Approvers = active internal-staff users tagged with
+  // canApproveWorkPermits=true. Was "every internal user" (`modules: null`)
+  // pre-Sep 17 — Shraddha asked for the picker to only show the site
+  // manager(s) actually authorised to approve. Admin > Users toggles the
+  // flag; the API's approve/reject gate still guards the server-side
+  // decision independently, so this is a UX narrowing rather than a
+  // security boundary.
   const users = await prisma.user.findMany({
-    where: { active: true, modules: null },
+    where: {
+      active: true,
+      modules: null,
+      canApproveWorkPermits: true,
+    },
     select: { id: true, name: true, username: true, role: true },
     orderBy: { name: "asc" },
   });

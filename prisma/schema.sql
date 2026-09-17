@@ -15,6 +15,7 @@ CREATE TABLE "User" (
     "contractorId" TEXT,
     "receivesDailyTaskEmail" BOOLEAN NOT NULL DEFAULT false,
     "receivesDailyNudge" BOOLEAN NOT NULL DEFAULT false,
+    "canApproveWorkPermits" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

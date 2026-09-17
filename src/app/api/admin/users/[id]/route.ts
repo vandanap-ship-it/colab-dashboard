@@ -24,6 +24,9 @@ const PatchUserSchema = z.object({
   // shrinks the recipient set for the two crons without any code change.
   receivesDailyTaskEmail: z.boolean().optional(),
   receivesDailyNudge: z.boolean().optional(),
+  // Whether this user appears in the mobile Raise Permit form's approver
+  // picker. Admin-editable; server-side approve/reject gate is independent.
+  canApproveWorkPermits: z.boolean().optional(),
   expectedUpdatedAt: z.string().optional(),
 });
 
@@ -37,7 +40,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
   if (!parsed.ok) return parsed.response;
   const {
     name, role, active, designation, modules, contractorId,
-    receivesDailyTaskEmail, receivesDailyNudge,
+    receivesDailyTaskEmail, receivesDailyNudge, canApproveWorkPermits,
     expectedUpdatedAt,
   } = parsed.data;
 
@@ -50,6 +53,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
     contractorId?: string | null;
     receivesDailyTaskEmail?: boolean;
     receivesDailyNudge?: boolean;
+    canApproveWorkPermits?: boolean;
   } = {};
   if (name !== undefined) data.name = name.trim();
   if (role !== undefined) data.role = role;
@@ -61,6 +65,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
   if (contractorId !== undefined) data.contractorId = contractorId;
   if (receivesDailyTaskEmail !== undefined) data.receivesDailyTaskEmail = receivesDailyTaskEmail;
   if (receivesDailyNudge !== undefined) data.receivesDailyNudge = receivesDailyNudge;
+  if (canApproveWorkPermits !== undefined) data.canApproveWorkPermits = canApproveWorkPermits;
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
