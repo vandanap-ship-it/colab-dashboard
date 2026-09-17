@@ -6,6 +6,8 @@ import { Download } from "lucide-react";
 import styles from "./scorecard.module.css";
 import type { Scorecard } from "@/lib/scorecardServer";
 import { Lightbox, type Photo } from "./PhotoStrip";
+import ScorecardSection from "./scorecard/ScorecardSection";
+import ScorecardActivity from "./scorecard/ScorecardActivity";
 
 export interface ScorecardViewProps {
   scorecard: Scorecard;
@@ -118,7 +120,7 @@ export default function ScorecardView({
       </div>
 
       {/* §1 Daily Site Snapshot — matches Colab reference: 4 tiles */}
-      <Section num="01" title="Daily Site Snapshot" meta={`reporting coverage · ${asOfLabel}`}>
+      <ScorecardSection num="01" title="Daily Site Snapshot" meta={`reporting coverage · ${asOfLabel}`}>
         <div className={styles.snap}>
           <div className={styles.snapCell}>
             <div className={styles.snapKey}>Site progress updated</div>
@@ -151,10 +153,10 @@ export default function ScorecardView({
           count is out of the villas / blocks / contractors that had work
           expected today.
         </div>
-      </Section>
+      </ScorecardSection>
 
       {/* §2 Daily Movement — Contractor-wise Progress + Planned Coverage (sub-panel) */}
-      <Section num="02" title="Daily Movement — Contractor-wise Progress" meta={`progressed vs planned for ${asOfLabel}`}>
+      <ScorecardSection num="02" title="Daily Movement — Contractor-wise Progress" meta={`progressed vs planned for ${asOfLabel}`}>
         <div className={styles.moveCard}>
         <div className={styles.movementHeadline}>
           <strong>{s.dailySnapshot.villasUpdated} / {s.dailySnapshot.villasExpected}</strong> villas executed vs planned
@@ -273,10 +275,10 @@ export default function ScorecardView({
             </>
           )}
         </div>
-      </Section>
+      </ScorecardSection>
 
       {/* §3 Daily Manpower */}
-      <Section num="03" title="Daily Manpower" meta={`present vs planned · ${asOfLabel}${s.manpower.isHoliday ? " · HOLIDAY" : ""}`}>
+      <ScorecardSection num="03" title="Daily Manpower" meta={`present vs planned · ${asOfLabel}${s.manpower.isHoliday ? " · HOLIDAY" : ""}`}>
         {s.manpower.isHoliday && (
           <div className={styles.holidayBanner}>
             <strong>HOLIDAY</strong> — {asOfLabel} is a scheduled holiday. Planned headcount is zero; any workers present are extra coverage.
@@ -344,140 +346,15 @@ export default function ScorecardView({
             </p>
           </div>
         )}
-      </Section>
+      </ScorecardSection>
 
-      {/* §4 Site Activity Highlights */}
-      <Section
-        num="04"
-        title="Site Activity Highlights"
-        meta={`activities logged on ${asOfLabel} · grouped block then villa`}
-      >
-        {s.activityHighlights.length === 0 ? (
-          <div className={styles.empty}>Nothing logged today.</div>
-        ) : (
-          s.activityHighlights.map((g) => (
-            <div key={g.blockCode} className={styles.actGroup}>
-              <div className={styles.actBlockHd}>Block {g.blockCode}</div>
-              {g.villas.map((v) => {
-                const count = v.activities.length;
-                // Milestone chip in the villa header — matches the
-                // reference PDF's `.sa-mile` label. Reads the FIRST
-                // activity's milestone; when activities on a villa
-                // straddle multiple milestones the chip shows the
-                // most-common one so the label stays informative.
-                const mileCounts = new Map<string, number>();
-                for (const a of v.activities) {
-                  if (!a.milestoneName || a.milestoneName === "—") continue;
-                  mileCounts.set(a.milestoneName, (mileCounts.get(a.milestoneName) ?? 0) + 1);
-                }
-                let milestoneLabel: string | null = null;
-                let best = 0;
-                for (const [name, n] of mileCounts) {
-                  if (n > best) { best = n; milestoneLabel = name; }
-                }
-                return (
-                  <div key={v.villaNumber}>
-                    <div className={styles.actVillaHd}>
-                      <span className={styles.actVillaName}>{v.villaLabel}</span>
-                      {milestoneLabel && (
-                        <span className={styles.actMile}>{milestoneLabel}</span>
-                      )}
-                      <span className={styles.actVillaCount}>
-                        {count} {count === 1 ? "activity" : "activities"} logged
-                      </span>
-                    </div>
-                    <div className={styles.actCards}>
-                      {v.activities.map((a) => {
-                        const done = a.achievedPct != null && a.achievedPct >= 100;
-                        const entryDay = new Date(a.entryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-                        const entryFull = new Date(a.entryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-                        const reason = [a.reasonLabel, a.reasonNote].filter(Boolean).join(" · ");
-                        const cardPhotos: Photo[] = (a.photos ?? []).map((p) => ({
-                          id: p.id,
-                          url: p.url,
-                          meta: {
-                            kind: "progress",
-                            project: s.project.name,
-                            block: g.blockCode,
-                            villa: v.villaLabel,
-                            activity: `${a.milestoneName}-${a.activityName}`,
-                            date: a.entryDate,
-                            percent: a.achievedPct ?? undefined,
-                          },
-                        }));
-                        return (
-                          <div key={a.progressEntryId} className={styles.actCard}>
-                            {cardPhotos.length > 0 ? (
-                              <button
-                                type="button"
-                                className={styles.actPhoto}
-                                onClick={() => setLightbox({ photos: cardPhotos, index: 0 })}
-                                aria-label="Open photo"
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={cardPhotos[0].url} alt="" />
-                                {cardPhotos.length > 1 && (
-                                  <span className={styles.actPhotoCount}>+{cardPhotos.length - 1}</span>
-                                )}
-                              </button>
-                            ) : (
-                              <div className={styles.actPhotoStub}>Photo not uploaded</div>
-                            )}
-                            <div className={styles.actInfo}>
-                              <div className={styles.actName}>
-                                {a.milestoneName} · {a.activityName}
-                              </div>
-                              {a.achievedPct != null && (
-                                <div className={styles.actStatus}>
-                                  <span className={`${styles.actPill} ${done ? styles.done : styles.wip}`}>
-                                    {Math.round(a.achievedPct)}% complete · {done ? "done" : "in progress"}
-                                  </span>
-                                </div>
-                              )}
-                              {a.dailyDeltaPct != null && a.dailyDeltaPct > 0 && (
-                                <div className={styles.actDay}>
-                                  {a.dailyDeltaPct}% completed on {entryDay}
-                                </div>
-                              )}
-                              {a.plannedEndDate && (
-                                <div className={styles.actDelay}>
-                                  Planned end {new Date(a.plannedEndDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                                  {a.daysToPlannedEnd != null && a.daysToPlannedEnd < 0 && (
-                                    <> · <b className={styles.actDelayBad}>{done ? "completed" : ""} {Math.abs(a.daysToPlannedEnd)} days {done ? "late" : "overdue"}</b></>
-                                  )}
-                                  {a.daysToPlannedEnd != null && a.daysToPlannedEnd > 0 && (
-                                    <> · {a.daysToPlannedEnd} days to planned end</>
-                                  )}
-                                  {a.daysToPlannedEnd === 0 && (
-                                    <> · <b className={styles.actDelayBad}>due today</b></>
-                                  )}
-                                </div>
-                              )}
-                              {a.notes && (
-                                <div className={styles.actField}>
-                                  <span className={styles.actFieldLbl}>Remark</span>
-                                  {a.notes}
-                                </div>
-                              )}
-                              <div className={styles.actField}>
-                                <span className={styles.actFieldLbl}>Delay Reason</span>
-                                {reason || "—"}
-                              </div>
-                              <div className={styles.actFoot}>
-                                {a.contractorName ?? "Untagged"} · {entryFull}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ))
-        )}
-      </Section>
+      {/* §4 Site Activity Highlights — extracted into ./scorecard/ScorecardActivity.tsx */}
+      <ScorecardActivity
+        activityHighlights={s.activityHighlights}
+        projectName={s.project.name}
+        asOfLabel={asOfLabel}
+        onOpenLightbox={(photos, index) => setLightbox({ photos, index })}
+      />
 
       {/* §5, §6, §7 removed per template — Milestone Progress and Project
           Health live on the Overview / Snapshot tabs; Block-wise Progress
@@ -495,29 +372,6 @@ export default function ScorecardView({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Reusable section shell
-// ---------------------------------------------------------------------------
-
-function Section({
-  num,
-  title,
-  meta,
-  children,
-}: {
-  num: string;
-  title: string;
-  meta?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className={styles.section}>
-      <div className={styles.sectionHd}>
-        <span className={styles.sectionNum}>{num}</span>
-        <span className={styles.sectionTitle}>{title}</span>
-        {meta && <div className={styles.sectionMeta}>{meta}</div>}
-      </div>
-      <div className={styles.sectionBody}>{children}</div>
-    </section>
-  );
-}
+// Section shell lives in ./scorecard/ScorecardSection.tsx as of Phase B.
+// §04's ~130 lines of activity-card render also live there
+// (./scorecard/ScorecardActivity.tsx).
