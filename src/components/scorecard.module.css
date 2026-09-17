@@ -203,42 +203,71 @@
 }
 .sectionBody { padding: 14px 18px 16px; }
 
-/* -------------- §1 Daily snapshot cells -------------- */
+/* -------------- §1 Daily snapshot — charcoal card, white numbers,
+   sandstone/cement labels. Matches Shraddha's reference PDF exactly
+   (Sep 15 Site Progress Scorecard). Was gold-on-ivory before, which
+   she flagged as low-contrast and off-template. -------------- */
 .snap {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 14px;
+  background: var(--sc-deep);
+  color: #FFFFFF;
+  border-radius: 12px;
+  padding: 22px 26px;
+  margin-bottom: 12px;
 }
 .snapCell {
-  padding: 10px 14px;
-  border: 1px solid var(--sc-rule);
-  border-radius: 6px;
-  background: var(--sc-rule-soft);
+  display: flex;
+  flex-direction: column-reverse;   /* label BELOW the value, per reference */
+  gap: 8px;
+  padding: 0 0 0 14px;
+  border: none;
+  border-left: 1px solid rgba(250, 225, 200, 0.18);
+  background: transparent;
+  border-radius: 0;
+}
+.snapCell:first-child {
+  border-left: none;
+  padding-left: 0;
 }
 .snapKey {
   font-size: 10px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--sc-ink-3);
+  color: var(--sc-ink-3);           /* cement */
   font-weight: 700;
-  margin-bottom: 4px;
+  margin-bottom: 0;
+  line-height: 1.3;
 }
 .snapValue {
   font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
-  font-size: 30px;
+  font-size: 28px;
   font-weight: 400;
-  color: var(--sc-gold);
+  color: #FFFFFF;                    /* was gold — now white on charcoal */
   letter-spacing: 0.005em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-.snapValue .of { font-family: "Open Sans", sans-serif; font-size: 14px; color: var(--sc-ink-3); font-weight: 500; margin-left: 4px; }
+.snapValue .of {
+  font-family: "Open Sans", sans-serif;
+  font-size: 15px;
+  color: var(--sc-ink-3);           /* cement */
+  font-weight: 500;
+  margin-left: 4px;
+}
 .snapFoot {
   margin-top: 10px;
   font-size: 10.5px;
   color: var(--sc-ink-3);
   font-style: italic;
   padding: 0 4px;
+}
+/* On very narrow print or mobile, drop to 2-col so numbers stay legible. */
+@media (max-width: 640px) {
+  .snap { grid-template-columns: repeat(2, 1fr); padding: 18px 20px; }
+  .snapCell:nth-child(odd) { border-left: none; padding-left: 0; }
+  .snapCell:nth-child(even) { border-left: 1px solid rgba(250, 225, 200, 0.18); }
 }
 
 /* -------------- §2 Contractor movement table -------------- */
