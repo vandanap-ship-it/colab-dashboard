@@ -1,6 +1,10 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { plannedPercentFor } from "@/lib/schedule";
+import {
+  contractorZoneRollup,
+  weightedOverallProgress,
+} from "@/lib/masterReportMath";
 
 /**
  * Shared helpers for the report pages — date validation, range parsing, and
@@ -761,24 +765,8 @@ async function getMasterReportUncached(
   // so achieved% would balloon (89.5% on Amanvana this afternoon while the
   // real weighted progress is ~1.5%). Fixed by reading weightPct and
   // summing across every leaf, same as the dashboard.
-  const weightedLeaves = leaves.filter((l) => l.weightPct != null);
-  let overallPlanned = 0;
-  let overallAchieved = 0;
-  if (weightedLeaves.length > 0) {
-    for (const l of weightedLeaves) {
-      const w = l.weightPct ?? 0;
-      overallAchieved += (w * (l.percentComplete ?? 0)) / 100;
-      overallPlanned  += (w * plannedPercentFor(l.baselineStart, l.baselineFinish, today)) / 100;
-    }
-  } else if (leaves.length > 0) {
-    let plannedSum = 0, achievedSum = 0;
-    for (const l of leaves) {
-      achievedSum += l.percentComplete ?? 0;
-      plannedSum  += plannedPercentFor(l.baselineStart, l.baselineFinish, today);
-    }
-    overallPlanned = plannedSum / leaves.length;
-    overallAchieved = achievedSum / leaves.length;
-  }
+  const { planned: overallPlanned, achieved: overallAchieved } =
+    weightedOverallProgress(leaves, today);
 
   // Signed: positive = days late, negative = days ahead, 0 = on the day.
   // Previously clamped at 0 which made "ahead of schedule" look identical to
@@ -910,44 +898,12 @@ async function getMasterReportUncached(
     );
     for (const cid of contractorIds) {
       const g = contractorGroups.get(cid)!;
-      const cLeaves = g.leaves;
       const cName = nameByContractorId.get(cid) ?? "Untagged";
-
-      const plannedStart = cLeaves.reduce<Date | null>(
-        (min, l) => (l.baselineStart && (!min || l.baselineStart < min) ? l.baselineStart : min),
-        null,
-      );
-      const plannedFinish = cLeaves.reduce<Date | null>(
-        (max, l) => (l.baselineFinish && (!max || l.baselineFinish > max) ? l.baselineFinish : max),
-        null,
-      );
-      const actualStart = cLeaves.reduce<Date | null>(
-        (min, l) => (l.actualStart && (!min || l.actualStart < min) ? l.actualStart : min),
-        null,
-      );
-      const projectedFinish = cLeaves.reduce<Date | null>((max, l) => {
-        const cand = l.actualFinish ?? l.projectedFinish ?? l.baselineFinish;
-        if (!cand) return max;
-        return !max || cand > max ? cand : max;
-      }, null);
-      const actualPercent =
-        cLeaves.length === 0
-          ? 0
-          : cLeaves.reduce((s, l) => s + (l.percentComplete ?? 0), 0) / cLeaves.length;
-      const totalDelayDays =
-        plannedFinish && projectedFinish ? (diffDays(projectedFinish, plannedFinish) ?? 0) : 0;
-
+      const rollup = contractorZoneRollup(g.leaves);
       perZone.push({
         id: cid,
         name: cName,
-        plannedStart,
-        plannedFinish,
-        plannedDurationDays: diffDays(plannedFinish, plannedStart),
-        actualStart,
-        projectedFinish,
-        actualDurationDays: diffDays(projectedFinish, actualStart ?? plannedStart),
-        actualPercent: Math.round(actualPercent * 100) / 100,
-        totalDelayDays,
+        ...rollup,
         hindrancesCount: hindranceCountsByContractor.get(cid) ?? 0,
       });
     }

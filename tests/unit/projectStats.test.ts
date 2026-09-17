@@ -138,19 +138,24 @@ describe("computeProjectStats — delay days", () => {
     expect(computeProjectStats(nodes, meta, TODAY).totalDelayDays).toBe(30);
   });
 
-  it("clamps a negative override at 0 (project is ahead, not 'delayed')", () => {
-    // projectedEndDate BEFORE endDate → finishing early. Don't report
-    // 'minus 10 days late'; the UI label is "days late" and negative is silly.
+  it("reports negative delay when the project is finishing ahead of its declared end", () => {
+    // projectedEndDate BEFORE endDate → finishing early. Signed math: we
+    // report -10 so "ahead of schedule" doesn't look identical to "on time
+    // to the day". Semantics changed when Snapshot's TotalDelay was
+    // reconciled with Overview's KPI (both now signed).
     const meta: ProjectMeta = {
       endDate: new Date("2026-08-31T00:00:00.000Z"),
       projectedEndDate: new Date("2026-08-21T00:00:00.000Z"),
     };
-    expect(computeProjectStats([parent("p"), leaf({ id: "a", parentId: "p" })], meta, TODAY).totalDelayDays).toBe(0);
+    expect(computeProjectStats([parent("p"), leaf({ id: "a", parentId: "p" })], meta, TODAY).totalDelayDays).toBe(-10);
   });
 
-  it("falls back to per-leaf max delay when project has no override", () => {
-    // Two leaves: leaf-A is 5 days late, leaf-B is 12 days late. Project
-    // delay = max(5, 12) = 12.
+  it("measures delay of the latest leaf finish against the declared end date", () => {
+    // Leaf B projected finish 22 Aug; declared end 10 Aug → 12 days late.
+    // Previously this took `max(finish - baseline)` per leaf — that reads
+    // 0 when every leaf is on its own baseline even though the schedule
+    // as a whole sits past the declared end. The new math compares the
+    // whole-schedule latest finish to project.endDate.
     const nodes = [
       parent("p"),
       leaf({
@@ -166,23 +171,26 @@ describe("computeProjectStats — delay days", () => {
         projectedFinish: new Date("2026-08-22T00:00:00.000Z"),
       }),
     ];
-    expect(computeProjectStats(nodes, NO_OVERRIDE, TODAY).totalDelayDays).toBe(12);
+    const meta: ProjectMeta = { endDate: new Date("2026-08-10T00:00:00.000Z"), projectedEndDate: null };
+    expect(computeProjectStats(nodes, meta, TODAY).totalDelayDays).toBe(12);
   });
 
-  it("prefers projectedFinish over actualFinish when both are present", () => {
-    // actualFinish is on time, projectedFinish is late — projected wins
-    // (planner has revised the estimate; that's the truth-of-record).
+  it("prefers actualFinish over projectedFinish when the activity is complete", () => {
+    // actualFinish is the truth-of-record once set — projectedFinish is a
+    // pre-completion estimate and becomes irrelevant. Signed math means a
+    // leaf that finished 7 days LATE registers as +7, not clamped.
     const nodes = [
       parent("p"),
       leaf({
         id: "a",
         parentId: "p",
         baselineFinish: new Date("2026-08-01T00:00:00.000Z"),
-        actualFinish: new Date("2026-08-01T00:00:00.000Z"),
-        projectedFinish: new Date("2026-08-08T00:00:00.000Z"),
+        actualFinish: new Date("2026-08-08T00:00:00.000Z"),   // finished 7d late
+        projectedFinish: new Date("2026-08-15T00:00:00.000Z"), // stale estimate — ignored
       }),
     ];
-    expect(computeProjectStats(nodes, NO_OVERRIDE, TODAY).totalDelayDays).toBe(7);
+    const meta: ProjectMeta = { endDate: new Date("2026-08-01T00:00:00.000Z"), projectedEndDate: null };
+    expect(computeProjectStats(nodes, meta, TODAY).totalDelayDays).toBe(7);
   });
 
   it("returns 0 delay when no leaf has both baseline + projected/actual", () => {

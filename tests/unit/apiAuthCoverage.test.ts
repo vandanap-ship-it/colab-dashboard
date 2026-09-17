@@ -29,6 +29,12 @@ const EXEMPT_ROUTES: Record<string, string> = {
     "One-time bootstrap: gated by BOOTSTRAP_TOKEN env var (timing-safe compare) AND refuses once any user exists. Documented in the file.",
   "cron/overdue-digest/route.ts":
     "Vercel Cron endpoint: gated by CRON_SECRET Bearer token. Fails closed if the env var is missing.",
+  "cron/progress-nudge/route.ts":
+    "Vercel Cron endpoint: gated by CRON_SECRET Bearer token. Same fail-closed pattern as overdue-digest.",
+  "cron/daily-tasks/route.ts":
+    "Vercel Cron endpoint: gated by CRON_SECRET Bearer token. Same fail-closed pattern as overdue-digest.",
+  "push/vapid-public/route.ts":
+    "Intentional public endpoint — returns only the VAPID public key (not the private one), which is safe to expose to any browser subscribing to push.",
   "health/route.ts":
     "Intentional unauthenticated liveness probe for external uptime monitoring (UptimeRobot, StatusPage, etc.). Leaks nothing sensitive — only 'is app alive' + 'is DB reachable' + latency. Requires no-store to prevent stale cache responses.",
 };
