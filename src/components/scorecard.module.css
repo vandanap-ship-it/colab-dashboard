@@ -270,28 +270,59 @@
   .snapCell:nth-child(even) { border-left: 1px solid rgba(250, 225, 200, 0.18); }
 }
 
+/* -------------- §2 / §3 Charcoal card wrapper --------------
+   Movement + Manpower share the same "big number → table" pattern the
+   reference PDF renders on a dark ground. Same charcoal ground as §01
+   so the three top-of-page sections read as one connected story. */
+.moveCard {
+  background: var(--sc-deep);
+  color: #FFFFFF;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 12px;
+}
+
 /* -------------- §2 Contractor movement table -------------- */
-.tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #EFE9DE;   /* ivory on charcoal */
+  font-variant-numeric: tabular-nums;
+}
 .tbl thead th {
   text-align: left;
-  padding: 6px 10px;
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  padding: 8px 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--sc-ink-3);
-  font-weight: 700;
-  border-bottom: 1px solid var(--sc-border);
-  background: var(--sc-rule-soft);
+  color: var(--sc-ink-3);   /* cement */
+  font-weight: 600;
+  border-bottom: 1px solid rgba(250, 225, 200, 0.2);
+  background: transparent;
+  vertical-align: bottom;
+  line-height: 1.3;
 }
 .tbl tbody td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--sc-rule);
-  font-variant-numeric: tabular-nums;
+  padding: 12px 8px;
+  border-bottom: 1px solid rgba(250, 225, 200, 0.1);
+  vertical-align: middle;
 }
 .tbl tbody tr:last-child td { border-bottom: 0; }
 .tblRight { text-align: right; }
-.tblName { font-weight: 700; color: var(--sc-ink); }
-.tblSub { font-size: 10.5px; color: var(--sc-ink-3); font-weight: 500; margin-top: 1px; }
+.tblName {
+  font-weight: 700;
+  color: #FFFFFF;
+  font-size: 14px;
+}
+.tblSub {
+  font-size: 10.5px;
+  color: var(--sc-ink-3);
+  font-weight: 500;
+  margin-top: 3px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
 
 /* -------------- §3 Block coverage rows -------------- */
 .blockCoverageRow {
@@ -344,24 +375,31 @@
   border-width: 1.5px;
 }
 
-/* -------------- §4 Manpower -------------- */
+/* -------------- §3 Manpower -------------- */
 .mpHeadline {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px dashed var(--sc-rule);
+  gap: 14px;
+  margin-bottom: 8px;
+  padding-bottom: 14px;
+  flex-wrap: wrap;
 }
 .mpBigNum {
   font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
   font-size: 30px;
   font-weight: 400;
-  color: var(--sc-ink);
+  color: #FFFFFF;
   letter-spacing: 0.005em;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
-.mpBigNum .of { font-family: "Open Sans", sans-serif; font-size: 16px; color: var(--sc-ink-3); font-weight: 500; margin-left: 4px; }
+.mpBigNum .of {
+  font-family: "Open Sans", sans-serif;
+  font-size: 16px;
+  color: var(--sc-ink-3);
+  font-weight: 500;
+  margin-left: 4px;
+}
 .mpVariance {
   font-size: 12px;
   font-weight: 600;
@@ -369,9 +407,20 @@
   border-radius: 3px;
   letter-spacing: 0.02em;
 }
-.mpVarGood { background: var(--sc-good-tint); color: var(--sc-good); }
-.mpVarBad  { background: var(--sc-bad-tint);  color: var(--sc-bad); }
-.mpVarZero { background: var(--sc-rule);      color: var(--sc-ink-2); }
+/* On the charcoal ground the chip needs to still read at a glance —
+   use lighter tints so they don't muddy against the dark surface. */
+.mpVarGood {
+  background: rgba(159, 190, 106, 0.18);  /* ref .mn .ex tint */
+  color: #B6D588;
+}
+.mpVarBad  {
+  background: rgba(199, 116, 106, 0.18);
+  color: #E39C90;
+}
+.mpVarZero {
+  background: rgba(250, 225, 200, 0.12);
+  color: var(--sc-ink-3);
+}
 
 /* -------------- §4 Activity highlights (Amanvana template) -------------- */
 .actGroup { margin-bottom: 18px; }
@@ -659,15 +708,15 @@
 /* -------------- Movement headline + section explanation (Colab reference match) -------------- */
 .movementHeadline {
   font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
-  font-size: 22px;
-  color: var(--sc-ink);
-  padding: 6px 0 12px;
-  border-bottom: 1px solid var(--sc-rule);
-  margin-bottom: 12px;
+  font-size: 26px;
+  color: #FFFFFF;
+  padding: 0 0 14px;
+  margin-bottom: 8px;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
 }
-.movementHeadline strong { color: var(--sc-gold); font-weight: 400; }
+.movementHeadline strong { color: #FFFFFF; font-weight: 400; }
+.movementHeadline .of { color: var(--sc-ink-3); }
 
 .sectionExplain {
   margin: 10px 0 0;
@@ -677,6 +726,15 @@
   color: var(--sc-ink-2);
   line-height: 1.55;
 }
+/* On the charcoal card, flip the explain footer to cement text on a
+   sandstone-tinted rule so it reads without breaking the dark ground. */
+.moveCard .sectionExplain {
+  border-top: 1px solid rgba(250, 225, 200, 0.18);
+  color: var(--sc-ink-3);
+}
+.moveCard .empty { color: var(--sc-ink-3); }
+/* §3 empty state — no data for the day, still lives on the charcoal card. */
+.moveCard .holidayBanner { color: var(--sc-ink-3); }
 
 /* -------------- §2 sub-panel: Planned coverage by block -------------- */
 .subPanel {

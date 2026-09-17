@@ -155,6 +155,7 @@ export default function ScorecardView({
 
       {/* §2 Daily Movement — Contractor-wise Progress + Planned Coverage (sub-panel) */}
       <Section num="02" title="Daily Movement — Contractor-wise Progress" meta={`progressed vs planned for ${asOfLabel}`}>
+        <div className={styles.moveCard}>
         <div className={styles.movementHeadline}>
           <strong>{s.dailySnapshot.villasUpdated} / {s.dailySnapshot.villasExpected}</strong> villas executed vs planned
           <span className={styles.of}> · </span>
@@ -199,6 +200,7 @@ export default function ScorecardView({
         <p className={styles.sectionExplain}>
           Planned for the day = villas whose work was scheduled for {asOfLabel}. Progressed = of those, how many logged an update. &quot;Untagged&quot; activities are ones without an assigned contractor yet — bulk-assign them via Admin → Contractor Assign.
         </p>
+        </div>
 
         {/* Coverage sub-panel — inline per Colab reference format */}
         <div className={styles.subPanel}>
@@ -285,7 +287,7 @@ export default function ScorecardView({
             No planned or actual manpower recorded for {asOfLabel}.
           </div>
         ) : (
-          <>
+          <div className={styles.moveCard}>
             <div className={styles.mpHeadline}>
               <div className={styles.mpBigNum}>
                 {s.manpower.actualTotal}
@@ -340,7 +342,7 @@ export default function ScorecardView({
               {s.manpower.variance < 0 && ` ${Math.abs(s.manpower.variance)} below plan.`}
               {s.manpower.variance === 0 && ` On plan.`}
             </p>
-          </>
+          </div>
         )}
       </Section>
 
