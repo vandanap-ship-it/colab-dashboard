@@ -252,10 +252,6 @@ export default function NewProgressForm({
         />
       </label>
 
-      <div className="rounded-xl bg-amber-100 px-3 py-2 text-sm font-medium text-amber-900 inline-block">
-        Labour Supply
-      </div>
-
       <div className="space-y-2">
         <div className="text-sm font-medium text-stone-700">Activity</div>
         {selected ? (
