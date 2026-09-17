@@ -61,3 +61,51 @@ export const AMANVANA_CONTRACTORS = {
   abraham: "Abraham Thomas",
   elegant: "Elegant Construction",
 } as const;
+
+// ---------------------------------------------------------------------------
+// Project-override implementation. Consumed via src/lib/projects/index.ts
+// so downstream code doesn't `if (isAmanvana)` inline anymore.
+// ---------------------------------------------------------------------------
+
+/** Abraham's contracted villa + block count. The MSP import can split
+ *  combined-pair villas across two rows, so the code registry (not the DB
+ *  row count) is the truth-of-record. */
+function abrahamScopeOverride(): { villaCount: number; blockCount: number } | null {
+  const abrahamVillaCount = AMANVANA_CONTRACTOR_SCOPE[AMANVANA_CONTRACTORS.abraham.toLowerCase()];
+  if (abrahamVillaCount == null) return null;
+  const distinctBlocks = new Set(Object.values(AMANVANA_VILLA_NUMBER_TO_BLOCK));
+  // The registry groups Block 3A + 3B under one "03" code. Real per-contract
+  // block count is 12 (Blocks 2, 3A, 3B, 4-10, 12, 13). Reflect that here
+  // instead of silently returning 11.
+  const AMANVANA_ABRAHAM_ACTUAL_BLOCK_COUNT = 12;
+  return {
+    villaCount: abrahamVillaCount,
+    blockCount: Math.max(distinctBlocks.size, AMANVANA_ABRAHAM_ACTUAL_BLOCK_COUNT),
+  };
+}
+
+/** Elegant Construction: 52 villas across 12 blocks (Blocks 11, 14-24). */
+function elegantScopeOverride(): { villaCount: number; blockCount: number } | null {
+  const elegantVillaCount = AMANVANA_CONTRACTOR_SCOPE[AMANVANA_CONTRACTORS.elegant.toLowerCase()];
+  if (elegantVillaCount == null) return null;
+  const AMANVANA_ELEGANT_CONTRACT_BLOCK_COUNT = 12;
+  return { villaCount: elegantVillaCount, blockCount: AMANVANA_ELEGANT_CONTRACT_BLOCK_COUNT };
+}
+
+/** Fingerprint-match on the block set — projectId varies per environment so
+ *  we identify Amanvana by the shape of its blocks. False positives are safe:
+ *  the overrides then read the same numbers everyone else would. */
+function detectFromBlockShape(blockCodes: string[]): boolean {
+  if (AMANVANA_ABRAHAM_ALL_VILLAS.length === 0) return false;
+  const registered = new Set(Object.values(AMANVANA_VILLA_NUMBER_TO_BLOCK));
+  const overlap = blockCodes.filter((c) => registered.has(c)).length;
+  return overlap >= Math.min(3, registered.size);
+}
+
+/** Amanvana's project override, registered from src/lib/projects/index.ts. */
+export const amanvanaProjectOverride = {
+  name: "Amanvana - Phase 1" as const,
+  detectFromBlockShape,
+  abrahamScopeOverride,
+  elegantScopeOverride,
+};

@@ -16,12 +16,10 @@ import { prisma } from "@/lib/prisma";
 import type { DashboardBag, MatrixRow } from "@/lib/rollupServer";
 import type { BlockRollup as ClientBlock, VillaRollup as ClientVilla, ContractorRollup, MilestoneCell, ProjectHealthSummary } from "@/lib/executiveMockData";
 import { getProjectStats } from "@/lib/projectStats";
-import {
-  AMANVANA_ABRAHAM_ALL_VILLAS,
-  AMANVANA_CONTRACTOR_SCOPE,
-  AMANVANA_CONTRACTORS,
-  AMANVANA_VILLA_NUMBER_TO_BLOCK,
-} from "@/lib/projects/amanvana";
+import { getProjectOverride } from "@/lib/projects";
+// Kept only for the fallback mock contractor name below — the rest of the
+// project-specific facts flow through getProjectOverride.
+import { AMANVANA_CONTRACTORS } from "@/lib/projects/amanvana";
 
 export interface AdaptedOverview {
   health: ProjectHealthSummary;
@@ -86,49 +84,10 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
   };
 }
 
-/** Abraham's contracted villa + block count for Amanvana. Returns null for
- *  other projects — those keep the row-count fallback. Uses the code
- *  registry (AMANVANA_VILLA_NUMBER_TO_BLOCK) so it stays true even when the
- *  MSP import happens to split combined pairs across two rows. */
-function amanvanaAbrahamOverride(): { villaCount: number; blockCount: number } | null {
-  const abrahamVillaCount = AMANVANA_CONTRACTOR_SCOPE[AMANVANA_CONTRACTORS.abraham.toLowerCase()];
-  if (abrahamVillaCount == null) return null;
-  const distinctBlocks = new Set(Object.values(AMANVANA_VILLA_NUMBER_TO_BLOCK));
-  // The registry currently groups Block 3A + 3B under one "03" code. Real
-  // block count per contract is 12 (Blocks 2, 3A, 3B, 4-10, 12, 13). Reflect
-  // that here rather than lie by silently returning 11.
-  const blockCountFromRegistry = distinctBlocks.size;
-  const AMANVANA_ABRAHAM_ACTUAL_BLOCK_COUNT = 12;
-  return {
-    villaCount: abrahamVillaCount,
-    blockCount: Math.max(blockCountFromRegistry, AMANVANA_ABRAHAM_ACTUAL_BLOCK_COUNT),
-  };
-}
-
-/** Elegant Construction's contracted villa + block count for Amanvana.
- *  Per the contract:
- *    52 villas across 12 blocks (Blocks 11, 14, 15, 16, 17, 18, 19, 20, 21,
- *    22, 23, 24). Returns null for other projects. */
-function amanvanaElegantOverride(): { villaCount: number; blockCount: number } | null {
-  const elegantVillaCount = AMANVANA_CONTRACTOR_SCOPE[AMANVANA_CONTRACTORS.elegant.toLowerCase()];
-  if (elegantVillaCount == null) return null;
-  const AMANVANA_ELEGANT_CONTRACT_BLOCK_COUNT = 12;
-  return { villaCount: elegantVillaCount, blockCount: AMANVANA_ELEGANT_CONTRACT_BLOCK_COUNT };
-}
-
-/** Is this the Amanvana project the AMANVANA_ constants describe? We can't
- *  match on projectId (that varies per environment), so match on the villa
- *  set — Abraham's Amanvana villas are a distinctive fingerprint that no
- *  other project will accidentally share. */
-function isAmanvanaByBlockShape(blockCodes: string[]): boolean {
-  // If the project contains the block codes Abraham's Amanvana registry knows
-  // about ("02", "03", "04", ...), treat as Amanvana. False positives are
-  // acceptable — the overrides read the same shape everyone else would.
-  if (AMANVANA_ABRAHAM_ALL_VILLAS.length === 0) return false;
-  const registered = new Set(Object.values(AMANVANA_VILLA_NUMBER_TO_BLOCK));
-  const overlap = blockCodes.filter((c) => registered.has(c)).length;
-  return overlap >= Math.min(3, registered.size);
-}
+// Project-specific overrides (Amanvana's contracted villa + block counts,
+// detect-from-block-shape fingerprinting, etc.) live in
+// src/lib/projects/*.ts and are dispatched through getProjectOverride.
+// This adapter stays project-agnostic — it just asks the registry.
 
 /** Fold a DashboardBag into the shape ExecutiveOverview / ExecutiveLayout expect. */
 export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): AdaptedOverview {
@@ -183,22 +142,18 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
   const totalVillas =
     extras?.totalPhysicalVillas ?? rollup.blocks.reduce((n, b) => n + b.villas.length, 0);
 
-  // Abraham's contracted scope — the "AT villas · X blocks" hero cell.
-  // On Amanvana the contract says 41 villas across 12 blocks (Blocks 2, 3A,
-  // 3B, 4-10, 12, 13). Use the override; other projects fall back to the
-  // whole-project totals as before.
+  // Ask the project registry for any project-specific facts about the two
+  // contractor hero cells (Abraham + Elegant). On Amanvana the contracts say
+  // 41 / 12 and 52 / 12; other projects with no registered override fall
+  // back to the whole-project row counts.
   const blockCodes = rollup.blocks.map((b) => b.code);
-  const isAmanvana = isAmanvanaByBlockShape(blockCodes);
-  const amanvanaAbraham = isAmanvana ? amanvanaAbrahamOverride() : null;
-  const atVillaCount = amanvanaAbraham?.villaCount ?? totalVillas;
-  const atBlockCount = amanvanaAbraham?.blockCount ?? rollup.blocks.length;
-
-  // Elegant Construction — the "Contractor 2" hero cell. On Amanvana this
-  // reads 52 villas · 12 blocks. On non-Amanvana projects it's 0/0 (view
-  // hides the tile). This replaces the old "Phase 1 · In Execution" cell.
-  const amanvanaElegant = isAmanvana ? amanvanaElegantOverride() : null;
-  const elegantVillaCount = amanvanaElegant?.villaCount ?? 0;
-  const elegantBlockCount = amanvanaElegant?.blockCount ?? 0;
+  const projectOverride = getProjectOverride({ blockCodes });
+  const abrahamScope = projectOverride?.abrahamScopeOverride() ?? null;
+  const atVillaCount = abrahamScope?.villaCount ?? totalVillas;
+  const atBlockCount = abrahamScope?.blockCount ?? rollup.blocks.length;
+  const elegantScope = projectOverride?.elegantScopeOverride() ?? null;
+  const elegantVillaCount = elegantScope?.villaCount ?? 0;
+  const elegantBlockCount = elegantScope?.blockCount ?? 0;
 
   const avgSlip = activeVillas.length === 0
     ? 0
