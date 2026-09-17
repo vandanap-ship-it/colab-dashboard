@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ChevronRight, Clock, Loader2, Search, X, Sparkles } from "lucide-react";
 import {
-  AMANVANA_ABRAHAM_ALL_VILLAS,
+  AMANVANA_VILLA_NUMBER_TO_BLOCK,
   AMANVANA_CONTRACTORS,
 } from "@/lib/projects/amanvana";
 
@@ -77,15 +77,31 @@ export interface ActivityPickerProps {
 
 type Step = "root" | "contractor" | "villa" | "milestone" | "activity";
 
-// Villa-name → contractor lookup. On Amanvana the awarded scope pins each
-// villa number to Abraham Thomas or Elegant Construction; the amanvana
-// registry is the truth-of-record. Names in AMANVANA_ABRAHAM_ALL_VILLAS
-// look like "Villa 03" / "Villa 10 & 11"; anything not in that set is
-// Elegant. Non-Amanvana projects (no matching villa labels) get an empty
-// Abraham set here and fall through to a single "All villas" group.
-const ABRAHAM_VILLA_SET: Set<string> = new Set(AMANVANA_ABRAHAM_ALL_VILLAS);
+// Villa-label → contractor lookup. On Amanvana the awarded scope pins each
+// villa NUMBER to Abraham Thomas or Elegant Construction; the amanvana
+// registry is the truth-of-record. Different sources of villa labels use
+// different formatting — "Villa 03" (padded), "Villa 3" (unpadded), "Villa
+// 10 & 11" (grouped pair), "Villa Set ( V32, V33 )" (block-level container
+// used in the WBS crumb), and so on. Comparing label strings breaks on
+// every variant. Instead, extract every integer from the label and check
+// whether ANY of them lands in the Abraham number set. Grouped pairs and
+// block-level containers hit both a matching villa number and the
+// contractor tile they belong to.
+const ABRAHAM_VILLA_NUMBERS: Set<number> = new Set(
+  Object.keys(AMANVANA_VILLA_NUMBER_TO_BLOCK).map((n) => parseInt(n, 10)),
+);
+function villaNumbersIn(label: string): number[] {
+  const out: number[] = [];
+  for (const m of label.matchAll(/\d+/g)) {
+    const n = parseInt(m[0], 10);
+    if (Number.isFinite(n)) out.push(n);
+  }
+  return out;
+}
 function contractorOfVilla(villaLabel: string): "abraham" | "elegant" {
-  return ABRAHAM_VILLA_SET.has(villaLabel) ? "abraham" : "elegant";
+  const nums = villaNumbersIn(villaLabel);
+  if (nums.length === 0) return "elegant";
+  return nums.some((n) => ABRAHAM_VILLA_NUMBERS.has(n)) ? "abraham" : "elegant";
 }
 
 export default function ActivityPicker({ projectId, onPick, initialActivityId }: ActivityPickerProps) {
