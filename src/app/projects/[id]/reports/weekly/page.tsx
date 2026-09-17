@@ -49,16 +49,16 @@ export default async function WeeklyReportPage({
   // actually ran (previous debugging suggested my earlier try/catch fixes
   // weren't picking up in production).
   console.info(`[weekly:v3] rendering for ${projectId} weekEnd=${weekEnd.toISOString()}`);
+  // JSX moved OUT of the try/catch — React does not throw during JSX
+  // construction, so a JSX return inside try isn't actually protected by
+  // it (see eslint/react-x jsx-in-try-catch). Errors from
+  // getWeeklyReport() are caught below; render-time errors are the job of
+  // the Next.js error boundary at error.tsx.
+  let report: Awaited<ReturnType<typeof getWeeklyReport>> | null = null;
+  let renderError: unknown = null;
   try {
-    const report = await getWeeklyReport(projectId, weekEnd);
+    report = await getWeeklyReport(projectId, weekEnd);
     if (!report) notFound();
-    return (
-      <WeeklyReportView
-        report={report}
-        projectId={projectId}
-        weekEndingStr={weekEnd.toISOString().slice(0, 10)}
-      />
-    );
   } catch (err) {
     // notFound() throws with digest "NEXT_HTTP_ERROR_FALLBACK;404" (the
     // correct constant — earlier I used the wrong one and my catch was
@@ -73,12 +73,23 @@ export default async function WeeklyReportPage({
       throw err;
     }
     console.error("[weekly:v3] failed", err);
+    renderError = err;
+  }
+
+  if (renderError || !report) {
     return (
       <ReportErrorFallback
         title="Weekly Report could not be generated"
-        detail={err instanceof Error ? err.message : String(err)}
+        detail={renderError instanceof Error ? renderError.message : String(renderError ?? "unknown")}
         projectId={projectId}
       />
     );
   }
+  return (
+    <WeeklyReportView
+      report={report}
+      projectId={projectId}
+      weekEndingStr={weekEnd.toISOString().slice(0, 10)}
+    />
+  );
 }

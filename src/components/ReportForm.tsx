@@ -225,8 +225,8 @@ export default function ReportForm({
           </h2>
           {saved.queued ? (
             <p className="text-sm text-emerald-800 mt-2">
-              You're offline — it's stored on this device and will sync as
-              soon as you're back on signal.
+              You&apos;re offline — it&apos;s stored on this device and will sync as
+              soon as you&apos;re back on signal.
             </p>
           ) : (
             <p className="text-sm text-emerald-800 mt-2">

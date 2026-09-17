@@ -201,7 +201,7 @@ async function importInspections(projectId: string): Promise<void> {
 
     // Module tag drives which tab (QA/QC vs EHS) the row surfaces under.
     // Colab's `category` says "Quality" or "Safety" verbatim.
-    const module = row.category === "Safety" ? "SAFETY" : row.category === "Quality" ? "QAQC" : null;
+    const moduleTag = row.category === "Safety" ? "SAFETY" : row.category === "Quality" ? "QAQC" : null;
 
     const rejectionReason =
       status === "REJECTED"
@@ -217,7 +217,7 @@ async function importInspections(projectId: string): Promise<void> {
         filledById,
         reviewedById,
         reviewedAt,
-        module,
+        module: moduleTag,
         idempotencyKey,
         createdAt: parseColabDate(row.triggered_timestamp) ?? new Date(),
       },
@@ -272,7 +272,7 @@ async function importIssues(projectId: string): Promise<void> {
     const severity = row.Issue_Priority ? severityMap[row.Issue_Priority] ?? "MEDIUM" : null;
 
     // Module tag — Colab's `Issue_Category` is "Quality" or "Safety".
-    const module =
+    const moduleTag =
       row.Issue_Category === "Safety" ? "SAFETY" :
       row.Issue_Category === "Quality" ? "QAQC" :
       null;
@@ -296,7 +296,7 @@ async function importIssues(projectId: string): Promise<void> {
         status,
         createdById,
         assignedToId,
-        module,
+        module: moduleTag,
         idempotencyKey,
         createdAt: parseColabDate(row.Creation_Date) ?? new Date(),
       },
