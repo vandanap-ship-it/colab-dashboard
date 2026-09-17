@@ -283,10 +283,22 @@ export default function ActivityPicker({ projectId, onPick, initialActivityId }:
         </button>
       )}
 
-      {/* Root — recent picks + entry to drilldown + search */}
+      {/* Root — search, pick-by-location entry, then recent picks. The
+          block/villa/milestone drilldown is a peer path to search — surface
+          it right under the search bar so a site engineer sees it before
+          scrolling past 10 recently-used items. */}
       {step === "root" && (
         <>
           <SearchBar value={freeText} onChange={setFreeText} onClear={() => setFreeText("")} />
+
+          <button
+            type="button"
+            onClick={() => setStep("block")}
+            className="w-full rounded-md border-2 border-dashed border-stone-300 bg-white px-4 py-3 text-sm font-medium text-stone-700 hover:border-stone-500"
+          >
+            <Sparkles className="w-4 h-4 inline mr-1.5 text-amber-500" />
+            Pick by location →
+          </button>
 
           {data.recent.length > 0 && (
             <div>
@@ -310,15 +322,6 @@ export default function ActivityPicker({ projectId, onPick, initialActivityId }:
               </ul>
             </div>
           )}
-
-          <button
-            type="button"
-            onClick={() => setStep("block")}
-            className="w-full rounded-md border-2 border-dashed border-stone-300 bg-white px-4 py-3 text-sm font-medium text-stone-700 hover:border-stone-500"
-          >
-            <Sparkles className="w-4 h-4 inline mr-1.5 text-amber-500" />
-            Pick by location →
-          </button>
         </>
       )}
 
