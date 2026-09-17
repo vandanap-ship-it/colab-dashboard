@@ -140,7 +140,10 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
         createdAt: true,
         reviewedAt: true,
         wbsNode: { select: { contractorId: true } },
-        filledBy: { select: { name: true } },
+        // Fallback contractor signal for inspections imported without a
+        // WBS attachment (all 111 Colab-imported inspections on Amanvana
+        // hit this path). Set User.contractorId in Admin > Users.
+        filledBy: { select: { name: true, contractorId: true } },
         photos: { select: { url: true }, take: 1 },
       },
     }),
@@ -155,7 +158,7 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
         createdAt: true,
         updatedAt: true,
         wbsNode: { select: { contractorId: true } },
-        createdBy: { select: { name: true } },
+        createdBy: { select: { name: true, contractorId: true } },
         photos: { select: { url: true }, take: 1 },
       },
     }),
@@ -271,9 +274,18 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
   })();
 
   // ------------- §7 Contractor Performance Master -------------
+  // Attribution: WBS-tag wins, then fall back to User.contractorId on the
+  // person who filled the inspection / raised the issue. Colab imports
+  // land with no WBS tie, so User.contractorId is the practical signal —
+  // rows stay blank for any inspection whose filler doesn't have a
+  // contractor set (visible via the "Unassigned" bucket downstream).
+  const contractorOf = (i: { wbsNode: { contractorId: string | null } | null; filledBy: { contractorId: string | null } }) =>
+    i.wbsNode?.contractorId ?? i.filledBy?.contractorId ?? null;
+  const issueContractorOf = (i: { wbsNode: { contractorId: string | null } | null; createdBy: { contractorId: string | null } }) =>
+    i.wbsNode?.contractorId ?? i.createdBy?.contractorId ?? null;
   const contractorsOut: ContractorRow[] = contractors.map((c) => {
-    const myInspections = inspections.filter((i) => i.wbsNode?.contractorId === c.id);
-    const myIssues = issues.filter((i) => i.wbsNode?.contractorId === c.id);
+    const myInspections = inspections.filter((i) => contractorOf(i) === c.id);
+    const myIssues = issues.filter((i) => issueContractorOf(i) === c.id);
 
     let iNew = 0, iIR = 0, iCl = 0, iTatSum = 0, iTatN = 0;
     for (const insp of myInspections) {

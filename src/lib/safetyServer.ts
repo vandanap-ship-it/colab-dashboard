@@ -110,6 +110,9 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
         createdAt: true,
         updatedAt: true,
         wbsNode: { select: { contractorId: true } },
+        // Fallback contractor signal — see qaqcServer for the same
+        // treatment. Colab-imported rows have no WBS attachment.
+        createdBy: { select: { contractorId: true } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -121,6 +124,7 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
         createdAt: true,
         reviewedAt: true,
         wbsNode: { select: { contractorId: true } },
+        filledBy: { select: { contractorId: true } },
       },
     }),
     prisma.contractor.findMany({
@@ -193,9 +197,16 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
   }));
 
   // ------- §3 Compliance Matrix -------
+  // Attribution fallback — same treatment as qaqcServer. Colab-imported
+  // inspections come in without a WBS attachment, so User.contractorId on
+  // the filler / creator is the practical signal.
+  const inspContractorOf = (i: { wbsNode: { contractorId: string | null } | null; filledBy: { contractorId: string | null } }) =>
+    i.wbsNode?.contractorId ?? i.filledBy?.contractorId ?? null;
+  const issueContractorOf = (i: { wbsNode: { contractorId: string | null } | null; createdBy: { contractorId: string | null } }) =>
+    i.wbsNode?.contractorId ?? i.createdBy?.contractorId ?? null;
   const compliance: SafetyComplianceRow[] = contractors.map((c) => {
-    const myInspections = safetyInspections.filter((i) => i.wbsNode?.contractorId === c.id);
-    const myIssues = allSafetyIssues.filter((i) => i.wbsNode?.contractorId === c.id);
+    const myInspections = safetyInspections.filter((i) => inspContractorOf(i) === c.id);
+    const myIssues = allSafetyIssues.filter((i) => issueContractorOf(i) === c.id);
     let closed = 0, inReview = 0, tatSum = 0, tatN = 0;
     for (const insp of myInspections) {
       if (insp.status === "PASSED" || insp.status === "REJECTED") {

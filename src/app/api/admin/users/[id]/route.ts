@@ -16,6 +16,10 @@ const PatchUserSchema = z.object({
   active: z.boolean().optional(),
   designation: z.string().max(120).nullable().optional(),
   modules: z.array(z.string().max(60)).nullable().optional(),
+  // Optional contractor tie (null = internal / unassigned). Used by the QA/QC
+  // and Safety contractor-performance rollups when a WBS row has no
+  // contractor tag on it (Colab imports).
+  contractorId: z.string().min(1).nullable().optional(),
   expectedUpdatedAt: z.string().optional(),
 });
 
@@ -27,7 +31,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
   const { id } = await ctx.params;
   const parsed = await parseBody(req, PatchUserSchema);
   if (!parsed.ok) return parsed.response;
-  const { name, role, active, designation, modules, expectedUpdatedAt } = parsed.data;
+  const { name, role, active, designation, modules, contractorId, expectedUpdatedAt } = parsed.data;
 
   const data: {
     name?: string;
@@ -35,6 +39,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
     active?: boolean;
     designation?: string | null;
     modules?: string | null;
+    contractorId?: string | null;
   } = {};
   if (name !== undefined) data.name = name.trim();
   if (role !== undefined) data.role = role;
@@ -43,6 +48,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/admin/users/[i
     data.designation = designation && designation.trim().length > 0 ? designation.trim() : null;
   }
   if (modules !== undefined) data.modules = serializeModules(modules);
+  if (contractorId !== undefined) data.contractorId = contractorId;
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });

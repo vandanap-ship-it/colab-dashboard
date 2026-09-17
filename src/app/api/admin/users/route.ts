@@ -28,7 +28,12 @@ export async function GET() {
 
   const users = await prisma.user.findMany({
     orderBy: [{ active: "desc" }, { createdAt: "desc" }],
-    select: { id: true, username: true, name: true, role: true, designation: true, modules: true, active: true, createdAt: true, updatedAt: true },
+    select: {
+      id: true, username: true, name: true, role: true, designation: true,
+      modules: true, active: true, createdAt: true, updatedAt: true,
+      contractorId: true,
+      contractor: { select: { id: true, name: true, project: { select: { id: true, name: true } } } },
+    },
   });
   return NextResponse.json({ users });
 }
@@ -54,7 +59,12 @@ export async function POST(req: Request) {
   const passwordHash = await bcrypt.hash(p, 10);
   const user = await prisma.user.create({
     data: { username: u, name: n, role: r, passwordHash, designation: d || null, modules: mods },
-    select: { id: true, username: true, name: true, role: true, designation: true, modules: true, active: true, createdAt: true, updatedAt: true },
+    select: {
+      id: true, username: true, name: true, role: true, designation: true,
+      modules: true, active: true, createdAt: true, updatedAt: true,
+      contractorId: true,
+      contractor: { select: { id: true, name: true, project: { select: { id: true, name: true } } } },
+    },
   });
 
   await recordAudit({

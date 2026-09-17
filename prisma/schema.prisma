@@ -17,8 +17,16 @@ model User {
   designation  String?
   modules      String? // JSON array of allowed module keys; null = full access (internal staff)
   active       Boolean  @default(true)
+  // Optional contractor tie — populated for external users so that
+  // inspections / issues / snags they file can be attributed back to
+  // their contractor even when the underlying WBS row has no contractor
+  // tag (Colab imports come in like that). Nullable for internal staff
+  // and for any user we haven't tagged yet.
+  contractorId String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  contractor               Contractor?             @relation(fields: [contractorId], references: [id])
 
   createdProjects          Project[]               @relation("ProjectCreator")
   progressEntries          ProgressEntry[]
@@ -242,6 +250,7 @@ model Contractor {
   tradePlans      TradePlan[]
   manpowerEntries ManpowerEntry[]
   workPermits     WorkPermit[]
+  users           User[]
 
   @@unique([projectId, name])
   @@index([projectId])

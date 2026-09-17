@@ -14,12 +14,24 @@ type UserRow = {
   // Echoed back on PATCH so the server can reject stale writes when two
   // admins edit the same user at the same time (optimistic-lock guard).
   updatedAt: string;
+  // Optional contractor tie — surfaces contractor-attributed inspections
+  // and issues in QA/QC + EHS Contractor Performance matrices.
+  contractorId: string | null;
+  contractor: { id: string; name: string; project: { id: string; name: string } } | null;
+};
+
+type ContractorOption = {
+  id: string;
+  name: string;
+  active: boolean;
+  project: { id: string; name: string };
 };
 
 const ROLE_OPTIONS = Object.values(ROLES);
 
 export default function UsersAdmin() {
   const [users, setUsers] = useState<UserRow[] | null>(null);
+  const [contractors, setContractors] = useState<ContractorOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -45,9 +57,36 @@ export default function UsersAdmin() {
     setUsers(data.users);
   }, []);
 
+  const loadContractors = useCallback(async () => {
+    const res = await fetch("/api/admin/contractors", { cache: "no-store" });
+    if (!res.ok) return;
+    const data = await res.json();
+    setContractors((data.contractors ?? []).filter((c: ContractorOption) => c.active));
+  }, []);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadContractors();
+  }, [load, loadContractors]);
+
+  async function changeContractor(u: UserRow, newContractorId: string | null) {
+    const res = await fetch(`/api/admin/users/${u.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contractorId: newContractorId, expectedUpdatedAt: u.updatedAt }),
+    });
+    if (res.status === 409) {
+      alert("Another admin just edited this user. Refreshing so you see the latest.");
+      load();
+      return;
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setError(data?.error ?? "Failed");
+      return;
+    }
+    load();
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -269,6 +308,7 @@ export default function UsersAdmin() {
                 <th className="px-4 py-2 font-medium">Username</th>
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">Role</th>
+                <th className="px-4 py-2 font-medium">Contractor</th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium text-right">Actions</th>
               </tr>
@@ -323,6 +363,27 @@ export default function UsersAdmin() {
                         {ROLE_OPTIONS.map((r) => (
                           <option key={r} value={r}>
                             {ROLE_LABELS[r]}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-2">
+                      {/* Contractor picker — nullable. Sets User.contractorId
+                          so QA/QC + EHS Contractor Performance rollups can
+                          attribute this user's inspections/issues back to a
+                          contractor even when the underlying WBS row has no
+                          contractor tag (Colab-imported inspections). */}
+                      <select
+                        value={u.contractorId ?? ""}
+                        onChange={(e) =>
+                          changeContractor(u, e.target.value === "" ? null : e.target.value)
+                        }
+                        className="rounded-md border border-stone-200 bg-white px-2 py-1 text-xs focus:outline-none focus:border-stone-900 max-w-[180px]"
+                      >
+                        <option value="">Internal / unassigned</option>
+                        {contractors.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} · {c.project.name}
                           </option>
                         ))}
                       </select>
