@@ -12,8 +12,8 @@ import {
 import type { ContractorDelayReasonGroup, DelayReasonCluster } from "@/lib/delayReasons";
 import DelayReasonsCard from "./DelayReasonsCard";
 import DashboardLegend from "./DashboardLegend";
-import SiteActivityHighlightsClient from "./SiteActivityHighlightsClient";
-import type { MilestoneProgressRow, SiteActivityBlockGroup } from "@/lib/dashboardSectionsServer";
+import SiteActivityGallery from "./SiteActivityGallery";
+import type { GalleryItem, MilestoneProgressRow } from "@/lib/dashboardSectionsServer";
 
 export interface ManpowerStrip {
   planned: number;
@@ -32,7 +32,9 @@ export interface ExecutiveOverviewProps {
   reasonClustersByContractor: ContractorDelayReasonGroup[];
   manpowerStrip: ManpowerStrip;
   milestoneProgress: MilestoneProgressRow[];
-  siteActivity: SiteActivityBlockGroup[];
+  /** Flat, month-grouped list of every uploaded photo — replaces the
+   *  "today only" grouped highlights, per Shraddha's Sep 17 note. */
+  siteActivity: GalleryItem[];
   /** Project display name — used in the Site Activity lightbox's caption
    *  strip and in composed download filenames. Optional so callers that
    *  don't have it fall back to a plain-project label. */
@@ -404,17 +406,20 @@ export default function ExecutiveOverview({
         </div>
       </div>
 
-      {/* Site Activity Highlights */}
+      {/* Site Activity Highlights — full project photo gallery,
+          newest first. Was "today only" grouped cards; Shraddha
+          asked for every image the site team has uploaded so the
+          section reads as a live wall of work in progress. */}
       <div className={styles.card}>
         <div className={styles.cardHd}>
           <h3>Site Activity Highlights</h3>
           <span className={styles.meta}>
-            activities logged today · grouped by block, then villa
+            every photo uploaded on this project · newest first
           </span>
         </div>
         <div className={styles.cardBd}>
-          <SiteActivityHighlightsClient
-            groups={siteActivity}
+          <SiteActivityGallery
+            items={siteActivity}
             projectName={projectName ?? "Project"}
           />
         </div>

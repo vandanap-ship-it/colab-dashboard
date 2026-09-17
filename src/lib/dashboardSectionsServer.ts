@@ -304,3 +304,113 @@ export async function getSiteActivityHighlights(
     };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Site Activity Gallery — every progress-entry photo in the project, flat.
+//
+// Different lens than getSiteActivityHighlights: no date filter, no block/villa
+// grouping — just a chronological grid of every image the site team has ever
+// uploaded. Rendered as the "Site Activity Highlights" section on the
+// Dashboard. The Scorecard §04 still uses the daily grouped view above; this
+// one lives alongside it.
+//
+// Only progress entries with at least one photo are returned (nothing to
+// show for text-only entries in a gallery). Cap defaults to 200 for
+// perf — enough to fill several scrolls of a 3-col grid; the client can
+// page for more if that becomes real.
+// ---------------------------------------------------------------------------
+
+export interface GalleryItem {
+  progressEntryId: string;
+  photoId: string;
+  photoUrl: string;
+  photoIndex: number;        // 0-based position within its progress entry
+  photoCount: number;        // total photos in that entry (for "+N" indicator)
+  siblingPhotos: { id: string; url: string }[]; // full set for the lightbox
+  blockCode: string | null;
+  villaLabel: string;
+  villaNumber: number | null;
+  milestoneName: string;
+  activityName: string;
+  entryDate: string;         // ISO — the date the site engineer marked progress on
+  loggedAt: string;
+  loggedByName: string;
+  contractorName: string | null;
+  achievedPct: number | null;
+  notes: string | null;
+}
+
+export async function getSiteActivityGallery(
+  projectId: string,
+  opts: { limit?: number } = {},
+): Promise<GalleryItem[]> {
+  const limit = opts.limit ?? 200;
+
+  const entries = await prisma.progressEntry.findMany({
+    where: {
+      projectId,
+      deletedAt: null,
+      photos: { some: {} },
+    },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    take: limit,
+    include: {
+      wbsNode: {
+        select: {
+          name: true,
+          villaMilestone: {
+            select: {
+              pctComplete: true,
+              section: { select: { name: true } },
+              villa: {
+                select: {
+                  number: true,
+                  label: true,
+                  block: { select: { code: true } },
+                },
+              },
+            },
+          },
+        },
+      },
+      photos: { select: { id: true, url: true }, orderBy: { uploadedAt: "asc" } },
+      contractor: { select: { name: true } },
+      createdBy: { select: { name: true } },
+    },
+  });
+
+  // One GalleryItem per PHOTO (not per entry) — so an entry with 5 photos
+  // spreads across 5 tiles in the grid instead of collapsing behind a
+  // single thumbnail. Sibling photos still travel with each item so the
+  // lightbox opens on the clicked one and lets you arrow through the set.
+  const items: GalleryItem[] = [];
+  for (const e of entries) {
+    const vm = e.wbsNode.villaMilestone;
+    const villa = vm?.villa ?? null;
+    const villaLabel = villa?.label ?? (villa ? `Villa ${villa.number}` : "Untagged");
+    for (let i = 0; i < e.photos.length; i++) {
+      const p = e.photos[i];
+      items.push({
+        progressEntryId: e.id,
+        photoId: p.id,
+        photoUrl: p.url,
+        photoIndex: i,
+        photoCount: e.photos.length,
+        siblingPhotos: e.photos,
+        blockCode: villa?.block?.code ?? null,
+        villaLabel,
+        villaNumber: villa?.number ?? null,
+        milestoneName: vm?.section?.name ?? "—",
+        activityName: e.wbsNode.name,
+        entryDate: e.date.toISOString(),
+        loggedAt: e.createdAt.toISOString(),
+        loggedByName: e.createdBy.name,
+        contractorName: e.contractor?.name ?? null,
+        achievedPct: vm?.pctComplete ?? null,
+        notes: e.notes,
+      });
+    }
+  }
+
+  return items;
+}
