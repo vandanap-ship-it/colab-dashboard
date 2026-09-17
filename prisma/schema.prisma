@@ -263,6 +263,7 @@ model Contractor {
   manpowerEntries ManpowerEntry[]
   workPermits     WorkPermit[]
   users           User[]
+  hindrancesResponsibleFor Hindrance[] @relation("HindranceResponsibleContractor")
 
   @@unique([projectId, name])
   @@index([projectId])
@@ -400,6 +401,7 @@ model Hindrance {
   wbsNodeId    String?
   description  String
   startDate    DateTime
+  endDate      DateTime? // expected / actual end of blocker (paired with startDate)
   resolvedDate DateTime?
   daysImpact   Int?
   status       String    @default("OPEN")
@@ -409,18 +411,29 @@ model Hindrance {
   reasonCode String?
   reasonNote String?
 
+  // Responsibility (distinct from `createdBy`, which is the reporter). The
+  // contractor is a FK so filters and rollups can group cleanly; the team is
+  // free text until we model Team as its own entity.
+  responsibleContractorId String?
+  responsibleTeam         String?
+
+  // Monetary impact in project currency (INR ₹).
+  costImpact Float?
+
   createdById    String
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
   idempotencyKey String?   @unique // de-dupes offline-queue replays
 
-  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  wbsNode   WBSNode?         @relation(fields: [wbsNodeId], references: [id])
-  createdBy User             @relation(fields: [createdById], references: [id])
-  photos    HindrancePhoto[]
+  project              Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wbsNode              WBSNode?         @relation(fields: [wbsNodeId], references: [id])
+  createdBy            User             @relation(fields: [createdById], references: [id])
+  responsibleContractor Contractor?     @relation("HindranceResponsibleContractor", fields: [responsibleContractorId], references: [id])
+  photos               HindrancePhoto[]
 
   @@index([projectId])
+  @@index([responsibleContractorId])
 }
 
 model HindrancePhoto {

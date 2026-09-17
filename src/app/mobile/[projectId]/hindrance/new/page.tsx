@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canAccessModule, MODULES } from "@/lib/modules";
-import ReportForm from "@/components/ReportForm";
-import { HINDRANCE_REASONS } from "@/lib/hindranceReasons";
+import MobileHindranceForm from "@/components/mobile/MobileHindranceForm";
 
 export default async function NewHindrancePage({
   params,
@@ -19,28 +18,9 @@ export default async function NewHindrancePage({
     redirect(`/mobile/${projectId}`);
   }
   return (
-    <ReportForm
+    <MobileHindranceForm
       projectId={projectId}
-      title="New Hindrance"
-      endpoint="/api/hindrances"
       successPath={`/mobile/${projectId}`}
-      primaryButtonLabel="Report hindrance"
-      scope="hindrance"
-      extraFields={[
-        { kind: "date",   key: "startDate",  label: "Started on", defaultToday: true },
-        { kind: "number", key: "daysImpact", label: "Days impact (est.)", min: 0, placeholder: "0" },
-        {
-          kind: "select",
-          key: "reasonCode",
-          label: "Reason",
-          default: "",
-          options: [
-            { value: "", label: "Select…" },
-            ...HINDRANCE_REASONS.map((r) => ({ value: r.code, label: r.label })),
-          ],
-        },
-        { kind: "text", key: "reasonNote", label: "Reason detail (optional)", placeholder: "e.g. cement not delivered" },
-      ]}
     />
   );
 }

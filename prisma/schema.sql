@@ -218,11 +218,15 @@ CREATE TABLE "Hindrance" (
     "wbsNodeId" TEXT,
     "description" TEXT NOT NULL,
     "startDate" TIMESTAMP(3) NOT NULL,
+    "endDate" TIMESTAMP(3),
     "resolvedDate" TIMESTAMP(3),
     "daysImpact" INTEGER,
     "status" TEXT NOT NULL DEFAULT 'OPEN',
     "reasonCode" TEXT,
     "reasonNote" TEXT,
+    "responsibleContractorId" TEXT,
+    "responsibleTeam" TEXT,
+    "costImpact" DOUBLE PRECISION,
     "createdById" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -747,6 +751,9 @@ CREATE UNIQUE INDEX "Hindrance_idempotencyKey_key" ON "Hindrance"("idempotencyKe
 CREATE INDEX "Hindrance_projectId_idx" ON "Hindrance"("projectId");
 
 -- CreateIndex
+CREATE INDEX "Hindrance_responsibleContractorId_idx" ON "Hindrance"("responsibleContractorId");
+
+-- CreateIndex
 CREATE INDEX "HindrancePhoto_hindranceId_idx" ON "HindrancePhoto"("hindranceId");
 
 -- CreateIndex
@@ -988,6 +995,9 @@ ALTER TABLE "Hindrance" ADD CONSTRAINT "Hindrance_wbsNodeId_fkey" FOREIGN KEY ("
 
 -- AddForeignKey
 ALTER TABLE "Hindrance" ADD CONSTRAINT "Hindrance_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Hindrance" ADD CONSTRAINT "Hindrance_responsibleContractorId_fkey" FOREIGN KEY ("responsibleContractorId") REFERENCES "Contractor"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "HindrancePhoto" ADD CONSTRAINT "HindrancePhoto_hindranceId_fkey" FOREIGN KEY ("hindranceId") REFERENCES "Hindrance"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -14,10 +14,20 @@ const PostHindranceSchema = z.object({
   wbsNodeId: z.string().min(1).nullable().optional(),
   description: z.string().min(3, "Description too short").max(2000),
   startDate: zDateString.optional(),
+  // Paired with startDate so From/To on the mobile form both land here. Kept
+  // permissive (date or datetime) — client sends ISO strings.
+  endDate: zDateString.nullable().optional(),
   daysImpact: z.number().finite().min(0).max(365).optional(),
   photoUrls: z.array(z.string().url()).max(6).optional(),
   reasonCode: z.string().max(40).optional(),
-  reasonNote: z.string().max(500).optional(),
+  reasonNote: z.string().max(2000).optional(),
+  // Responsibility (distinct from createdBy/reporter). ID for contractor so
+  // reports can group; free-text team until we model Team as its own entity.
+  responsibleContractorId: z.string().min(1).nullable().optional(),
+  responsibleTeam: z.string().max(120).nullable().optional(),
+  // INR ₹. Zero and large caps both allowed — bigger amounts are a real
+  // possibility on Amanvana (₹5-10L design revisions).
+  costImpact: z.number().finite().min(0).max(1_00_00_00_000).nullable().optional(),
   idempotencyKey: z.string().max(120).optional(),
 });
 
@@ -60,21 +70,60 @@ export async function POST(req: Request) {
   const parsed = await parseBody(req, PostHindranceSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
-  const { projectId, wbsNodeId, description, startDate, daysImpact, photoUrls, reasonCode, reasonNote } = body;
+  const {
+    projectId,
+    wbsNodeId,
+    description,
+    startDate,
+    endDate,
+    daysImpact,
+    photoUrls,
+    reasonCode,
+    reasonNote,
+    responsibleContractorId,
+    responsibleTeam,
+    costImpact,
+  } = body;
 
   const desc = description.trim();
   const start = startDate ? new Date(startDate) : new Date();
-  const impact = daysImpact != null ? Math.floor(daysImpact) : null;
+  const end = endDate ? new Date(endDate) : null;
+  // If no explicit daysImpact but we have both start and end, derive from the
+  // window so downstream aggregations stay populated. Ceiling so a partial-day
+  // block still counts as a day of impact.
+  const impactFromWindow =
+    daysImpact == null && end && end.getTime() > start.getTime()
+      ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)))
+      : null;
+  const impact =
+    daysImpact != null ? Math.floor(daysImpact) : impactFromWindow;
   const photos = (photoUrls ?? []).slice(0, 6);
   // Silently drop unknown reason codes (client-only enum guard) rather than
   // rejecting — the record is more important than the tag.
   const reason = isValidReasonCode(reasonCode) ? reasonCode : null;
   const note = (reasonNote ?? "").trim();
+  const team = (responsibleTeam ?? "").trim();
   const idempotencyKey = readIdempotencyKey(body);
 
   // Cross-project FK guard on the activity tag.
   const wbsErr = await assertWbsNodeInProject(wbsNodeId, projectId);
   if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
+
+  // Cross-project FK guard on the responsible contractor. A stale ID from a
+  // different project would silently null out via SET NULL — reject up front
+  // so the client can show a real error instead of "saved without contractor".
+  if (responsibleContractorId) {
+    const c = await prisma.contractor.findFirst({
+      where: { id: responsibleContractorId, projectId },
+      select: { id: true },
+    });
+    if (!c) {
+      return NextResponse.json(
+        { error: "Responsible contractor not found on this project" },
+        { status: 400 },
+      );
+    }
+  }
   const hindranceInclude = {
     createdBy: { select: { id: true, name: true } },
     wbsNode: { select: { id: true, name: true, taskCode: true } },
@@ -91,9 +140,13 @@ export async function POST(req: Request) {
           wbsNodeId: wbsNodeId || null,
           description: desc,
           startDate: start,
+          endDate: end,
           daysImpact: impact,
           reasonCode: reason,
           reasonNote: note || null,
+          responsibleContractorId: responsibleContractorId || null,
+          responsibleTeam: team || null,
+          costImpact: costImpact ?? null,
           createdById: session.user.id,
           idempotencyKey,
           photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
