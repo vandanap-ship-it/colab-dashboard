@@ -30,7 +30,13 @@ test.describe("Mobile experience", () => {
     await expect(page.locator("body")).not.toContainText(/Forbidden|Unauthorized/i);
   });
 
-  test("engineer logs an expense from the phone", async ({ page }) => {
+  // Log Expense was removed from the mobile home tiles on Sep 17 2026 —
+  // the site team wasn't using it and it took up a slot on a phone screen
+  // that had to fit 6 primary tools. Route still resolves for now (an admin
+  // can type the URL) but the flow isn't a supported mobile path, so this
+  // test stays skipped until we either bring the tile back or delete the
+  // route entirely.
+  test.skip("engineer logs an expense from the phone", async ({ page }) => {
     await signIn(page, "engineer");
     const projectId = await getProjectId(page);
 

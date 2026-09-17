@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   TrendingUp,
   Users,
-  Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -107,13 +106,6 @@ export default async function MobileProjectHome({
       href: `/mobile/${projectId}/site-progress`,
       label: "Site Progress",
       icon: ListChecks,
-      tier: "secondary",
-    },
-    {
-      key: "expense",
-      href: `/mobile/${projectId}/expense/new`,
-      label: "Log Expense",
-      icon: Wallet,
       tier: "secondary",
     },
     {
