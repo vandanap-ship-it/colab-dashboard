@@ -44,6 +44,7 @@ export default async function MobileProjectLayout({
           <BrandMark href="/mobile" showWordmark={false} />
           <div className="flex-1 min-w-0 text-center">
             <span className="text-sm font-semibold text-stone-900 tracking-tight truncate block">
+              <span className="text-stone-500 font-normal">Project: </span>
               {project.name}
             </span>
           </div>
