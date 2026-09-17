@@ -32,8 +32,13 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#FBF7EE",
-  // Prevent zoom on form focus on iOS (better PWA feel)
-  maximumScale: 5,
+  // Native-app feel on phones: no pinch-zoom, no double-tap-to-zoom, no
+  // iOS focus-zoom on inputs (paired with min-font-size: 16px in
+  // globals.css). Desktop browsers ignore `userScalable: false` for
+  // accessibility — Ctrl/Cmd zoom still works — so this only affects the
+  // mobile PWA/browser experience, which is where the site engineer lives.
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

@@ -40,6 +40,34 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Native-app feel on phones.
+ *
+ * `touch-action: manipulation` on interactive elements suppresses the
+ *   350ms tap delay AND the double-tap-to-zoom gesture the browser fires
+ *   over links/buttons — the two things that made the app feel "webby"
+ *   under a finger.
+ *
+ * The 16px min-font-size on form controls (only under the mobile
+ *   breakpoint) pairs with `userScalable:false` in the viewport meta: iOS
+ *   Safari auto-zooms into any input whose computed font-size is < 16px,
+ *   and once zoomed there's no way back with pinch disabled. Keep it 14px
+ *   on desktop where auto-zoom doesn't apply.
+ *
+ * `overscroll-behavior: none` kills the elastic bounce and pull-to-refresh
+ *   on iOS/Chrome so scrolling stays inside the app surface. */
+a, button, [role="button"], input, select, textarea, label {
+  touch-action: manipulation;
+}
+
+@media (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px;
+  }
+  html, body {
+    overscroll-behavior: none;
+  }
+}
+
 /* Scrollbars (subtle, on ivory bg) */
 @media (min-width: 768px) {
   ::-webkit-scrollbar { width: 10px; height: 10px; }
