@@ -22,13 +22,15 @@ export interface ManpowerEntryFormProps {
 /**
  * Mobile form for a site engineer to log actual manpower.
  *
- * Design decisions:
- *   - Date defaults to today (site engineers log same-day almost always).
- *   - One submission is one (contractor, trade, count). The upsert on the
- *     API side means a repeat submission for the same triple updates instead
- *     of duplicating — so the engineer can correct a mistake by re-submitting.
- *   - Offline resilience: on network failure or 5xx, queue via the same
- *     offlineQueue we use for progress + hindrance.
+ * Reference-aligned with the New Progress form: one screen, one contractor,
+ * and a repeating trade+count row block with an "+ Add row" affordance so
+ * the engineer can log every trade for a contractor in a single save
+ * without navigating away between entries.
+ *
+ * Server contract stays a per-row upsert on `(projectId, contractorId, trade,
+ * entryDate)` — the form fans out one POST per non-empty row so a resubmit
+ * of the same trade updates rather than duplicates. If any row fails we
+ * report which one, but rows that already saved stay saved.
  */
 export default function ManpowerEntryForm({
   projectId,
@@ -41,78 +43,115 @@ export default function ManpowerEntryForm({
 
   const today = useMemo(() => istDayString(), []);
 
+  type Row = { trade: string; count: string };
+  const initialRows = (): Row[] => [{ trade: trades[0] ?? "", count: "" }];
+
   const [entryDate, setEntryDate] = useState<string>(today);
   const [contractorId, setContractorId] = useState<string>(contractors[0]?.id ?? "");
-  const [trade, setTrade] = useState<string>(trades[0] ?? "");
-  const [actualCount, setActualCount] = useState<string>("");
+  const [rows, setRows] = useState<Row[]>(initialRows());
   const [notes, setNotes] = useState<string>("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // After save: in-place success card so an engineer logging trade-by-trade
   // doesn't get bounced home after every entry. See SaveSuccessCard.
-  const [saved, setSaved] = useState<null | { queued: boolean; trade: string; count: number }>(null);
+  const [saved, setSaved] = useState<null | { queued: boolean; totalHead: number; rowCount: number }>(null);
+
+  function updateRow(i: number, patch: Partial<Row>) {
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+  function addRow() {
+    // Pick the next trade the engineer hasn't already added, so the fresh row
+    // isn't a duplicate they immediately have to change. Falls back to the
+    // first trade if every trade is already listed.
+    const used = new Set(rows.map((r) => r.trade));
+    const nextTrade = trades.find((t) => !used.has(t)) ?? trades[0] ?? "";
+    setRows((prev) => [...prev, { trade: nextTrade, count: "" }]);
+  }
+  function removeRow(i: number) {
+    setRows((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
     if (!contractorId) { setError("Pick a contractor"); return; }
-    if (!trade) { setError("Pick a trade"); return; }
-    const n = Number(actualCount);
-    if (!Number.isFinite(n) || n < 0) { setError("Actual count must be a number"); return; }
+
+    // Only rows with a real count get sent — blank rows are ignored, matching
+    // Progress form behaviour where an empty "0" row is a no-op.
+    const parsedRows = rows
+      .map((r, idx) => ({ idx, trade: r.trade, count: r.count, n: Number(r.count) }))
+      .filter((r) => r.trade && r.count !== "" && Number.isFinite(r.n));
+    if (parsedRows.length === 0) {
+      setError("Enter at least one trade with a headcount");
+      return;
+    }
+    const bad = parsedRows.find((r) => r.n < 0);
+    if (bad) { setError(`Row ${bad.idx + 1}: headcount can't be negative`); return; }
+
+    // Reject duplicate trades in the same submission — the server would
+    // upsert one over the other, which is worse than telling the engineer
+    // to consolidate before saving.
+    const seen = new Set<string>();
+    for (const r of parsedRows) {
+      if (seen.has(r.trade)) { setError(`Trade "${r.trade}" appears twice — remove one row`); return; }
+      seen.add(r.trade);
+    }
 
     setPending(true);
-    const payload = {
-      idempotencyKey: crypto.randomUUID(),
-      projectId,
-      contractorId,
-      trade,
-      entryDate,
-      actualCount: Math.floor(n),
-      notes: notes.trim() || undefined,
-    };
 
     let queued = false;
-    try {
-      const res = await fetch("/api/manpower-entries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        // saved
-      } else if (res.status >= 400 && res.status < 500) {
-        const data = await res.json().catch(() => null);
-        setPending(false);
-        setError(data?.error ?? `Save failed (${res.status})`);
-        return;
-      } else {
+    let failed: string | null = null;
+    let sentTotal = 0;
+    for (const r of parsedRows) {
+      const payload = {
+        idempotencyKey: crypto.randomUUID(),
+        projectId,
+        contractorId,
+        trade: r.trade,
+        entryDate,
+        actualCount: Math.floor(r.n),
+        notes: notes.trim() || undefined,
+      };
+      try {
+        const res = await fetch("/api/manpower-entries", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          sentTotal += Math.floor(r.n);
+          continue;
+        }
+        if (res.status >= 400 && res.status < 500) {
+          const data = await res.json().catch(() => null);
+          failed = data?.error ?? `Row ${r.idx + 1} failed (${res.status})`;
+          break;
+        }
         const { enqueue } = await import("@/lib/offlineQueue");
-        await enqueue({ endpoint: "/api/manpower-entries", method: "POST", body: payload, label: "Manpower entry" });
+        await enqueue({ endpoint: "/api/manpower-entries", method: "POST", body: payload, label: `Manpower · ${r.trade}` });
+        sentTotal += Math.floor(r.n);
+        queued = true;
+      } catch {
+        const { enqueue } = await import("@/lib/offlineQueue");
+        await enqueue({ endpoint: "/api/manpower-entries", method: "POST", body: payload, label: `Manpower · ${r.trade}` });
+        sentTotal += Math.floor(r.n);
         queued = true;
       }
-    } catch {
-      const { enqueue } = await import("@/lib/offlineQueue");
-      await enqueue({ endpoint: "/api/manpower-entries", method: "POST", body: payload, label: "Manpower entry" });
-      queued = true;
     }
+
     setPending(false);
+    if (failed) { setError(failed); return; }
 
-    if (queued) {
-      toast.info("Saved on this device. It will sync when you're back online.");
-    } else {
-      toast.success("Manpower logged.");
-    }
-
-    setSaved({ queued, trade, count: Math.floor(n) });
+    if (queued) toast.info("Saved on this device. Some rows will sync when you're back online.");
+    else toast.success("Manpower logged.");
+    setSaved({ queued, totalHead: sentTotal, rowCount: parsedRows.length });
     router.refresh();
   }
 
   function resetForm() {
     setEntryDate(today);
-    // Keep contractorId/trade so the engineer can quickly log the next trade
-    // for the same contractor without re-picking. Reset just count + notes.
-    setActualCount("");
+    setRows(initialRows());
     setNotes("");
     setError(null);
     setSaved(null);
@@ -124,7 +163,7 @@ export default function ManpowerEntryForm({
     return (
       <SaveSuccessCard
         title="Manpower logged"
-        detail={`${saved.count} ${saved.trade}${saved.count === 1 ? "" : "s"} · ${contractorName}`}
+        detail={`${saved.totalHead} heads across ${saved.rowCount} trade${saved.rowCount === 1 ? "" : "s"} · ${contractorName}`}
         projectId={projectId}
         onAddAnother={resetForm}
         queued={saved.queued}
@@ -134,10 +173,8 @@ export default function ManpowerEntryForm({
 
   return (
     <form onSubmit={handleSubmit} className="px-4 py-4 space-y-5">
+      {/* Header back arrow lives in the mobile layout; keep just the H1 here. */}
       <div>
-        <button type="button" onClick={() => router.back()} className="text-sm text-stone-500 mb-2">
-          ← Back
-        </button>
         <h1 className="text-2xl font-semibold text-stone-900">Log manpower</h1>
         <p className="text-xs text-stone-500 mt-1">{projectName}</p>
       </div>
@@ -166,35 +203,58 @@ export default function ManpowerEntryForm({
         </select>
       </label>
 
-      <label className="block">
-        <span className="text-sm font-medium text-stone-700">Trade</span>
-        <select
-          value={trade}
-          onChange={(e) => setTrade(e.target.value)}
-          className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
-        >
-          {trades.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
-      </label>
-
-      <label className="block">
-        <span className="text-sm font-medium text-stone-700">Actual headcount on site</span>
-        <input
-          type="number"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          min={0}
-          value={actualCount}
-          onChange={(e) => setActualCount(e.target.value)}
-          placeholder="0"
-          className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-lg tabular-nums"
-        />
-        <span className="mt-1 block text-xs text-stone-500">
-          If you already logged this trade today, resubmitting will update the previous number.
-        </span>
-      </label>
+      {/* Trade rows — mirrors the Labour block on New Progress: one dropdown
+          + count per row, "+ Add row" appends. Saving fans out one row per
+          POST so upserts by (contractor, trade, date) still work per-row. */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-stone-700">Trades</span>
+          <button
+            type="button"
+            onClick={addRow}
+            className="text-xs text-amber-600 font-medium"
+          >
+            + Add row
+          </button>
+        </div>
+        {rows.map((row, i) => (
+          <div key={i} className="flex gap-2">
+            <select
+              value={row.trade}
+              onChange={(e) => updateRow(i, { trade: e.target.value })}
+              className="flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+            >
+              {trades.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min={0}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={row.count}
+              onChange={(e) => updateRow(i, { count: e.target.value.replace(/[^\d]/g, "") })}
+              placeholder="0"
+              className="w-24 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm tabular-nums"
+            />
+            {rows.length > 1 && (
+              <button
+                type="button"
+                onClick={() => removeRow(i)}
+                // min-h/min-w-11 (~44px) — Apple/Google minimum tap target.
+                className="text-stone-400 hover:text-red-500 text-lg min-h-11 min-w-11 flex items-center justify-center"
+                aria-label="Remove row"
+              >
+                🗑
+              </button>
+            )}
+          </div>
+        ))}
+        <p className="text-[11px] text-stone-500">
+          Resubmitting the same trade today updates the previous number.
+        </p>
+      </div>
 
       <label className="block">
         <span className="text-sm font-medium text-stone-700">

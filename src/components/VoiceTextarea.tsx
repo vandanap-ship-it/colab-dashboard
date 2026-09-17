@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff } from "lucide-react";
+import { Mic } from "lucide-react";
 
 /**
  * Textarea (or single-line input) with a mic button that uses the Web Speech
@@ -169,7 +169,11 @@ export default function VoiceTextarea({
               : "bg-stone-100 text-stone-600 hover:bg-stone-200"
           }`}
         >
-          {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          {/* Same Mic glyph regardless of state — the red pulsing background
+              already reads as "recording". A crossed-out mic said "muted /
+              disabled", the wrong signal at the moment audio IS being
+              captured. */}
+          <Mic className="w-4 h-4" />
         </button>
       )}
     </div>

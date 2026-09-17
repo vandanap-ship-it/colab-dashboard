@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ChevronDown, Calendar, Camera, X } from "lucide-react";
+import { ChevronDown, Calendar, Camera, X } from "lucide-react";
 import { useToast } from "@/components/Toast";
 import { HINDRANCE_REASONS } from "@/lib/hindranceReasons";
 
@@ -244,19 +244,11 @@ export default function MobileHindranceForm({
 
   return (
     <div className="min-h-full bg-stone-50">
-      {/* Header — lavender-tinted band matching the reference. */}
+      {/* Header — lavender-tinted band matching the reference. The Back arrow
+          moved to the mobile layout header (see MobileHeaderBack) so we don't
+          render two back buttons on the same screen. */}
       <div className="px-4 pt-4 pb-4 bg-[#eee6f2] border-b border-[#e0d3ea]">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-stone-900 active:bg-black/10"
-            aria-label="Back"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Add Hindrance</h1>
-        </div>
+        <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Add Hindrance</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="px-4 py-4 space-y-3.5 pb-24">

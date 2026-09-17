@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ChevronRight, Clock, Loader2, Search, X, Sparkles } from "lucide-react";
+import {
+  AMANVANA_ABRAHAM_ALL_VILLAS,
+  AMANVANA_CONTRACTORS,
+} from "@/lib/projects/amanvana";
 
 // ---------------------------------------------------------------------------
 // Shapes
@@ -71,13 +75,24 @@ export interface ActivityPickerProps {
 // Component
 // ---------------------------------------------------------------------------
 
-type Step = "root" | "block" | "villa" | "milestone" | "activity";
+type Step = "root" | "contractor" | "villa" | "milestone" | "activity";
+
+// Villa-name → contractor lookup. On Amanvana the awarded scope pins each
+// villa number to Abraham Thomas or Elegant Construction; the amanvana
+// registry is the truth-of-record. Names in AMANVANA_ABRAHAM_ALL_VILLAS
+// look like "Villa 03" / "Villa 10 & 11"; anything not in that set is
+// Elegant. Non-Amanvana projects (no matching villa labels) get an empty
+// Abraham set here and fall through to a single "All villas" group.
+const ABRAHAM_VILLA_SET: Set<string> = new Set(AMANVANA_ABRAHAM_ALL_VILLAS);
+function contractorOfVilla(villaLabel: string): "abraham" | "elegant" {
+  return ABRAHAM_VILLA_SET.has(villaLabel) ? "abraham" : "elegant";
+}
 
 export default function ActivityPicker({ projectId, onPick, initialActivityId }: ActivityPickerProps) {
   const [data, setData] = useState<PickerData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("root");
-  const [blockCode, setBlockCode] = useState<string | null>(null);
+  const [contractorKey, setContractorKey] = useState<"abraham" | "elegant" | null>(null);
   const [villaId, setVillaId] = useState<string | null>(null);
   const [villaMilestoneId, setVillaMilestoneId] = useState<string | null>(null);
   const [activities, setActivities] = useState<LeafActivity[] | null>(null);
@@ -150,15 +165,60 @@ export default function ActivityPicker({ projectId, onPick, initialActivityId }:
     return results.slice(0, 30);
   }, [data, freeText]);
 
+  // Contractor tiles for the first level of the drilldown. Villa counts are
+  // computed from what THIS project's picker returned rather than from the
+  // hardcoded scope so an Amanvana in transition (partially seeded villas)
+  // still shows an accurate "N villas" sub. Elegant sits below Abraham to
+  // match the schedule order.
+  const contractorTiles = useMemo(() => {
+    if (!data) return [];
+    const tallies = { abraham: 0, elegant: 0 };
+    for (const b of data.blocks) {
+      for (const v of b.villas) {
+        tallies[contractorOfVilla(v.label)]++;
+      }
+    }
+    return [
+      {
+        key: "abraham" as const,
+        label: AMANVANA_CONTRACTORS.abraham,
+        sub: `${tallies.abraham} villa${tallies.abraham === 1 ? "" : "s"}`,
+      },
+      {
+        key: "elegant" as const,
+        label: AMANVANA_CONTRACTORS.elegant,
+        sub: `${tallies.elegant} villa${tallies.elegant === 1 ? "" : "s"}`,
+      },
+    ].filter((t) => tallies[t.key] > 0);
+  }, [data]);
+
   // ------- helpers -------
-  const currentBlock = useMemo(
-    () => data?.blocks.find((b) => b.code === blockCode) ?? null,
-    [data, blockCode],
+
+  /** Flat (villa, block) pairs the current contractor owns. Keeps the block
+   *  crumb so leaf activities can still be attributed to the right block. */
+  const contractorVillas = useMemo(() => {
+    if (!data || !contractorKey) return [];
+    const out: Array<{ villa: PickerVilla; blockCode: string; blockName: string | null }> = [];
+    for (const b of data.blocks) {
+      for (const v of b.villas) {
+        if (contractorOfVilla(v.label) === contractorKey) {
+          out.push({ villa: v, blockCode: b.code, blockName: b.name });
+        }
+      }
+    }
+    // Sort by villa number so V03 < V10 < V32 rather than lexicographic.
+    return out.sort((a, b) => a.villa.number - b.villa.number);
+  }, [data, contractorKey]);
+
+  const currentVillaWithBlock = useMemo(
+    () => contractorVillas.find((cv) => cv.villa.id === villaId) ?? null,
+    [contractorVillas, villaId],
   );
-  const currentVilla = useMemo(
-    () => currentBlock?.villas.find((v) => v.id === villaId) ?? null,
-    [currentBlock, villaId],
-  );
+  const currentVilla = currentVillaWithBlock?.villa ?? null;
+  const currentBlock = useMemo(() => {
+    if (!currentVillaWithBlock || !data) return null;
+    return data.blocks.find((b) => b.code === currentVillaWithBlock.blockCode) ?? null;
+  }, [currentVillaWithBlock, data]);
   const currentMilestone = useMemo(
     () => currentVilla?.milestones.find((m) => m.id === villaMilestoneId) ?? null,
     [currentVilla, villaMilestoneId],
@@ -167,12 +227,16 @@ export default function ActivityPicker({ projectId, onPick, initialActivityId }:
   const goBack = useCallback(() => {
     if (step === "activity") { setStep("milestone"); setActivities(null); setVillaMilestoneId(null); return; }
     if (step === "milestone") { setStep("villa"); setVillaId(null); return; }
-    if (step === "villa") { setStep("block"); setBlockCode(null); return; }
-    if (step === "block") { setStep("root"); return; }
+    if (step === "villa") { setStep("contractor"); setContractorKey(null); return; }
+    if (step === "contractor") { setStep("root"); return; }
   }, [step]);
 
-  const jumpToMilestone = useCallback((match: { blockCode: string; villaId: string; villaMilestoneId: string }) => {
-    setBlockCode(match.blockCode);
+  const jumpToMilestone = useCallback((match: { villaId: string; villaMilestoneId: string; villaLabel: string }) => {
+    // Free-text search bypasses the contractor step by design — the engineer
+    // already searched by villa/block, so hand them straight into the
+    // milestone list. Contractor is inferred from the villa label so a Back
+    // out of Activity still lands in a sensible place.
+    setContractorKey(contractorOfVilla(match.villaLabel));
     setVillaId(match.villaId);
     setVillaMilestoneId(match.villaMilestoneId);
     setStep("activity");
@@ -252,7 +316,7 @@ export default function ActivityPicker({ projectId, onPick, initialActivityId }:
               <li key={m.villaMilestoneId}>
                 <button
                   type="button"
-                  onClick={() => jumpToMilestone(m)}
+                  onClick={() => jumpToMilestone({ villaId: m.villaId, villaMilestoneId: m.villaMilestoneId, villaLabel: m.villaLabel })}
                   className="w-full text-left px-3 py-2.5 hover:bg-stone-50 flex items-center justify-between gap-2"
                 >
                   <div className="min-w-0">
@@ -279,21 +343,27 @@ export default function ActivityPicker({ projectId, onPick, initialActivityId }:
           className="text-xs text-stone-500 hover:text-stone-900 inline-flex items-center gap-1"
         >
           <ArrowLeft className="w-3 h-3" />
-          {step === "block" ? "Back" : step === "villa" ? `Block ${currentBlock?.code}` : step === "milestone" ? currentVilla?.label : currentMilestone?.name}
+          {step === "contractor"
+            ? "Back"
+            : step === "villa"
+              ? (contractorKey === "abraham" ? AMANVANA_CONTRACTORS.abraham : AMANVANA_CONTRACTORS.elegant)
+              : step === "milestone"
+                ? currentVilla?.label
+                : currentMilestone?.name}
         </button>
       )}
 
       {/* Root — search, pick-by-location entry, then recent picks. The
-          block/villa/milestone drilldown is a peer path to search — surface
-          it right under the search bar so a site engineer sees it before
-          scrolling past 10 recently-used items. */}
+          contractor/villa/milestone drilldown is a peer path to search —
+          surface it right under the search bar so a site engineer sees it
+          before scrolling past 10 recently-used items. */}
       {step === "root" && (
         <>
           <SearchBar value={freeText} onChange={setFreeText} onClear={() => setFreeText("")} />
 
           <button
             type="button"
-            onClick={() => setStep("block")}
+            onClick={() => setStep("contractor")}
             className="w-full rounded-md border-2 border-dashed border-stone-300 bg-white px-4 py-3 text-sm font-medium text-stone-700 hover:border-stone-500"
           >
             <Sparkles className="w-4 h-4 inline mr-1.5 text-amber-500" />
@@ -325,26 +395,32 @@ export default function ActivityPicker({ projectId, onPick, initialActivityId }:
         </>
       )}
 
-      {/* Block level */}
-      {step === "block" && (
+      {/* Contractor level — Amanvana has just two, so a two-tile grid reads
+          cleanly. If a project has villas that don't map to either awarded
+          contractor, they fall through as "elegant" today (safe default;
+          the schedule will still be pickable) — worth revisiting when a
+          third contractor is onboarded. */}
+      {step === "contractor" && (
         <TileGrid
-          items={data.blocks.map((b) => ({
-            key: b.code,
-            label: `Block ${b.code}`,
-            sub: `${b.villas.length} villa${b.villas.length === 1 ? "" : "s"}`,
-            onClick: () => { setBlockCode(b.code); setStep("villa"); },
+          items={contractorTiles.map((c) => ({
+            key: c.key,
+            label: c.label,
+            sub: c.sub,
+            onClick: () => { setContractorKey(c.key); setStep("villa"); },
           }))}
         />
       )}
 
-      {/* Villa level */}
-      {step === "villa" && currentBlock && (
+      {/* Villa level — flat list under the chosen contractor. Block is
+          shown as a sub-label so the engineer still knows where a villa
+          sits without another drilldown level. */}
+      {step === "villa" && contractorKey && (
         <TileGrid
-          items={currentBlock.villas.map((v) => ({
-            key: v.id,
-            label: v.label,
-            sub: `${v.milestones.length} milestones`,
-            onClick: () => { setVillaId(v.id); setStep("milestone"); },
+          items={contractorVillas.map((cv) => ({
+            key: cv.villa.id,
+            label: cv.villa.label,
+            sub: `Block ${cv.blockCode} · ${cv.villa.milestones.length} milestones`,
+            onClick: () => { setVillaId(cv.villa.id); setStep("milestone"); },
           }))}
         />
       )}

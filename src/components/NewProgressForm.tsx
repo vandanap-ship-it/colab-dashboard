@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
 import VoiceTextarea from "./VoiceTextarea";
@@ -24,8 +24,6 @@ interface PickedActivity {
   path: { blockCode: string; villaLabel: string; sectionName: string };
 }
 
-type Contractor = { id: string; name: string; category: string };
-
 const LABOUR_CATEGORIES = ["Skilled", "Unskilled", "Mason", "Helper", "Supervisor"];
 
 export default function NewProgressForm({
@@ -39,13 +37,15 @@ export default function NewProgressForm({
   const toast = useToast();
   const today = istDayString();
 
-  const [contractors, setContractors] = useState<Contractor[] | null>(null);
   const [selected, setSelected] = useState<PickedActivity | null>(null);
   const activityId = selected?.id ?? "";
+  // Contractor is derived from the picked activity — the schedule already
+  // knows which contractor owns which block/villa via WBS.contractorId, so
+  // asking the engineer to re-pick it was redundant.
+  const contractorId = selected?.contractor?.id ?? "";
   const [date, setDate] = useState(today);
   const [achieved, setAchieved] = useState(0);
   const [cumulative, setCumulative] = useState(0);
-  const [contractorId, setContractorId] = useState<string>("");
   const [reasonCode, setReasonCode] = useState<string>("");
   const [reasonNote, setReasonNote] = useState<string>("");
   const [labour, setLabour] = useState<{ category: string; count: number }[]>([
@@ -60,23 +60,8 @@ export default function NewProgressForm({
   // per shift — booting them home every time forced 2 extra taps per entry.
   const [saved, setSaved] = useState<null | { queued: boolean }>(null);
 
-  useEffect(() => {
-    (async () => {
-      const conRes = await fetch(`/api/admin/contractors?projectId=${projectId}`, { cache: "no-store" });
-      if (conRes.ok) {
-        const data = await conRes.json();
-        setContractors(data.contractors);
-      }
-    })();
-  }, [projectId]);
-
   const totalQty = selected?.totalQuantity ?? 0;
   const pct = totalQty > 0 ? Math.max(0, Math.min(100, (cumulative / totalQty) * 100)) : 0;
-
-  // Auto-pick contractor if the newly-picked activity has one tagged.
-  useEffect(() => {
-    if (selected?.contractor && !contractorId) setContractorId(selected.contractor.id);
-  }, [selected, contractorId]);
 
   function updateLabour(i: number, patch: Partial<{ category: string; count: number }>) {
     setLabour((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -206,7 +191,6 @@ export default function NewProgressForm({
     setDate(today);
     setAchieved(0);
     setCumulative(0);
-    setContractorId("");
     setReasonCode("");
     setReasonNote("");
     setLabour([{ category: "Skilled", count: 0 }]);
@@ -230,16 +214,10 @@ export default function NewProgressForm({
 
   return (
     <form onSubmit={handleSubmit} className="px-4 py-4 space-y-5">
-      <div>
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="text-sm text-stone-500 mb-2"
-        >
-          ← Back
-        </button>
-        <h1 className="text-2xl font-semibold text-stone-900">New Progress</h1>
-      </div>
+      {/* Header back arrow lives in the mobile layout — one authoritative
+          Back per screen. Kept the H1 here so the page title stays with the
+          form content and readers land on the right heading level. */}
+      <h1 className="text-2xl font-semibold text-stone-900">New Progress</h1>
 
       <label className="block">
         <span className="text-sm font-medium text-stone-700">Date</span>
@@ -337,24 +315,6 @@ export default function NewProgressForm({
                 No total quantity set on this activity — enter cumulative as a count below.
               </p>
             )}
-          </div>
-
-          <div className="space-y-2">
-            <label className="block">
-              <span className="text-sm font-medium text-stone-700">Contractor</span>
-              <select
-                value={contractorId}
-                onChange={(e) => setContractorId(e.target.value)}
-                className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
-              >
-                <option value="">Choose contractor…</option>
-                {contractors?.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.category})
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
 
           <div className="space-y-2">

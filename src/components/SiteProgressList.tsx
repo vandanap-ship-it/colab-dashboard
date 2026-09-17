@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { formatDayMonthYear as fmt } from "@/lib/dates";
+import { ChevronRight } from "lucide-react";
 
 type Activity = {
   id: string;
@@ -27,11 +27,90 @@ function statusOf(a: Activity, today: Date): StatusKey {
   return "ONGOING";
 }
 
+// The WBS crumb trail for Amanvana runs
+//   [Project, Block XX, Villa YY (or Villa Set), Section, Sub-section, Activity]
+// We extract the villa crumb ("Villa 07", "Villa 10 & 11", "Villa Set ( V32, V33 )")
+// as the villa identity. Any activity whose crumbs don't include a Villa* segment
+// (e.g. project-level activities) rolls up under a fallback "Project-level" group
+// so we still surface them rather than silently drop.
+const VILLA_CRUMB_RE = /^villa\b/i;
+function villaCrumbOf(a: Activity): string {
+  const villaCrumb = a.path.find((p) => VILLA_CRUMB_RE.test(p));
+  return villaCrumb ?? "Project-level";
+}
+function blockCrumbOf(a: Activity): string | null {
+  const blockCrumb = a.path.find((p) => /^block\b/i.test(p));
+  return blockCrumb ?? null;
+}
+
+type VillaGroup = {
+  villa: string;
+  block: string | null;
+  activities: Activity[];
+  status: StatusKey; // Whichever status the villa's activities MOSTLY fall into (dominant)
+  ongoingCount: number;
+  doneCount: number;
+  upcomingCount: number;
+  totalCount: number;
+  avgPercent: number;
+};
+
+/** Group activities by villa, then compute a headline status per villa so the
+ *  three-tab filter still means something at the villa level. A villa lands in
+ *  "In Progress" if it has at least one ONGOING activity; "Upcoming" if all its
+ *  activities are still upcoming; "Done" only when every activity is complete.
+ *  This mirrors how Shraddha reads the paper report — "which villas are moving
+ *  right now" is the primary question, not "which activities". */
+function groupByVilla(activities: Activity[], today: Date): VillaGroup[] {
+  const byVilla = new Map<string, VillaGroup>();
+  for (const a of activities) {
+    const villa = villaCrumbOf(a);
+    const block = blockCrumbOf(a);
+    let g = byVilla.get(villa);
+    if (!g) {
+      g = {
+        villa,
+        block,
+        activities: [],
+        status: "ONGOING",
+        ongoingCount: 0,
+        doneCount: 0,
+        upcomingCount: 0,
+        totalCount: 0,
+        avgPercent: 0,
+      };
+      byVilla.set(villa, g);
+    }
+    g.activities.push(a);
+    g.totalCount++;
+    const s = statusOf(a, today);
+    if (s === "ONGOING") g.ongoingCount++;
+    else if (s === "UPCOMING") g.upcomingCount++;
+    else g.doneCount++;
+  }
+  const groups = Array.from(byVilla.values());
+  for (const g of groups) {
+    g.avgPercent =
+      g.activities.reduce((sum, a) => sum + (a.percentComplete || 0), 0) /
+      Math.max(1, g.activities.length);
+    if (g.ongoingCount > 0) g.status = "ONGOING";
+    else if (g.doneCount === g.totalCount) g.status = "QUEUE";
+    else g.status = "UPCOMING";
+  }
+  return groups;
+}
+
+/** Extract "Villa 07" → 7 for natural-number sort so villa 2 sits before villa 10. */
+function villaSortKey(v: string): number {
+  const m = v.match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+}
 
 export default function SiteProgressList({ projectId }: { projectId: string }) {
   const [activities, setActivities] = useState<Activity[] | null>(null);
   const [tab, setTab] = useState<StatusKey>("ONGOING");
   const [search, setSearch] = useState("");
+  const [openVilla, setOpenVilla] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -54,39 +133,32 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
     };
   }, [projectId, reloadKey]);
 
-  const filtered = useMemo(() => {
+  const today = useMemo(() => new Date(), []);
+  const villaGroups = useMemo(() => {
     if (!activities) return [];
-    const today = new Date();
-    const rows = activities.filter((a) => {
-      if (statusOf(a, today) !== tab) return false;
-      if (!search.trim()) return true;
-      const q = search.toLowerCase();
-      return a.name.toLowerCase().includes(q) || a.path.join(" / ").toLowerCase().includes(q);
+    return groupByVilla(activities, today);
+  }, [activities, today]);
+
+  const filteredVillas = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const rows = villaGroups.filter((g) => {
+      if (g.status !== tab) return false;
+      if (!q) return true;
+      return (
+        g.villa.toLowerCase().includes(q) ||
+        (g.block ?? "").toLowerCase().includes(q)
+      );
     });
-    // Sort so the top of the list is what the engineer would want first:
-    //   • In Progress: highest %-complete on top (nearing finish → attention)
-    //   • Upcoming: nearest planned start on top (what's about to begin)
-    //   • Done: most recently finished on top
-    // Previously the list came back in WBS-index order — sensible for a
-    // Gantt but not for a phone that renders one screen at a time.
-    const key = (a: Activity): number => {
-      if (tab === "UPCOMING") return a.baselineStart ? new Date(a.baselineStart).getTime() : Infinity;
-      if (tab === "QUEUE") {
-        const f = a.actualFinish ?? a.projectedFinish ?? a.baselineFinish;
-        return f ? -new Date(f).getTime() : Infinity;
-      }
-      return -(a.percentComplete ?? 0); // ONGOING
-    };
-    return rows.sort((a, b) => key(a) - key(b));
-  }, [activities, tab, search]);
+    // Villa 02, 03, 04… reads naturally in numeric order — matches the paper
+    // scorecard. Villas without a number (fallback groups) sort last.
+    return rows.sort((a, b) => villaSortKey(a.villa) - villaSortKey(b.villa));
+  }, [villaGroups, tab, search]);
 
   const counts = useMemo(() => {
-    if (!activities) return { UPCOMING: 0, ONGOING: 0, QUEUE: 0 };
-    const today = new Date();
     const c = { UPCOMING: 0, ONGOING: 0, QUEUE: 0 };
-    for (const a of activities) c[statusOf(a, today)]++;
+    for (const g of villaGroups) c[g.status]++;
     return c;
-  }, [activities]);
+  }, [villaGroups]);
 
   return (
     <div className="px-4 py-4 space-y-4">
@@ -113,7 +185,7 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
         type="text"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search activity…"
+        placeholder="Search villa or block…"
         className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
       />
 
@@ -130,47 +202,19 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
         </div>
       ) : activities === null ? (
         <p className="text-sm text-stone-500">Loading…</p>
-      ) : filtered.length === 0 ? (
-        <p className="text-sm text-stone-500">No activities in this status.</p>
+      ) : filteredVillas.length === 0 ? (
+        <p className="text-sm text-stone-500">No villas in this status.</p>
       ) : (
         <ul className="space-y-2">
-          {filtered.map((a) => (
-            <li key={a.id}>
-              <Link
-                href={`/mobile/${projectId}/activity/${a.id}`}
-                className="block rounded-xl border border-stone-200 bg-white p-4 active:scale-[0.99] transition"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="font-medium text-stone-900 truncate">{a.name}</h3>
-                    <p className="text-[10px] text-stone-500 truncate mt-0.5">{a.path.slice(0, -1).join(" / ")}</p>
-                  </div>
-                  {/* Bigger % complete indicator — 64px instead of 48px, and
-                      colour-coded by state so an engineer scanning the list
-                      can find their in-flight rows without reading each %.
-                      Killed the "ID: R3" line above the title — no one uses
-                      the WBS ID to find their row. */}
-                  <PctBadge percent={a.percentComplete} />
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <div className="text-stone-500">Planned Start</div>
-                    <div>{fmt(a.baselineStart)}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-stone-500">Planned End</div>
-                    <div>{fmt(a.baselineFinish)}</div>
-                  </div>
-                  <div>
-                    <div className="text-stone-500">Actual Start</div>
-                    <div>{fmt(a.actualStart)}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-stone-500">Projected End</div>
-                    <div>{fmt(a.projectedFinish)}</div>
-                  </div>
-                </div>
-              </Link>
+          {filteredVillas.map((g) => (
+            <li key={g.villa}>
+              <VillaCard
+                group={g}
+                projectId={projectId}
+                today={today}
+                open={openVilla === g.villa}
+                onToggle={() => setOpenVilla((cur) => (cur === g.villa ? null : g.villa))}
+              />
             </li>
           ))}
         </ul>
@@ -179,16 +223,103 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Villa card (row + expandable milestone list)
+// ---------------------------------------------------------------------------
+
+function VillaCard({
+  group,
+  projectId,
+  today,
+  open,
+  onToggle,
+}: {
+  group: VillaGroup;
+  projectId: string;
+  today: Date;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const pct = Math.round(group.avgPercent);
+  // Sort activities inside the villa: in-progress on top, then upcoming, then
+  // done — same read order Shraddha uses in her weekly review.
+  const sortedActivities = useMemo(() => {
+    const rank = (a: Activity) => {
+      const s = statusOf(a, today);
+      return s === "ONGOING" ? 0 : s === "UPCOMING" ? 1 : 2;
+    };
+    return [...group.activities].sort((a, b) => rank(a) - rank(b));
+  }, [group.activities, today]);
+  return (
+    <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full text-left px-4 py-3 flex items-center gap-3 active:bg-stone-50"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-stone-900 truncate">{group.villa}</div>
+          <div className="text-[11px] text-stone-500 truncate mt-0.5">
+            {group.block ?? "Project-level"} · {group.ongoingCount} in progress · {group.doneCount}/{group.totalCount} done
+          </div>
+        </div>
+        <PctBadge percent={pct} />
+        <ChevronRight
+          className={`w-4 h-4 text-stone-400 transition-transform ${open ? "rotate-90" : ""}`}
+        />
+      </button>
+      {open && (
+        <ul className="border-t border-stone-100 divide-y divide-stone-100">
+          {sortedActivities.map((a) => {
+            const s = statusOf(a, today);
+            return (
+              <li key={a.id}>
+                <Link
+                  href={`/mobile/${projectId}/activity/${a.id}`}
+                  className="flex items-center gap-3 px-4 py-2.5 active:bg-stone-50"
+                >
+                  <MilestonePill status={s} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm text-stone-900 truncate">{a.name}</div>
+                    <div className="text-[10px] text-stone-500 truncate">
+                      {/* Show the section crumb (parent of the leaf, minus the villa/block) so an engineer can tell "Ground Floor Structure" apart from "Terrace Works". */}
+                      {a.path.slice(0, -1).filter((p) => !/^villa\b/i.test(p) && !/^block\b/i.test(p)).join(" / ")}
+                    </div>
+                  </div>
+                  <div className="text-xs tabular-nums text-stone-500 shrink-0">{Math.round(a.percentComplete)}%</div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function MilestonePill({ status }: { status: StatusKey }) {
+  const cfg = {
+    ONGOING:  { dot: "bg-amber-500",   label: "In progress" },
+    UPCOMING: { dot: "bg-stone-300",   label: "Upcoming"    },
+    QUEUE:    { dot: "bg-emerald-500", label: "Done"        },
+  } as const;
+  const c = cfg[status];
+  return (
+    <span className="inline-flex items-center gap-1.5 shrink-0">
+      <span className={`w-2 h-2 rounded-full ${c.dot}`} aria-hidden />
+      <span className="sr-only">{c.label}</span>
+    </span>
+  );
+}
+
 /**
- * Big circular %-complete badge for a Site Progress row. Colour maps to state
- * so a site engineer scrolling the "In Progress" tab can eyeball what's
- * nearing finish (green), what's in the middle (amber), and what hasn't
- * started (grey) without reading numbers.
+ * Big circular %-complete badge for a villa row. Colour maps to state so a
+ * site engineer scrolling the "In Progress" tab can eyeball which villas are
+ * nearing finish (green), which are mid-work (amber), and which are just
+ * getting started (light amber) without reading numbers.
  */
 function PctBadge({ percent }: { percent: number }) {
   const p = Math.max(0, Math.min(100, Math.round(percent)));
-  // Grey for 0 (not started), green for 100 (done), amber ramp in between.
-  // Deliberately no red: this list is view-only status, not urgency.
   const ring =
     p === 0
       ? "border-stone-200 text-stone-400"
@@ -199,7 +330,7 @@ function PctBadge({ percent }: { percent: number }) {
           : "border-amber-300 text-amber-700";
   return (
     <div
-      className={`shrink-0 h-16 w-16 rounded-full border-[3px] flex items-center justify-center text-sm font-bold tabular-nums ${ring}`}
+      className={`shrink-0 h-12 w-12 rounded-full border-[3px] flex items-center justify-center text-xs font-bold tabular-nums ${ring}`}
       aria-label={`${p} percent complete`}
     >
       {p}%

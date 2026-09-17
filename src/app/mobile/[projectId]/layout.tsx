@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { canSeeMobile } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getPendingActionCount } from "@/lib/pendingActions";
-import BrandMark from "@/components/BrandMark";
+import MobileHeaderBack from "@/components/MobileHeaderBack";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import MobileOnboarding from "@/components/MobileOnboarding";
 import PendingSyncBadge from "@/components/PendingSyncBadge";
@@ -41,7 +41,10 @@ export default async function MobileProjectLayout({
     <div className="flex-1 flex flex-col bg-ivory">
       <header className="border-b border-stone-200 bg-white/90 backdrop-blur-md sticky top-0 z-20">
         <div className="flex items-center justify-between px-4 h-12 gap-3">
-          <BrandMark href="/mobile" showWordmark={false} />
+          {/* Top-left: BrandMark on home, Back arrow on subpages. See
+              MobileHeaderBack — one entry point for every child route so we
+              stop duplicating "← Back" buttons on individual forms. */}
+          <MobileHeaderBack projectId={project.id} />
           <div className="flex-1 min-w-0 text-center">
             <span className="text-sm font-semibold text-stone-900 tracking-tight truncate block">
               <span className="text-stone-500 font-normal">Project: </span>
