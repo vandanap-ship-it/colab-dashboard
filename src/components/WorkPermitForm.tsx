@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import PhotoPicker from "./PhotoPicker";
 import SaveSuccessCard from "./SaveSuccessCard";
 import { useToast } from "./Toast";
+import { ScreenHeading, FieldLabel, PrimaryAction } from "./mobile/ui";
 import {
   WORK_PERMIT_TYPES,
   WORK_PERMIT_TYPE_HINTS,
@@ -209,24 +210,19 @@ export default function WorkPermitForm({
   }
 
   const inputCls =
-    "w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm focus:outline-none focus:border-stone-900";
+    "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px] focus:outline-none focus:border-ink";
 
   return (
-    <form onSubmit={handleSubmit} className="px-4 py-4 space-y-5">
-      <div>
-        <button type="button" onClick={() => router.back()} className="text-sm text-stone-500 mb-2">
-          ← Back
-        </button>
-        <h1 className="text-2xl font-semibold text-stone-900">Raise Work Permit</h1>
-        <p className="text-xs text-stone-500 mt-1">
-          {projectName} · needs approval before work starts.
-        </p>
-      </div>
+    <form onSubmit={handleSubmit} className="px-5 py-5 space-y-5">
+      <ScreenHeading
+        title="Raise a work permit"
+        lede={`Needs approval before work starts · ${projectName}`}
+      />
 
       {/* Type — segmented picker so all four fit on-screen without scrolling */}
       <div>
-        <span className="text-sm font-medium text-stone-700">Type</span>
-        <div className="mt-1.5 grid grid-cols-2 gap-2">
+        <FieldLabel>What kind of work?</FieldLabel>
+        <div className="grid grid-cols-2 gap-2">
           {WORK_PERMIT_TYPES.map((t) => (
             <button
               key={t}
@@ -234,14 +230,14 @@ export default function WorkPermitForm({
               onClick={() => setType(t)}
               className={`rounded-lg border px-3 py-2.5 text-left transition-all ${
                 type === t
-                  ? "border-stone-900 bg-stone-900 text-white"
-                  : "border-stone-200 bg-white text-stone-900"
+                  ? "border-ink bg-ink text-cream"
+                  : "border-sandstone-100 bg-cream text-ink"
               }`}
             >
-              <div className="text-sm font-medium">{WORK_PERMIT_TYPE_LABELS[t]}</div>
+              <div className="text-[14px] font-semibold">{WORK_PERMIT_TYPE_LABELS[t]}</div>
               <div
-                className={`text-[10px] mt-0.5 ${
-                  type === t ? "text-stone-300" : "text-stone-500"
+                className={`text-[11px] mt-0.5 ${
+                  type === t ? "text-cream/70" : "text-ink-3"
                 }`}
               >
                 {WORK_PERMIT_TYPE_HINTS[t]}
@@ -252,9 +248,9 @@ export default function WorkPermitForm({
       </div>
 
       <label className="block">
-        <span className="text-sm font-medium text-stone-700">Short title</span>
+        <FieldLabel>Short title</FieldLabel>
         <input
-          className={`${inputCls} mt-1`}
+          className={inputCls}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="e.g. Welding of column reinforcement — Villa 14"
@@ -263,11 +259,9 @@ export default function WorkPermitForm({
       </label>
 
       <label className="block">
-        <span className="text-sm font-medium text-stone-700">
-          Description <span className="text-stone-400 text-xs">(optional)</span>
-        </span>
+        <FieldLabel optional>Description</FieldLabel>
         <textarea
-          className={`${inputCls} mt-1 min-h-[80px]`}
+          className={`${inputCls} min-h-[80px]`}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Extra context for the approver."
@@ -279,38 +273,36 @@ export default function WorkPermitForm({
           often the fastest way to give the approver context (drawing
           markup, site condition, blocked area). */}
       <div>
-        <span className="text-sm font-medium text-stone-700">
-          Photos <span className="text-stone-400 text-xs">(optional — max 6)</span>
-        </span>
-        <div className="mt-2">
-          <PhotoPicker photos={photos} setPhotos={setPhotos} max={6} />
-        </div>
+        <FieldLabel hint="A photo tells the approver the story faster than words." optional>
+          Photos (up to 6)
+        </FieldLabel>
+        <PhotoPicker photos={photos} setPhotos={setPhotos} max={6} />
       </div>
 
       <div className="grid grid-cols-3 gap-2">
         <label className="block">
-          <span className="text-sm font-medium text-stone-700">Work date</span>
+          <FieldLabel>Date</FieldLabel>
           <input
             type="date"
-            className={`${inputCls} mt-1`}
+            className={inputCls}
             value={workDate}
             onChange={(e) => setWorkDate(e.target.value)}
           />
         </label>
         <label className="block">
-          <span className="text-sm font-medium text-stone-700">Start</span>
+          <FieldLabel>Start</FieldLabel>
           <input
             type="time"
-            className={`${inputCls} mt-1`}
+            className={inputCls}
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
           />
         </label>
         <label className="block">
-          <span className="text-sm font-medium text-stone-700">End</span>
+          <FieldLabel>End</FieldLabel>
           <input
             type="time"
-            className={`${inputCls} mt-1`}
+            className={inputCls}
             value={endTime}
             onChange={(e) => setEndTime(e.target.value)}
           />
@@ -318,11 +310,9 @@ export default function WorkPermitForm({
       </div>
 
       <label className="block">
-        <span className="text-sm font-medium text-stone-700">
-          Location <span className="text-stone-400 text-xs">(optional)</span>
-        </span>
+        <FieldLabel optional>Location</FieldLabel>
         <input
-          className={`${inputCls} mt-1`}
+          className={inputCls}
           value={location}
           onChange={(e) => setLocation(e.target.value)}
           placeholder="e.g. Villa 14 · Ground floor · Column bay 3"
@@ -331,11 +321,9 @@ export default function WorkPermitForm({
       </label>
 
       <label className="block">
-        <span className="text-sm font-medium text-stone-700">
-          Contractor <span className="text-stone-400 text-xs">(optional)</span>
-        </span>
+        <FieldLabel optional>Contractor</FieldLabel>
         <select
-          className={`${inputCls} mt-1`}
+          className={inputCls}
           value={contractorId}
           onChange={(e) => setContractorId(e.target.value)}
         >
@@ -349,13 +337,12 @@ export default function WorkPermitForm({
       </label>
 
       <div>
-        <span className="text-sm font-medium text-stone-700">Approvers</span>
-        <p className="text-[11px] text-stone-500 mt-0.5">
-          Pick at least one. Any of them can approve — first-approver-wins.
-        </p>
-        <div className="mt-2 space-y-1.5 max-h-64 overflow-y-auto rounded-lg border border-stone-200 bg-white p-2">
+        <FieldLabel hint="Pick at least one. Any of them can approve — first approver wins.">
+          Who should approve?
+        </FieldLabel>
+        <div className="space-y-1.5 max-h-64 overflow-y-auto rounded-lg border border-sandstone-100 bg-cream p-2">
           {approverOptions.length === 0 ? (
-            <p className="text-xs text-stone-500 px-2 py-2">
+            <p className="text-[13px] text-ink-3 px-2 py-2">
               No approvers available. Ask an admin to provision an internal user.
             </p>
           ) : (
@@ -365,18 +352,18 @@ export default function WorkPermitForm({
                 <label
                   key={u.id}
                   className={`flex items-center gap-2.5 rounded-md px-2 py-2 cursor-pointer ${
-                    checked ? "bg-stone-100" : "hover:bg-stone-50"
+                    checked ? "bg-sandstone-100" : "hover:bg-sandstone-50"
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={checked}
                     onChange={() => toggleApprover(u.id)}
-                    className="w-4 h-4"
+                    className="w-4 h-4 accent-ferrous-500"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm text-stone-900">{u.name}</div>
-                    <div className="text-[10px] text-stone-500">
+                    <div className="text-[15px] text-ink">{u.name}</div>
+                    <div className="text-[11px] text-ink-3">
                       @{u.username} · {u.role}
                     </div>
                   </div>
@@ -388,21 +375,17 @@ export default function WorkPermitForm({
       </div>
 
       {error && (
-        <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+        <p className="text-[13px] text-ferrous-700 bg-ferrous-50 border border-ferrous-100 rounded-md px-3 py-2">
           {error}
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full rounded-lg bg-stone-900 text-white text-sm font-medium py-3 hover:bg-stone-800 disabled:opacity-60"
-      >
+      <PrimaryAction disabled={pending}>
         {pending ? "Submitting…" : "Raise permit"}
-      </button>
+      </PrimaryAction>
 
       {!isFullAccess && (
-        <p className="text-[11px] text-stone-500 text-center">
+        <p className="text-[12px] text-ink-3 text-center">
           You&apos;ll get notified when an approver acts on this permit.
         </p>
       )}

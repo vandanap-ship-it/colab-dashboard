@@ -236,14 +236,21 @@ export default function InspectionForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="px-4 py-4 space-y-5">
-      <div>
-        <button type="button" onClick={() => router.back()} className="text-sm text-stone-500 mb-2">
-          ← Back
-        </button>
-        <h1 className="text-2xl font-semibold text-stone-900">Inspection Checklist</h1>
-        <p className="text-xs text-stone-500 mt-1">Submit for planner review.</p>
-      </div>
+    <form onSubmit={handleSubmit} className="px-5 py-5 space-y-5">
+      {/* Header back arrow lives in the mobile layout. Fraunces title +
+          ferrous eyebrow match every other mobile screen so this WIR form
+          reads as the same product. */}
+      <header>
+        <p className="font-serif italic text-[13px] text-ferrous-600 tracking-wide">
+          Work inspection record
+        </p>
+        <h1 className="font-serif text-[28px] leading-tight text-ink tracking-tight mt-1">
+          Fill a checklist
+        </h1>
+        <p className="text-[13px] text-ink-3 mt-1.5">
+          Submit for planner review · pick a template or build one from scratch.
+        </p>
+      </header>
 
       {templates.length > 0 && (
         <label className="block">
@@ -404,12 +411,12 @@ export default function InspectionForm({
 
       <PhotoPicker photos={photos} setPhotos={setPhotos} max={8} label="Photos" />
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-[13px] text-ferrous-600">{error}</p>}
 
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-full bg-stone-900 text-white py-3 text-sm font-medium disabled:opacity-60"
+        className="w-full rounded-full bg-ink text-cream py-4 text-[16px] font-semibold shadow-card disabled:opacity-60 active:scale-[0.99]"
       >
         {pending ? "Submitting…" : "Submit for review"}
       </button>

@@ -27,26 +27,38 @@ export default async function MobileWorkPermitListPage({
   if (!project) notFound();
 
   return (
-    <div className="px-4 py-4 space-y-4">
-      <div className="flex items-baseline justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-stone-900">Work Permits</h1>
-          <p className="text-xs text-stone-500 mt-1">{project.name}</p>
+    <div>
+      {/* Sandstone hero band matching every other mobile screen — Fraunces
+          title, ferrous eyebrow. New Permit button lives in the same
+          top-right slot the QA/QC + EHS list uses so muscle memory carries. */}
+      <div
+        className="px-5 pt-5 pb-4 border-b border-sandstone-100"
+        style={{ background: "linear-gradient(180deg, var(--color-sandstone-50) 0%, var(--color-ivory) 100%)" }}
+      >
+        <p className="font-serif italic text-[13px] text-ferrous-600 tracking-wide">
+          Hot work · night work · deshuttering
+        </p>
+        <div className="mt-1 flex items-baseline justify-between gap-3">
+          <h1 className="font-serif text-[28px] leading-tight text-ink tracking-tight">
+            Work permits
+          </h1>
+          <Link
+            href={`/mobile/${projectId}/permit/new`}
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink text-cream text-[12px] font-semibold px-3 py-1.5 shrink-0"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            New
+          </Link>
         </div>
-        <Link
-          href={`/mobile/${projectId}/permit/new`}
-          className="inline-flex items-center gap-1.5 rounded-full bg-stone-900 text-white text-xs font-medium px-3 py-1.5"
-        >
-          <PlusCircle className="w-3.5 h-3.5" />
-          New
-        </Link>
       </div>
 
-      <WorkPermitList
-        projectId={projectId}
-        currentUserId={session.user.id}
-        isFullAccess={hasFullAccess(session.user.modules)}
-      />
+      <div className="px-5 py-4">
+        <WorkPermitList
+          projectId={projectId}
+          currentUserId={session.user.id}
+          isFullAccess={hasFullAccess(session.user.modules)}
+        />
+      </div>
     </div>
   );
 }
