@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   AlertTriangle,
+  Bug,
   ClipboardCheck,
+  ClipboardList,
   HardHat,
   ListChecks,
   PlusCircle,
@@ -12,7 +14,14 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { TOOL_MODULES, canAccessTool, isScopedUser } from "@/lib/modules";
+import {
+  TOOL_MODULES,
+  canAccessModule,
+  canAccessTool,
+  isScopedUser,
+  primaryModuleFor,
+  MODULES,
+} from "@/lib/modules";
 import { getDashboardManpowerStrip } from "@/lib/manpowerServer";
 import { istDayStart } from "@/lib/istDay";
 
@@ -43,7 +52,25 @@ export default async function MobileProjectHome({
   // the same date the site engineer just worked, not a UTC-rollover next
   // day.
   const todayIst = istDayStart();
-  const [myProgressToday, manpower] = await Promise.all([
+  const userModules = session?.user?.modules ?? null;
+  const scoped = isScopedUser(userModules);
+
+  // Quality strip counts — Work Inspection Requests currently IN_REVIEW and
+  // Issues/Defects currently OPEN. Colab surfaces these as the two things
+  // every site engineer wants to see on open, so the site's health is one
+  // glance not a menu dive. Scoped contractors only see their module's
+  // slice; users without any QA/QC or SAFETY access don't see the strip.
+  const canSeeQualityStrip =
+    canAccessModule(userModules, MODULES.QAQC) ||
+    canAccessModule(userModules, MODULES.SAFETY);
+  const scopedModule = scoped ? primaryModuleFor(userModules) : null;
+  const qualityBaseWhere = {
+    projectId,
+    deletedAt: null,
+    ...(scopedModule ? { module: scopedModule } : {}),
+  } as const;
+
+  const [myProgressToday, manpower, wirPendingCount, issuesOpenCount] = await Promise.all([
     session?.user
       ? prisma.progressEntry.count({
           where: {
@@ -54,10 +81,13 @@ export default async function MobileProjectHome({
         })
       : Promise.resolve(0),
     getDashboardManpowerStrip(projectId, todayIst),
+    canSeeQualityStrip
+      ? prisma.inspection.count({ where: { ...qualityBaseWhere, status: "IN_REVIEW" } })
+      : Promise.resolve(0),
+    canSeeQualityStrip
+      ? prisma.issue.count({ where: { ...qualityBaseWhere, status: "OPEN" } })
+      : Promise.resolve(0),
   ]);
-
-  const userModules = session?.user?.modules ?? null;
-  const scoped = isScopedUser(userModules);
 
   // The full date in a real editorial format — Fraunces will read it well
   // even at eyebrow scale. Rendered on the server so the FCP has the real
@@ -191,6 +221,19 @@ export default async function MobileProjectHome({
             staff — contractor-scoped users don't own that question. */}
         {!scoped && <SitePulse manpower={manpower} myProgressToday={myProgressToday} />}
 
+        {/* Quality strip — two dashboard cards side-by-side that mirror
+            the Colab home. Only rendered for users with QA/QC or SAFETY
+            access; a hindrance-only or progress-only contractor doesn't
+            need to see either count. */}
+        {canSeeQualityStrip && (
+          <QualityStrip
+            projectId={projectId}
+            wirPendingCount={wirPendingCount}
+            issuesOpenCount={issuesOpenCount}
+            moduleFilter={scopedModule}
+          />
+        )}
+
         {/* Log today — four primary CTAs. Warm cream card, ferrous icon
             in a soft-tone circle, hint under label. Feels considered
             rather than "stack of buttons". */}
@@ -224,6 +267,100 @@ export default async function MobileProjectHome({
 // ---------------------------------------------------------------------------
 // Presentational
 // ---------------------------------------------------------------------------
+
+/**
+ * Two-up dashboard row surfacing the two lists the site engineer wants to
+ * see at open — Work Inspection Requests waiting in review, and Issues &
+ * Defects currently open. Colab parity for their home. Copy leans on the
+ * count itself so the card reads as "there are X things to look at"
+ * rather than "here is a menu entry".
+ *
+ * When the current viewer is scoped to one module (a QAQC-only or
+ * SAFETY-only contractor), the WIR card deep-links into that same module
+ * filter so their tap keeps the isolation the API already enforces.
+ */
+function QualityStrip({
+  projectId,
+  wirPendingCount,
+  issuesOpenCount,
+  moduleFilter,
+}: {
+  projectId: string;
+  wirPendingCount: number;
+  issuesOpenCount: number;
+  moduleFilter: string | null;
+}) {
+  const wirHref = `/mobile/${projectId}/qaqc?tab=pending${moduleFilter ? `&module=${moduleFilter}` : ""}`;
+  const issuesHref = `/mobile/${projectId}/issue?tab=open`;
+  return (
+    <section aria-label="Quality dashboard">
+      <SectionEyebrow>On your desk</SectionEyebrow>
+      <div className="grid grid-cols-2 gap-2.5">
+        <QualityCard
+          href={wirHref}
+          icon={ClipboardList}
+          count={wirPendingCount}
+          label="Work Inspection"
+          hint={wirPendingCount === 1 ? "request in review" : "requests in review"}
+          emptyHint="Nothing in review"
+        />
+        <QualityCard
+          href={issuesHref}
+          icon={Bug}
+          count={issuesOpenCount}
+          label={<>Issues &amp; Defects</>}
+          hint={issuesOpenCount === 1 ? "snag open" : "snags open"}
+          emptyHint="No open snags"
+        />
+      </div>
+    </section>
+  );
+}
+
+function QualityCard({
+  href,
+  icon: Icon,
+  count,
+  label,
+  hint,
+  emptyHint,
+}: {
+  href: string;
+  icon: LucideIcon;
+  count: number;
+  label: React.ReactNode;
+  hint: string;
+  emptyHint: string;
+}) {
+  const isEmpty = count === 0;
+  return (
+    <Link
+      href={href}
+      className="rounded-2xl border border-sandstone-100 bg-cream shadow-soft px-4 py-4 flex flex-col gap-1.5 active:scale-[0.99] hover:border-sandstone-200 transition-all"
+    >
+      <Icon className={`w-4 h-4 ${isEmpty ? "text-ink-3" : "text-ferrous-600"}`} />
+      <div className="flex items-baseline gap-1.5">
+        <span
+          className={`font-serif ${isEmpty ? "text-ink-3" : "text-ferrous-600"}`}
+          style={{
+            fontSize: "34px",
+            lineHeight: "1",
+            letterSpacing: "-0.015em",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {count}
+        </span>
+      </div>
+      <div>
+        <div className="text-[13px] font-semibold text-ink leading-tight">{label}</div>
+        <div className="text-[11px] text-ink-3 mt-0.5">
+          {isEmpty ? emptyHint : hint}
+        </div>
+      </div>
+    </Link>
+  );
+}
 
 function SectionEyebrow({ children }: { children: React.ReactNode }) {
   return (
