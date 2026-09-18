@@ -56,13 +56,16 @@ export default async function MobileInspectionDetailPage({
   }
 
   const iCanReview = canReview(session.user.role);
-  // tab + moduleParam are read only to keep the tab/module context alive
-  // if we need it downstream — the on-screen "Back to list" link was
-  // removed in favour of the layout's single Back arrow, which uses
-  // router.back() and naturally lands on the exact list view the engineer
-  // came from (no extra plumbing needed).
+  // The layout's single Back arrow uses router.back(), which already
+  // lands on whichever list view the engineer came from (no extra
+  // plumbing needed for the *header* back).
   void tab;
-  void moduleParam;
+  // Module context IS still needed for the Pass/Reject redirect below —
+  // the review action performs a router.push after PATCH and needs to
+  // land on the same module-filtered pending list (EHS reviewer → EHS
+  // Pending, QA/QC reviewer → QA/QC Pending), not the combined feed.
+  const reviewModuleFilter: "QAQC" | "SAFETY" | undefined =
+    moduleParam === "QAQC" || moduleParam === "SAFETY" ? moduleParam : undefined;
 
   return (
     <div className="flex-1 flex flex-col bg-ivory min-h-0">
@@ -184,6 +187,7 @@ export default async function MobileInspectionDetailPage({
             currentStatus={inspection.status as "IN_REVIEW" | "PASSED" | "REJECTED"}
             expectedUpdatedAt={inspection.updatedAt.toISOString()}
             projectId={projectId}
+            moduleFilter={reviewModuleFilter}
           />
         </div>
       )}

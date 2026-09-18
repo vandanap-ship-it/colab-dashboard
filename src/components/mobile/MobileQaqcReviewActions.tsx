@@ -21,11 +21,16 @@ export default function MobileQaqcReviewActions({
   currentStatus,
   expectedUpdatedAt,
   projectId,
+  moduleFilter,
 }: {
   inspectionId: string;
   currentStatus: "IN_REVIEW" | "PASSED" | "REJECTED";
   expectedUpdatedAt: string; // ISO of Inspection.updatedAt for the 409 guard
   projectId: string;
+  /** Preserves the split-view context (?module=QAQC or ?module=SAFETY)
+   *  on the post-review redirect so an EHS reviewer lands back on EHS
+   *  Pending, not the combined feed. */
+  moduleFilter?: "QAQC" | "SAFETY";
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -56,9 +61,14 @@ export default function MobileQaqcReviewActions({
     }
     setRejectOpen(false);
     setReason("");
-    // Land on the pending list — the natural next thing a reviewer wants.
+    // Land on the pending list for whichever module the reviewer opened
+    // this inspection from — so an EHS reviewer lands on EHS Pending, a
+    // QA/QC reviewer on QA/QC Pending, no jarring "combined" fallback.
+    const backHref = `/mobile/${projectId}/qaqc?tab=pending${
+      moduleFilter ? `&module=${moduleFilter}` : ""
+    }`;
     startTransition(() => {
-      router.push(`/mobile/${projectId}/qaqc?tab=pending`);
+      router.push(backHref);
       router.refresh();
     });
   }
