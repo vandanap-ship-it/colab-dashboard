@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, CheckCircle2, X, Clock, User as UserIcon, Camera } from "lucide-react";
+import { CheckCircle2, X, Clock, User as UserIcon, Camera } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, canAccessScopedRow, MODULES } from "@/lib/modules";
@@ -57,33 +56,32 @@ export default async function MobileInspectionDetailPage({
   }
 
   const iCanReview = canReview(session.user.role);
-  const backTab = tab && ["pending", "all", "passed", "rejected"].includes(tab) ? tab : "pending";
-  // Preserve the split-view context (?module=QAQC or ?module=SAFETY) on
-  // Back so an inspector who dove into a record from the EHS list lands
-  // back on EHS, not the combined view.
-  const backModule = moduleParam === "QAQC" || moduleParam === "SAFETY" ? moduleParam : "";
-  const backHref = `/mobile/${projectId}/qaqc?tab=${backTab}${backModule ? `&module=${backModule}` : ""}`;
+  // tab + moduleParam are read only to keep the tab/module context alive
+  // if we need it downstream — the on-screen "Back to list" link was
+  // removed in favour of the layout's single Back arrow, which uses
+  // router.back() and naturally lands on the exact list view the engineer
+  // came from (no extra plumbing needed).
+  void tab;
+  void moduleParam;
 
   return (
     <div className="flex-1 flex flex-col bg-ivory min-h-0">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b border-stone-200">
-        <Link
-          href={backHref}
-          className="inline-flex items-center gap-1 text-sm text-stone-500 hover:text-stone-900"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back to list
-        </Link>
-
-        <h1 className="text-lg font-bold text-stone-900 mt-2 leading-snug">
+      {/* Hero band matches every other mobile screen — Fraunces title,
+          sandstone gradient, no inline back button (the layout's header
+          Back arrow is the single source of "return" and uses
+          router.back() so it lands on the previous page, not home). */}
+      <div
+        className="px-5 pt-5 pb-4 border-b border-sandstone-100"
+        style={{ background: "linear-gradient(180deg, var(--color-sandstone-50) 0%, var(--color-ivory) 100%)" }}
+      >
+        <h1 className="font-serif text-[22px] leading-snug text-ink tracking-tight">
           {inspection.title}
         </h1>
 
-        <div className="mt-2 flex items-center gap-2 flex-wrap text-[11px] text-stone-500">
+        <div className="mt-2 flex items-center gap-2 flex-wrap text-[12px] text-ink-3">
           <StatusPill status={inspection.status} />
           {inspection.module && (
-            <span className="rounded-full bg-stone-100 text-stone-700 px-2 py-0.5 font-semibold uppercase tracking-wider text-[9.5px]">
+            <span className="rounded-full bg-sandstone-100 text-ink-2 px-2 py-0.5 font-semibold uppercase tracking-[0.14em] text-[9.5px]">
               {inspection.module === "SAFETY" ? "EHS" : "QA/QC"}
             </span>
           )}
