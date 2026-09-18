@@ -297,7 +297,7 @@ export default function NewProgressForm({
                     step={0.1}
                     value={cumulative}
                     onChange={(e) => setCumulative(Number(e.target.value))}
-                    className="mt-4 w-full h-2 rounded-full appearance-none accent-ferrous-500"
+                    className="siddhi-range mt-4"
                     aria-label="Progress"
                   />
                   <div className="flex justify-between text-[11px] uppercase tracking-[0.14em] text-ink-3 mt-2">
