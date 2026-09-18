@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, ChevronDown } from "lucide-react";
+import { Pencil } from "lucide-react";
 import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
@@ -55,11 +55,9 @@ export default function NewProgressForm({
   const [notes, setNotes] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Details block collapsed by default so the primary flow is pick →
-  // slider → save. Labour, photos, notes, reason, date all live inside.
-  // A site engineer can log an entry in three taps if that's all they
-  // have time for, and open the details when there's more to say.
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  // Formerly collapsed the notes/photos/labour section behind a toggle —
+  // Shraddha flagged that as reading "optional" when it isn't. All fields
+  // now expand inline; Save moves to the very bottom.
   // After save: show an in-place "Saved · Add another / Back to home" card
   // instead of redirecting to /mobile/{id}. Site engineers log many entries
   // per shift — booting them home every time forced 2 extra taps per entry.
@@ -209,7 +207,6 @@ export default function NewProgressForm({
     setLabour([{ category: "Skilled", count: 0 }]);
     setPhotos([]);
     setNotes("");
-    setDetailsOpen(false);
     setError(null);
     setSaved(null);
   }
@@ -243,7 +240,8 @@ export default function NewProgressForm({
           Log progress
         </h1>
         <p className="text-[13px] text-ink-3 mt-1">
-          Three steps: pick, drag, save. Add photos or notes if you want.
+          Pick an activity, drag the % slider, then fill photos / notes /
+          labour before you save.
         </p>
       </header>
 
@@ -344,35 +342,14 @@ export default function NewProgressForm({
             </div>
           </section>
 
-          {/* Step 3 · Save — always visible right below the slider. Three
-              taps from home: activity → drag → save. */}
-          <button
-            type="submit"
-            disabled={pending || !activityId}
-            className="w-full rounded-full bg-ink text-cream py-4 text-[16px] font-semibold shadow-card disabled:opacity-60 active:scale-[0.99]"
-          >
-            {pending ? "Saving…" : "Save progress"}
-          </button>
-
-          {/* Optional details — collapsed behind a single tap. Everything
-              in here is *nice to have* for the log, never required. */}
+          {/* Details section — always visible. Photos, notes, labour and
+              delay reason are part of a full progress entry, not "nice to
+              have" behind a toggle: hiding them behind "Add photos, notes,
+              labour, delay reason" made the whole block read as optional
+              which it isn't. Save moves to the very bottom so the site
+              engineer scrolls through everything before pressing it. */}
           <section>
-            <button
-              type="button"
-              onClick={() => setDetailsOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-sandstone-100 bg-white active:bg-sandstone-50"
-              aria-expanded={detailsOpen}
-            >
-              <span className="text-[14px] font-semibold text-ink">
-                Add photos, notes, labour, delay reason
-              </span>
-              <ChevronDown
-                className={`w-4 h-4 text-ink-3 transition-transform ${detailsOpen ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {detailsOpen && (
-              <div className="mt-4 space-y-5">
+            <div className="space-y-5">
                 {/* Voice notes first — a big pill inside VoiceTextarea
                     makes voice the obvious way in. Copy: "Tell us what
                     you did" instead of the older "Optional comments". */}
@@ -494,8 +471,17 @@ export default function NewProgressForm({
                   </p>
                 </label>
               </div>
-            )}
           </section>
+
+          {/* Save · sits at the very end so the engineer scrolls through
+              every part of the entry before committing. */}
+          <button
+            type="submit"
+            disabled={pending || !activityId}
+            className="w-full rounded-full bg-ink text-cream py-4 text-[16px] font-semibold shadow-card disabled:opacity-60 active:scale-[0.99]"
+          >
+            {pending ? "Saving…" : "Save progress"}
+          </button>
         </>
       )}
 
