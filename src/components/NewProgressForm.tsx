@@ -191,8 +191,16 @@ export default function NewProgressForm({
     router.refresh();
   }
 
+  /**
+   * Reset the entry-specific fields but KEEP the picked activity — a site
+   * engineer logging progress typically enters the same villa/activity
+   * again a few hours later at a new %, or hops to a nearby activity on
+   * the same villa. Forcing them back through contractor → villa →
+   * milestone picker every time was pure friction; the "Change" button on
+   * the activity chip is one tap for the rare case where they need a
+   * different villa.
+   */
   function resetForm() {
-    setSelected(null);
     setDate(today);
     setAchieved(0);
     setCumulative(0);
@@ -210,7 +218,14 @@ export default function NewProgressForm({
     return (
       <SaveSuccessCard
         title="Progress saved"
-        detail={`Logged for ${selected?.name ?? "activity"}.`}
+        // Tell the engineer exactly what "Add another" will do: keep this
+        // villa/activity so they can just update whatever changed (a fresh
+        // %, more labour, a photo) rather than re-picking from scratch.
+        detail={
+          selected
+            ? `Logged for ${selected.name} · Block ${selected.path.blockCode} · ${selected.path.villaLabel}. Add another stays on this villa — just change what needs updating.`
+            : "Add another stays on this villa — just change what needs updating."
+        }
         projectId={projectId}
         onAddAnother={resetForm}
         queued={saved.queued}
