@@ -21,8 +21,27 @@
   --color-brand-600: #D97706;
   --color-brand-700: #B45309;
 
+  /* Ferrous — the warm rust accent used on Amanvana's own material palette
+   * (Kalinga stone, terracotta rail). Reserved for hero moments (a live
+   * status pill, a headline underline, a primary CTA). Not a competitor
+   * to the brand-gold; the two live at different scales in the design. */
+  --color-ferrous-50: #F7EBE2;
+  --color-ferrous-100: #F0D5C3;
+  --color-ferrous-200: #E5B398;
+  --color-ferrous-300: #D48A66;
+  --color-ferrous-400: #C56A40;
+  --color-ferrous-500: #B8542E;
+  --color-ferrous-600: #9C3E1E;
+  --color-ferrous-700: #7A2E17;
+
+  /* Cream — a warmer, one-shade-lifted alternative to plain white for
+   * mobile cards so they read as a warm object on the sandstone ground
+   * instead of the cold Tailwind default. */
+  --color-cream: #FBF8F1;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-fraunces);
 
   --shadow-soft: 0 1px 2px 0 rgb(28 25 23 / 0.04), 0 1px 3px -1px rgb(28 25 23 / 0.06);
   --shadow-card: 0 1px 3px 0 rgb(28 25 23 / 0.05), 0 4px 12px -2px rgb(28 25 23 / 0.06);
@@ -66,6 +85,29 @@ a, button, [role="button"], input, select, textarea, label {
   html, body {
     overscroll-behavior: none;
   }
+
+  /* Mobile type bump. Bare Tailwind on a phone leaves body at 14px which
+   * reads as "unfinished web page". Nudge the base to 16px, keep numerals
+   * with tabular figures + tighter tracking so villa counts + %s look
+   * intentional rather than accidental. */
+  body {
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  .tabular-nums, [data-nums] {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.005em;
+  }
+}
+
+/* Fraunces display face — reserved for editorial moments (mobile home
+ * eyebrow date, hero project name, big statistic numerals). Uses the
+ * optical-size axis so it stays crisp at hero scale and small scale.
+ * Keeping the utility narrow (.font-serif) so the body font never
+ * accidentally goes serif. */
+.font-serif {
+  font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  font-feature-settings: "ss01", "ss02";
 }
 
 /* Scrollbars (subtle, on ivory bg) */

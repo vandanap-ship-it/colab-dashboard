@@ -6,7 +6,6 @@ import {
   ListChecks,
   PlusCircle,
   ShieldCheck,
-  TrendingUp,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -15,6 +14,15 @@ import { prisma } from "@/lib/prisma";
 import { TOOL_MODULES, canAccessTool, isScopedUser } from "@/lib/modules";
 import { getDashboardManpowerStrip } from "@/lib/manpowerServer";
 import { istDayStart } from "@/lib/istDay";
+
+// Amanvana-native mobile home. Editorial serif hero + warm sandstone cards
+// + ferrous accent — reads like the villa brochure a site engineer already
+// knows, not a generic dashboard. Content order sequenced by the actual
+// question site engineers open the app to answer:
+//   1. What date is it and which project am I in? (dated eyebrow + name)
+//   2. What's the site pulse right now? (workers on site vs plan)
+//   3. What do I need to log today? (four big primary CTAs)
+//   4. What else can I go look at? (secondary tools, calmer grid)
 
 export default async function MobileProjectHome({
   params,
@@ -30,8 +38,9 @@ export default async function MobileProjectHome({
   });
   if (!project) notFound();
 
-  // Anchor "today" to IST so a phone opened at 23:30 IST still lands on the
-  // same date the site engineer just worked, not a UTC-rollover next day.
+  // "Today" anchored to IST so a phone opened at 23:30 IST still lands on
+  // the same date the site engineer just worked, not a UTC-rollover next
+  // day.
   const todayIst = istDayStart();
   const [myProgressToday, manpower] = await Promise.all([
     session?.user
@@ -47,63 +56,74 @@ export default async function MobileProjectHome({
   ]);
 
   const userModules = session?.user?.modules ?? null;
+  const scoped = isScopedUser(userModules);
+
+  // The full date in a real editorial format — Fraunces will read it well
+  // even at eyebrow scale. Rendered on the server so the FCP has the real
+  // date, not "Loading…". Timezone-locked to IST so a night-shift entry
+  // doesn't render as "Thursday" at 23:59 IST.
+  const dateLine = todayIst.toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "Asia/Kolkata",
+  });
 
   type Tool = {
     key: string;
     href: string;
     label: string;
+    hint: string; // sub-line under the label — gives each tile a job, not just a name
     icon: LucideIcon;
-    primary?: boolean;
     tier: "primary" | "secondary";
   };
-  // Mobile home — primary CTAs (Progress, Manpower, Hindrance, Permit) that
-  // the site team hits every day, plus a compact "More" section below for
-  // less-frequent flows. QA/QC surfaces as its own tile on Sep 17 2026 —
-  // list + review-in-place ships alongside so an inspector or reviewer can
-  // do the whole flow from a phone instead of bouncing to desktop.
+
   const allTools: Tool[] = [
     {
       key: "new-progress",
       href: `/mobile/${projectId}/progress/new`,
-      label: "New Progress",
+      label: "Log progress",
+      hint: "Percent complete + labour on an activity",
       icon: PlusCircle,
-      primary: true,
       tier: "primary",
     },
     {
       key: "manpower",
       href: `/mobile/${projectId}/manpower/new`,
-      label: "Log Manpower",
+      label: "Log manpower",
+      hint: "Trades and headcount on site today",
       icon: Users,
       tier: "primary",
     },
     {
       key: "hindrance",
       href: `/mobile/${projectId}/hindrance/new`,
-      label: "Log Hindrance",
-      // AlertTriangle reads as "blocker / attention" — CheckSquare read as
-      // "task done" which was semantically wrong for a hindrance.
+      label: "Add hindrance",
+      hint: "Blocker holding an activity up",
       icon: AlertTriangle,
       tier: "primary",
     },
     {
       key: "permit",
       href: `/mobile/${projectId}/permit/new`,
-      label: "Raise Work Permit",
+      label: "Raise work permit",
+      hint: "Hot work · night work · deshuttering",
       icon: ShieldCheck,
       tier: "primary",
     },
     {
       key: "permit-list",
       href: `/mobile/${projectId}/permit`,
-      label: "Work Permits",
+      label: "Work permits",
+      hint: "Approve or view raised permits",
       icon: ShieldCheck,
       tier: "secondary",
     },
     {
       key: "site-progress",
       href: `/mobile/${projectId}/site-progress`,
-      label: "Site Progress",
+      label: "Site progress",
+      hint: "Villa-by-villa completion",
       icon: ListChecks,
       tier: "secondary",
     },
@@ -111,183 +131,112 @@ export default async function MobileProjectHome({
       key: "inspection",
       href: `/mobile/${projectId}/qaqc?tab=pending`,
       label: "QA / QC",
+      hint: "Fill or review inspections",
       icon: ClipboardCheck,
       tier: "secondary",
     },
     {
       key: "dlr",
       href: `/projects/${projectId}/dlr`,
-      label: "DLR Updates",
+      label: "DLR updates",
+      hint: "Daily log report",
       icon: ClipboardCheck,
       tier: "secondary",
     },
   ];
 
-  // Filter tools by the user's module access. Internal staff see everything;
-  // scoped contractors see only their module's tools. Promote the first
-  // visible tool to "primary" if New Progress was filtered out.
   const tools = allTools.filter((t) =>
     canAccessTool(userModules, TOOL_MODULES[t.key] ?? []),
   );
-  if (tools.length > 0 && !tools.some((t) => t.primary)) {
-    tools[0] = { ...tools[0], primary: true };
-  }
   const primaryTools = tools.filter((t) => t.tier === "primary");
   const secondaryTools = tools.filter((t) => t.tier === "secondary");
 
-  const scoped = isScopedUser(userModules);
-
   return (
-    <div className="px-4 py-6 space-y-6">
-      {/* Compact identity line — engineer + project on one row. Removed the
-          full "Welcome back, {name}" block and the "Loaded X" timestamp
-          chip in the design pass: neither helped a site engineer opening
-          the app to log work, and both pushed the primary CTA below the
-          fold on smaller phones. */}
-      <div className="flex items-baseline justify-between gap-2">
-        <h1 className="text-lg font-semibold text-stone-900 tracking-tight truncate">
-          {session?.user?.name}
+    <div className="pb-8">
+      {/* Hero band — warm sandstone, editorial layout. Not a gigantic
+          landing page splash, but enough presence that the app feels like
+          a real product on open rather than a form. */}
+      <section
+        className="px-5 pt-6 pb-8 border-b border-sandstone-100"
+        style={{ background: "linear-gradient(180deg, var(--color-sandstone-50) 0%, var(--color-ivory) 100%)" }}
+      >
+        <p className="font-serif italic text-[13px] text-ferrous-600 tracking-wide">
+          {dateLine}
+        </p>
+        <h1 className="font-serif text-[36px] leading-[1.05] text-ink mt-1 tracking-tight">
+          {project.name}
         </h1>
-        <p className="text-xs text-stone-500 truncate">{project.name}</p>
-      </div>
-
-      <section>
-        <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
-          Log today
-        </h2>
-        <div className="grid grid-cols-1 gap-2.5">
-          {primaryTools.map((t) => {
-            const Icon = t.icon;
-            return (
-              <Link
-                key={t.href}
-                href={t.href}
-                className={`rounded-xl border p-5 active:scale-[0.99] transition-all flex items-center gap-4 ${
-                  t.primary
-                    ? "bg-stone-900 border-stone-900 text-white shadow-card hover:bg-stone-800"
-                    : "bg-white border-stone-200 hover:border-stone-300 hover:shadow-soft"
-                }`}
-              >
-                <Icon
-                  className={`w-6 h-6 shrink-0 ${
-                    t.primary ? "text-brand-400" : "text-stone-500"
-                  }`}
-                />
-                <div
-                  className={`text-base font-medium ${
-                    t.primary ? "" : "text-stone-900"
-                  }`}
-                >
-                  {t.label}
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+        {session?.user?.name && (
+          <p className="text-[13px] text-ink-2 mt-3">
+            <span className="text-ink-3">Good morning,</span>{" "}
+            <span className="font-medium text-ink">{session.user.name.split(" ")[0]}</span>
+          </p>
+        )}
       </section>
 
-      {secondaryTools.length > 0 && (
+      <div className="px-5 pt-6 space-y-7">
+        {/* Site pulse — one editorial statistic card. Answers "is the
+            site staffed today?" in one glance. Only rendered for internal
+            staff — contractor-scoped users don't own that question. */}
+        {!scoped && <SitePulse manpower={manpower} myProgressToday={myProgressToday} />}
+
+        {/* Log today — four primary CTAs. Warm cream card, ferrous icon
+            in a soft-tone circle, hint under label. Feels considered
+            rather than "stack of buttons". */}
         <section>
-          <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
-            More
-          </h2>
-          <div className="grid grid-cols-2 gap-2.5">
-            {secondaryTools.map((t) => {
-              const Icon = t.icon;
-              return (
-                <Link
-                  key={t.href}
-                  href={t.href}
-                  className="rounded-xl border p-4 active:scale-[0.99] transition-all bg-white border-stone-200 hover:border-stone-300 hover:shadow-soft"
-                >
-                  <Icon className="w-5 h-5 text-stone-500" />
-                  <div className="mt-3 text-sm font-medium text-stone-900">
-                    {t.label}
-                  </div>
-                </Link>
-              );
-            })}
+          <SectionEyebrow>Log today</SectionEyebrow>
+          <div className="grid grid-cols-1 gap-2.5">
+            {primaryTools.map((t) => (
+              <PrimaryToolCard key={t.href} tool={t} />
+            ))}
           </div>
         </section>
-      )}
 
-      {!scoped && (
-        <section className="rounded-xl border border-stone-200 bg-white p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
-              Today
-            </h2>
-            <TrendingUp className="w-4 h-4 text-stone-300" />
-          </div>
-
-          {/* Left: personal progress. Right: site plan-vs-actual manpower.
-              The two together answer "what have I done today" and "is the
-              site staffed to plan today" without leaving the home. */}
-          <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <div className="text-2xl font-semibold text-stone-900 tabular-nums">
-                {myProgressToday}
-              </div>
-              <div className="text-xs text-stone-500 mt-0.5">
-                {myProgressToday === 0
-                  ? "No progress logged yet"
-                  : `Progress ${myProgressToday === 1 ? "entry" : "entries"} logged`}
-              </div>
+        {/* More — a quieter block. Two columns, thin sandstone borders,
+            no shadow. The eye reads it as "the rest of the app" not "as
+            important as logging". */}
+        {secondaryTools.length > 0 && (
+          <section>
+            <SectionEyebrow>More</SectionEyebrow>
+            <div className="grid grid-cols-2 gap-2.5">
+              {secondaryTools.map((t) => (
+                <SecondaryToolCard key={t.href} tool={t} />
+              ))}
             </div>
-            <div>
-              <PlanVsActualStat manpower={manpower} />
-            </div>
-          </div>
-
-          {/* Plan-vs-actual bar (only when there IS a plan for today —
-              rendering a bar against a "no plan" state would just be a
-              flat gray line and clutter the card). */}
-          {manpower.status !== "no-plan" && manpower.planned > 0 && (
-            <div className="mt-3 space-y-1.5">
-              <div className="flex items-baseline justify-between text-[10px] uppercase tracking-wider text-stone-500">
-                <span>Plan {manpower.planned}</span>
-                <span>Actual {manpower.actual}</span>
-              </div>
-              <div className="relative h-2 rounded-full bg-stone-100 overflow-hidden">
-                {/* Planned bar (light) — full width represents 100% of plan */}
-                <div className="absolute inset-0 bg-amber-100" />
-                {/* Actual bar (bold) — capped at 110% of plan so a wildly-
-                    over-plan day doesn't visually blow out the card */}
-                <div
-                  className={
-                    manpower.actual >= manpower.planned
-                      ? "absolute inset-y-0 left-0 bg-emerald-500"
-                      : "absolute inset-y-0 left-0 bg-amber-500"
-                  }
-                  style={{
-                    width: `${Math.min(110, (manpower.actual / manpower.planned) * 100)}%`,
-                  }}
-                />
-              </div>
-            </div>
-          )}
-        </section>
-      )}
+          </section>
+        )}
+      </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Presentational helpers
+// Presentational
 // ---------------------------------------------------------------------------
 
+function SectionEyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[10.5px] font-semibold text-ink-3 uppercase tracking-[0.16em] mb-3">
+      {children}
+    </p>
+  );
+}
+
 /**
- * Compact right-side stat on the "Today" card. Shows planned vs actual
- * headcount as a single figure ("48 / 52" style) with a coloured tone
- * depending on delivery vs plan:
- *   - no plan yet  → "—" in muted grey
- *   - no manpower logged against a plan → "0" red, "Not logged yet" caption
- *   - actual < 90% of plan → amber "below"
- *   - 90% ≤ actual ≤ 110% of plan → emerald "on plan"
- *   - actual > 110% of plan → emerald "above plan"
+ * Editorial site-pulse card. Two big statistics on a warm cream ground —
+ * a clear headline about whether the site is on-plan today, plus a small
+ * "logged by you" tile so the engineer sees credit for what they've
+ * personally entered.
+ *
+ *  - "workers on site" and "planned" as tabular Fraunces numerals so they
+ *    look like a printed report, not a live counter.
+ *  - Ferrous stripe on the left → visual anchor + brand tie-in.
+ *  - Copy sentences instead of chart legends: reads like the executive
+ *    summary Shraddha writes weekly, not a debug pane.
  */
-function PlanVsActualStat({
+function SitePulse({
   manpower,
+  myProgressToday,
 }: {
   manpower: {
     planned: number;
@@ -295,34 +244,153 @@ function PlanVsActualStat({
     pctOfPlan: number | null;
     status: "no-plan" | "above" | "on-plan" | "below" | "not-logged";
   };
+  myProgressToday: number;
 }) {
-  if (manpower.status === "no-plan") {
-    return (
-      <div>
-        <div className="text-2xl font-semibold text-stone-400 tabular-nums">—</div>
-        <div className="text-xs text-stone-500 mt-0.5">No manpower plan set</div>
-      </div>
-    );
-  }
-  const toneClass =
-    manpower.status === "below" || manpower.status === "not-logged"
-      ? "text-amber-600"
-      : "text-emerald-600";
-  const caption =
-    manpower.status === "not-logged"
-      ? "Not logged yet"
-      : manpower.status === "above"
-        ? `Above plan (${manpower.planned} planned)`
+  const noPlan = manpower.status === "no-plan";
+  const headline =
+    noPlan
+      ? "No manpower plan set for today."
+      : manpower.status === "not-logged"
+        ? "Manpower not logged yet today."
         : manpower.status === "below"
-          ? `Below plan (${manpower.planned} planned)`
-          : `On plan (${manpower.planned} planned)`;
+          ? "Below plan today."
+          : manpower.status === "above"
+            ? "Above plan today."
+            : "On plan today.";
+  const toneClass =
+    manpower.status === "on-plan" || manpower.status === "above"
+      ? "text-emerald-700"
+      : manpower.status === "below" || manpower.status === "not-logged"
+        ? "text-ferrous-600"
+        : "text-ink-3";
+  return (
+    <section className="relative rounded-2xl bg-cream border border-sandstone-100 overflow-hidden">
+      <span
+        aria-hidden
+        className="absolute left-0 top-0 bottom-0 w-[3px] bg-ferrous-500"
+      />
+      <div className="px-5 py-5">
+        <div className="flex items-baseline justify-between">
+          <p className={`font-serif text-[15px] italic ${toneClass}`}>{headline}</p>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4">
+          <PulseStat
+            label="On site"
+            value={noPlan ? "—" : manpower.actual}
+            note={
+              noPlan
+                ? "no plan"
+                : `of ${manpower.planned} planned`
+            }
+            tone="warm"
+          />
+          <PulseStat
+            label="Your entries"
+            value={myProgressToday}
+            note={myProgressToday === 1 ? "activity logged" : "activities logged"}
+          />
+        </div>
+
+        {!noPlan && manpower.planned > 0 && (
+          <div className="mt-4 space-y-1.5">
+            <div className="flex items-baseline justify-between text-[10.5px] uppercase tracking-[0.14em] text-ink-3">
+              <span>Plan {manpower.planned}</span>
+              <span>Actual {manpower.actual}</span>
+            </div>
+            <div className="relative h-[6px] rounded-full bg-sandstone-100 overflow-hidden">
+              <div
+                className={
+                  manpower.actual >= manpower.planned
+                    ? "absolute inset-y-0 left-0 bg-emerald-500"
+                    : "absolute inset-y-0 left-0 bg-ferrous-500"
+                }
+                style={{
+                  width: `${Math.min(110, (manpower.actual / Math.max(manpower.planned, 1)) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PulseStat({
+  label,
+  value,
+  note,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  note?: string;
+  tone?: "warm";
+}) {
+  const valueTone = tone === "warm" ? "text-ferrous-700" : "text-ink";
   return (
     <div>
-      <div className={`text-2xl font-semibold tabular-nums ${toneClass}`}>
-        {manpower.actual}
-        <span className="text-sm text-stone-400 font-normal ml-1">workers</span>
-      </div>
-      <div className="text-xs text-stone-500 mt-0.5">{caption}</div>
+      <p className="text-[10.5px] font-semibold text-ink-3 uppercase tracking-[0.14em]">
+        {label}
+      </p>
+      <p
+        className={`font-serif ${valueTone} mt-1`}
+        style={{ fontSize: "40px", lineHeight: "1", letterSpacing: "-0.015em", fontVariantNumeric: "tabular-nums" }}
+      >
+        {value}
+      </p>
+      {note && <p className="text-[12px] text-ink-3 mt-1.5">{note}</p>}
     </div>
+  );
+}
+
+function PrimaryToolCard({
+  tool,
+}: {
+  tool: {
+    href: string;
+    label: string;
+    hint: string;
+    icon: LucideIcon;
+  };
+}) {
+  const Icon = tool.icon;
+  return (
+    <Link
+      href={tool.href}
+      className="rounded-2xl border border-sandstone-100 bg-cream px-4 py-4 flex items-center gap-4 active:scale-[0.99] hover:border-sandstone-200 transition-all shadow-soft"
+    >
+      <span className="w-11 h-11 rounded-full bg-ferrous-50 text-ferrous-600 flex items-center justify-center shrink-0">
+        <Icon className="w-5 h-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[16px] font-semibold text-ink leading-tight">{tool.label}</div>
+        <div className="text-[12.5px] text-ink-3 mt-0.5 truncate">{tool.hint}</div>
+      </div>
+    </Link>
+  );
+}
+
+function SecondaryToolCard({
+  tool,
+}: {
+  tool: {
+    href: string;
+    label: string;
+    hint: string;
+    icon: LucideIcon;
+  };
+}) {
+  const Icon = tool.icon;
+  return (
+    <Link
+      href={tool.href}
+      className="rounded-xl border border-sandstone-100 bg-white p-4 hover:border-sandstone-200 active:scale-[0.99] transition-all"
+    >
+      <Icon className="w-4 h-4 text-ink-3" />
+      <div className="mt-2 text-[14px] font-semibold text-ink leading-tight">{tool.label}</div>
+      <div className="text-[11px] text-ink-3 mt-0.5 leading-snug line-clamp-2">{tool.hint}</div>
+    </Link>
   );
 }
