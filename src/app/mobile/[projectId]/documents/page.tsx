@@ -1,13 +1,9 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  BookUser,
   ClipboardList,
   Download,
-  FileBarChart,
   FileText,
-  HardHat,
-  Package,
   ShieldCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -75,34 +71,10 @@ export default async function MobileDocumentsPage({
       icon: ClipboardList,
       href: `/mobile/${projectId}/site-progress`,
     },
-    {
-      key: "stock",
-      label: "View Stock Consumption",
-      sub: "Coming v1.1",
-      icon: Package,
-      stub: true,
-    },
-    {
-      key: "labour-trend",
-      label: "View Labour Trend",
-      sub: "Coming v1.1",
-      icon: HardHat,
-      stub: true,
-    },
-    {
-      key: "resource-requests",
-      label: "View Resource Requests",
-      sub: "Coming v1.1",
-      icon: FileBarChart,
-      stub: true,
-    },
-    {
-      key: "directory",
-      label: "View Directory",
-      sub: "Coming v1.1",
-      icon: BookUser,
-      stub: true,
-    },
+    // Stock Consumption / Labour Trend / Resource Requests / Directory
+    // were "Coming v1.1" placeholders; removed so the mobile Documents
+    // page shows only what actually works. Add back one at a time as each
+    // v1.1 feature ships.
   ];
 
   return (
