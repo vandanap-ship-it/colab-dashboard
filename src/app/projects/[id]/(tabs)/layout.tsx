@@ -2,11 +2,12 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { canSeeDesktop, ROLES } from "@/lib/roles";
+import { canSeeDesktop, canSeeMobile, ROLES } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
 import ProjectTabs from "@/components/ProjectTabs";
 import HighlightsButton from "@/components/HighlightsButton";
+import { hasDesktopPreference, isPhoneRequest } from "@/lib/device";
 
 export default async function ProjectLayout({
   children,
@@ -20,6 +21,15 @@ export default async function ProjectLayout({
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
 
   const { id } = await params;
+
+  // Phone-shaped device with a desktop role → route to the mobile project
+  // home instead of rendering the tabbed desktop layout into a 375px
+  // viewport. Same escape hatch as `/` — `?ui=desktop` on the URL or the
+  // sticky preference cookie.
+  const wantsDesktop = await hasDesktopPreference();
+  if (!wantsDesktop && canSeeMobile(session.user.role) && (await isPhoneRequest())) {
+    redirect(`/mobile/${id}`);
+  }
   const project = await prisma.project.findUnique({
     where: { id },
     select: { id: true, name: true, code: true, address: true },
