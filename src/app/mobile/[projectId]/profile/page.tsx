@@ -77,11 +77,12 @@ export default async function MobileProfilePage() {
           <span className="w-14 h-14 rounded-full bg-white/10 ring-2 ring-white/20 backdrop-blur-sm flex items-center justify-center text-lg font-semibold tracking-tight">
             {initials(session.user.name)}
           </span>
+          {/* Name appears in the layout header — profile card leads with
+              username + role, the two facts that ARE new on this screen. */}
           <div className="flex-1 min-w-0">
-            <p className="text-base font-semibold truncate">
-              Hi, {session.user.name ?? session.user.username}
+            <p className="text-[15px] font-semibold truncate">
+              @{session.user.username}
             </p>
-            <p className="text-xs text-stone-300 truncate">@{session.user.username}</p>
             <p className="text-[10px] uppercase tracking-widest text-brand-300 mt-1">
               {ROLE_LABELS[session.user.role] ?? session.user.role}
             </p>

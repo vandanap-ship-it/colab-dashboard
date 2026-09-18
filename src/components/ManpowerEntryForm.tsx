@@ -35,7 +35,11 @@ export interface ManpowerEntryFormProps {
  */
 export default function ManpowerEntryForm({
   projectId,
-  projectName,
+  // projectName threaded through the props but no longer rendered — the
+  // mobile layout header already carries it, so echoing it in the lede
+  // was pure duplication. Left in the prop list so the page.tsx call
+  // site doesn't need to churn; drop it entirely on next refactor.
+  projectName: _projectName,
   contractors,
   trades,
 }: ManpowerEntryFormProps) {
@@ -174,9 +178,10 @@ export default function ManpowerEntryForm({
 
   return (
     <form onSubmit={handleSubmit} className="px-5 py-5 space-y-5">
+      {/* Project name lives in the layout header — don't repeat it here. */}
       <ScreenHeading
         title="Log manpower"
-        lede={`Pick the contractor and add a row for every trade on site today · ${projectName}`}
+        lede="Pick the contractor and add a row for every trade on site today."
       />
 
       <label className="block">

@@ -53,7 +53,6 @@ export default async function MobileInfoPage({
         <h1 className="font-serif text-[28px] leading-tight text-ink mt-1 tracking-tight">
           My actions
         </h1>
-        <p className="text-[13px] text-ink-3 mt-1.5">{project.name}</p>
       </div>
 
       {/* Hero count card — ink ground for gravitas, Fraunces numeric for

@@ -169,6 +169,10 @@ export default async function MobileProjectHome({
       {/* Hero band — warm sandstone, editorial layout. Not a gigantic
           landing page splash, but enough presence that the app feels like
           a real product on open rather than a form. */}
+      {/* Hero band — the layout header already carries the project name and
+          user name so we don't repeat them here. Lead with the date + a
+          question that actually orients the engineer ("What's on today?"),
+          which is the useful content this band adds over the header. */}
       <section
         className="px-5 pt-6 pb-8 border-b border-sandstone-100"
         style={{ background: "linear-gradient(180deg, var(--color-sandstone-50) 0%, var(--color-ivory) 100%)" }}
@@ -176,15 +180,9 @@ export default async function MobileProjectHome({
         <p className="font-serif italic text-[13px] text-ferrous-600 tracking-wide">
           {dateLine}
         </p>
-        <h1 className="font-serif text-[36px] leading-[1.05] text-ink mt-1 tracking-tight">
-          {project.name}
+        <h1 className="font-serif text-[32px] leading-[1.1] text-ink mt-1 tracking-tight">
+          What&apos;s on today?
         </h1>
-        {session?.user?.name && (
-          <p className="text-[13px] text-ink-2 mt-3">
-            <span className="text-ink-3">Good morning,</span>{" "}
-            <span className="font-medium text-ink">{session.user.name.split(" ")[0]}</span>
-          </p>
-        )}
       </section>
 
       <div className="px-5 pt-6 space-y-7">

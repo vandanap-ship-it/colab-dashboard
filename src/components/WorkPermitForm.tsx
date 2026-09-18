@@ -214,9 +214,10 @@ export default function WorkPermitForm({
 
   return (
     <form onSubmit={handleSubmit} className="px-5 py-5 space-y-5">
+      {/* Project name lives in the layout header — don't repeat it here. */}
       <ScreenHeading
         title="Raise a work permit"
-        lede={`Needs approval before work starts · ${projectName}`}
+        lede="Needs approval before work starts."
       />
 
       {/* Type — segmented picker so all four fit on-screen without scrolling */}
