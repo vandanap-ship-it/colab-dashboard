@@ -138,7 +138,7 @@ export default async function MobileInspectionDetailPage({
             <ul>
               {inspection.items.map((item) => (
                 <li key={item.id} className="border-b border-stone-100 last:border-b-0 px-3 py-2.5 flex items-start gap-3">
-                  <ItemMark passed={item.passed} />
+                  <ItemMark passed={item.passed} notApplicable={item.notApplicable} />
                   <div className="min-w-0 flex-1">
                     <div className="text-sm text-stone-900 leading-snug">{item.label}</div>
                     {item.notes && (
@@ -195,7 +195,16 @@ export default async function MobileInspectionDetailPage({
   );
 }
 
-function ItemMark({ passed }: { passed: boolean | null }) {
+function ItemMark({ passed, notApplicable }: { passed: boolean | null; notApplicable: boolean }) {
+  // NA is a real construction answer for scope items that don't apply to this
+  // specific villa/section — read it first so it wins over passed=null.
+  if (notApplicable) {
+    return (
+      <span className="w-6 h-6 rounded-full bg-stone-100 ring-1 ring-stone-300 text-stone-600 flex items-center justify-center shrink-0 text-[9.5px] font-semibold tracking-tight">
+        N/A
+      </span>
+    );
+  }
   if (passed === true) {
     return (
       <span className="w-6 h-6 rounded-full bg-emerald-50 ring-1 ring-emerald-200 text-emerald-700 flex items-center justify-center shrink-0">

@@ -43,8 +43,8 @@ export default function InspectionForm({
   // passed: null = untouched (refused at submit); true = passed; false = failed.
   // Previously defaulted to `true`, which let engineers submit an inspection
   // without ticking each row — a real safety-record risk.
-  const [items, setItems] = useState<{ label: string; passed: boolean | null; notes: string }[]>(
-    DEFAULT_ITEMS.map((label) => ({ label, passed: null, notes: "" })),
+  const [items, setItems] = useState<{ label: string; passed: boolean | null; notApplicable: boolean; notes: string }[]>(
+    DEFAULT_ITEMS.map((label) => ({ label, passed: null, notApplicable: false, notes: "" })),
   );
   const [photos, setPhotos] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
@@ -95,7 +95,7 @@ export default function InspectionForm({
       tpl.items
         .slice()
         .sort((a, b) => a.seq - b.seq)
-        .map((it) => ({ label: it.description, passed: null, notes: "" })),
+        .map((it) => ({ label: it.description, passed: null, notApplicable: false, notes: "" })),
     );
   }
 
@@ -110,11 +110,11 @@ export default function InspectionForm({
 
   const selected = activities?.find((a) => a.id === activityId);
 
-  function updateItem(i: number, patch: Partial<{ label: string; passed: boolean | null; notes: string }>) {
+  function updateItem(i: number, patch: Partial<{ label: string; passed: boolean | null; notApplicable: boolean; notes: string }>) {
     setItems((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
   function addItem() {
-    setItems((rows) => [...rows, { label: "", passed: null, notes: "" }]);
+    setItems((rows) => [...rows, { label: "", passed: null, notApplicable: false, notes: "" }]);
   }
   function removeItem(i: number) {
     setItems((rows) => rows.filter((_, idx) => idx !== i));
@@ -131,13 +131,14 @@ export default function InspectionForm({
       setError("Add at least one item");
       return;
     }
-    // Every item must be explicitly passed or failed. Engineer-facing safety
-    // gate — paired with the server-side check in /api/inspections POST.
-    const untouched = usable.filter((i) => i.passed === null);
+    // Every item must be explicitly answered — Yes, No, or NA. An item is
+    // untouched when it's neither NA nor has a boolean pass/fail. Paired
+    // with the server-side check in /api/inspections POST.
+    const untouched = usable.filter((i) => !i.notApplicable && i.passed === null);
     if (untouched.length > 0) {
       const first = untouched[0].label.trim();
       const more = untouched.length > 1 ? ` (+${untouched.length - 1} more)` : "";
-      setError(`Tick Pass or Fail for "${first}"${more}.`);
+      setError(`Tick Yes, No or N/A for "${first}"${more}.`);
       return;
     }
     setPending(true);
@@ -216,7 +217,7 @@ export default function InspectionForm({
     setActivityId("");
     setActivitySearch("");
     setTitle("");
-    setItems(DEFAULT_ITEMS.map((label) => ({ label, passed: null, notes: "" })));
+    setItems(DEFAULT_ITEMS.map((label) => ({ label, passed: null, notApplicable: false, notes: "" })));
     setPhotos([]);
     setTemplateId("");
     setError(null);
@@ -334,16 +335,19 @@ export default function InspectionForm({
         </div>
         <ul className="space-y-2">
           {items.map((it, i) => {
-            // Three explicit states. Don't use truthiness — null was being
-            // treated as falsey before, which highlighted "Fail" by default.
-            const isPassed = it.passed === true;
-            const isFailed = it.passed === false;
-            const isUntouched = it.passed === null;
+            // Four possible states — Yes / No / NA / untouched — with NA
+            // treated as a first-class response (not a boolean fallback).
+            // Matches Colab QA/QC where "not applicable" is a real answer
+            // for scope items that don't apply to this specific villa.
+            const isYes = !it.notApplicable && it.passed === true;
+            const isNo = !it.notApplicable && it.passed === false;
+            const isNA = it.notApplicable === true;
+            const isUntouched = !isYes && !isNo && !isNA;
             return (
               <li
                 key={i}
                 // Amber left edge calls out items the engineer still hasn't
-                // ticked, so the unfilled rows visually stand out as they
+                // answered, so the unfilled rows visually stand out as they
                 // scroll the page.
                 className={`rounded-lg border bg-white p-3 space-y-2 ${
                   isUntouched ? "border-stone-200 border-l-4 border-l-amber-400" : "border-stone-200"
@@ -369,33 +373,43 @@ export default function InspectionForm({
                   </button>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => updateItem(i, { passed: true })}
-                  // py-3 ≈ 44px including text — comfortable thumb target with mud on the screen.
-                  className={`flex-1 text-sm font-medium rounded-full py-3 ${
-                    isPassed ? "bg-emerald-500 text-white" : "bg-stone-100 text-stone-500"
+                  onClick={() => updateItem(i, { passed: true, notApplicable: false })}
+                  className={`text-[14px] font-semibold rounded-full py-3 ${
+                    isYes ? "bg-emerald-500 text-white" : "bg-stone-100 text-stone-500"
                   }`}
-                  aria-pressed={isPassed}
+                  aria-pressed={isYes}
                 >
-                  ✓ Pass
+                  ✓ Yes
                 </button>
                 <button
                   type="button"
-                  onClick={() => updateItem(i, { passed: false })}
-                  className={`flex-1 text-sm font-medium rounded-full py-3 ${
-                    isFailed ? "bg-red-500 text-white" : "bg-stone-100 text-stone-500"
+                  onClick={() => updateItem(i, { passed: false, notApplicable: false })}
+                  className={`text-[14px] font-semibold rounded-full py-3 ${
+                    isNo ? "bg-red-500 text-white" : "bg-stone-100 text-stone-500"
                   }`}
-                  aria-pressed={isFailed}
+                  aria-pressed={isNo}
                 >
-                  ✕ Fail
+                  ✕ No
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateItem(i, { passed: null, notApplicable: true })}
+                  className={`text-[14px] font-semibold rounded-full py-3 ${
+                    isNA ? "bg-stone-700 text-white" : "bg-stone-100 text-stone-500"
+                  }`}
+                  aria-pressed={isNA}
+                  title="Not applicable to this scope"
+                >
+                  N/A
                 </button>
               </div>
               {isUntouched && (
-                <p className="text-[11px] text-amber-700">Tap Pass or Fail to mark this item.</p>
+                <p className="text-[11px] text-amber-700">Tap Yes, No or N/A to mark this item.</p>
               )}
-              {isFailed && (
+              {isNo && (
                 <VoiceTextarea
                   multiline={false}
                   value={it.notes}

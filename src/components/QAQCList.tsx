@@ -5,7 +5,10 @@ import PhotoStrip from "./PhotoStrip";
 import TrashButton from "./TrashButton";
 import { formatDayMonthYear as fmt } from "@/lib/dates";
 
-type Item = { id: string; label: string; passed: boolean; notes: string | null; orderIndex: number };
+// Yes / No / NA — see prisma/schema.prisma InspectionItem. `notApplicable`
+// wins over `passed`, and only `passed === true` is a real "pass" for the
+// header stats.
+type Item = { id: string; label: string; passed: boolean | null; notApplicable: boolean; notes: string | null; orderIndex: number };
 
 type Inspection = {
   id: string;
@@ -106,9 +109,12 @@ export default function QAQCList({ projectId, canReview }: { projectId: string; 
       ) : (
         <ul className="space-y-2">
           {inspections.map((insp) => {
-            const passed = insp.items.filter((i) => i.passed).length;
+            const passed = insp.items.filter((i) => i.passed === true).length;
+            // NA items don't get counted in the pass-rate denominator — they
+            // aren't a fail, they don't apply to this villa/section.
+            const applicable = insp.items.filter((i) => !i.notApplicable).length;
             const total = insp.items.length;
-            const rate = total > 0 ? (passed / total) * 100 : 0;
+            const rate = applicable > 0 ? (passed / applicable) * 100 : 0;
             const isOpen = expandedId === insp.id;
             return (
               <li key={insp.id} className="rounded-lg border border-stone-100 bg-stone-50">
@@ -145,15 +151,31 @@ export default function QAQCList({ projectId, canReview }: { projectId: string; 
                           key={it.id}
                           className="flex items-start gap-2 text-xs bg-white rounded p-2 border border-stone-100"
                         >
-                          <span
-                            className={`w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] ${
-                              it.passed ? "bg-emerald-500" : "bg-red-500"
-                            }`}
-                          >
-                            {it.passed ? "✓" : "✕"}
-                          </span>
+                          {it.notApplicable ? (
+                            <span className="w-4 h-4 rounded-full flex items-center justify-center bg-stone-200 text-stone-700 text-[7px] font-semibold tracking-tight">
+                              NA
+                            </span>
+                          ) : (
+                            <span
+                              className={`w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] ${
+                                it.passed === true ? "bg-emerald-500" : "bg-red-500"
+                              }`}
+                            >
+                              {it.passed === true ? "✓" : "✕"}
+                            </span>
+                          )}
                           <div className="flex-1">
-                            <div className={it.passed ? "text-stone-700" : "text-red-700 font-medium"}>{it.label}</div>
+                            <div
+                              className={
+                                it.notApplicable
+                                  ? "text-stone-500 italic"
+                                  : it.passed === true
+                                    ? "text-stone-700"
+                                    : "text-red-700 font-medium"
+                              }
+                            >
+                              {it.label}
+                            </div>
                             {it.notes && <div className="text-stone-500 mt-0.5">{it.notes}</div>}
                           </div>
                         </li>

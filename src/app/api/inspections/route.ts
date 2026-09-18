@@ -16,6 +16,11 @@ const PostInspectionSchema = z.object({
     z.object({
       label: z.string().max(300).optional(),
       passed: z.union([z.boolean(), z.null()]).optional(),
+      // Yes / No / NA — NA is a real construction answer for scope items
+      // that don't apply to this specific villa/section. Client sends true
+      // when the engineer picked N/A; server treats it as an "answered"
+      // response equivalent to Yes/No.
+      notApplicable: z.boolean().optional(),
       notes: z.string().max(500).optional(),
     }),
   ).max(100).optional(),
@@ -93,25 +98,29 @@ export async function POST(req: Request) {
   const { projectId, wbsNodeId, title, items, photoUrls } = body;
   const t = title.trim();
 
-  // Refuse the submission if any non-empty item has an unset pass/fail.
-  // Pre-Jun-2026 the server coerced `!!i.passed` so a missing value silently
-  // became "passed", which let engineers submit clean-looking inspections
-  // without actually ticking each row. That was a real safety-record risk.
+  // Refuse the submission if any non-empty item is unanswered. Since the
+  // Jun-2026 tightening we need an explicit answer per item — now that
+  // means Yes, No, OR NA (the Colab three-way). Only untouched
+  // (notApplicable === false AND passed === null) rows fail.
   const candidateItems = Array.isArray(items) ? items : [];
-  const itemsClean: Array<{ label: string; passed: boolean; notes: string | null; orderIndex: number }> = [];
+  const itemsClean: Array<{ label: string; passed: boolean | null; notApplicable: boolean; notes: string | null; orderIndex: number }> = [];
   for (let idx = 0; idx < candidateItems.length; idx++) {
     const i = candidateItems[idx];
     const label = (i.label ?? "").trim();
     if (label.length === 0) continue;
-    if (typeof i.passed !== "boolean") {
+    const isNA = i.notApplicable === true;
+    if (!isNA && typeof i.passed !== "boolean") {
       return NextResponse.json(
-        { error: `Item "${label}" was not marked pass or fail.` },
+        { error: `Item "${label}" was not marked Yes, No or N/A.` },
         { status: 400 },
       );
     }
     itemsClean.push({
       label,
-      passed: i.passed,
+      // NA stores passed=null + notApplicable=true so downstream readers
+      // don't confuse "not applicable" with "not answered yet".
+      passed: isNA ? null : (i.passed as boolean),
+      notApplicable: isNA,
       notes: i.notes?.trim() || null,
       orderIndex: idx,
     });
@@ -153,7 +162,7 @@ export async function POST(req: Request) {
   );
 
   if (!duplicate) {
-    const passedCount = itemsClean.filter((i) => i.passed).length;
+    const passedCount = itemsClean.filter((i) => i.passed === true).length;
     await recordAudit({
       projectId,
       userId: session.user.id,

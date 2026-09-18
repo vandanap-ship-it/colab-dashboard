@@ -427,6 +427,7 @@ CREATE TABLE "InspectionItem" (
     "inspectionId" TEXT NOT NULL,
     "label" TEXT NOT NULL,
     "passed" BOOLEAN,
+    "notApplicable" BOOLEAN NOT NULL DEFAULT false,
     "notes" TEXT,
     "orderIndex" INTEGER NOT NULL DEFAULT 0,
 
