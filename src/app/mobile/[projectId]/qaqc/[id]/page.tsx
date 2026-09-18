@@ -23,13 +23,13 @@ export default async function MobileInspectionDetailPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string; id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; module?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
   const { projectId, id } = await params;
-  const { tab } = await searchParams;
+  const { tab, module: moduleParam } = await searchParams;
 
   if (
     !canAccessModule(session.user.modules, MODULES.QAQC) &&
@@ -58,13 +58,18 @@ export default async function MobileInspectionDetailPage({
 
   const iCanReview = canReview(session.user.role);
   const backTab = tab && ["pending", "all", "passed", "rejected"].includes(tab) ? tab : "pending";
+  // Preserve the split-view context (?module=QAQC or ?module=SAFETY) on
+  // Back so an inspector who dove into a record from the EHS list lands
+  // back on EHS, not the combined view.
+  const backModule = moduleParam === "QAQC" || moduleParam === "SAFETY" ? moduleParam : "";
+  const backHref = `/mobile/${projectId}/qaqc?tab=${backTab}${backModule ? `&module=${backModule}` : ""}`;
 
   return (
     <div className="flex-1 flex flex-col bg-ivory min-h-0">
       {/* Header */}
       <div className="px-4 pt-4 pb-3 border-b border-stone-200">
         <Link
-          href={`/mobile/${projectId}/qaqc?tab=${backTab}`}
+          href={backHref}
           className="inline-flex items-center gap-1 text-sm text-stone-500 hover:text-stone-900"
         >
           <ArrowLeft className="w-3.5 h-3.5" />

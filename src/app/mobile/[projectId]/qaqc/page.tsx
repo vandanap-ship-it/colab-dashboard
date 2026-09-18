@@ -29,19 +29,42 @@ function normaliseTab(v: string | undefined): Tab {
   return (VALID_TABS as readonly string[]).includes(v ?? "") ? (v as Tab) : "pending";
 }
 
+// Module filter · when the home splits QA / QC and EHS into separate
+// tiles, we route each to /mobile/[projectId]/qaqc?module=QAQC|SAFETY so
+// the same list component filters and titles itself for the right team.
+// Falls through to the combined view when no module is given, which is
+// how internal staff can still see everything in one place if they
+// deep-link without the param.
+type ModuleFilter = "QAQC" | "SAFETY" | null;
+function normaliseModule(v: string | undefined): ModuleFilter {
+  if (v === "QAQC" || v === "SAFETY") return v;
+  return null;
+}
+function moduleTitle(m: ModuleFilter): string {
+  if (m === "SAFETY") return "EHS";
+  if (m === "QAQC") return "QA / QC";
+  return "QA / QC · EHS";
+}
+function moduleTilePath(projectId: string, m: ModuleFilter, tab: Tab): string {
+  const qs = new URLSearchParams({ tab });
+  if (m) qs.set("module", m);
+  return `/mobile/${projectId}/qaqc?${qs.toString()}`;
+}
+
 export default async function MobileQaqcPage({
   params,
   searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; module?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
   const { projectId } = await params;
-  const { tab: tabParam } = await searchParams;
+  const { tab: tabParam, module: moduleParam } = await searchParams;
   const tab = normaliseTab(tabParam);
+  let moduleFilter = normaliseModule(moduleParam);
 
   if (
     !canAccessModule(session.user.modules, MODULES.QAQC) &&
@@ -49,6 +72,15 @@ export default async function MobileQaqcPage({
   ) {
     redirect(`/mobile/${projectId}`);
   }
+
+  // Scoped-user safety: a QAQC-only contractor requesting ?module=SAFETY
+  // (or vice-versa) gets silently narrowed to what they can see, so a
+  // hand-crafted URL can't bypass isolation. Internal staff keep the full
+  // combined view when no module param is given.
+  const canSeeQAQC = canAccessModule(session.user.modules, MODULES.QAQC);
+  const canSeeSafety = canAccessModule(session.user.modules, MODULES.SAFETY);
+  if (moduleFilter === "QAQC" && !canSeeQAQC) moduleFilter = "SAFETY";
+  if (moduleFilter === "SAFETY" && !canSeeSafety) moduleFilter = "QAQC";
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -59,8 +91,13 @@ export default async function MobileQaqcPage({
   const userId = session.user.id;
   const iCanReview = canReview(session.user.role);
 
-  // Base filter. All tabs share it.
-  const baseWhere = { projectId, deletedAt: null } as const;
+  // Base filter. All tabs share it, plus the optional module filter so
+  // counts and rows both match the requested view.
+  const baseWhere = {
+    projectId,
+    deletedAt: null,
+    ...(moduleFilter ? { module: moduleFilter } : {}),
+  } as const;
 
   // Tab → status filter. `pending` shows IN_REVIEW inspections the current
   // user should care about (they filled it OR they can review it), which is
@@ -111,7 +148,8 @@ export default async function MobileQaqcPage({
 
   return (
     <div className="flex-1 flex flex-col bg-ivory min-h-0">
-      {/* Header */}
+      {/* Header — title tracks the module filter so a QA/QC-only view
+          reads "QA / QC" and an EHS-only view reads "EHS". */}
       <div className="px-4 pt-4 pb-3">
         <Link
           href={`/mobile/${projectId}`}
@@ -121,9 +159,13 @@ export default async function MobileQaqcPage({
           Back
         </Link>
         <div className="mt-2 flex items-baseline justify-between gap-3">
-          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">QA / QC</h1>
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
+            {moduleTitle(moduleFilter)}
+          </h1>
           <Link
-            href={`/mobile/${projectId}/inspection/new`}
+            // New WIR carries the module filter forward so a New button
+            // pressed from EHS creates a SAFETY-scoped inspection.
+            href={`/mobile/${projectId}/inspection/new${moduleFilter ? `?module=${moduleFilter}` : ""}`}
             className="inline-flex items-center gap-1 rounded-full bg-stone-900 text-white text-xs font-semibold px-3 py-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -132,13 +174,15 @@ export default async function MobileQaqcPage({
         </div>
       </div>
 
-      {/* Tab bar — sticky so it stays reachable as the list scrolls. */}
+      {/* Tab bar — sticky so it stays reachable as the list scrolls.
+          Each TabLink now carries moduleFilter forward so tabbing keeps
+          the same view instead of dropping back to the combined feed. */}
       <nav className="sticky top-12 z-10 bg-ivory/95 backdrop-blur-md border-b border-stone-200 px-4">
         <div className="flex items-center gap-1 -mb-px overflow-x-auto">
-          <TabLink projectId={projectId} tab="pending" current={tab} label="My Pending" count={pendingCount} icon={Clock} />
-          <TabLink projectId={projectId} tab="all" current={tab} label="All" icon={ClipboardCheck} />
-          <TabLink projectId={projectId} tab="passed" current={tab} label="Passed" count={countByStatus.get("PASSED") ?? 0} icon={CheckCircle2} />
-          <TabLink projectId={projectId} tab="rejected" current={tab} label="Rejected" count={countByStatus.get("REJECTED") ?? 0} icon={AlertTriangle} />
+          <TabLink projectId={projectId} tab="pending" current={tab} moduleFilter={moduleFilter} label="My Pending" count={pendingCount} icon={Clock} />
+          <TabLink projectId={projectId} tab="all" current={tab} moduleFilter={moduleFilter} label="All" icon={ClipboardCheck} />
+          <TabLink projectId={projectId} tab="passed" current={tab} moduleFilter={moduleFilter} label="Passed" count={countByStatus.get("PASSED") ?? 0} icon={CheckCircle2} />
+          <TabLink projectId={projectId} tab="rejected" current={tab} moduleFilter={moduleFilter} label="Rejected" count={countByStatus.get("REJECTED") ?? 0} icon={AlertTriangle} />
         </div>
       </nav>
 
@@ -151,7 +195,10 @@ export default async function MobileQaqcPage({
             {inspections.map((i) => (
               <li key={i.id}>
                 <Link
-                  href={`/mobile/${projectId}/qaqc/${i.id}?tab=${tab}`}
+                  // Detail link carries tab AND module so pressing Back
+                  // from the detail returns to the same filtered view
+                  // (EHS Passed stays EHS Passed, not QAQC Pending).
+                  href={`/mobile/${projectId}/qaqc/${i.id}?tab=${tab}${moduleFilter ? `&module=${moduleFilter}` : ""}`}
                   className="rounded-xl border border-stone-200 bg-white p-4 block active:bg-stone-50"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -201,6 +248,7 @@ function TabLink({
   projectId,
   tab,
   current,
+  moduleFilter,
   label,
   count,
   icon: Icon,
@@ -208,6 +256,7 @@ function TabLink({
   projectId: string;
   tab: Tab;
   current: Tab;
+  moduleFilter: ModuleFilter;
   label: string;
   count?: number;
   icon: typeof ClipboardCheck;
@@ -215,7 +264,7 @@ function TabLink({
   const active = tab === current;
   return (
     <Link
-      href={`/mobile/${projectId}/qaqc?tab=${tab}`}
+      href={moduleTilePath(projectId, moduleFilter, tab)}
       className={
         "inline-flex items-center gap-1.5 py-2 px-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors " +
         (active

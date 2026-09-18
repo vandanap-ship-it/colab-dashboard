@@ -106,6 +106,11 @@ export const TOOL_MODULES: Record<string, ModuleKey[]> = {
   dlr: [MODULES.PROGRESS],
   snag: [MODULES.QAQC, MODULES.SAFETY],
   inspection: [MODULES.QAQC, MODULES.SAFETY],
+  // Split QA/QC and EHS into their own tiles on the mobile home. Each is
+  // its own tool key so a SAFETY-scoped contractor sees the EHS tile
+  // only and a QAQC-scoped contractor sees the QA/QC tile only.
+  "qaqc-tile": [MODULES.QAQC],
+  "ehs-tile": [MODULES.SAFETY],
   hindrance: [MODULES.HINDRANCE],
   manpower: [MODULES.PROGRESS],
   concern: [MODULES.CONCERN],

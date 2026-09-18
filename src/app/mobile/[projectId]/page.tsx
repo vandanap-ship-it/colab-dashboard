@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import {
   AlertTriangle,
   ClipboardCheck,
+  HardHat,
   ListChecks,
   PlusCircle,
   ShieldCheck,
@@ -127,12 +128,24 @@ export default async function MobileProjectHome({
       icon: ListChecks,
       tier: "secondary",
     },
+    // QA/QC and EHS live on the SAME mobile screen (/qaqc) filtered by
+    // `?module=…`; the home surfaces two distinct tiles so the teams
+    // land where they expect, and so a SAFETY-scoped contractor doesn't
+    // see the QA/QC tile at all (see TOOL_MODULES).
     {
-      key: "inspection",
-      href: `/mobile/${projectId}/qaqc?tab=pending`,
+      key: "qaqc-tile",
+      href: `/mobile/${projectId}/qaqc?tab=pending&module=QAQC`,
       label: "QA / QC",
-      hint: "Fill or review inspections",
+      hint: "Quality inspections + snags",
       icon: ClipboardCheck,
+      tier: "secondary",
+    },
+    {
+      key: "ehs-tile",
+      href: `/mobile/${projectId}/qaqc?tab=pending&module=SAFETY`,
+      label: "EHS",
+      hint: "Safety inspections + snags",
+      icon: HardHat,
       tier: "secondary",
     },
     {
