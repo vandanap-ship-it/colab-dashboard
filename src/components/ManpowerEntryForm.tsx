@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "./Toast";
 import SaveSuccessCard from "./SaveSuccessCard";
 import { istDayString } from "@/lib/istDay";
+import { ScreenHeading, FieldLabel, PrimaryAction } from "./mobile/ui";
 
 export interface ContractorOption {
   id: string;
@@ -172,29 +173,28 @@ export default function ManpowerEntryForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="px-4 py-4 space-y-5">
-      {/* Header back arrow lives in the mobile layout; keep just the H1 here. */}
-      <div>
-        <h1 className="text-2xl font-semibold text-stone-900">Log manpower</h1>
-        <p className="text-xs text-stone-500 mt-1">{projectName}</p>
-      </div>
+    <form onSubmit={handleSubmit} className="px-5 py-5 space-y-5">
+      <ScreenHeading
+        title="Log manpower"
+        lede={`Pick the contractor and add a row for every trade on site today · ${projectName}`}
+      />
 
       <label className="block">
-        <span className="text-sm font-medium text-stone-700">Date</span>
+        <FieldLabel>Date</FieldLabel>
         <input
           type="date"
           value={entryDate}
           onChange={(e) => setEntryDate(e.target.value)}
-          className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
         />
       </label>
 
       <label className="block">
-        <span className="text-sm font-medium text-stone-700">Contractor</span>
+        <FieldLabel>Contractor</FieldLabel>
         <select
           value={contractorId}
           onChange={(e) => setContractorId(e.target.value)}
-          className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
         >
           {contractors.length === 0 && <option value="">No contractors on this project</option>}
           {contractors.map((c) => (
@@ -207,12 +207,12 @@ export default function ManpowerEntryForm({
           + count per row, "+ Add row" appends. Saving fans out one row per
           POST so upserts by (contractor, trade, date) still work per-row. */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-stone-700">Trades</span>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[13px] font-semibold text-ink">Trades on site</span>
           <button
             type="button"
             onClick={addRow}
-            className="text-xs text-amber-600 font-medium"
+            className="text-[13px] text-ferrous-600 font-medium"
           >
             + Add row
           </button>
@@ -222,7 +222,7 @@ export default function ManpowerEntryForm({
             <select
               value={row.trade}
               onChange={(e) => updateRow(i, { trade: e.target.value })}
-              className="flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+              className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
             >
               {trades.map((t) => (
                 <option key={t} value={t}>{t}</option>
@@ -236,13 +236,12 @@ export default function ManpowerEntryForm({
               value={row.count}
               onChange={(e) => updateRow(i, { count: e.target.value.replace(/[^\d]/g, "") })}
               placeholder="0"
-              className="w-24 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm tabular-nums"
+              className="w-24 rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px] tabular-nums"
             />
             {rows.length > 1 && (
               <button
                 type="button"
                 onClick={() => removeRow(i)}
-                // min-h/min-w-11 (~44px) — Apple/Google minimum tap target.
                 className="text-stone-400 hover:text-red-500 text-lg min-h-11 min-w-11 flex items-center justify-center"
                 aria-label="Remove row"
               >
@@ -251,34 +250,28 @@ export default function ManpowerEntryForm({
             )}
           </div>
         ))}
-        <p className="text-[11px] text-stone-500">
-          Resubmitting the same trade today updates the previous number.
+        <p className="text-[12px] text-ink-3 mt-1">
+          Adding the same trade again today just updates the previous number.
         </p>
       </div>
 
       <label className="block">
-        <span className="text-sm font-medium text-stone-700">
-          Notes <span className="text-stone-400">(optional)</span>
-        </span>
+        <FieldLabel optional>Notes</FieldLabel>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
           maxLength={500}
-          placeholder="e.g. 3 workers arrived late due to bus delay"
-          className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+          placeholder="e.g. three workers arrived late due to bus delay"
+          className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
         />
       </label>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-ferrous-600">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={pending || contractors.length === 0}
-        className="w-full rounded-full bg-stone-900 text-white py-3 text-sm font-medium disabled:opacity-60"
-      >
+      <PrimaryAction disabled={pending || contractors.length === 0}>
         {pending ? "Saving…" : "Save entry"}
-      </button>
+      </PrimaryAction>
     </form>
   );
 }

@@ -243,12 +243,20 @@ export default function MobileHindranceForm({
   }
 
   return (
-    <div className="min-h-full bg-stone-50">
-      {/* Header — lavender-tinted band matching the reference. The Back arrow
-          moved to the mobile layout header (see MobileHeaderBack) so we don't
-          render two back buttons on the same screen. */}
-      <div className="px-4 pt-4 pb-4 bg-[#eee6f2] border-b border-[#e0d3ea]">
-        <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Add Hindrance</h1>
+    <div className="min-h-full bg-ivory">
+      {/* Hero band — sandstone gradient to match the mobile home, and a
+          Fraunces title so the visual language is consistent across every
+          mobile screen. The Back arrow lives in the layout header. */}
+      <div
+        className="px-5 pt-5 pb-6 border-b border-sandstone-100"
+        style={{ background: "linear-gradient(180deg, var(--color-sandstone-50) 0%, var(--color-ivory) 100%)" }}
+      >
+        <p className="font-serif italic text-[13px] text-ferrous-600 tracking-wide">
+          Something holding a job up?
+        </p>
+        <h1 className="font-serif text-[28px] leading-tight text-ink mt-1 tracking-tight">
+          Add hindrance
+        </h1>
       </div>
 
       <form onSubmit={handleSubmit} className="px-4 py-4 space-y-3.5 pb-24">
@@ -488,9 +496,9 @@ export default function MobileHindranceForm({
         <button
           type="submit"
           disabled={pending}
-          className="w-full rounded-2xl bg-brand-400 hover:bg-brand-500 text-white text-base font-semibold py-4 shadow-sm disabled:opacity-60"
+          className="w-full rounded-full bg-ink text-cream py-4 text-[16px] font-semibold shadow-card disabled:opacity-60 active:scale-[0.99]"
         >
-          {pending ? "Saving…" : "Submit"}
+          {pending ? "Saving…" : "Save hindrance"}
         </button>
       </form>
     </div>

@@ -45,28 +45,37 @@ export default async function MobileInfoPage({
   const totalActions = concernsAssigned + issuesAssigned + inspectionsToReview;
 
   return (
-    <div className="px-4 py-6 space-y-4">
+    <div className="px-5 py-5 space-y-4">
       <div>
-        <h1 className="text-xl font-semibold text-stone-900 tracking-tight">My Actions</h1>
-        <p className="text-xs text-stone-500 mt-1">{project.name}</p>
+        <p className="font-serif italic text-[13px] text-ferrous-600 tracking-wide">
+          What&apos;s on your plate
+        </p>
+        <h1 className="font-serif text-[28px] leading-tight text-ink mt-1 tracking-tight">
+          My actions
+        </h1>
+        <p className="text-[13px] text-ink-3 mt-1.5">{project.name}</p>
       </div>
 
-      {/* Hero count card */}
-      <section className="rounded-2xl bg-stone-900 text-white p-6 text-center shadow-card relative overflow-hidden">
+      {/* Hero count card — ink ground for gravitas, Fraunces numeric for
+          brand consistency with the home's Site Pulse. */}
+      <section className="rounded-2xl bg-ink text-cream p-6 text-center shadow-card relative overflow-hidden">
         <div
           aria-hidden
           className="absolute inset-0 pointer-events-none"
           style={{
             backgroundImage:
-              "radial-gradient(circle at 20% 0%, rgba(251, 191, 36, 0.18), transparent 50%), radial-gradient(circle at 100% 100%, rgba(251, 191, 36, 0.08), transparent 40%)",
+              "radial-gradient(circle at 20% 0%, rgba(197, 106, 64, 0.24), transparent 50%), radial-gradient(circle at 100% 100%, rgba(251, 191, 36, 0.08), transparent 40%)",
           }}
         />
         <div className="relative">
-          <p className="text-xs uppercase tracking-widest text-stone-400">Total actions</p>
-          <p className="mt-2 text-5xl font-semibold tracking-tight text-brand-400 tabular-nums">
+          <p className="text-[10.5px] uppercase tracking-[0.16em] text-cream/60">Total actions</p>
+          <p
+            className="mt-2 font-serif text-ferrous-300 tabular-nums"
+            style={{ fontSize: "56px", lineHeight: "1", letterSpacing: "-0.02em" }}
+          >
             {totalActions}
           </p>
-          <p className="text-xs text-stone-400 mt-2">
+          <p className="text-[12px] text-cream/60 mt-3">
             {totalActions === 0 ? "Nothing on your plate. Nice." : "Items waiting on you."}
           </p>
         </div>
@@ -74,16 +83,16 @@ export default async function MobileInfoPage({
 
       <Link
         href={`/mobile/${projectId}/site-progress`}
-        className="rounded-xl border border-stone-200 bg-white p-4 flex items-center gap-3 hover:border-stone-300 hover:shadow-soft active:scale-[0.99] transition-all"
+        className="rounded-2xl border border-sandstone-100 bg-cream p-4 flex items-center gap-3 shadow-soft active:scale-[0.99] transition-all"
       >
-        <span className="w-10 h-10 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
+        <span className="w-10 h-10 rounded-lg bg-ferrous-50 text-ferrous-600 flex items-center justify-center shrink-0">
           <ListChecks className="w-5 h-5" />
         </span>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-stone-900">Progress</div>
-          <div className="text-xs text-stone-500 mt-0.5">Activities to update</div>
+          <div className="text-[15px] font-semibold text-ink">Site progress</div>
+          <div className="text-[12px] text-ink-3 mt-0.5">Villa-by-villa completion</div>
         </div>
-        <ArrowRight className="w-4 h-4 text-stone-300" />
+        <ArrowRight className="w-4 h-4 text-ink-3" />
       </Link>
 
       {/* All four rows deep-link into the desktop Snapshot / QA/QC surfaces
@@ -146,27 +155,27 @@ function ActionRow({
 }) {
   const body = (
     <>
-      <span className="w-10 h-10 rounded-lg bg-stone-100 text-stone-600 flex items-center justify-center shrink-0">
+      <span className="w-10 h-10 rounded-lg bg-sandstone-50 text-ink-2 flex items-center justify-center shrink-0">
         <Icon className="w-5 h-5" />
       </span>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-stone-900">{title}</div>
-        <div className="text-xs text-stone-500 mt-0.5">{sub}</div>
+        <div className="text-[15px] font-semibold text-ink">{title}</div>
+        <div className="text-[12px] text-ink-3 mt-0.5">{sub}</div>
       </div>
       {count > 0 ? (
-        <span className="rounded-full bg-stone-900 text-white text-xs font-semibold px-2.5 py-0.5 min-w-[28px] text-center tabular-nums">
+        <span className="rounded-full bg-ink text-cream text-[12px] font-semibold px-2.5 py-0.5 min-w-[28px] text-center tabular-nums">
           {count}
         </span>
       ) : (
-        <span className="text-xs text-stone-400">0</span>
+        <span className="text-[12px] text-ink-3">0</span>
       )}
-      {href && <ArrowRight className="w-4 h-4 text-stone-300 shrink-0" />}
+      {href && <ArrowRight className="w-4 h-4 text-ink-3 shrink-0" />}
     </>
   );
-  const shell = "rounded-xl border border-stone-200 bg-white p-4 flex items-center gap-3";
+  const shell = "rounded-2xl border border-sandstone-100 bg-cream p-4 flex items-center gap-3 shadow-soft";
   if (href) {
     return (
-      <Link href={href} className={`${shell} active:bg-stone-50`}>
+      <Link href={href} className={`${shell} active:bg-sandstone-50`}>
         {body}
       </Link>
     );

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ClipboardCheck, ArrowLeft, Plus, AlertTriangle, CheckCircle2, X, Clock } from "lucide-react";
+import { ClipboardCheck, Plus, AlertTriangle, CheckCircle2, X, Clock } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
@@ -148,25 +148,22 @@ export default async function MobileQaqcPage({
 
   return (
     <div className="flex-1 flex flex-col bg-ivory min-h-0">
-      {/* Header — title tracks the module filter so a QA/QC-only view
-          reads "QA / QC" and an EHS-only view reads "EHS". */}
-      <div className="px-4 pt-4 pb-3">
-        <Link
-          href={`/mobile/${projectId}`}
-          className="inline-flex items-center gap-1 text-sm text-stone-500 hover:text-stone-900"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back
-        </Link>
-        <div className="mt-2 flex items-baseline justify-between gap-3">
-          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
+      {/* Hero band + title tracks the module filter so a QA/QC-only view
+          reads "QA / QC" and an EHS-only view reads "EHS". Matches the
+          sandstone gradient the mobile home uses. */}
+      <div
+        className="px-5 pt-5 pb-4 border-b border-sandstone-100"
+        style={{ background: "linear-gradient(180deg, var(--color-sandstone-50) 0%, var(--color-ivory) 100%)" }}
+      >
+        <div className="flex items-baseline justify-between gap-3">
+          <h1 className="font-serif text-[28px] leading-tight text-ink tracking-tight">
             {moduleTitle(moduleFilter)}
           </h1>
           <Link
             // New WIR carries the module filter forward so a New button
             // pressed from EHS creates a SAFETY-scoped inspection.
             href={`/mobile/${projectId}/inspection/new${moduleFilter ? `?module=${moduleFilter}` : ""}`}
-            className="inline-flex items-center gap-1 rounded-full bg-stone-900 text-white text-xs font-semibold px-3 py-1.5"
+            className="inline-flex items-center gap-1 rounded-full bg-ink text-cream text-[12px] font-semibold px-3 py-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
             New WIR
@@ -199,18 +196,18 @@ export default async function MobileQaqcPage({
                   // from the detail returns to the same filtered view
                   // (EHS Passed stays EHS Passed, not QAQC Pending).
                   href={`/mobile/${projectId}/qaqc/${i.id}?tab=${tab}${moduleFilter ? `&module=${moduleFilter}` : ""}`}
-                  className="rounded-xl border border-stone-200 bg-white p-4 block active:bg-stone-50"
+                  className="rounded-2xl border border-sandstone-100 bg-cream shadow-soft p-4 block active:bg-sandstone-50"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold text-stone-900 leading-snug line-clamp-2">
+                      <div className="text-[15px] font-semibold text-ink leading-snug line-clamp-2">
                         {i.title}
                       </div>
-                      <div className="text-[11px] text-stone-500 mt-1">
+                      <div className="text-[12px] text-ink-3 mt-1">
                         {i.filledBy?.name ?? "—"}
                         {i.wbsNode?.name ? ` · ${i.wbsNode.name}` : ""}
                       </div>
-                      <div className="text-[11px] text-stone-400 mt-0.5 flex items-center gap-2">
+                      <div className="text-[11px] text-ink-3 mt-0.5 flex items-center gap-2">
                         <span>{fmtDate(i.createdAt)}</span>
                         <span>·</span>
                         <span>{i._count.items} item{i._count.items === 1 ? "" : "s"}</span>

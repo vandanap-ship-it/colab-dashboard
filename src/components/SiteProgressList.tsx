@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { ScreenHeading } from "./mobile/ui";
 
 // The picker endpoint already carries the villa/milestone shape we want
 // here — Block → Villa → VillaMilestone (with pctComplete + done). Reading
@@ -125,8 +126,11 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
   }, [villasFlat]);
 
   return (
-    <div className="px-4 py-4 space-y-4">
-      <h1 className="text-xl font-semibold text-stone-900">Site Progress</h1>
+    <div className="px-5 py-5 space-y-4">
+      <ScreenHeading
+        title="Site progress"
+        lede="Every villa on the site, most-active first. Tap one to see its milestones."
+      />
 
       <div className="flex gap-2">
         {(["UPCOMING", "ONGOING", "QUEUE"] as const).map((t) => (
@@ -134,10 +138,10 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`flex-1 rounded-full px-3 py-2 text-xs font-medium ${
+            className={`flex-1 rounded-full px-3 py-2 text-[13px] font-semibold ${
               tab === t
-                ? "bg-amber-400 text-stone-900"
-                : "bg-white border border-stone-200 text-stone-600"
+                ? "bg-ink text-cream"
+                : "bg-cream border border-sandstone-100 text-ink-2"
             }`}
           >
             {t === "UPCOMING" ? "Upcoming" : t === "ONGOING" ? "In Progress" : "Done"} ({counts[t]})
@@ -150,7 +154,7 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Search villa or block…"
-        className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+        className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
       />
 
       {loadError ? (
@@ -217,25 +221,25 @@ function VillaCard({
     return [...villa.milestones].sort((a, b) => rank(a) - rank(b));
   }, [villa.milestones]);
   return (
-    <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+    <div className="rounded-2xl border border-sandstone-100 bg-cream overflow-hidden shadow-soft">
       <button
         type="button"
         onClick={onToggle}
-        className="w-full text-left px-4 py-3 flex items-center gap-3 active:bg-stone-50"
+        className="w-full text-left px-4 py-3.5 flex items-center gap-3 active:bg-sandstone-50"
       >
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-stone-900 truncate">{villa.label}</div>
-          <div className="text-[11px] text-stone-500 truncate mt-0.5">
+          <div className="text-[15px] font-semibold text-ink truncate">{villa.label}</div>
+          <div className="text-[12px] text-ink-3 truncate mt-0.5">
             Block {blockCode} · {c.ongoing} in progress · {c.done}/{c.total} done
           </div>
         </div>
         <PctBadge percent={pct} />
         <ChevronRight
-          className={`w-4 h-4 text-stone-400 transition-transform ${open ? "rotate-90" : ""}`}
+          className={`w-4 h-4 text-ink-3 transition-transform ${open ? "rotate-90" : ""}`}
         />
       </button>
       {open && (
-        <ul className="border-t border-stone-100 divide-y divide-stone-100">
+        <ul className="border-t border-sandstone-100 divide-y divide-sandstone-100 bg-white">
           {sortedMilestones.map((m) => {
             const status: StatusKey =
               m.done || m.pctComplete >= 100 ? "QUEUE" : m.pctComplete > 0 ? "ONGOING" : "UPCOMING";
