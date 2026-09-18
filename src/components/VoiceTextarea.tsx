@@ -130,8 +130,12 @@ export default function VoiceTextarea({
     else start();
   };
 
-  const sharedFieldClasses =
-    "w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm pr-11";
+  // Field padding leaves room for the mic pill at the bottom-right on
+  // multiline (an obvious CTA under the writing area), or the classic
+  // right-side round mic on single-line inputs where a pill wouldn't fit.
+  const sharedFieldClasses = multiline
+    ? "w-full rounded-lg border border-stone-300 bg-white px-3 pt-3 pb-14 text-base"
+    : "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base pr-14";
 
   return (
     <div className="relative">
@@ -155,24 +159,39 @@ export default function VoiceTextarea({
         />
       )}
 
-      {supported && (
+      {supported && multiline && (
+        // Big pill — the primary way into this field. Reads "Tap to speak"
+        // when idle and "Listening…" when recording (with a red pulsing
+        // background), so a site engineer who doesn't want to type sees
+        // the way in immediately. Sits inside the field at bottom-right so
+        // it doesn't fight the label above.
         <button
           type="button"
           onClick={toggle}
           aria-label={listening ? "Stop dictation" : "Start dictation"}
-          title={listening ? "Stop dictation" : "Tap to dictate"}
-          className={`absolute right-2 ${
-            multiline ? "bottom-2" : "top-1/2 -translate-y-1/2"
-          } w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+          className={`absolute right-2 bottom-2 inline-flex items-center gap-2 rounded-full px-4 h-11 text-[14px] font-semibold shadow-sm transition-colors active:scale-[0.98] ${
             listening
-              ? "bg-red-500 text-white animate-pulse"
-              : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+              ? "bg-ferrous-500 text-white animate-pulse"
+              : "bg-stone-900 text-white hover:bg-stone-800"
           }`}
         >
-          {/* Same Mic glyph regardless of state — the red pulsing background
-              already reads as "recording". A crossed-out mic said "muted /
-              disabled", the wrong signal at the moment audio IS being
-              captured. */}
+          <Mic className="w-4 h-4" />
+          {listening ? "Listening…" : "Tap to speak"}
+        </button>
+      )}
+      {supported && !multiline && (
+        // Compact round mic on single-line inputs (Reason detail etc.) —
+        // pill would break the layout.
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={listening ? "Stop dictation" : "Start dictation"}
+          className={`absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+            listening
+              ? "bg-ferrous-500 text-white animate-pulse"
+              : "bg-stone-100 text-stone-700 hover:bg-stone-200"
+          }`}
+        >
           <Mic className="w-4 h-4" />
         </button>
       )}

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil } from "lucide-react";
+import { Pencil, ChevronDown } from "lucide-react";
 import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
@@ -55,6 +55,11 @@ export default function NewProgressForm({
   const [notes, setNotes] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Details block collapsed by default so the primary flow is pick →
+  // slider → save. Labour, photos, notes, reason, date all live inside.
+  // A site engineer can log an entry in three taps if that's all they
+  // have time for, and open the details when there's more to say.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   // After save: show an in-place "Saved · Add another / Back to home" card
   // instead of redirecting to /mobile/{id}. Site engineers log many entries
   // per shift — booting them home every time forced 2 extra taps per entry.
@@ -196,6 +201,7 @@ export default function NewProgressForm({
     setLabour([{ category: "Skilled", count: 0 }]);
     setPhotos([]);
     setNotes("");
+    setDetailsOpen(false);
     setError(null);
     setSaved(null);
   }
@@ -213,62 +219,77 @@ export default function NewProgressForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="px-4 py-4 space-y-5">
-      {/* Header back arrow lives in the mobile layout — one authoritative
-          Back per screen. Kept the H1 here so the page title stays with the
-          form content and readers land on the right heading level. */}
-      <h1 className="text-2xl font-semibold text-stone-900">New Progress</h1>
+    <form onSubmit={handleSubmit} className="px-5 py-5 space-y-6">
+      {/* Editorial heading — matches the Amanvana-native language from the
+          home. Kept the H1 here so the page title stays with the form and
+          readers land on the right heading level. */}
+      <header>
+        <h1 className="font-serif text-[28px] leading-tight text-ink">
+          Log progress
+        </h1>
+        <p className="text-[13px] text-ink-3 mt-1">
+          Three steps: pick, drag, save. Add photos or notes if you want.
+        </p>
+      </header>
 
-      <label className="block">
-        <span className="text-sm font-medium text-stone-700">Date</span>
-        <input
-          type="date"
-          required
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
-        />
-      </label>
-
-      <div className="space-y-2">
-        <div className="text-sm font-medium text-stone-700">Activity</div>
-        {selected ? (
-          <div className="rounded-md border border-stone-200 bg-white px-3 py-2.5 flex items-start gap-2">
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-stone-900 truncate">{selected.name}</div>
-              <div className="text-[11px] text-stone-500 truncate">
-                Block {selected.path.blockCode} · {selected.path.villaLabel} · {selected.path.sectionName}
+      {/* Step 1 · Activity */}
+      <section>
+        <Step number={1} label={selected ? "Activity" : "Pick an activity"} />
+        <div className="mt-3">
+          {selected ? (
+            <div className="rounded-2xl border border-sandstone-100 bg-cream px-4 py-3 flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="text-[15px] font-semibold text-ink leading-tight">{selected.name}</div>
+                <div className="text-[12px] text-ink-3 mt-0.5 truncate">
+                  Block {selected.path.blockCode} · {selected.path.villaLabel} · {selected.path.sectionName}
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="text-[13px] text-ferrous-600 hover:text-ferrous-700 inline-flex items-center gap-1 shrink-0"
+                aria-label="Change activity"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Change
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setSelected(null)}
-              className="text-xs text-stone-500 hover:text-stone-900 inline-flex items-center gap-1 flex-shrink-0"
-              aria-label="Change activity"
-            >
-              <Pencil className="w-3 h-3" />
-              Change
-            </button>
-          </div>
-        ) : (
-          <ActivityPicker
-            projectId={projectId}
-            initialActivityId={initialActivityId}
-            onPick={(a) => {
-              setSelected(a);
-              setCumulative(0); // reset for fresh entry
-            }}
-          />
-        )}
-      </div>
+          ) : (
+            <ActivityPicker
+              projectId={projectId}
+              initialActivityId={initialActivityId}
+              onPick={(a) => {
+                setSelected(a);
+                setCumulative(0);
+              }}
+            />
+          )}
+        </div>
+      </section>
 
       {selected && (
         <>
-          <div className="rounded-xl border border-stone-200 bg-white p-4 space-y-3">
-            {totalQty > 0 ? (
-              <>
-                <div>
-                  <div className="text-xs text-stone-500">Quantity {pct.toFixed(1)}%</div>
+          {/* Step 2 · Progress — hero % ring above a big slider. Direct
+              manipulation reads better than typed numbers on a site
+              phone, and the huge % readout gives the engineer real
+              feedback about what they're logging. */}
+          <section>
+            <Step number={2} label="How much done in total?" />
+            <div className="mt-4 rounded-2xl border border-sandstone-100 bg-cream p-5">
+              {totalQty > 0 ? (
+                <>
+                  <div className="flex items-baseline gap-2">
+                    <span
+                      className="font-serif text-ferrous-600"
+                      style={{ fontSize: "56px", lineHeight: "1", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}
+                    >
+                      {Math.round(pct)}
+                    </span>
+                    <span className="font-serif text-[24px] text-ferrous-600 leading-none">%</span>
+                    <span className="ml-auto text-[12px] text-ink-3">
+                      {cumulative.toFixed(1)} / {totalQty} {selected.unit ?? "units"}
+                    </span>
+                  </div>
                   <input
                     type="range"
                     min={0}
@@ -276,160 +297,209 @@ export default function NewProgressForm({
                     step={0.1}
                     value={cumulative}
                     onChange={(e) => setCumulative(Number(e.target.value))}
-                    className="mt-2 w-full"
+                    className="mt-4 w-full h-2 rounded-full appearance-none accent-ferrous-500"
+                    aria-label="Progress"
                   />
-                  <div className="flex justify-between text-[10px] text-stone-500">
-                    <span>0 {selected.unit ?? "UNIT"}</span>
-                    <span>
-                      {totalQty} {selected.unit ?? "UNIT"}
-                    </span>
+                  <div className="flex justify-between text-[11px] uppercase tracking-[0.14em] text-ink-3 mt-2">
+                    <span>Not started</span>
+                    <span>Complete</span>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <div className="text-xs text-stone-500">Achieved today</div>
-                    <input
-                      type="number"
-                      step="0.1"
-                      inputMode="decimal"
-                      value={achieved}
-                      onChange={(e) => setAchieved(Number(e.target.value))}
-                      className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
-                    />
+                </>
+              ) : (
+                // No total quantity set → free-count fallback. Same visual
+                // language, just a number field instead of a slider.
+                <>
+                  <div className="text-[12px] text-ink-3 uppercase tracking-[0.14em]">
+                    Done so far (count)
                   </div>
-                  <div>
-                    <div className="text-xs text-stone-500">Cumulative</div>
-                    <input
-                      type="number"
-                      step="0.1"
-                      inputMode="decimal"
-                      value={cumulative}
-                      onChange={(e) => setCumulative(Number(e.target.value))}
-                      className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
-                    />
-                  </div>
-                </div>
-              </>
-            ) : (
-              <p className="text-xs text-amber-600">
-                No total quantity set on this activity — enter cumulative as a count below.
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-stone-700">Labour</span>
-              <button
-                type="button"
-                onClick={addLabourRow}
-                className="text-xs text-amber-600 font-medium"
-              >
-                + Add row
-              </button>
+                  <input
+                    type="number"
+                    step="0.1"
+                    inputMode="decimal"
+                    value={cumulative || ""}
+                    onChange={(e) => setCumulative(Number(e.target.value))}
+                    placeholder="0"
+                    className="mt-2 w-full rounded-lg border border-stone-300 bg-white px-4 py-3 text-[18px] tabular-nums"
+                  />
+                  <p className="text-[12px] text-ink-3 mt-2">
+                    This activity has no scheduled quantity — log a count.
+                  </p>
+                </>
+              )}
             </div>
-            {labour.map((row, i) => (
-              <div key={i} className="flex gap-2">
-                <select
-                  value={row.category}
-                  onChange={(e) => updateLabour(i, { category: e.target.value })}
-                  className="flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
-                >
-                  {LABOUR_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  min={0}
-                  inputMode="numeric"
-                  value={row.count}
-                  onChange={(e) => updateLabour(i, { count: Math.max(0, Math.floor(Number(e.target.value))) })}
-                  className="w-24 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
-                />
-                {labour.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeLabourRow(i)}
-                    // min-h/min-w-11 (~44px) — Apple/Google minimum tap target.
-                    className="text-stone-400 hover:text-red-500 text-lg min-h-11 min-w-11 flex items-center justify-center"
-                    aria-label="Remove"
-                  >
-                    🗑
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
+          </section>
 
-          <div>
-            <PhotoPicker photos={photos} setPhotos={setPhotos} max={4} label="Photos" />
-            {/* Guidance under the picker only when the engineer hasn't
-                started adding photos yet. Once they have at least one,
-                the tip disappears — it's a nudge, not a lecture. */}
-            {photos.length === 0 && (
-              <p className="mt-2 text-[11px] text-stone-500 leading-snug">
-                Tip: 3 quick photos help — one of the activity, one of the
-                workers on it, and one of any issue or defect.
-              </p>
-            )}
-          </div>
+          {/* Step 3 · Save — always visible right below the slider. Three
+              taps from home: activity → drag → save. */}
+          <button
+            type="submit"
+            disabled={pending || !activityId}
+            className="w-full rounded-full bg-ink text-cream py-4 text-[16px] font-semibold shadow-card disabled:opacity-60 active:scale-[0.99]"
+          >
+            {pending ? "Saving…" : "Save progress"}
+          </button>
 
-          <label className="block">
-            <span className="text-sm font-medium text-stone-700">Notes</span>
-            <div className="mt-1">
-              <VoiceTextarea
-                rows={3}
-                value={notes}
-                onChange={setNotes}
-                placeholder="Optional comments"
-              />
-            </div>
-          </label>
-
-          <label className="block">
-            <span className="text-sm font-medium text-stone-700">
-              Reason for delay <span className="text-stone-400">(optional)</span>
-            </span>
-            <select
-              value={reasonCode}
-              onChange={(e) => setReasonCode(e.target.value)}
-              className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+          {/* Optional details — collapsed behind a single tap. Everything
+              in here is *nice to have* for the log, never required. */}
+          <section>
+            <button
+              type="button"
+              onClick={() => setDetailsOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-sandstone-100 bg-white active:bg-sandstone-50"
+              aria-expanded={detailsOpen}
             >
-              <option value="">— No delay</option>
-              {HINDRANCE_REASONS.map((r) => (
-                <option key={r.code} value={r.code}>{r.label}</option>
-              ))}
-            </select>
-          </label>
-
-          {reasonCode && (
-            <label className="block">
-              <span className="text-sm font-medium text-stone-700">
-                Reason detail <span className="text-stone-400">(optional)</span>
+              <span className="text-[14px] font-semibold text-ink">
+                Add photos, notes, labour, delay reason
               </span>
-              <input
-                type="text"
-                value={reasonNote}
-                onChange={(e) => setReasonNote(e.target.value)}
-                maxLength={500}
-                placeholder="e.g. cement delivery skipped for the day"
-                className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+              <ChevronDown
+                className={`w-4 h-4 text-ink-3 transition-transform ${detailsOpen ? "rotate-180" : ""}`}
               />
-            </label>
-          )}
+            </button>
+
+            {detailsOpen && (
+              <div className="mt-4 space-y-5">
+                {/* Voice notes first — a big pill inside VoiceTextarea
+                    makes voice the obvious way in. Copy: "Tell us what
+                    you did" instead of the older "Optional comments". */}
+                <label className="block">
+                  <span className="text-[13px] font-semibold text-ink">Notes</span>
+                  <p className="text-[12px] text-ink-3 mb-2">
+                    Tap the mic and just talk — we&apos;ll write it down.
+                  </p>
+                  <VoiceTextarea
+                    rows={4}
+                    value={notes}
+                    onChange={setNotes}
+                    placeholder="Tell us what you did today…"
+                  />
+                </label>
+
+                {/* Photos */}
+                <div>
+                  <PhotoPicker photos={photos} setPhotos={setPhotos} max={4} label="Photos" />
+                  {photos.length === 0 && (
+                    <p className="mt-2 text-[12px] text-ink-3 leading-snug">
+                      Three quick photos help — the activity, the workers, any issue.
+                    </p>
+                  )}
+                </div>
+
+                {/* Labour rows — same repeating pattern the manpower form
+                    already uses, kept small since the site engineer will
+                    only fill it if they're the person logging labour. */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-semibold text-ink">Labour</span>
+                    <button
+                      type="button"
+                      onClick={addLabourRow}
+                      className="text-[13px] text-ferrous-600 font-medium"
+                    >
+                      + Add row
+                    </button>
+                  </div>
+                  {labour.map((row, i) => (
+                    <div key={i} className="flex gap-2">
+                      <select
+                        value={row.category}
+                        onChange={(e) => updateLabour(i, { category: e.target.value })}
+                        className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
+                      >
+                        {LABOUR_CATEGORIES.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min={0}
+                        inputMode="numeric"
+                        value={row.count}
+                        onChange={(e) => updateLabour(i, { count: Math.max(0, Math.floor(Number(e.target.value))) })}
+                        className="w-24 rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px] tabular-nums"
+                      />
+                      {labour.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeLabourRow(i)}
+                          className="text-stone-400 hover:text-red-500 text-lg min-h-11 min-w-11 flex items-center justify-center"
+                          aria-label="Remove"
+                        >
+                          🗑
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Reason for delay — plain-English copy, still optional. */}
+                <label className="block">
+                  <span className="text-[13px] font-semibold text-ink">
+                    What held it up? <span className="text-ink-3 font-normal">(optional)</span>
+                  </span>
+                  <select
+                    value={reasonCode}
+                    onChange={(e) => setReasonCode(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
+                  >
+                    <option value="">— Nothing held it up</option>
+                    {HINDRANCE_REASONS.map((r) => (
+                      <option key={r.code} value={r.code}>{r.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {reasonCode && (
+                  <label className="block">
+                    <span className="text-[13px] font-semibold text-ink">
+                      More detail <span className="text-ink-3 font-normal">(optional)</span>
+                    </span>
+                    <input
+                      type="text"
+                      value={reasonNote}
+                      onChange={(e) => setReasonNote(e.target.value)}
+                      maxLength={500}
+                      placeholder="e.g. cement delivery skipped for the day"
+                      className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
+                    />
+                  </label>
+                )}
+
+                {/* Date — moved down here since 99% of entries are today */}
+                <label className="block">
+                  <span className="text-[13px] font-semibold text-ink">Date</span>
+                  <input
+                    type="date"
+                    required
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
+                  />
+                  <p className="text-[12px] text-ink-3 mt-1">
+                    Defaults to today. Change it only if you&apos;re back-logging.
+                  </p>
+                </label>
+              </div>
+            )}
+          </section>
         </>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-
-      <button
-        type="submit"
-        disabled={pending || !activityId}
-        className="w-full rounded-full bg-stone-900 text-white py-3 text-sm font-medium disabled:opacity-60"
-      >
-        {pending ? "Saving…" : "Save progress"}
-      </button>
+      {error && <p className="text-sm text-ferrous-600">{error}</p>}
     </form>
+  );
+}
+
+/**
+ * Numbered step marker for the three-step flow. Small ferrous chip + label
+ * — reads as "this is what to do next", not a decorative heading.
+ */
+function Step({ number, label }: { number: number; label: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-ferrous-500 text-white text-[12px] font-bold font-serif">
+        {number}
+      </span>
+      <span className="text-[15px] font-semibold text-ink">{label}</span>
+    </div>
   );
 }
