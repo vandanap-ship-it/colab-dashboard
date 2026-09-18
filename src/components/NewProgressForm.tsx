@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil } from "lucide-react";
+import { Pencil, Lock } from "lucide-react";
 import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
@@ -75,6 +75,17 @@ export default function NewProgressForm({
   const [notes, setNotes] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Precheck gate — some activities can't be logged until a prerequisite
+  // inspection on the same villa has passed. The API call fires as soon
+  // as the engineer picks an activity so the block is visible before they
+  // fill anything else. `null` = not fetched yet (or unknown); a blocked
+  // gate keeps Save disabled and renders a banner.
+  const [gate, setGate] = useState<
+    | null
+    | { ok: true }
+    | { ok: false; reason: string }
+  >(null);
+  const [gateLoading, setGateLoading] = useState(false);
   // Formerly collapsed the notes/photos/labour section behind a toggle —
   // Shraddha flagged that as reading "optional" when it isn't. All fields
   // now expand inline; Save moves to the very bottom.
@@ -89,6 +100,42 @@ export default function NewProgressForm({
   // else the pctState itself so backend still gets a numeric value.
   const pct = pctState;
   const cumulative = totalQty > 0 ? (totalQty * pctState) / 100 : pctState;
+
+  // Fetch the precheck gate as soon as an activity is picked (or the
+  // engineer swaps to a different activity). Server enforces the same
+  // rule on POST — this is the pre-submit UX so nobody scrolls to Save
+  // only to be refused.
+  useEffect(() => {
+    if (!activityId) {
+      setGate(null);
+      return;
+    }
+    let cancelled = false;
+    setGateLoading(true);
+    setGate(null);
+    fetch(`/api/progress/precheck?wbsNodeId=${encodeURIComponent(activityId)}`, { cache: "no-store" })
+      .then(async (res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          // Network hiccup — fall open (the server will still enforce
+          // on POST). Better to let the engineer keep typing than to
+          // block the whole form on a transient failure.
+          setGate({ ok: true });
+          return;
+        }
+        const data = await res.json();
+        setGate(data.ok ? { ok: true } : { ok: false, reason: data.reason ?? "Prerequisite not met" });
+      })
+      .catch(() => {
+        if (!cancelled) setGate({ ok: true });
+      })
+      .finally(() => {
+        if (!cancelled) setGateLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activityId]);
 
   function updateLabour(i: number, patch: Partial<{ category: string; count: number }>) {
     setLabour((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -105,6 +152,13 @@ export default function NewProgressForm({
     e.preventDefault();
     if (!activityId) {
       setError("Pick an activity first");
+      return;
+    }
+    // Precheck gate — the useEffect above already fetched this the moment
+    // the activity was picked. Refuse the submit locally so the engineer
+    // doesn't lose their typed notes to a 409 from the server.
+    if (gate && !gate.ok) {
+      setError(gate.reason);
       return;
     }
     // Progress % is mandatory — a save with 0% would be indistinguishable
@@ -321,6 +375,31 @@ export default function NewProgressForm({
         </div>
       </section>
 
+      {selected && gate && !gate.ok && (
+        <section
+          role="alert"
+          className="rounded-2xl border border-ferrous-200 bg-ferrous-50/60 px-4 py-4"
+        >
+          <div className="flex items-start gap-3">
+            <span className="w-9 h-9 rounded-full bg-ferrous-500 text-white flex items-center justify-center shrink-0">
+              <Lock className="w-4 h-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold text-ferrous-700 uppercase tracking-[0.14em]">
+                Precheck required
+              </p>
+              <p className="text-[14px] text-ink mt-1 leading-snug">
+                {gate.reason}
+              </p>
+              <p className="text-[12px] text-ink-3 mt-2 leading-snug">
+                Raise a Work Inspection Request for the prerequisite, get it
+                passed, then come back here to log progress.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
       {selected && (
         <>
           {/* Progress · one uniform 0-100 slider for every activity. The
@@ -501,10 +580,12 @@ export default function NewProgressForm({
           </section>
 
           {/* Save · sits at the very end so the engineer scrolls through
-              every part of the entry before committing. */}
+              every part of the entry before committing. Disabled while
+              the precheck gate is loading or blocked, so a slow network
+              can't let a gated activity through by accident. */}
           <button
             type="submit"
-            disabled={pending || !activityId || pctState <= 0}
+            disabled={pending || !activityId || pctState <= 0 || gateLoading || (gate ? !gate.ok : false)}
             className="w-full rounded-full bg-ink text-cream py-4 text-[16px] font-semibold shadow-card disabled:opacity-60 active:scale-[0.99]"
           >
             {pending ? "Saving…" : "Save progress"}

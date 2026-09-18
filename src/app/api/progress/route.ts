@@ -9,6 +9,7 @@ import { milestoneCompletionEmail, sendEmail } from "@/lib/email";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { isValidReasonCode } from "@/lib/hindranceReasons";
 import { parseBody, zDateString } from "@/lib/parseBody";
+import { checkPrecheck } from "@/lib/progressGates";
 
 const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
@@ -147,6 +148,17 @@ export async function POST(req: Request) {
     select: { id: true, projectId: true, contractorId: true, totalQuantity: true },
   });
   if (!node) return NextResponse.json({ error: "Activity not found" }, { status: 404 });
+
+  // Precheck gate — some activities can't be logged until a prerequisite
+  // inspection on the same villa has passed (Rebar before Concreting,
+  // Waterproofing before Flooring, etc). Rules live in @/lib/progressGates
+  // — same helper the mobile form calls in advance so the UX shows the
+  // block before the engineer scrolls to Save. Enforced here too so a
+  // direct POST can't bypass it.
+  const gate = await checkPrecheck(wbsNodeId);
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.reason }, { status: 409 });
+  }
 
   // A contractor must belong to the same project as the activity — otherwise a
   // foreign contractor would pollute this project's labour/contractor rollups.
