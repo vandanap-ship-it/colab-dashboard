@@ -56,7 +56,17 @@ export default async function MobileProjectLayout({
           </span>
         </div>
       </header>
-      <main className="flex-1 overflow-y-auto pb-20">
+      {/* Bottom padding is the sum of the fixed nav's height (~60px) AND
+          the iPhone home-indicator safe area — pb-20 (80px) was leaving the
+          last ~10-15px of every screen UNDER the nav on iPhones with a
+          home bar, so tapping a Submit button near the bottom hit the Home
+          tab instead and sent the engineer back to the project home. This
+          also explains the "some buttons need a double-tap" complaint:
+          first tap → accidental Home nav, second tap → real target. */}
+      <main
+        className="flex-1 overflow-y-auto"
+        style={{ paddingBottom: "calc(72px + env(safe-area-inset-bottom))" }}
+      >
         {/* Push-notification opt-in — hides itself when permission is
             already granted or denied, or when previously dismissed. */}
         <PushOptIn />
