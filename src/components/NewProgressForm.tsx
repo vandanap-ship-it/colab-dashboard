@@ -45,7 +45,12 @@ export default function NewProgressForm({
   const contractorId = selected?.contractor?.id ?? "";
   const [date, setDate] = useState(today);
   const [achieved, setAchieved] = useState(0);
-  const [cumulative, setCumulative] = useState(0);
+  // Progress is a single 0-100 value regardless of whether the activity
+  // has a scheduled totalQuantity — every activity gets the same slider,
+  // same feedback, same muscle memory. When totalQty > 0 we derive the
+  // cumulative-quantity number the API stores from pctState * totalQty;
+  // when totalQty == 0 we save pctState directly as a 0-100 completion.
+  const [pctState, setPctState] = useState(0);
   const [reasonCode, setReasonCode] = useState<string>("");
   const [reasonNote, setReasonNote] = useState<string>("");
   const [labour, setLabour] = useState<{ category: string; count: number }[]>([
@@ -64,7 +69,11 @@ export default function NewProgressForm({
   const [saved, setSaved] = useState<null | { queued: boolean }>(null);
 
   const totalQty = selected?.totalQuantity ?? 0;
-  const pct = totalQty > 0 ? Math.max(0, Math.min(100, (cumulative / totalQty) * 100)) : 0;
+  // pctState is authoritative — the slider always shows a 0-100 value.
+  // `cumulative` is derived for API storage: proportional when totalQty > 0,
+  // else the pctState itself so backend still gets a numeric value.
+  const pct = pctState;
+  const cumulative = totalQty > 0 ? (totalQty * pctState) / 100 : pctState;
 
   function updateLabour(i: number, patch: Partial<{ category: string; count: number }>) {
     setLabour((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -81,6 +90,12 @@ export default function NewProgressForm({
     e.preventDefault();
     if (!activityId) {
       setError("Pick an activity first");
+      return;
+    }
+    // Progress % is mandatory — a save with 0% would be indistinguishable
+    // from an accidental submit and pollutes downstream reports.
+    if (!(pctState > 0)) {
+      setError("Drag the % slider — how much is done?");
       return;
     }
     setPending(true);
@@ -201,7 +216,7 @@ export default function NewProgressForm({
   function resetForm() {
     setDate(today);
     setAchieved(0);
-    setCumulative(0);
+    setPctState(0);
     setReasonCode("");
     setReasonNote("");
     setLabour([{ category: "Skilled", count: 0 }]);
@@ -273,7 +288,7 @@ export default function NewProgressForm({
               initialActivityId={initialActivityId}
               onPick={(a) => {
                 setSelected(a);
-                setCumulative(0);
+                setPctState(0);
               }}
             />
           )}
@@ -282,63 +297,43 @@ export default function NewProgressForm({
 
       {selected && (
         <>
-          {/* Step 2 · Progress — hero % ring above a big slider. Direct
-              manipulation reads better than typed numbers on a site
-              phone, and the huge % readout gives the engineer real
-              feedback about what they're logging. */}
+          {/* Progress · one uniform 0-100 slider for every activity. The
+              activity may or may not have a scheduled totalQuantity — the
+              engineer shouldn't care, and shouldn't see two different
+              layouts. The optional "N / M units" line under the % only
+              renders when totalQty > 0, purely for context; it doesn't
+              change how the engineer interacts. */}
           <section>
             <Step number={2} label="How much done in total?" />
-            <div className="mt-4 rounded-2xl border border-sandstone-100 bg-cream p-5">
-              {totalQty > 0 ? (
-                <>
-                  <div className="flex items-baseline gap-2">
-                    <span
-                      className="font-serif text-ferrous-600"
-                      style={{ fontSize: "56px", lineHeight: "1", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}
-                    >
-                      {Math.round(pct)}
-                    </span>
-                    <span className="font-serif text-[24px] text-ferrous-600 leading-none">%</span>
-                    <span className="ml-auto text-[12px] text-ink-3">
-                      {cumulative.toFixed(1)} / {totalQty} {selected.unit ?? "units"}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={totalQty}
-                    step={0.1}
-                    value={cumulative}
-                    onChange={(e) => setCumulative(Number(e.target.value))}
-                    className="siddhi-range mt-4"
-                    aria-label="Progress"
-                  />
-                  <div className="flex justify-between text-[11px] uppercase tracking-[0.14em] text-ink-3 mt-2">
-                    <span>Not started</span>
-                    <span>Complete</span>
-                  </div>
-                </>
-              ) : (
-                // No total quantity set → free-count fallback. Same visual
-                // language, just a number field instead of a slider.
-                <>
-                  <div className="text-[12px] text-ink-3 uppercase tracking-[0.14em]">
-                    Done so far (count)
-                  </div>
-                  <input
-                    type="number"
-                    step="0.1"
-                    inputMode="decimal"
-                    value={cumulative || ""}
-                    onChange={(e) => setCumulative(Number(e.target.value))}
-                    placeholder="0"
-                    className="mt-2 w-full rounded-lg border border-stone-300 bg-white px-4 py-3 text-[18px] tabular-nums"
-                  />
-                  <p className="text-[12px] text-ink-3 mt-2">
-                    This activity has no scheduled quantity — log a count.
-                  </p>
-                </>
-              )}
+            <div className="mt-3 rounded-2xl border border-sandstone-100 bg-cream p-4">
+              <div className="flex items-baseline gap-2">
+                <span
+                  className="font-serif text-ferrous-600"
+                  style={{ fontSize: "48px", lineHeight: "1", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}
+                >
+                  {Math.round(pct)}
+                </span>
+                <span className="font-serif text-[22px] text-ferrous-600 leading-none">%</span>
+                {totalQty > 0 && (
+                  <span className="ml-auto text-[12px] text-ink-3 tabular-nums">
+                    {cumulative.toFixed(1)} / {totalQty} {selected.unit ?? "units"}
+                  </span>
+                )}
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={pct}
+                onChange={(e) => setPctState(Number(e.target.value))}
+                className="siddhi-range mt-3"
+                aria-label="Progress"
+              />
+              <div className="flex justify-between text-[11px] uppercase tracking-[0.14em] text-ink-3 mt-2">
+                <span>Not started</span>
+                <span>Complete</span>
+              </div>
             </div>
           </section>
 
@@ -423,17 +418,19 @@ export default function NewProgressForm({
                   ))}
                 </div>
 
-                {/* Reason for delay — plain-English copy, still optional. */}
+                {/* Delay reason — compact single line so it doesn't
+                    dominate the form; the picker is still there when the
+                    engineer needs it. */}
                 <label className="block">
                   <span className="text-[13px] font-semibold text-ink">
-                    What held it up? <span className="text-ink-3 font-normal">(optional)</span>
+                    Delay reason <span className="text-ink-3 font-normal">(optional)</span>
                   </span>
                   <select
                     value={reasonCode}
                     onChange={(e) => setReasonCode(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
                   >
-                    <option value="">— Nothing held it up</option>
+                    <option value="">— No delay</option>
                     {HINDRANCE_REASONS.map((r) => (
                       <option key={r.code} value={r.code}>{r.label}</option>
                     ))}
@@ -477,7 +474,7 @@ export default function NewProgressForm({
               every part of the entry before committing. */}
           <button
             type="submit"
-            disabled={pending || !activityId}
+            disabled={pending || !activityId || pctState <= 0}
             className="w-full rounded-full bg-ink text-cream py-4 text-[16px] font-semibold shadow-card disabled:opacity-60 active:scale-[0.99]"
           >
             {pending ? "Saving…" : "Save progress"}
