@@ -210,7 +210,7 @@ export default async function MobileMyActionsPage({
                 {permits.map((p) => (
                   <ActionRow
                     key={p.id}
-                    href={`/mobile/${projectId}/permit`}
+                    href={`/mobile/${projectId}/permit/${p.id}`}
                     label={p.type.replace(/_/g, " ")}
                     primary={p.title}
                     secondary={secondaryLine(
