@@ -127,6 +127,7 @@ export const TOOL_MODULES: Record<string, ModuleKey[]> = {
     MODULES.RFI,
   ],
   manpower: [MODULES.PROGRESS],
+  "manpower-list": [MODULES.PROGRESS],
   concern: [MODULES.CONCERN],
   rfi: [MODULES.RFI],
   permit: [MODULES.PERMIT],

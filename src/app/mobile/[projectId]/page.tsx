@@ -206,6 +206,14 @@ export default async function MobileProjectHome({
       tier: "secondary",
     },
     {
+      key: "manpower-list",
+      href: `/mobile/${projectId}/manpower`,
+      label: "Manpower history",
+      hint: "Today + last 7 days on site",
+      icon: Users,
+      tier: "secondary",
+    },
+    {
       key: "search",
       href: `/mobile/${projectId}/search`,
       label: "Search",
