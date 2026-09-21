@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   HardHat,
+  HelpCircle,
   ListChecks,
   PlusCircle,
   ShieldCheck,
@@ -176,6 +177,14 @@ export default async function MobileProjectHome({
       label: "EHS",
       hint: "Safety inspections + snags",
       icon: HardHat,
+      tier: "secondary",
+    },
+    {
+      key: "rfi",
+      href: `/mobile/${projectId}/rfi?tab=open`,
+      label: "RFIs",
+      hint: "Ask consultants for a decision",
+      icon: HelpCircle,
       tier: "secondary",
     },
     {
