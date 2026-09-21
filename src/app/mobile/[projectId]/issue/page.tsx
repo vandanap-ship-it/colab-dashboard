@@ -142,11 +142,10 @@ export default async function MobileIssuesListPage({
           <ul className="space-y-2">
             {issues.map((i) => (
               <li key={i.id}>
-                {/* No mobile detail view yet — desktop /projects/[id]/snags
-                    remains the edit surface. Wrapping the row in a link
-                    here would 404, so we keep it read-only on the phone
-                    until the mobile detail lands. */}
-                <div className="rounded-2xl border border-sandstone-100 bg-cream shadow-soft p-4">
+                <Link
+                  href={`/mobile/${projectId}/issue/${i.id}?tab=${tab}`}
+                  className="rounded-2xl border border-sandstone-100 bg-cream shadow-soft p-4 block active:bg-sandstone-50"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="text-[14px] text-ink leading-snug line-clamp-3">
@@ -180,7 +179,7 @@ export default async function MobileIssuesListPage({
                     </div>
                     <SeverityPill severity={i.severity} />
                   </div>
-                </div>
+                </Link>
               </li>
             ))}
           </ul>
