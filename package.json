@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/migrate-with-retry.mjs && prisma generate && next build",
+    "build": "node scripts/migrate-with-retry.mjs && prisma generate && tsx scripts/seed-inspection-templates.ts && next build",
     "start": "next start",
     "lint": "eslint",
     "test:unit": "vitest run",
