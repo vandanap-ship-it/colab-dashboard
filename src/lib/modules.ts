@@ -112,6 +112,7 @@ export const TOOL_MODULES: Record<string, ModuleKey[]> = {
   "qaqc-tile": [MODULES.QAQC],
   "ehs-tile": [MODULES.SAFETY],
   hindrance: [MODULES.HINDRANCE],
+  "hindrance-list": [MODULES.HINDRANCE],
   manpower: [MODULES.PROGRESS],
   concern: [MODULES.CONCERN],
   rfi: [MODULES.RFI],

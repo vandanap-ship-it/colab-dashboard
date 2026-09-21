@@ -197,6 +197,14 @@ export default async function MobileProjectHome({
       tier: "secondary",
     },
     {
+      key: "hindrance-list",
+      href: `/mobile/${projectId}/hindrance?tab=open`,
+      label: "Hindrances",
+      hint: "Open blockers · days & cost impact",
+      icon: AlertTriangle,
+      tier: "secondary",
+    },
+    {
       key: "dlr",
       href: `/projects/${projectId}/dlr`,
       label: "DLR updates",
