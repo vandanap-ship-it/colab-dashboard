@@ -7,6 +7,8 @@ import { canAccessModule, primaryModuleFor, isScopedUser, MODULES } from "@/lib/
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { parseBody } from "@/lib/parseBody";
 import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
+import { sendPushToUser } from "@/lib/push";
+import { ROLES } from "@/lib/roles";
 
 const PostInspectionSchema = z.object({
   projectId: z.string().min(1),
@@ -171,6 +173,29 @@ export async function POST(req: Request) {
       entityId: inspection.id,
       summary: `Inspection submitted: "${t}" (${passedCount}/${itemsClean.length} passed)`,
     });
+
+    // Push every project reviewer so the queue doesn't sit unnoticed. WIRs
+    // have no assignee; the "person who should look at this" set is
+    // whoever can review inspections on this project — planners, product
+    // team, admins. First-reviewer-wins in practice; we notify them all
+    // so any of them can pick it up. Skip the filler themselves — they
+    // just clicked submit and know what they did.
+    const reviewers = await prisma.user.findMany({
+      where: {
+        active: true,
+        role: { in: [ROLES.PLANNER, ROLES.PRODUCT_TEAM, ROLES.ADMIN] },
+        id: { not: session.user.id },
+      },
+      select: { id: true },
+    });
+    for (const r of reviewers) {
+      void sendPushToUser(r.id, {
+        title: `New WIR to review · ${t.slice(0, 40)}`,
+        body: `${session.user.name ?? session.user.username} submitted ${itemsClean.length} item${itemsClean.length === 1 ? "" : "s"}.${passedCount === itemsClean.length ? " All Yes so far." : ""}`,
+        url: `/mobile/${projectId}/qaqc/${inspection.id}?tab=pending${moduleTag ? `&module=${moduleTag}` : ""}`,
+        tag: `wir-new-${inspection.id}`,
+      });
+    }
   }
 
   return NextResponse.json({ inspection }, { status: duplicate ? 200 : 201 });

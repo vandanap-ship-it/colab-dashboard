@@ -16,6 +16,7 @@ import {
 } from "@/lib/rfi";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { checkConflict } from "@/lib/optimisticLock";
+import { sendPushToUser } from "@/lib/push";
 
 const PatchRfiSchema = z.object({
   assignedToId: z.string().min(1).nullable().optional(),
@@ -191,6 +192,34 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/rfi/[id]">) {
           dueDate: updated.dueDate,
         }),
       );
+    }
+
+    // Push notifications — one to the newly-assigned answerer if the
+    // assignee changed, one to the raiser when the RFI gets answered.
+    // Both skip self-updates so a consultant answering their own RFI
+    // doesn't get told about it.
+    const rfiNumber = formatRfiNumber(existing.number);
+    const subjectShort = existing.subject.slice(0, 50);
+    if (
+      updated.assignedToId &&
+      updated.assignedToId !== existing.assignedToId &&
+      updated.assignedToId !== session.user.id
+    ) {
+      void sendPushToUser(updated.assignedToId, {
+        title: `RFI assigned to you · ${rfiNumber}`,
+        body: `${subjectShort} — raised by ${existing.raisedBy.name}.`,
+        url: `/mobile/${existing.projectId}/rfi/${id}`,
+        tag: `rfi-assign-${id}`,
+      });
+    }
+    const isAnswer = patch.answer !== undefined && existing.status !== "ANSWERED";
+    if (isAnswer && existing.raisedById && existing.raisedById !== session.user.id) {
+      void sendPushToUser(existing.raisedById, {
+        title: `RFI answered · ${rfiNumber}`,
+        body: `${session.user.name ?? session.user.username} answered "${subjectShort}".`,
+        url: `/mobile/${existing.projectId}/rfi/${id}`,
+        tag: `rfi-answered-${id}`,
+      });
     }
 
     return NextResponse.json({ rfi: updated });

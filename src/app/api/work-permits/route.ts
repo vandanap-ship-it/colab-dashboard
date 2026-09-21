@@ -8,6 +8,7 @@ import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
 import { assignmentEmail, sendEmail } from "@/lib/email";
+import { sendPushToUser } from "@/lib/push";
 import {
   WORK_PERMIT_TYPES,
   WORK_PERMIT_TYPE_LABELS,
@@ -203,6 +204,20 @@ export async function POST(req: Request) {
         ),
       ),
     );
+
+    // Push notification alongside the email — reaches the approver's phone
+    // even when Siddhi is closed and email is unread. First-approver-wins,
+    // but we notify all listed approvers so any of them can pick it up.
+    const typeLabel = WORK_PERMIT_TYPE_LABELS[workPermit.type as WorkPermitType] ?? workPermit.type;
+    const requesterName = workPermit.requester?.name ?? "Someone";
+    for (const approverId of body.approverIds) {
+      void sendPushToUser(approverId, {
+        title: `Permit awaiting your approval · ${workPermit.title.slice(0, 40)}`,
+        body: `${typeLabel} raised by ${requesterName}. Tap to review.`,
+        url: `/mobile/${body.projectId}/permit/${workPermit.id}`,
+        tag: `permit-${workPermit.id}`,
+      });
+    }
   }
 
   return NextResponse.json({ workPermit }, { status: duplicate ? 200 : 201 });

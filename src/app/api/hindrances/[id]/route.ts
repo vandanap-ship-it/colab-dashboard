@@ -7,6 +7,7 @@ import { canAccessModule, MODULES } from "@/lib/modules";
 import { recordAudit, diffSummary } from "@/lib/audit";
 import { checkConflict } from "@/lib/optimisticLock";
 import { parseBody } from "@/lib/parseBody";
+import { sendPushToUser } from "@/lib/push";
 import {
   badRequest,
   forbidden,
@@ -49,7 +50,15 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/hindrances/[id
   try {
     const before = await prisma.hindrance.findUnique({
       where: { id },
-      select: { id: true, projectId: true, status: true, daysImpact: true, updatedAt: true },
+      select: {
+        id: true,
+        projectId: true,
+        status: true,
+        daysImpact: true,
+        description: true,
+        createdById: true,
+        updatedAt: true,
+      },
     });
     if (!before) return notFound();
     // Optimistic-lock guard — reject if someone else edited between the
@@ -87,6 +96,26 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/hindrances/[id
           (isStatusChange ? `Hindrance → ${hindrance.status}` : "Hindrance updated"),
         changes: diff.changes,
       });
+
+      // Push the site engineer who raised it when the status flips — they
+      // care most about "the blocker I logged got cleared" (or the reverse
+      // if a reviewer reopens it). Never push a self-update; the actor
+      // already knows what they did.
+      if (isStatusChange && before.createdById && before.createdById !== session.user.id) {
+        const desc = before.description.slice(0, 60);
+        void sendPushToUser(before.createdById, {
+          title:
+            hindrance.status === "RESOLVED"
+              ? `Hindrance resolved · ${desc}`
+              : `Hindrance reopened · ${desc}`,
+          body:
+            hindrance.status === "RESOLVED"
+              ? `Marked resolved by ${session.user.name ?? session.user.username}. Nice.`
+              : `${session.user.name ?? session.user.username} reopened it — more work needed.`,
+          url: `/mobile/${hindrance.projectId}/hindrance/${hindrance.id}`,
+          tag: `hindrance-${hindrance.id}`,
+        });
+      }
     }
     return NextResponse.json({ hindrance });
   } catch (e) {

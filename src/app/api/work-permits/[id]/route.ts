@@ -196,7 +196,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
           kind === "approve"
             ? `${WORK_PERMIT_TYPE_LABELS[existing.type as WorkPermitType] ?? existing.type} for ${formatDayMonthYear(existing.workDate)} approved by ${actorName}.`
             : `${WORK_PERMIT_TYPE_LABELS[existing.type as WorkPermitType] ?? existing.type} rejected by ${actorName}${rejectionReason?.trim() ? `. Reason: ${rejectionReason.slice(0, 100)}` : "."}`,
-        url: `/mobile/${existing.projectId}/permit`,
+        url: `/mobile/${existing.projectId}/permit/${existing.id}`,
         tag: `permit-${existing.id}`,
       });
     }
