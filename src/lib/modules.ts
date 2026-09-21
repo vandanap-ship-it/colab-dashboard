@@ -113,6 +113,19 @@ export const TOOL_MODULES: Record<string, ModuleKey[]> = {
   "ehs-tile": [MODULES.SAFETY],
   hindrance: [MODULES.HINDRANCE],
   "hindrance-list": [MODULES.HINDRANCE],
+  // Search is available to any authenticated user with any module — the
+  // results are filtered per-module inside the search itself, so gating
+  // the tile visibility on any-module is honest. Full-access users get
+  // it too via the null-modules pass in canAccessTool.
+  search: [
+    MODULES.PROGRESS,
+    MODULES.QAQC,
+    MODULES.SAFETY,
+    MODULES.CONCERN,
+    MODULES.HINDRANCE,
+    MODULES.PERMIT,
+    MODULES.RFI,
+  ],
   manpower: [MODULES.PROGRESS],
   concern: [MODULES.CONCERN],
   rfi: [MODULES.RFI],

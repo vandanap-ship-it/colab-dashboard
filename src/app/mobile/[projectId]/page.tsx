@@ -10,6 +10,7 @@ import {
   ListChecks,
   MessageSquare,
   PlusCircle,
+  Search as SearchIcon,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -202,6 +203,14 @@ export default async function MobileProjectHome({
       label: "Hindrances",
       hint: "Open blockers · days & cost impact",
       icon: AlertTriangle,
+      tier: "secondary",
+    },
+    {
+      key: "search",
+      href: `/mobile/${projectId}/search`,
+      label: "Search",
+      hint: "Villa, RFI, snag, activity — one query",
+      icon: SearchIcon,
       tier: "secondary",
     },
     {
