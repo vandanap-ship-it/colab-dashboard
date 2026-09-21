@@ -8,6 +8,7 @@ import {
   HardHat,
   HelpCircle,
   ListChecks,
+  MessageSquare,
   PlusCircle,
   ShieldCheck,
   Users,
@@ -185,6 +186,14 @@ export default async function MobileProjectHome({
       label: "RFIs",
       hint: "Ask consultants for a decision",
       icon: HelpCircle,
+      tier: "secondary",
+    },
+    {
+      key: "concern",
+      href: `/mobile/${projectId}/concern?tab=pending`,
+      label: "Concerns",
+      hint: "Heads-ups from the site",
+      icon: MessageSquare,
       tier: "secondary",
     },
     {
