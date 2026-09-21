@@ -3,11 +3,13 @@ import { auth } from "@/lib/auth";
 import { canSeeMobile } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getPendingActionCount } from "@/lib/pendingActions";
+import { canAccessModule, MODULES } from "@/lib/modules";
 import MobileHeaderBack from "@/components/MobileHeaderBack";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import MobileOnboarding from "@/components/MobileOnboarding";
 import PendingSyncBadge from "@/components/PendingSyncBadge";
 import PushOptIn from "@/components/PushOptIn";
+import QuickAddFab, { type QuickAddKey } from "@/components/mobile/QuickAddFab";
 
 export default async function MobileProjectLayout({
   children,
@@ -36,6 +38,20 @@ export default async function MobileProjectLayout({
     session.user.id,
     session.user.role,
   ).catch(() => 0);
+
+  // Filter the quick-add sheet to actions the current user's modules
+  // actually permit. A HINDRANCE-only contractor doesn't see "Log
+  // progress" or "Raise WIR"; a scoped user with no PROGRESS access
+  // stays out of those flows entirely.
+  const mods = session.user.modules;
+  const quickActions: QuickAddKey[] = [];
+  if (canAccessModule(mods, MODULES.PROGRESS)) quickActions.push("log-progress", "log-manpower");
+  if (canAccessModule(mods, MODULES.QAQC) || canAccessModule(mods, MODULES.SAFETY)) {
+    quickActions.push("raise-wir");
+  }
+  if (canAccessModule(mods, MODULES.HINDRANCE)) quickActions.push("add-hindrance");
+  if (canAccessModule(mods, MODULES.CONCERN)) quickActions.push("add-concern");
+  if (canAccessModule(mods, MODULES.RFI)) quickActions.push("raise-rfi");
 
   return (
     <div className="flex-1 flex flex-col bg-ivory">
@@ -81,6 +97,11 @@ export default async function MobileProjectLayout({
       >
         <MobileBottomNav projectId={project.id} pendingActions={pendingActions} />
       </div>
+      {/* Central "+" FAB above the bottom nav — one tap opens a sheet of
+          the day's most-used log actions. Rendered only when the user has
+          at least one accessible action (scoped users with none see no
+          FAB, which keeps the chrome honest). */}
+      <QuickAddFab projectId={project.id} actions={quickActions} />
       {/* First-run 3-slide tour. Renders nothing after the engineer has
           dismissed it once (localStorage-gated on the device). */}
       <MobileOnboarding />
