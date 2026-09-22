@@ -731,7 +731,7 @@ export default function InspectionForm({
           storageKey="siddhi.htw.wir"
           steps={[
             "Pick a checklist template that matches the work — e.g. Footing Concreting, Column Rebar. Leave it blank to build your own.",
-            "Read each row on the checklist. Tap Yes if the check passed, No if it failed, NA if it doesn't apply to this pour.",
+            "Read each row on the checklist. Tap Yes if the check passed, No if it failed, NA if it doesn't apply to this work.",
             "For any No or a shaky Yes, add a short note and a photo so the reviewer sees exactly what you saw.",
             "Pick one or more reviewers — usually your planner or the QA/QC lead. They get a push when you send.",
             "Tap \"Send For Review\" when you're done. You'll get a push back once they approve or send you comments.",

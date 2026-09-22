@@ -193,7 +193,7 @@ export default function ManpowerEntryForm({
           "Pick the contractor whose crew you're logging.",
           "Add a row for each trade that worked today — Mason, Helper, Skilled, Unskilled, Supervisor.",
           "Type the headcount for each trade — how many people of that trade were on site.",
-          "Add or remove rows as needed. One row per trade — merge or split before you save if the same trade has two rows.",
+          "Add or remove rows as needed. One row per trade — remove any duplicates before saving.",
           "Tap Save. Your DLR picks this up automatically for today.",
         ]}
       />
