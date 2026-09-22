@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendEmail, waitingNudgeEmail } from "@/lib/email";
+import { sendPushToUser } from "@/lib/push";
 import { istDayStart } from "@/lib/istDay";
 import {
   canAccessModule,
@@ -223,6 +224,22 @@ export async function runNudge(overrideRecipients?: Array<{ id: string; name: st
       }
       const result = await sendEmail(email);
       sent.push({ userId: user.id, projectId: pStale.projectId, ok: result.ok, error: result.error });
+
+      // Push companion — same opt-in gate as the email (they came in
+      // through the receivesDailyTaskEmail set). Fires only when the
+      // user has a live push subscription; sendPushToUser silently
+      // returns { sent: 0 } if not. Tag is date-scoped so a same-day
+      // retry replaces the earlier push instead of stacking a second
+      // notification tile.
+      const pushBody = buildPushBody(buckets);
+      if (pushBody) {
+        void sendPushToUser(user.id, {
+          title: `Waiting on you · ${pStale.projectName}`,
+          body: pushBody,
+          url: `/mobile/${pStale.projectId}`,
+          tag: `waiting-nudge-${asOf.toISOString().slice(0, 10)}-${pStale.projectId}`,
+        });
+      }
     }
   }
 
@@ -233,4 +250,38 @@ export async function runNudge(overrideRecipients?: Array<{ id: string; name: st
     recipientCount: recipients.length,
     sent,
   });
+}
+
+/**
+ * One-line push body — mirrors the ordering the email + on-screen strip
+ * use (escalation-strength first, own drafts last). Returns null when
+ * every bucket is 0 so the caller can skip the push cleanly.
+ *
+ * Kept short: iOS shows the first ~60-80 chars in the collapsed
+ * notification tile, so the leading buckets need to earn their place.
+ * Truncates with "…" when three or more buckets fire so the tile stays
+ * on one line at the OS's preview width.
+ */
+function buildPushBody(buckets: {
+  staleWirs: number;
+  stalePermits: number;
+  staleHindrances: number;
+  staleIssues: number;
+  staleRfis: number;
+  staleConcerns: number;
+  myDrafts: number;
+}): string | null {
+  type Row = { n: number; label: string };
+  const rows: Row[] = [
+    { n: buckets.stalePermits, label: buckets.stalePermits === 1 ? "stale permit" : "stale permits" },
+    { n: buckets.staleHindrances, label: buckets.staleHindrances === 1 ? "stale blocker" : "stale blockers" },
+    { n: buckets.staleIssues, label: buckets.staleIssues === 1 ? "stale snag" : "stale snags" },
+    { n: buckets.staleRfis, label: buckets.staleRfis === 1 ? "stale RFI" : "stale RFIs" },
+    { n: buckets.staleConcerns, label: buckets.staleConcerns === 1 ? "stale concern" : "stale concerns" },
+    { n: buckets.staleWirs, label: buckets.staleWirs === 1 ? "stale WIR" : "stale WIRs" },
+    { n: buckets.myDrafts, label: buckets.myDrafts === 1 ? "draft to finish" : "drafts to finish" },
+  ].filter((r) => r.n > 0);
+  if (rows.length === 0) return null;
+  const shown = rows.slice(0, 2).map((r) => `${r.n} ${r.label}`).join(", ");
+  return rows.length > 2 ? `${shown}, +${rows.length - 2} more` : shown;
 }
