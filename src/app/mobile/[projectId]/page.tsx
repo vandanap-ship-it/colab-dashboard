@@ -7,6 +7,7 @@ import {
   ClipboardList,
   HardHat,
   HelpCircle,
+  IndianRupee,
   ListChecks,
   MessageSquare,
   PlusCircle,
@@ -211,6 +212,14 @@ export default async function MobileProjectHome({
       label: "Manpower history",
       hint: "Today + last 7 days on site",
       icon: Users,
+      tier: "secondary",
+    },
+    {
+      key: "expense",
+      href: `/mobile/${projectId}/expense?tab=submitted`,
+      label: "Expenses",
+      hint: "Petty cash, reimbursements, purchases",
+      icon: IndianRupee,
       tier: "secondary",
     },
     {
