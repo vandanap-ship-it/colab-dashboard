@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ClipboardCheck, Plus, AlertTriangle, CheckCircle2, X, Clock } from "lucide-react";
+import { ClipboardCheck, Plus, AlertTriangle, CalendarClock, CheckCircle2, X, Clock } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
@@ -10,21 +10,23 @@ export const dynamic = "force-dynamic";
 
 /**
  * Mobile QA/QC list — replaces the "tap goes to desktop /qaqc" fallback
- * with a phone-native list of inspections. Four tabs:
+ * with a phone-native list of inspections. Five tabs:
  *
- *   - My Pending — inspections still IN_REVIEW that this user filled OR is
- *     eligible to review. Landing tab, so the reviewer sees their queue on
- *     first open.
- *   - All       — every inspection in the project (respects module scoping).
- *   - Passed    — status PASSED, most recent first.
- *   - Rejected  — status REJECTED, most recent first.
+ *   - My Pending    — inspections still IN_REVIEW that this user filled OR
+ *                     is eligible to review. Landing tab, so the reviewer
+ *                     sees their queue on first open.
+ *   - All           — every inspection in the project (respects module scoping).
+ *   - Rescheduled   — status RESCHEDULED, sorted by rescheduledFor asc so
+ *                     the soonest reopen is first.
+ *   - Passed        — status PASSED, most recent first.
+ *   - Rejected      — status REJECTED, most recent first.
  *
  * Rows tap into /mobile/[projectId]/qaqc/[id] which does review-in-place.
  */
 
-type Tab = "pending" | "all" | "passed" | "rejected";
+type Tab = "pending" | "all" | "rescheduled" | "passed" | "rejected";
 
-const VALID_TABS: readonly Tab[] = ["pending", "all", "passed", "rejected"] as const;
+const VALID_TABS: readonly Tab[] = ["pending", "all", "rescheduled", "passed", "rejected"] as const;
 function normaliseTab(v: string | undefined): Tab {
   return (VALID_TABS as readonly string[]).includes(v ?? "") ? (v as Tab) : "pending";
 }
@@ -105,6 +107,7 @@ export default async function MobileQaqcPage({
   const tabWhere = (() => {
     if (tab === "passed") return { ...baseWhere, status: "PASSED" };
     if (tab === "rejected") return { ...baseWhere, status: "REJECTED" };
+    if (tab === "rescheduled") return { ...baseWhere, status: "RESCHEDULED" };
     if (tab === "pending") {
       return iCanReview
         ? { ...baseWhere, status: "IN_REVIEW" }
@@ -113,12 +116,20 @@ export default async function MobileQaqcPage({
     return baseWhere;
   })();
 
-  // Counts for the tab badges. Cheap groupBy — same three status values the
-  // list surfaces, so the pills stay accurate as inspections move.
+  // Rescheduled sorts by rescheduledFor ASC so the soonest-to-reopen is on
+  // top — that's the row a reviewer actually needs to plan around today.
+  // Every other tab keeps createdAt DESC so the freshest work is first.
+  const tabOrderBy = tab === "rescheduled"
+    ? ({ rescheduledFor: "asc" } as const)
+    : ({ createdAt: "desc" } as const);
+
+  // Counts for the tab badges. Cheap groupBy — every status value the list
+  // surfaces gets its own tally, so the pills stay accurate as inspections
+  // move between buckets.
   const [inspections, statusCounts] = await Promise.all([
     prisma.inspection.findMany({
       where: tabWhere,
-      orderBy: { createdAt: "desc" },
+      orderBy: tabOrderBy,
       take: 100, // Cap for perf. Amanvana has ~110 total; realistic tabs stay well under.
       select: {
         id: true,
@@ -126,6 +137,7 @@ export default async function MobileQaqcPage({
         status: true,
         module: true,
         createdAt: true,
+        rescheduledFor: true,
         filledBy: { select: { name: true } },
         wbsNode: { select: { name: true } },
         _count: { select: { photos: true, items: true } },
@@ -178,6 +190,7 @@ export default async function MobileQaqcPage({
         <div className="flex items-center gap-1 -mb-px overflow-x-auto">
           <TabLink projectId={projectId} tab="pending" current={tab} moduleFilter={moduleFilter} label="My Pending" count={pendingCount} icon={Clock} />
           <TabLink projectId={projectId} tab="all" current={tab} moduleFilter={moduleFilter} label="All" icon={ClipboardCheck} />
+          <TabLink projectId={projectId} tab="rescheduled" current={tab} moduleFilter={moduleFilter} label="Rescheduled" count={countByStatus.get("RESCHEDULED") ?? 0} icon={CalendarClock} />
           <TabLink projectId={projectId} tab="passed" current={tab} moduleFilter={moduleFilter} label="Passed" count={countByStatus.get("PASSED") ?? 0} icon={CheckCircle2} />
           <TabLink projectId={projectId} tab="rejected" current={tab} moduleFilter={moduleFilter} label="Rejected" count={countByStatus.get("REJECTED") ?? 0} icon={AlertTriangle} />
         </div>
@@ -224,6 +237,15 @@ export default async function MobileQaqcPage({
                           </>
                         )}
                       </div>
+                      {/* Reopen date · what a reviewer opens the tab to
+                          see. Only rendered for RESCHEDULED rows; the
+                          field is null on every other status. */}
+                      {i.status === "RESCHEDULED" && i.rescheduledFor && (
+                        <div className="text-[11px] mt-1 inline-flex items-center gap-1 rounded-full bg-sandstone-100 text-ink-2 px-2 py-0.5 font-semibold">
+                          <CalendarClock className="w-3 h-3" />
+                          Reopens {fmtDate(i.rescheduledFor)}
+                        </div>
+                      )}
                     </div>
                     <StatusPill status={i.status} />
                   </div>
@@ -290,6 +312,11 @@ function StatusPill({ status }: { status: string }) {
     IN_REVIEW: { bg: "bg-amber-50 ring-amber-200", fg: "text-amber-800", label: "In review", Icon: Clock },
     PASSED: { bg: "bg-emerald-50 ring-emerald-200", fg: "text-emerald-800", label: "Passed", Icon: CheckCircle2 },
     REJECTED: { bg: "bg-red-50 ring-red-200", fg: "text-red-800", label: "Rejected", Icon: X },
+    // Sandstone rather than a cold blue — this state means "waiting", not
+    // "cancelled", and the warm palette carries the "still ours to
+    // finish" reading. Same neutral family as the module chip so the
+    // eye reads them as related metadata.
+    RESCHEDULED: { bg: "bg-sandstone-100 ring-sandstone-200", fg: "text-ink-2", label: "Rescheduled", Icon: CalendarClock },
   };
   const cfg = map[status] ?? map.IN_REVIEW;
   const Icon = cfg.Icon;
@@ -305,6 +332,7 @@ function EmptyState({ tab }: { tab: Tab }) {
   const copy = {
     pending: "Nothing waiting for your review.",
     all: "No inspections logged on this project yet.",
+    rescheduled: "No inspections parked for later.",
     passed: "No passed inspections yet.",
     rejected: "No rejected inspections. Good.",
   }[tab];

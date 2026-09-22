@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { CheckCircle2, X, Clock, User as UserIcon, Camera } from "lucide-react";
+import { CalendarClock, CheckCircle2, MessageSquare, X, Clock, User as UserIcon, Users as UsersIcon, Camera } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, canAccessScopedRow, MODULES } from "@/lib/modules";
@@ -48,6 +48,17 @@ export default async function MobileInspectionDetailPage({
     },
   });
   if (!inspection) notFound();
+
+  // Hydrate the picked-reviewer names. The Inspection model stores their
+  // ids on assignedReviewerIds (postgres text[]); the detail card needs
+  // their names. Skips the lookup entirely when nothing was picked, so
+  // the pre-Sep-2026 WIRs cost zero extra queries.
+  const assignedReviewers = inspection.assignedReviewerIds.length > 0
+    ? await prisma.user.findMany({
+        where: { id: { in: inspection.assignedReviewerIds } },
+        select: { id: true, name: true, username: true, role: true },
+      })
+    : [];
 
   // Module gate — a QAQC-scoped user cannot open a SAFETY inspection and vice
   // versa. Server-side belt matches the API's own belt-and-braces.
@@ -127,6 +138,68 @@ export default async function MobileInspectionDetailPage({
           </section>
         )}
 
+        {/* Reschedule callout · answers "when does this reopen and why".
+            Only rendered when the WIR is currently parked; a WIR that
+            was rescheduled and then reviewed keeps the historical
+            rescheduledFor on the row but stops showing it prominently. */}
+        {inspection.status === "RESCHEDULED" && inspection.rescheduledFor && (
+          <section className="rounded-xl border border-sandstone-200 bg-sandstone-50 p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <CalendarClock className="w-4 h-4 text-ink-2" />
+              <div className="text-[10px] font-semibold text-ink-2 uppercase tracking-wider">
+                Rescheduled — reopens {fmtDate(inspection.rescheduledFor)}
+              </div>
+            </div>
+            {inspection.rescheduledNote && (
+              <p className="text-sm text-ink leading-snug mt-1">“{inspection.rescheduledNote}”</p>
+            )}
+          </section>
+        )}
+
+        {/* Submit remark · the note the filler left for the reviewer at
+            Send For Review time (Colab step 7). Always shown if present
+            — a reviewer opens the WIR to know what the filler flagged,
+            and the remark is the shortest path to that context. */}
+        {inspection.submitRemark && (
+          <section className="rounded-xl border border-stone-200 bg-white p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <MessageSquare className="w-4 h-4 text-stone-400" />
+              <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">
+                Filler’s remark
+              </div>
+            </div>
+            <p className="text-sm text-stone-900 leading-snug">{inspection.submitRemark}</p>
+          </section>
+        )}
+
+        {/* Assigned reviewers · surfaces who the filler asked to look at
+            this. When empty, the WIR fell back to the role broadcast so
+            the card is omitted rather than shown with "everyone", which
+            would read as more specific than it is. */}
+        {assignedReviewers.length > 0 && (
+          <section className="rounded-xl border border-stone-200 bg-white p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <UsersIcon className="w-4 h-4 text-stone-400" />
+              <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">
+                Reviewers · {assignedReviewers.length}
+              </div>
+            </div>
+            <ul className="space-y-1">
+              {assignedReviewers.map((r) => (
+                <li key={r.id} className="flex items-center gap-2 text-sm text-stone-900">
+                  <span className="w-6 h-6 rounded-full bg-sandstone-100 text-ink-2 flex items-center justify-center text-[11px] font-semibold shrink-0">
+                    {(r.name ?? r.username).slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="font-medium">{r.name ?? r.username}</span>
+                  <span className="text-[11px] text-stone-500 ml-auto lowercase">
+                    {r.role.replace("_", " ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {/* Checklist */}
         <section className="rounded-xl border border-stone-200 bg-white overflow-hidden">
           <div className="px-3 py-2 border-b border-stone-100 text-[10px] font-semibold text-stone-500 uppercase tracking-wider">
@@ -147,6 +220,21 @@ export default async function MobileInspectionDetailPage({
                       </div>
                     )}
                   </div>
+                  {/* Per-item photo (Colab step 6). The filler captured a
+                      single close-up of the checkpoint; the reviewer sees
+                      it inline, tap opens the full image in a new tab. */}
+                  {item.photoUrl && (
+                    <a
+                      href={item.photoUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="w-12 h-12 flex-none rounded-lg overflow-hidden border border-stone-200 bg-stone-50 block"
+                      aria-label="Open checkpoint photo"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={item.photoUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>
@@ -178,9 +266,12 @@ export default async function MobileInspectionDetailPage({
         )}
       </div>
 
-      {/* Sticky review actions — reviewers only. Server component decides
-          who sees the bar; the client component owns the transitions. */}
-      {iCanReview && (
+      {/* Sticky review actions — reviewers only, and NOT on a rescheduled
+          WIR (Pass/Reject on a parked inspection would be a category
+          error; the reviewer waits until it reopens). Server component
+          decides who sees the bar; the client component owns the
+          transitions. */}
+      {iCanReview && inspection.status !== "RESCHEDULED" && (
         <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3">
           <MobileQaqcReviewActions
             inspectionId={inspection.id}
@@ -231,6 +322,7 @@ function StatusPill({ status }: { status: string }) {
     IN_REVIEW: { bg: "bg-amber-50 ring-amber-200", fg: "text-amber-800", label: "In review", Icon: Clock },
     PASSED: { bg: "bg-emerald-50 ring-emerald-200", fg: "text-emerald-800", label: "Passed", Icon: CheckCircle2 },
     REJECTED: { bg: "bg-red-50 ring-red-200", fg: "text-red-800", label: "Rejected", Icon: X },
+    RESCHEDULED: { bg: "bg-sandstone-100 ring-sandstone-200", fg: "text-ink-2", label: "Rescheduled", Icon: CalendarClock },
   };
   const cfg = map[status] ?? map.IN_REVIEW;
   const Icon = cfg.Icon;
