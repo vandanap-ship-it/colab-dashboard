@@ -683,3 +683,122 @@ export function weeklyReportEmail(input: WeeklyReportEmailInput): SendEmailInput
     }),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Daily "Waiting on you" email nudge — companion to the mobile home strip.
+// Fires each morning to the same recipients who receive the daily-tasks
+// email. Only sends when at least one bucket is non-zero — a clean morning
+// gets no mail, so people don't tune the alert out.
+// ---------------------------------------------------------------------------
+
+export interface WaitingNudgeInput {
+  to: string | string[];
+  toName?: string;                  // "Hi {name}" opener; falls back to a neutral greeting
+  projectName: string;
+  asOf: Date;
+  buckets: {
+    staleWirs: number;              // WIRs IN_REVIEW past the 7d SLA
+    stalePermits: number;           // Permits PENDING past the 2d SLA
+    staleHindrances: number;        // Hindrances OPEN past the 3d SLA
+    staleIssues: number;            // Snags OPEN/IN_REINSPECTION past the 4d SLA
+    staleRfis: number;              // RFIs OPEN past the 5d SLA
+    staleConcerns: number;          // Concerns PENDING past the 5d SLA
+    myDrafts: number;               // Filler's own DRAFT WIRs, any age
+  };
+  homeUrl: string;                  // Deep-link back into the mobile home
+}
+
+/**
+ * Compact "waiting on you" nudge. Returns null when every bucket is 0 so
+ * the caller can skip the send without lighting up an inbox with a
+ * "you're clear" note every morning.
+ */
+export function waitingNudgeEmail(input: WaitingNudgeInput): SendEmailInput | null {
+  const { buckets } = input;
+  const total =
+    buckets.staleWirs +
+    buckets.stalePermits +
+    buckets.staleHindrances +
+    buckets.staleIssues +
+    buckets.staleRfis +
+    buckets.staleConcerns +
+    buckets.myDrafts;
+  if (total === 0) return null;
+
+  // Row shape: [count, singular label, plural label, deep-link path].
+  // Ordered by escalation strength — permits (blocking) first, drafts
+  // (your own work) last. Deep-links preserve the tab / status filter
+  // so the tap lands on the exact rows the count is measuring.
+  type Row = { n: number; label: string; href: string; stale: boolean };
+  const rows: Row[] = [
+    { n: buckets.stalePermits, label: buckets.stalePermits === 1 ? "stale permit" : "stale permits", href: "/permit", stale: true },
+    { n: buckets.staleHindrances, label: buckets.staleHindrances === 1 ? "stale blocker" : "stale blockers", href: "/hindrance?tab=open", stale: true },
+    { n: buckets.staleIssues, label: buckets.staleIssues === 1 ? "stale snag" : "stale snags", href: "/issue?tab=open", stale: true },
+    { n: buckets.staleRfis, label: buckets.staleRfis === 1 ? "stale RFI" : "stale RFIs", href: "/rfi?tab=open", stale: true },
+    { n: buckets.staleConcerns, label: buckets.staleConcerns === 1 ? "stale concern" : "stale concerns", href: "/concern?tab=pending", stale: true },
+    { n: buckets.staleWirs, label: buckets.staleWirs === 1 ? "stale WIR" : "stale WIRs", href: "/qaqc?tab=pending", stale: true },
+    { n: buckets.myDrafts, label: buckets.myDrafts === 1 ? "draft to finish" : "drafts to finish", href: "/qaqc?tab=drafts", stale: false },
+  ].filter((r) => r.n > 0);
+
+  const homeBase = input.homeUrl.replace(/\/+$/, "");
+  const rowsHtml = rows
+    .map((r) => {
+      const link = `${homeBase}${r.href}`;
+      // Muted amber pill for aging/stale rows, neutral for drafts —
+      // matches the sandstone vs ferrous split the on-screen strip uses.
+      const pillBg = r.stale ? "#F9DEC6" : "#EDE4CE";
+      const pillColor = r.stale ? "#96430A" : "#4E5866";
+      return `
+        <tr>
+          <td style="padding:10px 8px; vertical-align:middle;">
+            <span style="display:inline-block; min-width:26px; padding:2px 8px;
+                         border-radius:999px; background:${pillBg}; color:${pillColor};
+                         font-size:12px; font-weight:600; text-align:center;
+                         font-variant-numeric: tabular-nums;">${r.n}</span>
+          </td>
+          <td style="padding:10px 8px; vertical-align:middle; color:${INK}; font-size:14px;">
+            <a href="${link}" style="color:${INK}; text-decoration:none;">${r.label}</a>
+          </td>
+        </tr>`;
+    })
+    .join("");
+
+  const opener = input.toName ? `Hi ${input.toName.split(" ")[0]},` : "Good morning,";
+  const staleCount = rows.filter((r) => r.stale).reduce((n, r) => n + r.n, 0);
+  const draftCount = buckets.myDrafts;
+
+  const lede = (() => {
+    if (staleCount > 0 && draftCount > 0) {
+      return `You have <strong style="color:${INK};">${staleCount}</strong> row${staleCount === 1 ? "" : "s"} past their SLA on ${input.projectName}, plus ${draftCount} draft${draftCount === 1 ? "" : "s"} of your own to finish.`;
+    }
+    if (staleCount > 0) {
+      return `You have <strong style="color:${INK};">${staleCount}</strong> row${staleCount === 1 ? "" : "s"} past their SLA on ${input.projectName}. Each one is waiting on someone.`;
+    }
+    return `You have <strong style="color:${INK};">${draftCount}</strong> draft${draftCount === 1 ? "" : "s"} of your own to finish on ${input.projectName}.`;
+  })();
+
+  return {
+    to: input.to,
+    subject: `[Siddhi] Waiting on you · ${input.projectName} — ${fmtDate(input.asOf)}`,
+    html: shell({
+      preheader: `${total} item${total === 1 ? "" : "s"} past their SLA on ${input.projectName}.`,
+      headline: "Waiting on you",
+      bodyHtml: `
+        <p style="color:${INK};">${opener}</p>
+        <p style="color:${INK_2}; margin-top:4px;">${lede}</p>
+        <table role="presentation" cellpadding="0" cellspacing="0"
+               style="border-collapse:collapse; width:100%; margin-top:14px;
+                      border-top:1px solid ${RULE};">
+          <tbody>${rowsHtml}</tbody>
+        </table>
+        <p style="color:${INK_2}; font-size:12.5px; margin-top:14px;">
+          Fresh rows (still inside their SLA window) aren't listed here — this
+          email is only about what's overdue.
+        </p>
+      `,
+      cta: { text: "Open the app", url: homeBase },
+      footer: `Automated from Siddhi — sent every weekday morning to people opted into daily site alerts.<br>
+               A quiet day means no mail; if you'd rather stop entirely, an admin can toggle it off on your account.`,
+    }),
+  };
+}

@@ -35,6 +35,8 @@ const EXEMPT_ROUTES: Record<string, string> = {
     "Vercel Cron endpoint: gated by CRON_SECRET Bearer token. Same fail-closed pattern as overdue-digest.",
   "cron/weekly-report/route.ts":
     "Vercel Cron endpoint: gated by CRON_SECRET Bearer token. Same fail-closed pattern as overdue-digest.",
+  "cron/waiting-nudge/route.ts":
+    "Vercel Cron endpoint: gated by CRON_SECRET Bearer token. Same fail-closed pattern as overdue-digest.",
   "inspection-templates/count/route.ts":
     "Intentional unauthed smoke probe: returns only how many inspection templates are seeded + their public codes. Same shape as the seed data checked into git — nothing user-scoped leaks. Used by post-deploy verification.",
   "push/vapid-public/route.ts":
