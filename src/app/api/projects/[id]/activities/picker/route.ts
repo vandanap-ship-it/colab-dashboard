@@ -21,7 +21,7 @@ export async function GET(
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   if (isScopedUser(session.user.modules)) {
-    return NextResponse.json({ blocks: [], recent: [] });
+    return NextResponse.json({ blocks: [], recent: [], recentVillaLabel: null });
   }
 
   const { id: projectId } = await params;
@@ -62,6 +62,7 @@ export async function GET(
       orderBy: { createdAt: "desc" },
       take: 25, // fetch a few extras since some may dedupe to the same wbsNode
       select: {
+        createdAt: true,
         wbsNode: {
           select: {
             id: true,
@@ -85,6 +86,22 @@ export async function GET(
       },
     }),
   ]);
+
+  // "Continuing on {villa}" chip on the picker root — surfaces the villa
+  // the engineer was working on RECENTLY so a fresh visit (from Home,
+  // from the FAB) can skip contractor + villa drill in one tap. Only
+  // shown when the most recent progress log is < 4h old so the chip
+  // doesn't lead engineers back to yesterday's villa. When absent,
+  // the picker falls back to its normal root drilldown.
+  const RECENT_VILLA_WINDOW_MS = 4 * 60 * 60 * 1000;
+  const mostRecent = recentEntries[0];
+  const isFresh = mostRecent && Date.now() - mostRecent.createdAt.getTime() < RECENT_VILLA_WINDOW_MS;
+  const recentVillaLabel = isFresh
+    ? mostRecent.wbsNode?.villaMilestone?.villa?.label ??
+      (mostRecent.wbsNode?.villaMilestone?.villa?.number != null
+        ? `Villa ${mostRecent.wbsNode.villaMilestone.villa.number}`
+        : null)
+    : null;
 
   const compactBlocks = blocks.map((b) => ({
     code: b.code,
@@ -130,5 +147,5 @@ export async function GET(
     if (recent.length >= 10) break;
   }
 
-  return NextResponse.json({ blocks: compactBlocks, recent });
+  return NextResponse.json({ blocks: compactBlocks, recent, recentVillaLabel });
 }

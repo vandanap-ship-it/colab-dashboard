@@ -40,6 +40,10 @@ interface RecentActivity {
 interface PickerData {
   blocks: PickerBlock[];
   recent: RecentActivity[];
+  /** Villa label from the current user's most recent progress entry
+   *  (< 4h old). When set, the root step surfaces a "Continuing on
+   *  {villa}" chip that jumps straight to that villa's milestones. */
+  recentVillaLabel?: string | null;
 }
 
 interface LeafActivity {
@@ -332,35 +336,43 @@ export default function ActivityPicker({
   // sees the root drilldown.
   void initialActivityId;
 
-  // Initial-villa preseed. Runs once, after the picker index has loaded and
-  // if the caller asked us to snap to a specific villa. Finds the villa
-  // whose label matches (comparing across all blocks) and jumps straight
-  // to its milestone list. If the label doesn't match anything in the
-  // index — stale villa, project mismatch, typo — we silently fall back
-  // to the root drilldown rather than surfacing an error, because "the
-  // shortcut didn't fire" is safer here than "the picker is broken".
-  useEffect(() => {
-    if (!data || !initialVillaLabel || initialVillaJumpedRef.current) return;
-    for (const b of data.blocks) {
-      for (const v of b.villas) {
-        if (v.label === initialVillaLabel) {
-          // One-shot preseed on data arrival — the cascading render is
-          // expected and desirable (we're moving step="root" to
-          // step="milestone" in one commit). Rule fires on the first
-          // setState in the effect body.
-          // eslint-disable-next-line react-hooks/set-state-in-effect
-          setContractorKey(contractorOfVilla(v.label));
-          setVillaId(v.id);
-          setStep("milestone");
-          setShowPreseedHint(true);
-          initialVillaJumpedRef.current = true;
-          return;
+  /**
+   * Jump the drilldown straight to the milestone list for a villa
+   * identified by label. Returns true when the villa exists in the
+   * loaded index, false otherwise. Used both by the initial-villa
+   * preseed effect and by the "Continuing on {villa}" chip on the
+   * root step.
+   */
+  const jumpToVillaByLabel = useCallback(
+    (label: string): boolean => {
+      if (!data) return false;
+      for (const b of data.blocks) {
+        for (const v of b.villas) {
+          if (v.label === label) {
+            setContractorKey(contractorOfVilla(v.label));
+            setVillaId(v.id);
+            setStep("milestone");
+            setShowPreseedHint(true);
+            return true;
+          }
         }
       }
-    }
-    // No match — mark as attempted so we don't keep re-running.
+      return false;
+    },
+    [data],
+  );
+
+  // Initial-villa preseed. Runs once, after the picker index has loaded and
+  // if the caller asked us to snap to a specific villa. If the label doesn't
+  // match anything in the index — stale villa, project mismatch, typo — we
+  // silently fall back to the root drilldown rather than surfacing an
+  // error, because "the shortcut didn't fire" is safer here than "the
+  // picker is broken".
+  useEffect(() => {
+    if (!data || !initialVillaLabel || initialVillaJumpedRef.current) return;
+    jumpToVillaByLabel(initialVillaLabel);
     initialVillaJumpedRef.current = true;
-  }, [data, initialVillaLabel]);
+  }, [data, initialVillaLabel, jumpToVillaByLabel]);
 
   // ------- render -------
   if (loadError) {
@@ -432,6 +444,31 @@ export default function ActivityPicker({
       {step === "root" && (
         <>
           <SearchBar value={freeText} onChange={setFreeText} onClear={() => setFreeText("")} />
+
+          {/* "Continuing on {villa}" chip — one-tap jump to the villa the
+              engineer was working on within the last 4 hours. Skips the
+              contractor + villa drilldown for the very common "just
+              switched activity, still on the same villa" case. Only
+              renders when the server signals a fresh recent villa AND
+              that villa still exists in the picker data. */}
+          {data.recentVillaLabel && data.blocks.some((b) => b.villas.some((v) => v.label === data.recentVillaLabel)) && (
+            <button
+              type="button"
+              onClick={() => jumpToVillaByLabel(data.recentVillaLabel!)}
+              className="w-full rounded-md bg-ink text-cream px-4 py-3 text-left flex items-center gap-2 active:scale-[0.99]"
+            >
+              <Clock className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1 min-w-0">
+                <span className="block text-[14px] font-semibold leading-tight">
+                  Continuing on {data.recentVillaLabel}
+                </span>
+                <span className="block text-[11px] text-stone-300 mt-0.5">
+                  You logged progress here a little while ago
+                </span>
+              </span>
+              <ChevronRight className="w-4 h-4 flex-shrink-0" />
+            </button>
+          )}
 
           <button
             type="button"
