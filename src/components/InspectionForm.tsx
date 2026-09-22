@@ -28,11 +28,36 @@ type ChecklistItem = {
   passed: boolean | null;
   notApplicable: boolean;
   notes: string;
-  // Per-row photo (Colab parity). The file lives in state while the form
-  // is open; on submit we upload it and thread the returned URL into the
-  // POST payload. Kept separately from the whole-checklist evidence
-  // gallery below.
+  // Per-row photo (Colab parity). Two orthogonal slots:
+  //   photo   — a new file the filler just captured, uploaded on save
+  //   photoUrl — an already-saved URL carried through from a draft
+  // On save, a new `photo` uploads and its URL wins over the existing
+  // `photoUrl`. When `photo` is null, `photoUrl` is preserved verbatim.
+  // Both null means the row has no picture at all.
   photo: File | null;
+  photoUrl: string | null;
+};
+
+/**
+ * Snapshot of a draft, passed in when resuming an existing DRAFT.
+ * Kept in the SAME shape as what the form serializes on save so the
+ * roundtrip is transparent: reader-facing state names align 1:1.
+ */
+export type EditDraftInput = {
+  id: string;
+  expectedUpdatedAt: string;
+  title: string;
+  wbsNodeId: string | null;
+  submitRemark: string | null;
+  assignedReviewerIds: string[];
+  items: Array<{
+    label: string;
+    passed: boolean | null;
+    notApplicable: boolean;
+    notes: string | null;
+    photoUrl: string | null;
+  }>;
+  photoUrls: string[];
 };
 
 const DEFAULT_ITEMS = [
@@ -84,6 +109,7 @@ async function compressImage(file: File): Promise<File> {
 
 export default function InspectionForm({
   projectId,
+  editDraft,
 }: {
   projectId: string;
   // `redirectTo` was accepted in an earlier iteration but never wired up.
@@ -91,27 +117,49 @@ export default function InspectionForm({
   // there's nothing to redirect to. Kept out of the destructure so the
   // linter stays clean; callers passing it are ignored.
   redirectTo?: string;
+  // When present, the form is in edit mode: state pre-fills from this
+  // snapshot, the Save button PUTs to the draft endpoint, and Send For
+  // Review promotes the DRAFT to IN_REVIEW instead of creating a new
+  // one. Absent → the standard "new WIR" flow (POST creates fresh).
+  editDraft?: EditDraftInput;
 }) {
   const router = useRouter();
   const toast = useToast();
+  const isEditingDraft = !!editDraft;
   const [activities, setActivities] = useState<Activity[] | null>(null);
-  const [activityId, setActivityId] = useState("");
+  const [activityId, setActivityId] = useState(editDraft?.wbsNodeId ?? "");
   const [activitySearch, setActivitySearch] = useState("");
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(editDraft?.title ?? "");
   const [items, setItems] = useState<ChecklistItem[]>(
-    DEFAULT_ITEMS.map((label) => ({ label, passed: null, notApplicable: false, notes: "", photo: null })),
+    editDraft
+      ? editDraft.items.map((i) => ({
+          label: i.label,
+          passed: i.passed,
+          notApplicable: i.notApplicable,
+          notes: i.notes ?? "",
+          photo: null,
+          photoUrl: i.photoUrl,
+        }))
+      : DEFAULT_ITEMS.map((label) => ({ label, passed: null, notApplicable: false, notes: "", photo: null, photoUrl: null })),
   );
   const [photos, setPhotos] = useState<File[]>([]);
+  // Whole-checklist photos already saved on this draft. Rendered as a
+  // read-only strip above the PhotoPicker so the filler can see what's
+  // there; new photos added via the picker append on save. Delete-a-
+  // saved-photo is a follow-up.
+  const [existingWholePhotos] = useState<string[]>(editDraft?.photoUrls ?? []);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [templateId, setTemplateId] = useState("");
   const [reviewers, setReviewers] = useState<Reviewer[]>([]);
-  const [selectedReviewerIds, setSelectedReviewerIds] = useState<Set<string>>(new Set());
+  const [selectedReviewerIds, setSelectedReviewerIds] = useState<Set<string>>(
+    new Set(editDraft?.assignedReviewerIds ?? []),
+  );
   // Send-For-Review popup — Colab's step 7 flow. Opens a bottom sheet with
   // a remark textarea before the actual POST.
   const [sendPopupOpen, setSendPopupOpen] = useState(false);
-  const [submitRemark, setSubmitRemark] = useState("");
+  const [submitRemark, setSubmitRemark] = useState(editDraft?.submitRemark ?? "");
   // Reschedule popup — Colab's third button. Opens a date picker + note.
   const [reschedPopupOpen, setReschedPopupOpen] = useState(false);
   const [reschedDate, setReschedDate] = useState(() => {
@@ -188,7 +236,7 @@ export default function InspectionForm({
       tpl.items
         .slice()
         .sort((a, b) => a.seq - b.seq)
-        .map((it) => ({ label: it.description, passed: null, notApplicable: false, notes: "", photo: null })),
+        .map((it) => ({ label: it.description, passed: null, notApplicable: false, notes: "", photo: null, photoUrl: null })),
     );
   }
 
@@ -207,7 +255,7 @@ export default function InspectionForm({
     setItems((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
   function addItem() {
-    setItems((rows) => [...rows, { label: "", passed: null, notApplicable: false, notes: "", photo: null }]);
+    setItems((rows) => [...rows, { label: "", passed: null, notApplicable: false, notes: "", photo: null, photoUrl: null }]);
   }
   function removeItem(i: number) {
     setItems((rows) => rows.filter((_, idx) => idx !== i));
@@ -321,27 +369,45 @@ export default function InspectionForm({
       uploadWholePhotos(),
     ]);
 
-    const payload = {
-      idempotencyKey: crypto.randomUUID(),
-      projectId,
+    // Shared row-payload shape — same on POST (new WIR) and PUT (draft
+    // edit → review). photoUrl falls back to the row's existing photoUrl
+    // when no new file was uploaded this session, so resume-editing a
+    // draft doesn't drop the photos the filler already captured.
+    const items = v.usable.map((it, idx) => ({
+      label: it.label,
+      passed: it.passed,
+      notApplicable: it.notApplicable,
+      notes: it.notes,
+      photoUrl: rowPhotos.urls[idx] ?? it.photoUrl ?? null,
+    }));
+
+    // Edit mode → PUT the draft with mode=review, which server-side
+    // promotes DRAFT → IN_REVIEW and fires the push. Fresh WIR → POST
+    // to /api/inspections as before.
+    const endpoint = isEditingDraft ? `/api/inspections/${editDraft!.id}/draft` : "/api/inspections";
+    const method = isEditingDraft ? "PUT" : "POST";
+    const payload: Record<string, unknown> = {
       wbsNodeId: activityId || undefined,
       title: title.trim(),
-      items: v.usable.map((it, idx) => ({
-        label: it.label,
-        passed: it.passed,
-        notApplicable: it.notApplicable,
-        notes: it.notes,
-        photoUrl: rowPhotos.urls[idx] ?? null,
-      })),
+      items,
+      // On edit-mode-and-review, only newly uploaded whole-photos ship
+      // in the payload — existing ones stay on the row untouched.
       photoUrls: wholePhotos.urls,
       assignedReviewerIds: Array.from(selectedReviewerIds),
       submitRemark: remark.trim() || undefined,
     };
+    if (isEditingDraft) {
+      payload.mode = "review";
+      payload.expectedUpdatedAt = editDraft!.expectedUpdatedAt;
+    } else {
+      payload.idempotencyKey = crypto.randomUUID();
+      payload.projectId = projectId;
+    }
 
     let queued = false;
     try {
-      const res = await fetch("/api/inspections", {
-        method: "POST",
+      const res = await fetch(endpoint, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -352,20 +418,35 @@ export default function InspectionForm({
         setPending(false);
         setError(data?.error ?? `Save failed (${res.status})`);
         return;
-      } else {
+      } else if (!isEditingDraft) {
+        // Only queue for fresh WIRs — a draft edit is per-user, per-
+        // draft, and doesn't idempotent-replay cleanly through the
+        // offline queue. If the PUT fails on a real 5xx, the filler
+        // sees the error and retries themselves.
         const { enqueue } = await import("@/lib/offlineQueue");
-        await enqueue({ endpoint: "/api/inspections", method: "POST", body: payload, label: `Inspection: ${title.trim()}` });
+        await enqueue({ endpoint, method, body: payload, label: `Inspection: ${title.trim()}` });
         queued = true;
+      } else {
+        const data = await res.json().catch(() => null);
+        setPending(false);
+        setError(data?.error ?? `Server error (${res.status}) — please try again.`);
+        return;
       }
     } catch {
-      const { enqueue } = await import("@/lib/offlineQueue");
-      await enqueue({ endpoint: "/api/inspections", method: "POST", body: payload, label: `Inspection: ${title.trim()}` });
-      queued = true;
+      if (!isEditingDraft) {
+        const { enqueue } = await import("@/lib/offlineQueue");
+        await enqueue({ endpoint, method, body: payload, label: `Inspection: ${title.trim()}` });
+        queued = true;
+      } else {
+        setPending(false);
+        setError("Network offline — please try again when connected.");
+        return;
+      }
     }
     setPending(false);
 
     if (queued) toast.info("Saved on this device. It will sync when you're back online.");
-    else toast.success("Inspection sent for review.");
+    else toast.success(isEditingDraft ? "Draft sent for review." : "Inspection sent for review.");
     if (rowPhotos.warning) toast.warning(rowPhotos.warning);
     if (wholePhotos.warning) toast.warning(wholePhotos.warning);
 
@@ -393,37 +474,43 @@ export default function InspectionForm({
       uploadWholePhotos(),
     ]);
 
-    const payload = {
-      idempotencyKey: crypto.randomUUID(),
-      projectId,
+    // Same shared row shape as submitForReview — see the comment there.
+    const items = v.usable.map((it, idx) => ({
+      label: it.label,
+      passed: it.passed,
+      notApplicable: it.notApplicable,
+      notes: it.notes,
+      photoUrl: rowPhotos.urls[idx] ?? it.photoUrl ?? null,
+    }));
+
+    // Edit mode → PUT with mode=draft. Fresh WIR → POST with mode=draft.
+    // Reviewers + submitRemark are deliberately included even though
+    // the API skips the push for drafts — they belong to the WIR the
+    // draft will BECOME on Send For Review, so preserving them through
+    // the resume-edit round trip means the filler doesn't have to
+    // re-pick the same reviewers when they come back.
+    const endpoint = isEditingDraft ? `/api/inspections/${editDraft!.id}/draft` : "/api/inspections";
+    const method = isEditingDraft ? "PUT" : "POST";
+    const payload: Record<string, unknown> = {
       wbsNodeId: activityId || undefined,
       title: title.trim(),
-      // Row payload mirrors the review shape — the server accepts a
-      // draft row with passed=null / notApplicable=false as "not
-      // answered yet" and stores that state for the eventual
-      // resume-edit (a follow-up task).
-      items: v.usable.map((it, idx) => ({
-        label: it.label,
-        passed: it.passed,
-        notApplicable: it.notApplicable,
-        notes: it.notes,
-        photoUrl: rowPhotos.urls[idx] ?? null,
-      })),
+      items,
       photoUrls: wholePhotos.urls,
-      // Reviewers + submitRemark are deliberately included even though
-      // the API skips the push for drafts — they belong to the WIR the
-      // draft will BECOME on Send For Review, so preserving them
-      // through the resume-edit round trip means the filler doesn't
-      // have to re-pick the same reviewers when they come back.
       assignedReviewerIds: Array.from(selectedReviewerIds),
       submitRemark: submitRemark.trim() || undefined,
       mode: "draft" as const,
     };
+    if (isEditingDraft) {
+      payload.expectedUpdatedAt = editDraft!.expectedUpdatedAt;
+    } else {
+      payload.idempotencyKey = crypto.randomUUID();
+      payload.projectId = projectId;
+    }
 
     let queued = false;
     try {
-      const res = await fetch("/api/inspections", {
-        method: "POST",
+      const res = await fetch(endpoint, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -434,20 +521,31 @@ export default function InspectionForm({
         setPending(false);
         setError(data?.error ?? `Draft save failed (${res.status})`);
         return;
-      } else {
+      } else if (!isEditingDraft) {
         const { enqueue } = await import("@/lib/offlineQueue");
-        await enqueue({ endpoint: "/api/inspections", method: "POST", body: payload, label: `Draft: ${title.trim()}` });
+        await enqueue({ endpoint, method, body: payload, label: `Draft: ${title.trim()}` });
         queued = true;
+      } else {
+        const data = await res.json().catch(() => null);
+        setPending(false);
+        setError(data?.error ?? `Server error (${res.status}) — please try again.`);
+        return;
       }
     } catch {
-      const { enqueue } = await import("@/lib/offlineQueue");
-      await enqueue({ endpoint: "/api/inspections", method: "POST", body: payload, label: `Draft: ${title.trim()}` });
-      queued = true;
+      if (!isEditingDraft) {
+        const { enqueue } = await import("@/lib/offlineQueue");
+        await enqueue({ endpoint, method, body: payload, label: `Draft: ${title.trim()}` });
+        queued = true;
+      } else {
+        setPending(false);
+        setError("Network offline — please try again when connected.");
+        return;
+      }
     }
     setPending(false);
 
     if (queued) toast.info("Draft saved on this device. It will sync when you're back online.");
-    else toast.success("Draft saved.");
+    else toast.success(isEditingDraft ? "Draft updated." : "Draft saved.");
     if (rowPhotos.warning) toast.warning(rowPhotos.warning);
     if (wholePhotos.warning) toast.warning(wholePhotos.warning);
 
@@ -488,7 +586,7 @@ export default function InspectionForm({
         passed: it.passed,
         notApplicable: it.notApplicable,
         notes: it.notes,
-        photoUrl: rowPhotos.urls[idx] ?? null,
+        photoUrl: rowPhotos.urls[idx] ?? it.photoUrl ?? null,
       })),
       photoUrls: wholePhotos.urls,
       assignedReviewerIds: Array.from(selectedReviewerIds),
@@ -557,7 +655,7 @@ export default function InspectionForm({
     setActivityId("");
     setActivitySearch("");
     setTitle("");
-    setItems(DEFAULT_ITEMS.map((label) => ({ label, passed: null, notApplicable: false, notes: "", photo: null })));
+    setItems(DEFAULT_ITEMS.map((label) => ({ label, passed: null, notApplicable: false, notes: "", photo: null, photoUrl: null })));
     setPhotos([]);
     setTemplateId("");
     setSelectedReviewerIds(new Set());
@@ -568,19 +666,23 @@ export default function InspectionForm({
   }
 
   if (saved) {
-    // One SaveSuccessCard, three outcomes — pick the copy the filler
-    // needs based on which of the three finish paths they took.
+    // Success-card copy branches on the finish path AND on edit-mode:
+    // an edit-mode "draft" is an UPDATE (existing draft), an edit-mode
+    // "review" is a PROMOTE (draft became a WIR). Fresh-form outcomes
+    // stay as they were.
     const cardTitle =
       saved.outcome === "reschedule"
         ? "Inspection rescheduled"
         : saved.outcome === "draft"
-          ? "Draft saved"
-          : "Inspection saved";
+          ? (isEditingDraft ? "Draft updated" : "Draft saved")
+          : (isEditingDraft ? "Draft sent for review" : "Inspection saved");
     const cardDetail =
       saved.outcome === "reschedule"
         ? `${saved.title} — parked for a later day.`
         : saved.outcome === "draft"
-          ? `${saved.title} — saved as a draft. Only you can see it in your Drafts tab.`
+          ? (isEditingDraft
+              ? `${saved.title} — still in your Drafts tab. Open it again anytime.`
+              : `${saved.title} — saved as a draft. Only you can see it in your Drafts tab.`)
           : `${saved.title} — sent for planner review.`;
     return (
       <SaveSuccessCard
@@ -602,10 +704,12 @@ export default function InspectionForm({
           Work inspection record
         </p>
         <h1 className="font-serif text-[28px] leading-tight text-ink tracking-tight mt-1">
-          Fill a checklist
+          {isEditingDraft ? "Continue your draft" : "Fill a checklist"}
         </h1>
         <p className="text-[13px] text-ink-3 mt-1.5">
-          Pick a template, mark every row, then Save Draft, Reschedule, or Send For Review.
+          {isEditingDraft
+            ? "Your previous answers are pre-filled. Save Draft to keep working, or Send For Review to finish."
+            : "Pick a template, mark every row, then Save Draft, Reschedule, or Send For Review."}
         </p>
       </header>
 
@@ -772,8 +876,9 @@ export default function InspectionForm({
                   />
                   <ItemPhotoButton
                     photo={it.photo}
+                    existingUrl={it.photoUrl}
                     onPick={(f) => updateItem(i, { photo: f })}
-                    onClear={() => updateItem(i, { photo: null })}
+                    onClear={() => updateItem(i, { photo: null, photoUrl: null })}
                   />
                 </div>
               </li>
@@ -781,6 +886,36 @@ export default function InspectionForm({
           })}
         </ul>
       </div>
+
+      {/* Whole-checklist photos already saved on this draft. Read-only
+          strip so the filler can see what's already there; new photos
+          added via the PhotoPicker below append on save. Delete-a-
+          saved-photo is a follow-up (needs an InspectionPhoto DELETE
+          endpoint). */}
+      {existingWholePhotos.length > 0 && (
+        <div className="block">
+          <span className="text-sm font-medium text-stone-700">
+            Already saved <span className="text-stone-400 font-normal">({existingWholePhotos.length})</span>
+          </span>
+          <div className="grid grid-cols-3 gap-2 mt-2">
+            {existingWholePhotos.map((url) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="relative aspect-square rounded-lg border border-stone-200 overflow-hidden bg-stone-50 block"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+              </a>
+            ))}
+          </div>
+          <p className="text-[11px] text-stone-500 mt-1">
+            Tap to open. Any new photos below will be added alongside these on save.
+          </p>
+        </div>
+      )}
 
       <PhotoPicker photos={photos} setPhotos={setPhotos} max={8} label="Extra photos (context / evidence)" />
 
@@ -836,15 +971,11 @@ export default function InspectionForm({
 
       {error && <p className="text-[13px] text-ferrous-600">{error}</p>}
 
-      {/* Action row — Colab step 7: three buttons.
-            Save Draft (weakest visual weight — light chip) is a pause
-              action, so it doesn't compete with the finish paths;
-            Reschedule (outlined) is a secondary finish path;
-            Send For Review (filled ink) is the primary finish.
-          Save Draft only needs a title + one non-empty row, so it stays
-          enabled while Send For Review is still blocked by untouched
-          rows. The visual hierarchy tells the filler which one is the
-          "shipped" state at a glance. */}
+      {/* Action row. Fresh WIRs get the full three-button hierarchy
+          (Save Draft / Reschedule / Send For Review). Resume-editing a
+          draft hides Reschedule — a rescheduled WIR is a distinct
+          concept from a saved draft, and "park my in-progress
+          checklist for later" is what Save Draft already means. */}
       <div className="space-y-2">
         <button
           type="button"
@@ -852,29 +983,31 @@ export default function InspectionForm({
           onClick={saveDraft}
           className="w-full rounded-full bg-sandstone-100 text-ink py-3 text-[14px] font-semibold disabled:opacity-60"
         >
-          {pending ? "Saving…" : "Save Draft"}
+          {pending ? "Saving…" : isEditingDraft ? "Save Draft (keep editing)" : "Save Draft"}
         </button>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => {
-              const v = validate();
-              if (!v.ok) {
-                setError(v.error);
-                return;
-              }
-              setError(null);
-              setReschedPopupOpen(true);
-            }}
-            className="rounded-full border border-ink text-ink py-4 text-[15px] font-semibold disabled:opacity-60"
-          >
-            Reschedule
-          </button>
+        <div className={isEditingDraft ? "" : "grid grid-cols-2 gap-3"}>
+          {!isEditingDraft && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                const v = validate();
+                if (!v.ok) {
+                  setError(v.error);
+                  return;
+                }
+                setError(null);
+                setReschedPopupOpen(true);
+              }}
+              className="rounded-full border border-ink text-ink py-4 text-[15px] font-semibold disabled:opacity-60"
+            >
+              Reschedule
+            </button>
+          )}
           <button
             type="submit"
             disabled={pending || untouchedCount > 0}
-            className="rounded-full bg-ink text-cream py-4 text-[15px] font-semibold shadow-card disabled:opacity-60 active:scale-[0.99]"
+            className="w-full rounded-full bg-ink text-cream py-4 text-[15px] font-semibold shadow-card disabled:opacity-60 active:scale-[0.99]"
           >
             {pending ? "Sending…" : "Send For Review"}
           </button>
@@ -969,10 +1102,15 @@ export default function InspectionForm({
  */
 function ItemPhotoButton({
   photo,
+  existingUrl,
   onPick,
   onClear,
 }: {
   photo: File | null;
+  // A saved URL carried through from a draft. When a new `photo` isn't
+  // picked, this is what gets rendered — the row shows the shot the
+  // filler captured last time. New capture overrides on save.
+  existingUrl?: string | null;
   onPick: (file: File) => void;
   onClear: () => void;
 }) {
@@ -983,11 +1121,15 @@ function ItemPhotoButton({
     };
   }, [previewUrl]);
 
-  if (photo && previewUrl) {
+  // Priority: newly-captured file > existing saved URL > empty
+  // (camera button). New capture wins so a retake replaces the old
+  // one visibly.
+  const rendered = photo && previewUrl ? previewUrl : (existingUrl || null);
+  if (rendered) {
     return (
       <div className="relative w-14 h-14 flex-none rounded-lg overflow-hidden border border-stone-300">
-        {/* eslint-disable-next-line @next/next/no-img-element -- blob URL */}
-        <img src={previewUrl} alt="Checkpoint" className="w-full h-full object-cover" />
+        {/* eslint-disable-next-line @next/next/no-img-element -- blob URL or saved URL */}
+        <img src={rendered} alt="Checkpoint" className="w-full h-full object-cover" />
         <button
           type="button"
           onClick={onClear}

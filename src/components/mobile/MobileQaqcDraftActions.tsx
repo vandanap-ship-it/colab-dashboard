@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Trash2, Loader2 } from "lucide-react";
+import { Trash2, Loader2, Pencil } from "lucide-react";
 
 /**
  * Draft-only bottom bar on the WIR detail page. Currently one action:
@@ -65,15 +66,24 @@ export default function MobileQaqcDraftActions({
         </div>
       )}
       {!confirmOpen ? (
-        <button
-          type="button"
-          onClick={() => setConfirmOpen(true)}
-          disabled={isPending || deleting}
-          className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-stone-800 text-sm font-semibold py-3 disabled:opacity-60"
-        >
-          <Trash2 className="w-4 h-4" />
-          Delete draft
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setConfirmOpen(true)}
+            disabled={isPending || deleting}
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-stone-800 text-sm font-semibold py-3 disabled:opacity-60"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete draft
+          </button>
+          <Link
+            href={`/mobile/${projectId}/inspection/edit/${inspectionId}`}
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-ink text-cream text-sm font-semibold py-3"
+          >
+            <Pencil className="w-4 h-4" />
+            Continue editing
+          </Link>
+        </div>
       ) : (
         <div className="rounded-xl border border-stone-200 bg-white p-3 space-y-2">
           <p className="text-sm text-stone-700 leading-snug">
