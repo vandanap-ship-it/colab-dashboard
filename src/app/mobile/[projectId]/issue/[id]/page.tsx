@@ -3,6 +3,7 @@ import { User as UserIcon, Camera, Calendar } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, canAccessScopedRow, MODULES } from "@/lib/modules";
+import { issueAgeFor } from "@/lib/queueAge";
 import { canReview } from "@/lib/roles";
 import MobileIssueActions from "@/components/mobile/MobileIssueActions";
 
@@ -71,6 +72,12 @@ export default async function MobileIssueDetailPage({
       >
         <div className="flex items-center gap-2 flex-wrap text-[11px] text-ink-3 uppercase tracking-[0.14em] font-semibold">
           <StatusPill status={issue.status} />
+          {/* Same aging cue the list card wears — silent on fresh
+              snags, sandstone at 2d, ferrous at 4d. Applied to
+              OPEN + IN_REINSPECTION only. */}
+          {(issue.status === "OPEN" || issue.status === "IN_REINSPECTION") && (
+            <DetailIssueAgingChip createdAt={issue.createdAt} />
+          )}
           {issue.severity && <SeverityPill severity={issue.severity} />}
           {issue.module && (
             <span className="rounded-full bg-sandstone-100 text-ink-2 px-2 py-0.5">
@@ -189,6 +196,29 @@ function SeverityPill({ severity }: { severity: string }) {
   return (
     <span className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold shrink-0 ${cfg.bg} ${cfg.fg}`}>
       {cfg.label}
+    </span>
+  );
+}
+
+/**
+ * Detail-hero variant of the list card's aging chip. Same math, same
+ * tier→color mapping, styled to sit inline with the uppercase-tracked
+ * StatusPill row. Kept local so hero density can tweak without
+ * touching the list.
+ */
+function DetailIssueAgingChip({ createdAt }: { createdAt: Date }) {
+  const age = issueAgeFor(createdAt);
+  if (age.tier === "fresh") return null;
+  const cls =
+    age.tier === "stale"
+      ? "bg-ferrous-50 ring-ferrous-200 text-ferrous-700"
+      : "bg-sandstone-100 ring-sandstone-200 text-ink-2";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold tabular-nums normal-case tracking-normal ${cls}`}
+      title={`Raised ${fmtDate(createdAt)} · ${age.days} day${age.days === 1 ? "" : "s"} ago`}
+    >
+      {age.label}
     </span>
   );
 }

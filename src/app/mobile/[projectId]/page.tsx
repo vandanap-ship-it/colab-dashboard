@@ -29,7 +29,7 @@ import {
 } from "@/lib/modules";
 import { getDashboardManpowerStrip } from "@/lib/manpowerServer";
 import { istDayStart } from "@/lib/istDay";
-import { WIR_TIERS, PERMIT_TIERS, HINDRANCE_TIERS, CONCERN_TIERS } from "@/lib/queueAge";
+import { WIR_TIERS, PERMIT_TIERS, HINDRANCE_TIERS, CONCERN_TIERS, ISSUE_TIERS } from "@/lib/queueAge";
 
 // Amanvana-native mobile home. Editorial serif hero + warm sandstone cards
 // + ferrous accent — reads like the villa brochure a site engineer already
@@ -93,6 +93,7 @@ export default async function MobileProjectHome({
   const stalePermitCutoff = new Date(nowMs - PERMIT_TIERS.staleAt * 86_400_000);
   const staleHindranceCutoff = new Date(nowMs - HINDRANCE_TIERS.staleAt * 86_400_000);
   const staleConcernCutoff = new Date(nowMs - CONCERN_TIERS.staleAt * 86_400_000);
+  const staleIssueCutoff = new Date(nowMs - ISSUE_TIERS.staleAt * 86_400_000);
 
   const canSeeHindrance = canAccessModule(userModules, MODULES.HINDRANCE);
   const canSeePermit = canAccessModule(userModules, MODULES.PERMIT);
@@ -107,6 +108,7 @@ export default async function MobileProjectHome({
     stalePermitCount,
     staleHindranceCount,
     staleConcernCount,
+    staleIssueCount,
     myDraftCount,
   ] = await Promise.all([
     session?.user
@@ -145,6 +147,19 @@ export default async function MobileProjectHome({
           where: { projectId, deletedAt: null, status: "PENDING", createdAt: { lt: staleConcernCutoff } },
         })
       : Promise.resolve(0),
+    // Issue = snag/defect. OPEN + IN_REINSPECTION both count as "live";
+    // resolved snags don't. Gated on QA/QC or Safety module access via
+    // canSeeQualityStrip, matching the wirPendingCount / issuesOpenCount
+    // gates above.
+    canSeeQualityStrip
+      ? prisma.issue.count({
+          where: {
+            ...qualityBaseWhere,
+            status: { in: ["OPEN", "IN_REINSPECTION"] },
+            createdAt: { lt: staleIssueCutoff },
+          },
+        })
+      : Promise.resolve(0),
     // Own drafts count — only meaningful when the caller can raise WIRs.
     // Scoped strictly to filledById so nothing leaks between authors.
     canSeeQualityStrip && session?.user
@@ -155,7 +170,7 @@ export default async function MobileProjectHome({
   ]);
 
   const totalWaitingOnYou =
-    staleWirCount + stalePermitCount + staleHindranceCount + staleConcernCount + myDraftCount;
+    staleWirCount + stalePermitCount + staleHindranceCount + staleConcernCount + staleIssueCount + myDraftCount;
 
   // The full date in a real editorial format — Fraunces will read it well
   // even at eyebrow scale. Rendered on the server so the FCP has the real
@@ -354,6 +369,7 @@ export default async function MobileProjectHome({
             stalePermitCount={stalePermitCount}
             staleHindranceCount={staleHindranceCount}
             staleConcernCount={staleConcernCount}
+            staleIssueCount={staleIssueCount}
             myDraftCount={myDraftCount}
           />
         )}
@@ -515,6 +531,7 @@ function WaitingOnYouStrip({
   stalePermitCount,
   staleHindranceCount,
   staleConcernCount,
+  staleIssueCount,
   myDraftCount,
 }: {
   projectId: string;
@@ -523,6 +540,7 @@ function WaitingOnYouStrip({
   stalePermitCount: number;
   staleHindranceCount: number;
   staleConcernCount: number;
+  staleIssueCount: number;
   myDraftCount: number;
 }) {
   const wirHref = `/mobile/${projectId}/qaqc?tab=pending${moduleFilter ? `&module=${moduleFilter}` : ""}`;
@@ -543,6 +561,7 @@ function WaitingOnYouStrip({
     { key: "wir", href: wirHref, count: staleWirCount, label: staleWirCount === 1 ? "stale WIR" : "stale WIRs", Icon: ClipboardList, tone: "stale" as const },
     { key: "permit", href: `/mobile/${projectId}/permit`, count: stalePermitCount, label: stalePermitCount === 1 ? "stale permit" : "stale permits", Icon: ShieldCheck, tone: "stale" as const },
     { key: "hindrance", href: `/mobile/${projectId}/hindrance?tab=open`, count: staleHindranceCount, label: staleHindranceCount === 1 ? "stale blocker" : "stale blockers", Icon: AlertTriangle, tone: "stale" as const },
+    { key: "issue", href: `/mobile/${projectId}/issue?tab=open`, count: staleIssueCount, label: staleIssueCount === 1 ? "stale snag" : "stale snags", Icon: Bug, tone: "stale" as const },
     { key: "concern", href: `/mobile/${projectId}/concern?tab=pending`, count: staleConcernCount, label: staleConcernCount === 1 ? "stale concern" : "stale concerns", Icon: MessageSquare, tone: "stale" as const },
     { key: "drafts", href: draftsHref, count: myDraftCount, label: myDraftCount === 1 ? "draft to finish" : "drafts to finish", Icon: FileEdit, tone: "draft" as const },
   ].filter((p) => p.count > 0);

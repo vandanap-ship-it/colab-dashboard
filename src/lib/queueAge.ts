@@ -122,3 +122,19 @@ export const CONCERN_TIERS: AgeTiers = { agingAt: 2, staleAt: 5 };
 export function concernAgeFor(createdAt: Date, now: Date = new Date()): QueueAge {
   return computeAge(createdAt, CONCERN_TIERS, now);
 }
+
+/**
+ * Issue (snag/defect) SLA · 2d aging, 4d stale.
+ *
+ * Issues are the formal snag record — someone's called out a defect
+ * that needs fixing. Sits between a concern (informal heads-up, 2d/5d)
+ * and a hindrance (active blocker, 2d/3d) — an unfixed defect over
+ * four days without an assignee reads as a supervision gap, but it
+ * isn't stopping work. Applied to OPEN and IN_REINSPECTION rows
+ * (both are "the issue is still live"); silent on RESOLVED.
+ */
+export const ISSUE_TIERS: AgeTiers = { agingAt: 2, staleAt: 4 };
+
+export function issueAgeFor(createdAt: Date, now: Date = new Date()): QueueAge {
+  return computeAge(createdAt, ISSUE_TIERS, now);
+}
