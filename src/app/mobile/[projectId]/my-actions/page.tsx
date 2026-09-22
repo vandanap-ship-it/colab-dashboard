@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
 import { formatRfiNumber } from "@/lib/rfi";
+import { concernAgeFor, issueAgeFor, permitAgeFor, rfiAgeFor, wirAgeFor, type QueueAge } from "@/lib/queueAge";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +72,7 @@ export default async function MobileMyActionsPage({
         subject: true,
         priority: true,
         dueDate: true,
+        createdAt: true,
         raisedBy: { select: { name: true } },
       },
     }),
@@ -112,6 +114,7 @@ export default async function MobileMyActionsPage({
         startTime: true,
         endTime: true,
         location: true,
+        createdAt: true,
         requester: { select: { name: true } },
       },
     }),
@@ -172,6 +175,7 @@ export default async function MobileMyActionsPage({
                     primary={s.description}
                     secondary={secondaryLine(s.createdBy?.name, s.wbsNode?.name, fmtDate(s.createdAt))}
                     right={s.severity ? severityLabel(s.severity) : undefined}
+                    age={issueAgeFor(s.createdAt)}
                   />
                 ))}
               </ActionSection>
@@ -187,6 +191,7 @@ export default async function MobileMyActionsPage({
                     primary={r.subject}
                     secondary={secondaryLine(r.raisedBy?.name, r.dueDate ? `due ${fmtDate(r.dueDate)}` : undefined)}
                     right={r.priority !== "MEDIUM" ? priorityLabel(r.priority) : undefined}
+                    age={rfiAgeFor(r.createdAt)}
                   />
                 ))}
               </ActionSection>
@@ -200,6 +205,7 @@ export default async function MobileMyActionsPage({
                     href={`/mobile/${projectId}/concern/${c.id}?tab=${c.status === "PENDING" ? "pending" : "task_assigned"}`}
                     primary={c.description}
                     secondary={secondaryLine(c.raisedBy?.name, fmtDate(c.createdAt))}
+                    age={concernAgeFor(c.createdAt)}
                   />
                 ))}
               </ActionSection>
@@ -218,6 +224,7 @@ export default async function MobileMyActionsPage({
                       `${fmtDate(p.workDate)} · ${p.startTime}-${p.endTime}`,
                       p.location ?? undefined,
                     )}
+                    age={permitAgeFor(p.createdAt)}
                   />
                 ))}
               </ActionSection>
@@ -232,6 +239,7 @@ export default async function MobileMyActionsPage({
                     label={i.module === "SAFETY" ? "EHS" : "QA/QC"}
                     primary={i.title}
                     secondary={secondaryLine(i.filledBy?.name, fmtDate(i.createdAt))}
+                    age={wirAgeFor(i.createdAt)}
                   />
                 ))}
               </ActionSection>
@@ -280,12 +288,17 @@ function ActionRow({
   primary,
   secondary,
   right,
+  age,
 }: {
   href: string;
   label?: string;
   primary: string;
   secondary?: string;
   right?: string;
+  /** Per-domain age from queueAge helpers — chip only renders when
+   *  the row has crossed its aging cliff. Fresh rows stay silent so
+   *  the queue reads calmly on a well-managed inbox. */
+  age?: QueueAge;
 }) {
   return (
     <li>
@@ -307,11 +320,25 @@ function ActionRow({
               <div className="text-[11.5px] text-ink-3 mt-1">{secondary}</div>
             )}
           </div>
-          {right && (
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-2 shrink-0 mt-0.5">
-              {right}
-            </span>
-          )}
+          <div className="flex flex-col items-end gap-1 shrink-0 mt-0.5">
+            {right && (
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-2">
+                {right}
+              </span>
+            )}
+            {age && age.tier !== "fresh" && (
+              <span
+                className={
+                  "inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold tabular-nums " +
+                  (age.tier === "stale"
+                    ? "bg-ferrous-50 ring-ferrous-200 text-ferrous-700"
+                    : "bg-sandstone-100 ring-sandstone-200 text-ink-2")
+                }
+              >
+                {age.label}
+              </span>
+            )}
+          </div>
         </div>
       </Link>
     </li>
