@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Clock, Loader2, Search, X, Sparkles } from "lucide-react";
 import {
   AMANVANA_VILLA_NUMBER_TO_BLOCK,
@@ -69,6 +69,15 @@ export interface ActivityPickerProps {
   }) => void;
   /** Preselect a specific activity id on mount (e.g. deep-link). */
   initialActivityId?: string;
+  /**
+   * Preseed the drilldown to a specific villa on mount, jumping the user
+   * straight to that villa's milestone list. Used by "Log another on
+   * {villa}" on the Progress save card — the second log on the same villa
+   * skips the block → villa drill. Villa is matched by label so callers
+   * can pass along whatever label they had (search result, recent pick,
+   * previous save) without carrying the villa id.
+   */
+  initialVillaLabel?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +113,12 @@ function contractorOfVilla(villaLabel: string): "abraham" | "elegant" {
   return nums.some((n) => ABRAHAM_VILLA_NUMBERS.has(n)) ? "abraham" : "elegant";
 }
 
-export default function ActivityPicker({ projectId, onPick, initialActivityId }: ActivityPickerProps) {
+export default function ActivityPicker({
+  projectId,
+  onPick,
+  initialActivityId,
+  initialVillaLabel,
+}: ActivityPickerProps) {
   const [data, setData] = useState<PickerData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("root");
@@ -114,6 +128,10 @@ export default function ActivityPicker({ projectId, onPick, initialActivityId }:
   const [activities, setActivities] = useState<LeafActivity[] | null>(null);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
   const [freeText, setFreeText] = useState("");
+  // Once the initial-villa jump has fired, don't re-jump — the user may
+  // Back out of the preseeded milestone list on purpose, and we don't
+  // want the effect to yank them back in.
+  const initialVillaJumpedRef = useRef(false);
 
   // ------- initial index load -------
   useEffect(() => {
@@ -305,6 +323,35 @@ export default function ActivityPicker({ projectId, onPick, initialActivityId }:
   // yet. For now the deep-link value is accepted but ignored, and the user
   // sees the root drilldown.
   void initialActivityId;
+
+  // Initial-villa preseed. Runs once, after the picker index has loaded and
+  // if the caller asked us to snap to a specific villa. Finds the villa
+  // whose label matches (comparing across all blocks) and jumps straight
+  // to its milestone list. If the label doesn't match anything in the
+  // index — stale villa, project mismatch, typo — we silently fall back
+  // to the root drilldown rather than surfacing an error, because "the
+  // shortcut didn't fire" is safer here than "the picker is broken".
+  useEffect(() => {
+    if (!data || !initialVillaLabel || initialVillaJumpedRef.current) return;
+    for (const b of data.blocks) {
+      for (const v of b.villas) {
+        if (v.label === initialVillaLabel) {
+          // One-shot preseed on data arrival — the cascading render is
+          // expected and desirable (we're moving step="root" to
+          // step="milestone" in one commit). Rule fires on the first
+          // setState in the effect body.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setContractorKey(contractorOfVilla(v.label));
+          setVillaId(v.id);
+          setStep("milestone");
+          initialVillaJumpedRef.current = true;
+          return;
+        }
+      }
+    }
+    // No match — mark as attempted so we don't keep re-running.
+    initialVillaJumpedRef.current = true;
+  }, [data, initialVillaLabel]);
 
   // ------- render -------
   if (loadError) {

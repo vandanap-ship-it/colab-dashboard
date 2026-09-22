@@ -93,6 +93,12 @@ export default function NewProgressForm({
   // instead of redirecting to /mobile/{id}. Site engineers log many entries
   // per shift — booting them home every time forced 2 extra taps per entry.
   const [saved, setSaved] = useState<null | { queued: boolean }>(null);
+  // When the engineer chooses "Log another on {villa}" after a save, we
+  // clear the picked activity BUT keep a hint so the picker can jump the
+  // user straight to that villa's milestone list on the next log. Null
+  // means no hint — the picker starts at root. Only set right before we
+  // hand back to the form; cleared on a full reset or a hard "Add another".
+  const [sameVillaHint, setSameVillaHint] = useState<string | null>(null);
 
   const totalQty = selected?.totalQuantity ?? 0;
   // pctState is authoritative — the slider always shows a 0-100 value.
@@ -287,9 +293,9 @@ export default function NewProgressForm({
    * engineer logging progress typically enters the same villa/activity
    * again a few hours later at a new %, or hops to a nearby activity on
    * the same villa. Forcing them back through contractor → villa →
-   * milestone picker every time was pure friction; the "Change" button on
-   * the activity chip is one tap for the rare case where they need a
-   * different villa.
+   * milestone picker every time was pure friction; the back arrow in the
+   * header is one tap for the rare case where they need a different
+   * villa.
    */
   function resetForm() {
     setDate(today);
@@ -302,22 +308,56 @@ export default function NewProgressForm({
     setNotes("");
     setError(null);
     setSaved(null);
+    setSameVillaHint(null);
+  }
+
+  /**
+   * Reset everything AND drop the picked activity — but stash the villa
+   * label so the ActivityPicker jumps straight to that villa's milestone
+   * list. Used by the "Log another on {villa}" CTA on the save card:
+   * engineers moving between activities on the same villa (say, from
+   * plinth to shuttering) no longer walk the contractor + villa steps
+   * every time.
+   */
+  function resetForNextOnSameVilla() {
+    const villaLabel = selected?.path.villaLabel ?? null;
+    setDate(today);
+    setAchieved(0);
+    setPctState(0);
+    setReasonCode("");
+    setReasonNote("");
+    setLabour([{ category: "Skilled", count: 0 }]);
+    setPhotos([]);
+    setNotes("");
+    setError(null);
+    setSaved(null);
+    setSelected(null);
+    setSameVillaHint(villaLabel);
   }
 
   if (saved) {
     return (
       <SaveSuccessCard
         title="Progress saved"
-        // Tell the engineer exactly what "Add another" will do: keep this
-        // villa/activity so they can just update whatever changed (a fresh
-        // %, more labour, a photo) rather than re-picking from scratch.
+        // Tell the engineer what the two "Add another" paths do: the
+        // context CTA keeps them on the just-saved villa (skips the block
+        // → villa drill on the next log); "Add another" keeps THIS
+        // activity so they can update just what changed.
         detail={
           selected
-            ? `Logged for ${selected.name} · Block ${selected.path.blockCode} · ${selected.path.villaLabel}. Add another stays on this villa — just change what needs updating.`
-            : "Add another stays on this villa — just change what needs updating."
+            ? `Logged for ${selected.name} · Block ${selected.path.blockCode} · ${selected.path.villaLabel}.`
+            : undefined
         }
         projectId={projectId}
         onAddAnother={resetForm}
+        contextAction={
+          selected
+            ? {
+                label: `Log another on ${selected.path.villaLabel}`,
+                onSelect: resetForNextOnSameVilla,
+              }
+            : undefined
+        }
         queued={saved.queued}
       />
     );
@@ -358,9 +398,14 @@ export default function NewProgressForm({
             <ActivityPicker
               projectId={projectId}
               initialActivityId={initialActivityId}
+              initialVillaLabel={sameVillaHint ?? undefined}
               onPick={(a) => {
                 setSelected(a);
                 setPctState(0);
+                // The hint has served its purpose the moment the engineer
+                // picks an activity — clear it so a subsequent hard "Add
+                // another" (or a manual back-out) doesn't re-preseed.
+                setSameVillaHint(null);
               }}
             />
           )}

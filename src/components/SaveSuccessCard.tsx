@@ -28,6 +28,7 @@ export default function SaveSuccessCard({
   detail,
   projectId,
   onAddAnother,
+  contextAction,
   queued = false,
 }: {
   /** Big header line, e.g. "Progress saved", "Permit raised". */
@@ -40,6 +41,13 @@ export default function SaveSuccessCard({
    *  form's state (fields, photos, error, etc.) so the engineer can
    *  immediately submit another entry without navigating anywhere. */
   onAddAnother: () => void;
+  /**
+   * Optional "add another BUT keep some context" CTA rendered above
+   * Add another. Progress uses it for "Log another on Villa 15" so
+   * the second and subsequent logs on the same villa skip the
+   * block/villa drilldown. Callers set the label + reset function.
+   */
+  contextAction?: { label: string; onSelect: () => void };
   /** True when the save was queued locally (offline). Adjusts the
    *  detail line so the engineer knows their entry is on the device
    *  and will sync later — not lost. */
@@ -68,10 +76,23 @@ export default function SaveSuccessCard({
         )}
       </div>
       <div className="grid grid-cols-1 gap-2.5">
+        {contextAction ? (
+          <button
+            type="button"
+            onClick={contextAction.onSelect}
+            className="rounded-xl bg-stone-900 text-white text-base font-medium py-4 active:scale-[0.99] transition-all"
+          >
+            {contextAction.label}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onAddAnother}
-          className="rounded-xl bg-stone-900 text-white text-base font-medium py-4 active:scale-[0.99] transition-all"
+          className={
+            contextAction
+              ? "rounded-xl bg-white border border-stone-200 text-stone-900 text-base font-medium py-4 active:scale-[0.99] transition-all"
+              : "rounded-xl bg-stone-900 text-white text-base font-medium py-4 active:scale-[0.99] transition-all"
+          }
         >
           Add another
         </button>
