@@ -2,18 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, FolderClosed, Inbox, User } from "lucide-react";
+import { Bell, FolderClosed, Home, Inbox, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export default function MobileBottomNav({
   projectId,
   pendingActions = 0,
+  unreadNotifications = 0,
 }: {
   projectId: string;
   /** Total items assigned to the current user that need action — shown as
-   *  a small badge on the "Info" tab so an engineer opening the app sees
+   *  a small badge on the "Inbox" tab so an engineer opening the app sees
    *  work waiting without having to explore. Zero → no badge. */
   pendingActions?: number;
+  /** Unread notification count for the Bell tab. Everything sent via
+   *  sendPushToUser lands in Notification and shows up here until the
+   *  engineer opens the inbox or hits Mark all as read. */
+  unreadNotifications?: number;
 }) {
   const pathname = usePathname();
   const home = `/mobile/${projectId}`;
@@ -21,6 +26,7 @@ export default function MobileBottomNav({
     { href: home, label: "Home", icon: Home },
     { href: `${home}/documents`, label: "Documents", icon: FolderClosed },
     { href: `${home}/my-actions`, label: "Inbox", icon: Inbox, badge: pendingActions },
+    { href: `${home}/notifications`, label: "Alerts", icon: Bell, badge: unreadNotifications },
     { href: `${home}/profile`, label: "Profile", icon: User },
   ];
 
@@ -35,7 +41,7 @@ export default function MobileBottomNav({
 
   return (
     <nav
-      className="border-t border-stone-200 bg-white grid grid-cols-4"
+      className="border-t border-stone-200 bg-white grid grid-cols-5"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       {items.map((it) => {
