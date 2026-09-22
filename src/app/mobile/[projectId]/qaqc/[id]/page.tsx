@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, canAccessScopedRow, MODULES } from "@/lib/modules";
 import { canReview, isAdmin } from "@/lib/roles";
-import { wirAgeFor } from "@/lib/wirAge";
+import { wirAgeFor } from "@/lib/queueAge";
 import MobileQaqcReviewActions from "@/components/mobile/MobileQaqcReviewActions";
 import MobileQaqcReopenAction from "@/components/mobile/MobileQaqcReopenAction";
 import MobileQaqcDraftActions from "@/components/mobile/MobileQaqcDraftActions";

@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { canReview } from "@/lib/roles";
-import { wirAgeFor } from "@/lib/wirAge";
+import { wirAgeFor } from "@/lib/queueAge";
 
 export const dynamic = "force-dynamic";
 

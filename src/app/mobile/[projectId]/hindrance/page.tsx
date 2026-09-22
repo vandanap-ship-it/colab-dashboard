@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { reasonLabel } from "@/lib/hindranceReasons";
+import { hindranceAgeFor } from "@/lib/queueAge";
 
 export const dynamic = "force-dynamic";
 
@@ -115,8 +116,17 @@ export default async function MobileHindranceListPage({
                   href={`/mobile/${projectId}/hindrance/${h.id}?tab=${tab}`}
                   className="rounded-2xl border border-sandstone-100 bg-cream shadow-soft p-4 block active:bg-sandstone-50"
                 >
-                  <div className="text-[14px] text-ink leading-snug line-clamp-3">
-                    {h.description}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-[14px] text-ink leading-snug line-clamp-3 min-w-0 flex-1">
+                      {h.description}
+                    </div>
+                    {/* Aging cue for open blockers. Every day an open
+                        hindrance sits, someone on site is either idle
+                        or reworking around it — so the chip fires at
+                        2d and flips ferrous at 3d, tighter than the
+                        WIR SLA. Skipped for RESOLVED rows where
+                        aging says nothing new. */}
+                    {h.status === "OPEN" && <HindranceAgingChip startDate={h.startDate} />}
                   </div>
                   <div className="text-[12px] text-ink-3 mt-1.5">
                     {h.responsibleContractor?.name ?? "—"}
@@ -216,6 +226,29 @@ function EmptyState({ tab }: { tab: Tab }) {
 
 function fmtDate(d: Date): string {
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/**
+ * Age pill for OPEN hindrances. Anchored on startDate — that's when the
+ * blocker began, which is what "how long has this been holding us up"
+ * measures. Silent for 0-1d (a blocker filed today is being handled
+ * right now); sandstone at 2d; ferrous at 3d, where the SLA sits.
+ */
+function HindranceAgingChip({ startDate }: { startDate: Date }) {
+  const age = hindranceAgeFor(startDate);
+  if (age.tier === "fresh") return null;
+  const cls =
+    age.tier === "stale"
+      ? "bg-ferrous-50 ring-ferrous-200 text-ferrous-700"
+      : "bg-sandstone-100 ring-sandstone-200 text-ink-2";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold shrink-0 tabular-nums ${cls}`}
+      title={`Started ${fmtDate(startDate)} · ${age.days} day${age.days === 1 ? "" : "s"} ago`}
+    >
+      {age.label}
+    </span>
+  );
 }
 function fmtInr(n: number): string {
   if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;

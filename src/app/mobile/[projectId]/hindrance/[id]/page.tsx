@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { canReview } from "@/lib/roles";
 import { reasonLabel } from "@/lib/hindranceReasons";
+import { hindranceAgeFor } from "@/lib/queueAge";
 import MobileHindranceActions from "@/components/mobile/MobileHindranceActions";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +49,14 @@ export default async function MobileHindranceDetailPage({
         className="px-5 pt-5 pb-4 border-b border-sandstone-100"
         style={{ background: "linear-gradient(180deg, var(--color-sandstone-50) 0%, var(--color-ivory) 100%)" }}
       >
-        <StatusPill status={h.status} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <StatusPill status={h.status} />
+          {/* Same aging cue the list card wears — silent on fresh
+              blockers, sandstone at 2d, ferrous at 3d. Skipped for
+              RESOLVED rows: aging says nothing once the blocker's
+              done. */}
+          {h.status === "OPEN" && <DetailHindranceAgingChip startDate={h.startDate} />}
+        </div>
         <h1 className="font-serif text-[20px] leading-snug text-ink tracking-tight mt-2">
           {h.description}
         </h1>
@@ -197,4 +205,27 @@ function fmtInr(n: number): string {
   if (n >= 100000) return `${(n / 100000).toFixed(1)}L`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return Math.round(n).toLocaleString("en-IN");
+}
+
+/**
+ * Detail-hero aging chip. Same math as the list-card variant so a
+ * blocker reads at the same tier on both surfaces; kept as a local
+ * helper (not shared with the list) so hero-density tweaks can happen
+ * without disturbing the list.
+ */
+function DetailHindranceAgingChip({ startDate }: { startDate: Date }) {
+  const age = hindranceAgeFor(startDate);
+  if (age.tier === "fresh") return null;
+  const cls =
+    age.tier === "stale"
+      ? "bg-ferrous-50 ring-ferrous-200 text-ferrous-700"
+      : "bg-sandstone-100 ring-sandstone-200 text-ink-2";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold tabular-nums ${cls}`}
+      title={`Started ${fmtDate(startDate)} · ${age.days} day${age.days === 1 ? "" : "s"} ago`}
+    >
+      {age.label}
+    </span>
+  );
 }
