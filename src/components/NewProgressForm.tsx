@@ -350,6 +350,7 @@ export default function NewProgressForm({
         }
         projectId={projectId}
         onAddAnother={resetForm}
+        addAnotherSublabel="Same activity — bump the % or add a photo"
         contextAction={
           selected
             ? {

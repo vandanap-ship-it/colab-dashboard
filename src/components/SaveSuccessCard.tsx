@@ -28,6 +28,7 @@ export default function SaveSuccessCard({
   detail,
   projectId,
   onAddAnother,
+  addAnotherSublabel,
   contextAction,
   queued = false,
 }: {
@@ -41,6 +42,13 @@ export default function SaveSuccessCard({
    *  form's state (fields, photos, error, etc.) so the engineer can
    *  immediately submit another entry without navigating anywhere. */
   onAddAnother: () => void;
+  /**
+   * Optional secondary line under the "Add another" button label. Pass
+   * this when a `contextAction` is also set — otherwise the two dark
+   * CTAs look interchangeable and the engineer has no way to tell what
+   * each one keeps and what it drops.
+   */
+  addAnotherSublabel?: string;
   /**
    * Optional "add another BUT keep some context" CTA rendered above
    * Add another. Progress uses it for "Log another on Villa 15" so
@@ -96,11 +104,22 @@ export default function SaveSuccessCard({
           onClick={onAddAnother}
           className={
             contextAction
-              ? "rounded-xl bg-white border border-stone-200 text-stone-900 text-base font-medium py-4 active:scale-[0.99] transition-all"
+              ? "rounded-xl bg-white border border-stone-200 text-stone-900 py-3.5 active:scale-[0.99] transition-all"
               : "rounded-xl bg-stone-900 text-white text-base font-medium py-4 active:scale-[0.99] transition-all"
           }
         >
-          Add another
+          <span
+            className={
+              contextAction
+                ? "block text-base font-medium leading-tight"
+                : "block text-base font-medium"
+            }
+          >
+            Add another
+          </span>
+          {addAnotherSublabel && contextAction && (
+            <span className="block text-[12px] text-stone-500 mt-0.5">{addAnotherSublabel}</span>
+          )}
         </button>
         <button
           type="button"
