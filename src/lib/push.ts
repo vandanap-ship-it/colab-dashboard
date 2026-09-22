@@ -47,11 +47,33 @@ export interface PushPayload {
 }
 
 /**
- * Fan out a push payload to every subscription the user has. No-op when
- * VAPID isn't configured (dev env or before Vercel env is set). Silently
- * prunes dead subscriptions (404 / 410).
+ * Fan out a push payload to every subscription the user has, AND write
+ * the same payload to the persistent Notification inbox so the mobile
+ * bell has an accurate unread count + scrollable history even when the
+ * push itself never lands (VAPID unconfigured, phone off, tab closed,
+ * or the browser hostile to service workers). No-op on the browser-push
+ * side when VAPID isn't configured; the inbox insert still fires so
+ * dev / preview envs get a realistic bell to look at. Silently prunes
+ * dead subscriptions (404 / 410).
  */
 export async function sendPushToUser(userId: string, payload: PushPayload): Promise<{ sent: number; pruned: number }> {
+  // Inbox write first — separately try/catch'd so a failed insert never
+  // blocks the browser push (or vice versa). Best-effort by design; the
+  // push itself is the source of truth for "did the user get notified".
+  await prisma.notification
+    .create({
+      data: {
+        userId,
+        title: payload.title,
+        body: payload.body,
+        url: payload.url ?? null,
+        tag: payload.tag ?? null,
+      },
+    })
+    .catch((err) => {
+      console.warn("[push] inbox insert failed", { userId, title: payload.title, msg: (err as Error).message });
+    });
+
   if (!CONFIGURED) {
     if (process.env.NODE_ENV !== "test") {
       console.info("[push] VAPID keys not configured, skipping send", { userId, title: payload.title });

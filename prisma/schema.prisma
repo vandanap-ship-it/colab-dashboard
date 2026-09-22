@@ -65,6 +65,7 @@ model User {
   approvedWorkPermits      WorkPermit[]            @relation("WorkPermitApprover")
   closedWorkPermits        WorkPermit[]            @relation("WorkPermitCloser")
   pushSubscriptions        PushSubscription[]
+  notifications            Notification[]
 }
 
 /// Web Push subscriptions per user. One user may have multiple entries when
@@ -87,6 +88,39 @@ model PushSubscription {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/// Persistent inbox for every push notification we send. sendPushToUser
+/// writes here in the same call that fires the browser push, so the bell
+/// in the mobile bottom nav can show unread counts + a scrollable history
+/// even when the user missed the push (phone off, tab closed, browser
+/// hostile to service workers). One row per (user, event) — the push
+/// payload's `tag` slot is stored so a follow-up can replace an existing
+/// entry (e.g. a nudge push overwrites yesterday's nudge rather than
+/// stacking). Deletion cascades with the user.
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  /// Deep-link URL. Path-only (e.g. /mobile/proj/rfi/123) — no origin.
+  url       String?
+  /// Push-payload tag; carried through so the client can dedupe by it.
+  tag       String?
+  createdAt DateTime  @default(now())
+  /// Timestamp of when the user marked this notification as read; NULL
+  /// means it's still in the unread badge. Read is a first-class event
+  /// (not just a soft delete) so we can show a small "12 read this week"
+  /// footer + drive the unread-only default view.
+  readAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Compound index that carries both list queries: unread rows for the
+  /// badge count (WHERE userId=? AND readAt IS NULL) and the full history
+  /// for the inbox (WHERE userId=? ORDER BY createdAt DESC).
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
 }
 
 model Project {
