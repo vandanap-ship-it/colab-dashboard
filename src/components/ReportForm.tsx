@@ -55,7 +55,14 @@ export default function ReportForm({
   // with clear next-action buttons (Add another / Home). Redirecting straight
   // to /mobile was disorienting — the toast flashed briefly and users
   // couldn't tell if their report actually saved.
+  //
+  // `savedActivityName` snapshots the picked activity's display name at
+  // save time so the "Log another for {name}" CTA reads back the just-
+  // saved activity even after we clear activityId in the Add-another
+  // flow. Null when the save happened without an activity picked (the
+  // wbsNodeId field is optional on some ReportForm consumers).
   const [saved, setSaved] = useState<null | { queued: boolean }>(null);
+  const [savedActivityName, setSavedActivityName] = useState<string | null>(null);
 
   const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
@@ -190,16 +197,22 @@ export default function ReportForm({
     // Instead of redirecting immediately, show the success view. The
     // "Add another" / "Home" buttons let the user confirm the save
     // consciously — a redirect-flash was easy to miss on mobile.
+    // Also snapshot the activity's display name (if picked) so the
+    // save card can offer "Log another for {name}" — the same-scope
+    // shortcut Progress got in #115.
+    const picked = activityId ? activities?.find((a) => a.id === activityId) ?? null : null;
+    setSavedActivityName(picked?.name ?? null);
     setSaved({ queued });
     router.refresh();
   }
 
-  function startAnother() {
-    // Reset the form fields to their defaults so the user can log the next
-    // entry without leaving the page.
+  /**
+   * Reset every editable field. Both Add-another paths share this;
+   * `startAnotherKeepActivity` calls it and then re-applies the
+   * previously-picked activity so the engineer stays scoped to it.
+   */
+  function resetEditableFields() {
     setDescription("");
-    setActivityId("");
-    setActivitySearch("");
     setPhotos([]);
     const reset: Record<string, string | number> = {};
     for (const f of extraFields) {
@@ -211,6 +224,28 @@ export default function ReportForm({
     setExtras(reset);
     setError(null);
     setSaved(null);
+  }
+
+  function startAnother() {
+    // Reset the form fields to their defaults so the user can log the next
+    // entry without leaving the page. Also clears the picked activity.
+    setActivityId("");
+    setActivitySearch("");
+    setSavedActivityName(null);
+    resetEditableFields();
+  }
+
+  /**
+   * Keeps the just-saved activity picked so the next report on the same
+   * activity is one form to fill instead of "hunt for the activity all
+   * over again". Reset function is shared with startAnother — the only
+   * difference is that we skip clearing activityId + activitySearch.
+   */
+  function startAnotherKeepActivity() {
+    resetEditableFields();
+    // savedActivityName stays set — the save card can show "Log another
+    // for {name}" again immediately after the next save without the
+    // engineer re-picking.
   }
 
   if (saved) {
@@ -235,12 +270,39 @@ export default function ReportForm({
           )}
         </div>
         <div className="grid grid-cols-1 gap-2.5">
+          {savedActivityName && (
+            <button
+              type="button"
+              onClick={startAnotherKeepActivity}
+              className="rounded-xl bg-stone-900 text-white py-3.5 active:scale-[0.99] transition-all"
+            >
+              <span className="block text-base font-medium leading-tight">
+                Log another for {savedActivityName}
+              </span>
+              <span className="block text-[12px] text-stone-300 mt-0.5">
+                Keeps the activity, clears everything else
+              </span>
+            </button>
+          )}
           <button
             type="button"
             onClick={startAnother}
-            className="rounded-xl bg-stone-900 text-white text-base font-medium py-4 active:scale-[0.99] transition-all"
+            className={
+              savedActivityName
+                ? "rounded-xl bg-white border border-stone-200 text-stone-900 py-3.5 active:scale-[0.99] transition-all"
+                : "rounded-xl bg-stone-900 text-white text-base font-medium py-4 active:scale-[0.99] transition-all"
+            }
           >
-            Add another
+            <span
+              className={
+                savedActivityName ? "block text-base font-medium leading-tight" : "block text-base font-medium"
+              }
+            >
+              Add another
+            </span>
+            {savedActivityName && (
+              <span className="block text-[12px] text-stone-500 mt-0.5">Clears the activity too</span>
+            )}
           </button>
           <button
             type="button"
