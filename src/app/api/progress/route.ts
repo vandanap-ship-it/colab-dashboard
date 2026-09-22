@@ -116,6 +116,12 @@ const PostProgressSchema = z.object({
   reasonNote: z.string().max(500).optional(),
   // Idempotency key — kept flexible; validated at readIdempotencyKey().
   idempotencyKey: z.string().max(120).optional(),
+  // "publish" is the site-engineer-hits-Save path; "draft" is the
+  // Save Draft path where the engineer is stepping away and wants
+  // the entry stashed for later. Drafts skip precheck, rollup,
+  // milestone-completion emails, and the audit line — they aren't
+  // "real progress" until the engineer comes back and publishes.
+  mode: z.enum(["draft", "publish"]).optional(),
 });
 
 export async function POST(req: Request) {
@@ -142,7 +148,9 @@ export async function POST(req: Request) {
     photoUrls,
     reasonCode,
     reasonNote,
+    mode,
   } = body;
+  const isDraft = mode === "draft";
   const node = await prisma.wBSNode.findUnique({
     where: { id: wbsNodeId },
     select: { id: true, projectId: true, contractorId: true, totalQuantity: true },
@@ -154,10 +162,14 @@ export async function POST(req: Request) {
   // Waterproofing before Flooring, etc). Rules live in @/lib/progressGates
   // — same helper the mobile form calls in advance so the UX shows the
   // block before the engineer scrolls to Save. Enforced here too so a
-  // direct POST can't bypass it.
-  const gate = await checkPrecheck(wbsNodeId);
-  if (!gate.ok) {
-    return NextResponse.json({ error: gate.reason }, { status: 409 });
+  // direct POST can't bypass it. Drafts skip the gate: an engineer
+  // stashing an unfinished entry hasn't claimed anything is done, so
+  // the prerequisite doesn't matter until they hit Publish.
+  if (!isDraft) {
+    const gate = await checkPrecheck(wbsNodeId);
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.reason }, { status: 409 });
+    }
   }
 
   // A contractor must belong to the same project as the activity — otherwise a
@@ -214,6 +226,7 @@ export async function POST(req: Request) {
         notes: notes?.trim() || null,
         reasonCode: reason,
         reasonNote: reasonNoteClean || null,
+        status: isDraft ? "DRAFT" : "PUBLISHED",
         createdById: session.user.id,
         idempotencyKey,
         labour: labourClean.length > 0 ? { create: labourClean } : undefined,
@@ -223,7 +236,9 @@ export async function POST(req: Request) {
     });
 
     // Update activity % complete from cumulative if total quantity known.
-    if (node.totalQuantity && node.totalQuantity > 0 && isFinite(cumulative)) {
+    // Skipped for drafts — a stashed unfinished entry shouldn't move the
+    // dashboard's percent-complete or trigger a milestone-completion email.
+    if (!isDraft && node.totalQuantity && node.totalQuantity > 0 && isFinite(cumulative)) {
       const pct = Math.max(0, Math.min(100, (cumulative / node.totalQuantity) * 100));
       const current = await tx.wBSNode.findUnique({
         where: { id: wbsNodeId },
@@ -268,7 +283,10 @@ export async function POST(req: Request) {
 
   // On a replayed duplicate the entry (and its rollup + audit) already exist —
   // just hand back the original so the client clears it from the queue.
-  if (!duplicate) {
+  // Draft rows also skip the audit — audit tracks "state changes to the
+  // project" and an unfinished entry the engineer might discard doesn't
+  // qualify. The audit lands when they publish the draft.
+  if (!duplicate && !isDraft) {
     await recordAudit({
       projectId: node.projectId,
       userId: session.user.id,

@@ -56,7 +56,21 @@ function createClient() {
     query: {
       progressEntry: {
         async $allOperations({ operation, args, query }) {
-          return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
+          // ProgressEntry carries a lifecycle status (DRAFT | PUBLISHED)
+          // on top of the soft-delete filter. Every caller that queries
+          // for "real progress" implicitly means PUBLISHED — reports,
+          // rollups, DLR, the mobile list, the picker's recent tab, the
+          // scorecard, everything. Rather than sprinkling
+          // `status: "PUBLISHED"` at ~25 call sites we bake it into the
+          // read hook, same shape as the deletedAt filter: default to
+          // PUBLISHED-only, but an explicit status in `where` opts out
+          // (that's how the Drafts tab reads DRAFT rows).
+          if (!READ_OPERATIONS.has(operation)) return query(args);
+          const a = args as AnyArgs;
+          const where = { ...(a.where ?? {}) } as Record<string, unknown>;
+          if (where.deletedAt === undefined) where.deletedAt = null;
+          if (where.status === undefined) where.status = "PUBLISHED";
+          return query({ ...a, where });
         },
       },
       issue: {

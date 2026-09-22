@@ -93,7 +93,7 @@ export default function NewProgressForm({
   // After save: show an in-place "Saved · Add another / Back to home" card
   // instead of redirecting to /mobile/{id}. Site engineers log many entries
   // per shift — booting them home every time forced 2 extra taps per entry.
-  const [saved, setSaved] = useState<null | { queued: boolean }>(null);
+  const [saved, setSaved] = useState<null | { queued: boolean; mode: "publish" | "draft" }>(null);
   // When the engineer chooses "Log another on {villa}" after a save, we
   // clear the picked activity BUT keep a hint so the picker can jump the
   // user straight to that villa's milestone list on the next log. Null
@@ -166,25 +166,46 @@ export default function NewProgressForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    await submitEntry("publish");
+  }
+
+  async function handleSaveDraft() {
+    // Save Draft skips both the precheck gate and the 0% check — the
+    // whole point of a draft is that the engineer isn't ready to
+    // commit yet. The server also skips precheck when mode="draft".
+    // Still needs an activity (nothing to attach the draft to
+    // otherwise); everything else is optional.
     if (!activityId) {
-      setError("Pick an activity first");
+      setError("Pick an activity first, even for a draft.");
       return;
     }
-    // Precheck gate — the useEffect above already fetched this the moment
-    // the activity was picked. Refuse the submit locally so the engineer
-    // doesn't lose their typed notes to a 409 from the server.
-    if (gate && !gate.ok) {
-      setError(gate.reason);
-      return;
-    }
-    // Progress % is mandatory — a save with 0% would be indistinguishable
-    // from an accidental submit and pollutes downstream reports.
-    if (!(pctState > 0)) {
-      setError("Drag the % slider — how much is done?");
-      return;
+    await submitEntry("draft");
+  }
+
+  async function submitEntry(mode: "publish" | "draft") {
+    if (mode === "publish") {
+      if (!activityId) {
+        setError("Pick an activity first");
+        return;
+      }
+      // Precheck gate — the useEffect above already fetched this the moment
+      // the activity was picked. Refuse the submit locally so the engineer
+      // doesn't lose their typed notes to a 409 from the server.
+      if (gate && !gate.ok) {
+        setError(gate.reason);
+        return;
+      }
+      // Progress % is mandatory on publish — a save with 0% would be
+      // indistinguishable from an accidental submit and pollutes
+      // downstream reports.
+      if (!(pctState > 0)) {
+        setError("Drag the % slider — how much is done?");
+        return;
+      }
     }
     setPending(true);
     setError(null);
+    const isDraft = mode === "draft";
 
     // Try to upload photos inline first (fast path). If the online upload
     // fails, we queue the whole entry WITH the raw photo blobs — the offline
@@ -225,8 +246,11 @@ export default function NewProgressForm({
       photoUrls,
       reasonCode: reasonCode || undefined,
       reasonNote: reasonNote.trim() || undefined,
+      mode,
     };
-    const entryLabel = `Progress for ${selected?.name ?? "activity"}`;
+    const entryLabel = isDraft
+      ? `Progress draft for ${selected?.name ?? "activity"}`
+      : `Progress for ${selected?.name ?? "activity"}`;
 
     // Photos couldn't upload → queue the WHOLE entry with raw blobs. Skip the
     // online entry POST entirely so we don't create an entry without its
@@ -243,7 +267,7 @@ export default function NewProgressForm({
       });
       setPending(false);
       toast.info("Saved on this device. Photos will upload when you're back online.");
-      setSaved({ queued: true });
+      setSaved({ queued: true, mode });
       router.refresh();
       return;
     }
@@ -281,11 +305,11 @@ export default function NewProgressForm({
     // showed NO feedback at all, and engineers on slow networks would
     // double-submit thinking nothing happened.
     if (saved) {
-      toast.success("Progress saved.");
+      toast.success(isDraft ? "Draft saved." : "Progress saved.");
     } else {
       toast.info("Saved on this device. It will sync when you're back online.");
     }
-    setSaved({ queued: !saved });
+    setSaved({ queued: !saved, mode });
     router.refresh();
   }
 
@@ -337,17 +361,23 @@ export default function NewProgressForm({
   }
 
   if (saved) {
+    const isDraft = saved.mode === "draft";
     return (
       <SaveSuccessCard
-        title="Progress saved"
+        title={isDraft ? "Draft saved" : "Progress saved"}
         // Tell the engineer what the two "Add another" paths do: the
         // context CTA keeps them on the just-saved villa (skips the block
         // → villa drill on the next log); "Add another" keeps THIS
-        // activity so they can update just what changed.
+        // activity so they can update just what changed. For drafts the
+        // detail line says where to find it later.
         detail={
-          selected
-            ? `Logged for ${selected.name} · Block ${selected.path.blockCode} · ${selected.path.villaLabel}.`
-            : undefined
+          isDraft
+            ? selected
+              ? `Stashed as a draft for ${selected.name} on ${selected.path.villaLabel}. Find it under Drafts on the Progress list to finish and publish.`
+              : "Stashed as a draft. Find it under Drafts on the Progress list to finish and publish."
+            : selected
+              ? `Logged for ${selected.name} · Block ${selected.path.blockCode} · ${selected.path.villaLabel}.`
+              : undefined
         }
         projectId={projectId}
         onAddAnother={resetForm}
@@ -653,6 +683,22 @@ export default function NewProgressForm({
           >
             {pending ? "Saving…" : "Save progress"}
           </button>
+
+          {/* Save Draft · secondary escape hatch for site engineers
+              interrupted mid-entry. Skips the % and precheck gates so
+              even a half-typed entry stashes cleanly. Shown only when
+              an activity is picked — a draft with no activity has
+              nothing to attach to. */}
+          {activityId && (
+            <button
+              type="button"
+              onClick={handleSaveDraft}
+              disabled={pending}
+              className="w-full rounded-full bg-white border border-stone-200 text-ink py-4 text-[15px] font-medium disabled:opacity-60 active:scale-[0.99]"
+            >
+              {pending ? "Saving…" : "Save as Draft"}
+            </button>
+          )}
         </>
       )}
 
