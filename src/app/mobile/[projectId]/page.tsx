@@ -232,7 +232,7 @@ export default async function MobileProjectHome({
     },
     {
       key: "dlr",
-      href: `/projects/${projectId}/dlr`,
+      href: `/mobile/${projectId}/dlr`,
       label: "DLR updates",
       hint: "Daily log report",
       icon: ClipboardCheck,
