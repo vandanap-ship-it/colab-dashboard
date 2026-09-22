@@ -502,3 +502,184 @@ export function overdueDigestEmail(input: OverdueDigestInput): SendEmailInput | 
     }),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Flow 5 — Weekly executive roll-up
+//
+// Auto-Friday summary of Amanvana (or any project) for White Lotus
+// leadership. Meant to answer "should I look at the dashboard this week?"
+// in one 30-second glance: overall progress delta, manpower vs plan, top
+// three delay reasons. Full detail lives on the desktop weekly report
+// page; the email links there through the CTA.
+// ---------------------------------------------------------------------------
+
+export interface WeeklyReportEmailInput {
+  to: string | string[];
+  projectName: string;
+  weekEndLabel: string; // pre-formatted "26 Sep 2026"
+  plannedPct: number;
+  actualPct: number;
+  variancePct: number;
+  manpowerActual: number;
+  manpowerPlanned: number;
+  manpowerPctOfPlan: number | null;
+  milestones: {
+    completed: number;
+    started: number;
+    notStarted: number;
+    overdue: number;
+  };
+  byContractor: Array<{
+    name: string;
+    weeklyPlanned: number;
+    weeklyActual: number;
+    pctOfPlan: number | null;
+  }>;
+  topDelayReasons: Array<{ label: string; count: number; daysImpact: number }>;
+  reportUrl: string;
+}
+
+export function weeklyReportEmail(input: WeeklyReportEmailInput): SendEmailInput {
+  const varianceSign = input.variancePct > 0 ? "+" : "";
+  const varianceTone = input.variancePct >= 0 ? "#059669" : "#B83E22"; // emerald / ferrous
+  const manpowerPctText =
+    input.manpowerPctOfPlan == null ? "—" : `${Math.round(input.manpowerPctOfPlan * 100)}%`;
+  const manpowerTone =
+    input.manpowerPctOfPlan == null
+      ? INK_2
+      : input.manpowerPctOfPlan >= 0.9
+        ? "#059669"
+        : "#B83E22";
+
+  const headlineHtml = `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin: 4px 0 20px;">
+      <tr>
+        <td style="width:33.33%; padding: 12px 8px; text-align:center; background:#F7F5EF; border-radius:6px 0 0 6px;">
+          <div style="font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:${INK_2}; font-weight:600;">
+            Actual
+          </div>
+          <div style="font-size:28px; font-weight:700; color:${INK}; margin-top:4px;">
+            ${Math.round(input.actualPct)}%
+          </div>
+          <div style="font-size:11.5px; color:${INK_2}; margin-top:2px;">
+            planned ${Math.round(input.plannedPct)}%
+          </div>
+        </td>
+        <td style="width:33.33%; padding: 12px 8px; text-align:center; background:#F7F5EF; border-left: 1px solid ${RULE}; border-right: 1px solid ${RULE};">
+          <div style="font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:${INK_2}; font-weight:600;">
+            Variance
+          </div>
+          <div style="font-size:28px; font-weight:700; color:${varianceTone}; margin-top:4px;">
+            ${varianceSign}${input.variancePct.toFixed(1)}%
+          </div>
+          <div style="font-size:11.5px; color:${INK_2}; margin-top:2px;">
+            ${input.variancePct >= 0 ? "on / ahead of plan" : "behind plan"}
+          </div>
+        </td>
+        <td style="width:33.33%; padding: 12px 8px; text-align:center; background:#F7F5EF; border-radius:0 6px 6px 0;">
+          <div style="font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:${INK_2}; font-weight:600;">
+            Manpower
+          </div>
+          <div style="font-size:28px; font-weight:700; color:${manpowerTone}; margin-top:4px;">
+            ${manpowerPctText}
+          </div>
+          <div style="font-size:11.5px; color:${INK_2}; margin-top:2px;">
+            ${input.manpowerActual.toLocaleString("en-IN")} / ${input.manpowerPlanned.toLocaleString("en-IN")}
+          </div>
+        </td>
+      </tr>
+    </table>
+  `;
+
+  const milestonesLine = `
+    <p style="margin: 0 0 14px; color:${INK}; font-size:14px;">
+      <strong>Milestones:</strong>
+      ${input.milestones.completed} completed ·
+      ${input.milestones.started} started ·
+      <span style="color:${input.milestones.notStarted > 0 ? "#B83E22" : INK_2};">
+        ${input.milestones.notStarted} planned but not started
+      </span> ·
+      <span style="color:${input.milestones.overdue > 0 ? "#B83E22" : INK_2};">
+        ${input.milestones.overdue} overdue
+      </span>
+    </p>
+  `;
+
+  const contractorRowsHtml = input.byContractor
+    .map((c, idx) => {
+      const pctText = c.pctOfPlan == null ? "—" : `${Math.round(c.pctOfPlan * 100)}%`;
+      const tone =
+        c.pctOfPlan == null ? INK_2 : c.pctOfPlan >= 0.9 ? "#059669" : "#B83E22";
+      const bg = idx % 2 === 0 ? "#F7F5EF" : "#fff";
+      return `
+        <tr>
+          <td style="padding: 8px 12px; background:${bg}; font-size:13px; color:${INK};">
+            ${c.name}
+          </td>
+          <td style="padding: 8px 12px; background:${bg}; text-align:right; font-size:13px; color:${INK_2};">
+            ${c.weeklyActual.toLocaleString("en-IN")} / ${c.weeklyPlanned.toLocaleString("en-IN")}
+          </td>
+          <td style="padding: 8px 12px; background:${bg}; text-align:right; font-size:13px; font-weight:600; color:${tone};">
+            ${pctText}
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+  const contractorTableHtml =
+    input.byContractor.length > 0
+      ? `
+        <p style="margin: 14px 0 6px; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:${INK_2}; font-weight:600;">
+          Manpower by contractor
+        </p>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border: 1px solid ${RULE}; border-radius:6px; overflow:hidden;">
+          ${contractorRowsHtml}
+        </table>
+      `
+      : "";
+
+  const delayReasonsHtml =
+    input.topDelayReasons.length > 0
+      ? `
+        <p style="margin: 20px 0 6px; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:${INK_2}; font-weight:600;">
+          Top delay reasons
+        </p>
+        <ul style="margin: 4px 0 0; padding-left: 18px; color:${INK}; font-size:13.5px; line-height:1.55;">
+          ${input.topDelayReasons
+            .slice(0, 3)
+            .map(
+              (r) => `
+            <li>
+              <strong>${r.label}</strong> —
+              ${r.count} activit${r.count === 1 ? "y" : "ies"},
+              ${r.daysImpact} day${r.daysImpact === 1 ? "" : "s"} lost
+            </li>
+          `,
+            )
+            .join("")}
+        </ul>
+      `
+      : `
+        <p style="margin: 20px 0 0; color:${INK_2}; font-size:13.5px; font-style:italic;">
+          No delay reasons logged this week — clean run.
+        </p>
+      `;
+
+  const preheader = `Actual ${Math.round(input.actualPct)}% · variance ${varianceSign}${input.variancePct.toFixed(1)}% · manpower ${manpowerPctText}`;
+
+  return {
+    to: input.to,
+    subject: `[Siddhi] ${input.projectName} · Weekly roll-up · ${input.weekEndLabel}`,
+    html: shell({
+      preheader,
+      headline: `${input.projectName} · week ending ${input.weekEndLabel}`,
+      bodyHtml: `
+        ${headlineHtml}
+        ${milestonesLine}
+        ${contractorTableHtml}
+        ${delayReasonsHtml}
+      `,
+      cta: { text: "Open weekly report", url: input.reportUrl },
+    }),
+  };
+}
