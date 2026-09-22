@@ -6,6 +6,7 @@ import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
 import SaveSuccessCard from "./SaveSuccessCard";
+import { itemState } from "@/lib/inspectionItemState";
 
 type Activity = { id: string; name: string; taskCode: string; path: string[] };
 
@@ -134,7 +135,7 @@ export default function InspectionForm({
     // Every item must be explicitly answered — Yes, No, or NA. An item is
     // untouched when it's neither NA nor has a boolean pass/fail. Paired
     // with the server-side check in /api/inspections POST.
-    const untouched = usable.filter((i) => !i.notApplicable && i.passed === null);
+    const untouched = usable.filter((i) => itemState(i) === "untouched");
     if (untouched.length > 0) {
       const first = untouched[0].label.trim();
       const more = untouched.length > 1 ? ` (+${untouched.length - 1} more)` : "";
