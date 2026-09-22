@@ -3,6 +3,7 @@ import { User as UserIcon, Camera, Calendar } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
+import { concernAgeFor } from "@/lib/queueAge";
 import { canReview } from "@/lib/roles";
 import MobileConcernActions from "@/components/mobile/MobileConcernActions";
 
@@ -52,7 +53,13 @@ export default async function MobileConcernDetailPage({
         className="px-5 pt-5 pb-4 border-b border-sandstone-100"
         style={{ background: "linear-gradient(180deg, var(--color-sandstone-50) 0%, var(--color-ivory) 100%)" }}
       >
-        <StatusPill status={concern.status} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <StatusPill status={concern.status} />
+          {/* Same aging cue the list card wears — silent on fresh
+              concerns, sandstone at 2d, ferrous at 5d. Skipped once
+              someone has READ / TASK_ASSIGNED / RESOLVED. */}
+          {concern.status === "PENDING" && <DetailConcernAgingChip createdAt={concern.createdAt} />}
+        </div>
         <h1 className="font-serif text-[20px] leading-snug text-ink tracking-tight mt-2">
           {concern.description}
         </h1>
@@ -136,6 +143,28 @@ function StatusPill({ status }: { status: string }) {
   return (
     <span className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold shrink-0 ${cfg.bg} ${cfg.fg}`}>
       {cfg.label}
+    </span>
+  );
+}
+
+/**
+ * Detail-hero variant of the list card's aging chip. Kept local so
+ * the two surfaces can style independently as the design evolves,
+ * but reads from the same helper so the tier boundaries can't drift.
+ */
+function DetailConcernAgingChip({ createdAt }: { createdAt: Date }) {
+  const age = concernAgeFor(createdAt);
+  if (age.tier === "fresh") return null;
+  const cls =
+    age.tier === "stale"
+      ? "bg-ferrous-50 ring-ferrous-200 text-ferrous-700"
+      : "bg-sandstone-100 ring-sandstone-200 text-ink-2";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold tabular-nums ${cls}`}
+      title={`Raised ${fmtDate(createdAt)} · ${age.days} day${age.days === 1 ? "" : "s"} ago`}
+    >
+      {age.label}
     </span>
   );
 }

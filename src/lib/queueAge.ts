@@ -105,3 +105,20 @@ export const PERMIT_TIERS: AgeTiers = { agingAt: 1, staleAt: 2 };
 export function permitAgeFor(createdAt: Date, now: Date = new Date()): QueueAge {
   return computeAge(createdAt, PERMIT_TIERS, now);
 }
+
+/**
+ * Concern SLA · 2d aging, 5d stale.
+ *
+ * Concerns are heads-up observations, not blockers — a supervisor
+ * flagged something that needs a look (leak forming, wonky finish,
+ * safety near-miss). They're less urgent than a hindrance because
+ * they don't stop work, but a concern sitting five days without
+ * anyone reading it is a real supervision gap. Applied only to
+ * PENDING rows: once someone has READ or TASK_ASSIGNED, the aging
+ * signal has already been acknowledged.
+ */
+export const CONCERN_TIERS: AgeTiers = { agingAt: 2, staleAt: 5 };
+
+export function concernAgeFor(createdAt: Date, now: Date = new Date()): QueueAge {
+  return computeAge(createdAt, CONCERN_TIERS, now);
+}

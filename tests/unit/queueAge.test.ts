@@ -19,9 +19,11 @@ import {
   wirAgeFor,
   hindranceAgeFor,
   permitAgeFor,
+  concernAgeFor,
   WIR_TIERS,
   HINDRANCE_TIERS,
   PERMIT_TIERS,
+  CONCERN_TIERS,
 } from "@/lib/queueAge";
 
 const ISO = (s: string) => new Date(s);
@@ -109,6 +111,36 @@ describe("tierFor (generic, permit SLA)", () => {
   it("flips to stale at 2d — a permit sitting two days blocks the work it authorizes", () => {
     expect(tierFor(2, PERMIT_TIERS)).toBe("stale");
     expect(tierFor(5, PERMIT_TIERS)).toBe("stale");
+  });
+});
+
+describe("tierFor (generic, concern SLA)", () => {
+  it("stays fresh through 1d", () => {
+    expect(tierFor(0, CONCERN_TIERS)).toBe("fresh");
+    expect(tierFor(1, CONCERN_TIERS)).toBe("fresh");
+  });
+  it("flips to aging at 2d — same trigger as WIRs and hindrances", () => {
+    expect(tierFor(2, CONCERN_TIERS)).toBe("aging");
+    expect(tierFor(4, CONCERN_TIERS)).toBe("aging");
+  });
+  it("flips to stale at 5d — looser than hindrance (3d) since concerns aren't blockers", () => {
+    expect(tierFor(5, CONCERN_TIERS)).toBe("stale");
+    expect(tierFor(30, CONCERN_TIERS)).toBe("stale");
+  });
+});
+
+describe("concernAgeFor", () => {
+  it("stays fresh at 1d — a concern raised yesterday", () => {
+    const age = concernAgeFor(ISO("2026-09-21T10:00:00Z"), ISO("2026-09-22T10:00:00Z"));
+    expect(age).toEqual({ days: 1, tier: "fresh", label: "waiting 1d" });
+  });
+  it("flips to aging at exactly 2d", () => {
+    const age = concernAgeFor(ISO("2026-09-20T10:00:00Z"), ISO("2026-09-22T10:00:00Z"));
+    expect(age).toEqual({ days: 2, tier: "aging", label: "waiting 2d" });
+  });
+  it("flips to stale at exactly 5d — a supervision gap by then", () => {
+    const age = concernAgeFor(ISO("2026-09-17T10:00:00Z"), ISO("2026-09-22T10:00:00Z"));
+    expect(age).toEqual({ days: 5, tier: "stale", label: "waiting 5d" });
   });
 });
 

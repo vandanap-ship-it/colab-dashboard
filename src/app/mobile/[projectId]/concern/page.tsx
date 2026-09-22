@@ -4,6 +4,7 @@ import { MessageSquare, CheckCircle2, Clock, UserCheck, Plus } from "lucide-reac
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
+import { concernAgeFor } from "@/lib/queueAge";
 
 export const dynamic = "force-dynamic";
 
@@ -118,8 +119,14 @@ export default async function MobileConcernListPage({
                   href={`/mobile/${projectId}/concern/${c.id}?tab=${tab}`}
                   className="rounded-2xl border border-sandstone-100 bg-cream shadow-soft p-4 block active:bg-sandstone-50"
                 >
-                  <div className="text-[14px] text-ink leading-snug line-clamp-3">
-                    {c.description}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-[14px] text-ink leading-snug line-clamp-3 min-w-0 flex-1">
+                      {c.description}
+                    </div>
+                    {/* Aging cue only on PENDING — once someone READs
+                        or a task is assigned, the aging signal has
+                        already been acknowledged. */}
+                    {c.status === "PENDING" && <ConcernAgingChip createdAt={c.createdAt} />}
                   </div>
                   <div className="text-[12px] text-ink-3 mt-1.5">
                     {c.raisedBy?.name ?? "—"}
@@ -204,6 +211,28 @@ function EmptyState({ tab }: { tab: Tab }) {
       <MessageSquare className="w-6 h-6 text-stone-300 mx-auto" />
       <p className="text-sm text-stone-500 mt-2">{copy}</p>
     </div>
+  );
+}
+
+/**
+ * Age pill for PENDING concerns. Silent for 0-1d (a heads-up filed
+ * today is being triaged); sandstone at 2d; ferrous at 5d, where a
+ * pending concern reads as a supervision gap.
+ */
+function ConcernAgingChip({ createdAt }: { createdAt: Date }) {
+  const age = concernAgeFor(createdAt);
+  if (age.tier === "fresh") return null;
+  const cls =
+    age.tier === "stale"
+      ? "bg-ferrous-50 ring-ferrous-200 text-ferrous-700"
+      : "bg-sandstone-100 ring-sandstone-200 text-ink-2";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold shrink-0 tabular-nums ${cls}`}
+      title={`Raised ${fmtDate(createdAt)} · ${age.days} day${age.days === 1 ? "" : "s"} ago`}
+    >
+      {age.label}
+    </span>
   );
 }
 
