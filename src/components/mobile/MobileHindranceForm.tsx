@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Calendar, Camera, X } from "lucide-react";
 import { useToast } from "@/components/Toast";
+import HowThisWorks from "@/components/HowThisWorks";
 import { HINDRANCE_REASONS } from "@/lib/hindranceReasons";
 
 // Types for the data we load on mount.
@@ -260,6 +261,20 @@ export default function MobileHindranceForm({
       </div>
 
       <form onSubmit={handleSubmit} className="px-4 py-4 space-y-3.5 pb-24">
+        <HowThisWorks
+          title="How to log a hindrance"
+          storageKey="siddhi.htw.hindrance"
+          steps={[
+            "Pick the reason that best matches why work stopped — Material shortage, Weather, Design query, Manpower shortage, and so on.",
+            "In the description, say what got stopped, since when, and what's needed to unblock it.",
+            "Pick where on site it is — the block or the villa.",
+            "If you know which contractor or team is responsible, tag them so the right person sees the hindrance.",
+            "Add photos if they help show the condition.",
+            "Fill in the estimated end date and cost impact if you have an idea — leave blank if not.",
+            "Tap Save. It'll show up on the DLR under Hindrances automatically, and leadership gets a nudge in the next digest.",
+          ]}
+        />
+
         {/* 1. Hindrance (reasonCode) — required */}
         <FieldCard label="Hindrance" required>
           <SelectShell placeholder="Please select Hindrance">

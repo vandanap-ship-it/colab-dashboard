@@ -24,6 +24,18 @@ export default async function NewIssuePage({
       successPath={`/mobile/${projectId}`}
       primaryButtonLabel="Report snag"
       scope="issue"
+      howThisWorks={{
+        title: "How to raise a snag",
+        storageKey: "siddhi.htw.snag",
+        steps: [
+          "Pick the activity the snag belongs to (search by block, villa, or activity name).",
+          "Describe the defect — what's wrong, where exactly on the villa, and a measurement if it matters.",
+          "Add 1 or 2 photos of the actual defect. The assignee needs to see it.",
+          "Pick severity — Low, Medium, or High — so it gets prioritized right.",
+          "Fill in the defect category (e.g. \"Not in plumb\") so the reports can group similar issues.",
+          "Tap Report snag. The contractor gets pinged and can respond.",
+        ],
+      }}
       extraFields={[
         {
           kind: "select",

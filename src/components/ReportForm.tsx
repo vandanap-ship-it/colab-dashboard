@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
+import HowThisWorks from "./HowThisWorks";
 
 type Activity = { id: string; name: string; taskCode: string; path: string[] };
 
@@ -22,6 +23,7 @@ export default function ReportForm({
   primaryButtonLabel = "Save",
   scope = "report",
   extraFields = [],
+  howThisWorks,
 }: {
   projectId: string;
   title: string;
@@ -30,6 +32,10 @@ export default function ReportForm({
   primaryButtonLabel?: string;
   scope?: string;
   extraFields?: ExtraField[];
+  /** Optional plain-English walkthrough rendered above the fields. Each
+   *  caller (Snag, Concern) passes its own copy — the shape is the same
+   *  as HowThisWorks's own props minus title style. */
+  howThisWorks?: { title: string; steps: string[]; storageKey: string };
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -324,6 +330,14 @@ export default function ReportForm({
         </button>
         <h1 className="text-2xl font-semibold text-stone-900">{title}</h1>
       </div>
+
+      {howThisWorks && (
+        <HowThisWorks
+          title={howThisWorks.title}
+          steps={howThisWorks.steps}
+          storageKey={howThisWorks.storageKey}
+        />
+      )}
 
       <label className="block">
         <span className="text-sm font-medium text-stone-700">Description</span>

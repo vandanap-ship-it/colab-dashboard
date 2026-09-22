@@ -6,6 +6,7 @@ import PhotoPicker from "@/components/PhotoPicker";
 import VoiceTextarea from "@/components/VoiceTextarea";
 import { useToast } from "@/components/Toast";
 import SaveSuccessCard from "@/components/SaveSuccessCard";
+import HowThisWorks from "@/components/HowThisWorks";
 import {
   RFI_CATEGORIES,
   RFI_CATEGORY_LABELS,
@@ -173,11 +174,20 @@ export default function MobileRfiForm({ projectId }: { projectId: string }) {
         <h1 className="font-serif text-[28px] leading-tight text-ink mt-1">
           Raise an RFI
         </h1>
-        <p className="text-[13px] text-ink-3 mt-1">
-          Something needs a decision or a clarification — write down what you
-          need and add photos if they help.
-        </p>
       </header>
+
+      <HowThisWorks
+        title="How to raise an RFI"
+        storageKey="siddhi.htw.rfi"
+        steps={[
+          "Write a one-line subject that says what you're asking about — e.g. \"Column rebar clash near V15 stair\".",
+          "Pick the right category — Structural, MEP, Architectural, Finishing, or Other.",
+          "Pick priority — Low if it can wait a week, Medium if you need it this week, High if work is already blocked.",
+          "In the description, spell out exactly what needs answering. Tap the mic if you'd rather talk than type.",
+          "Add 1 or 2 photos of the actual condition — they help the person answering way more than words.",
+          "Tap Raise RFI. The consultant or planner will see it in their queue and answer.",
+        ]}
+      />
 
       {/* Subject */}
       <label className="block space-y-2">

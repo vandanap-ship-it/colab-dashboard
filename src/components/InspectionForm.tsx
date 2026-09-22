@@ -7,6 +7,7 @@ import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
 import SaveSuccessCard from "./SaveSuccessCard";
+import HowThisWorks from "./HowThisWorks";
 import { itemState } from "@/lib/inspectionItemState";
 
 type Activity = { id: string; name: string; taskCode: string; path: string[] };
@@ -720,12 +721,25 @@ export default function InspectionForm({
         <h1 className="font-serif text-[28px] leading-tight text-ink tracking-tight mt-1">
           {isEditingDraft ? "Continue your draft" : "Fill a checklist"}
         </h1>
-        <p className="text-[13px] text-ink-3 mt-1.5">
-          {isEditingDraft
-            ? "Your previous answers are pre-filled. Save Draft to keep working, or Send For Review to finish."
-            : "Pick a template, mark every row, then Save Draft, Reschedule, or Send For Review."}
-        </p>
       </header>
+
+      {/* Onboarding · walk the site team through the WIR flow. Hidden
+          when editing a draft since they already know the flow by then. */}
+      {!isEditingDraft && (
+        <HowThisWorks
+          title="How to raise a Work Inspection Request"
+          storageKey="siddhi.htw.wir"
+          steps={[
+            "Pick a checklist template that matches the work — e.g. Footing Concreting, Column Rebar. Leave it blank to build your own.",
+            "Read each row on the checklist. Tap Yes if the check passed, No if it failed, NA if it doesn't apply to this pour.",
+            "For any No or a shaky Yes, add a short note and a photo so the reviewer sees exactly what you saw.",
+            "Pick one or more reviewers — usually your planner or the QA/QC lead. They get a push when you send.",
+            "Tap \"Send For Review\" when you're done. You'll get a push back once they approve or send you comments.",
+            "Need to step away partway through? Tap \"Save Draft\" and pick it back up in your Drafts tab later.",
+            "Site not ready today (weather, no material, prereq not passed)? Tap \"Reschedule\" — it moves to the Rescheduled tab until you reopen it.",
+          ]}
+        />
+      )}
 
       {templates.length > 0 && (
         <label className="block">

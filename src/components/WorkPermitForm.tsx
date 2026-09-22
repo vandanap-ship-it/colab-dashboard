@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import PhotoPicker from "./PhotoPicker";
 import SaveSuccessCard from "./SaveSuccessCard";
+import HowThisWorks from "./HowThisWorks";
 import { useToast } from "./Toast";
 import { ScreenHeading, FieldLabel, PrimaryAction } from "./mobile/ui";
 import {
@@ -218,6 +219,21 @@ export default function WorkPermitForm({
       <ScreenHeading
         title="Raise a work permit"
         lede="Needs approval before work starts."
+      />
+
+      <HowThisWorks
+        title="How to request a work permit"
+        storageKey="siddhi.htw.permit"
+        steps={[
+          "Pick the permit type — Hot Work (welding, grinding), Night Work, Deshuttering, or General.",
+          "Give it a short title so approvers can tell what it's for at a glance (e.g. \"Rebar welding on V12 slab\").",
+          "Write a short description of what's actually going to happen on site.",
+          "Pick the work date, plus start and end times.",
+          "Say where on site — the location or villa.",
+          "Pick who should approve it. Safety officer for Hot Work / Night Work; planner for General / Deshuttering.",
+          "Add photos of prep or site conditions if they help the approver decide.",
+          "Tap Submit. The approver gets a push and can approve or reject from their phone.",
+        ]}
       />
 
       {/* Type — segmented picker so all four fit on-screen without scrolling */}

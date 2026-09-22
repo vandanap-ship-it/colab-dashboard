@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "./Toast";
 import SaveSuccessCard from "./SaveSuccessCard";
+import HowThisWorks from "./HowThisWorks";
 import { istDayString } from "@/lib/istDay";
 import { ScreenHeading, FieldLabel, PrimaryAction } from "./mobile/ui";
 
@@ -182,6 +183,19 @@ export default function ManpowerEntryForm({
       <ScreenHeading
         title="Log manpower"
         lede="Pick the contractor and add a row for every trade on site today."
+      />
+
+      <HowThisWorks
+        title="How to log manpower"
+        storageKey="siddhi.htw.manpower"
+        steps={[
+          "Set the date — usually today, but change it if you're back-logging yesterday's crew.",
+          "Pick the contractor whose crew you're logging.",
+          "Add a row for each trade that worked today — Mason, Helper, Skilled, Unskilled, Supervisor.",
+          "Type the headcount for each trade — how many people of that trade were on site.",
+          "Add or remove rows as needed. One row per trade — merge or split before you save if the same trade has two rows.",
+          "Tap Save. Your DLR picks this up automatically for today.",
+        ]}
       />
 
       <label className="block">
