@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { RFI_STATUSES, RFI_STATUS_LABELS, RFI_CATEGORY_LABELS, formatRfiNumber, type RfiStatus, type RfiCategory } from "@/lib/rfi";
-import { rfiAgeFor } from "@/lib/queueAge";
+import { rfiAgeFor, rfiDueSignal, type RfiDueSignal } from "@/lib/queueAge";
 
 export const dynamic = "force-dynamic";
 
@@ -145,7 +145,13 @@ export default async function MobileRfiListPage({
                             <span>to {r.assignedTo.name}</span>
                           </>
                         )}
-                        {r.dueDate && (
+                        {/* Explicit dueDate now shows as a chip in the
+                            top-right for OPEN RFIs (see RfiDueChip
+                            below). On answered/closed rows we keep
+                            the plain date in the meta line so the
+                            historical due date stays visible without
+                            competing with any status. */}
+                        {r.dueDate && r.status !== "OPEN" && (
                           <>
                             <span>·</span>
                             <span>due {fmtDate(r.dueDate)}</span>
@@ -163,11 +169,18 @@ export default async function MobileRfiListPage({
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <PriorityPill priority={r.priority} />
-                      {/* Aging cue on OPEN RFIs — silent for 0-1d,
-                          sandstone at 2d, ferrous at 5d. Skipped once
-                          answered or closed (the queue-position signal
-                          is done at that point). */}
-                      {r.status === "OPEN" && <RfiAgingChip createdAt={r.createdAt} />}
+                      {/* Two-tier signal on OPEN RFIs. Explicit dueDate
+                          wins — it's a promise the raiser made and
+                          overrides the wall-clock aging tier. When
+                          there's no dueDate, fall back to the age
+                          chip. Skipped once answered or closed (the
+                          queue-position signal is done then). */}
+                      {r.status === "OPEN" && r.dueDate && (
+                        <RfiDueChip signal={rfiDueSignal(r.dueDate)} />
+                      )}
+                      {r.status === "OPEN" && !r.dueDate && (
+                        <RfiAgingChip createdAt={r.createdAt} />
+                      )}
                     </div>
                   </div>
                 </Link>
@@ -253,12 +266,39 @@ function EmptyState({ tab }: { tab: Tab }) {
 }
 
 /**
+ * Explicit-due-date chip for OPEN RFIs — takes priority over the
+ * wall-clock aging chip when the raiser set a promised date. Three
+ * tones:
+ *   overdue   → ferrous "overdue by Nd"      the SLA has been missed
+ *   due-today → sandstone "due today"        last-chance for the answer
+ *   upcoming  → neutral "due in Nd"          only when N is small
+ *
+ * Anything more than 5 days out is silent — a due date three weeks
+ * away isn't a queue-position signal, just a calendar entry.
+ */
+function RfiDueChip({ signal }: { signal: RfiDueSignal }) {
+  if (signal.kind === "upcoming" && signal.days > 5) return null;
+  const cls =
+    signal.kind === "overdue"
+      ? "bg-ferrous-50 ring-ferrous-200 text-ferrous-700"
+      : signal.kind === "due-today"
+        ? "bg-sandstone-100 ring-sandstone-200 text-ink-2"
+        : "bg-stone-100 ring-stone-200 text-ink-2";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold tabular-nums ${cls}`}
+    >
+      {signal.label}
+    </span>
+  );
+}
+
+/**
  * Age pill for OPEN RFIs. Silent for 0-1d (question just filed);
  * sandstone at 2d; ferrous at 5d — the SLA cliff Colab-culture runs
  * consultants to, and where an unanswered RFI reads as a real
- * supervision gap. Explicit dueDate (when set on the row) still
- * shows in the meta line under the subject; this chip is the
- * queue-position signal, not the calendar deadline.
+ * supervision gap. Used only when the RFI has no explicit dueDate;
+ * when it does, RfiDueChip above takes over.
  */
 function RfiAgingChip({ createdAt }: { createdAt: Date }) {
   const age = rfiAgeFor(createdAt);

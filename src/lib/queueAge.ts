@@ -159,3 +159,46 @@ export const RFI_TIERS: AgeTiers = { agingAt: 2, staleAt: 5 };
 export function rfiAgeFor(createdAt: Date, now: Date = new Date()): QueueAge {
   return computeAge(createdAt, RFI_TIERS, now);
 }
+
+/**
+ * Explicit-due-date signal on an RFI. Complementary to rfiAgeFor: the
+ * age helper measures how long the RFI has been waiting since it was
+ * raised; this one measures the promise the raiser made with the
+ * dueDate field. When both are meaningful, the due-date signal takes
+ * priority — an explicit promise beats a wall-clock tier.
+ *
+ *   past-due    "overdue by Nd"    ferrous, days > 0
+ *   due today   "due today"        sandstone, days == 0
+ *   upcoming    "due in Nd"        neutral, days > 0, only when N is small
+ *
+ * Callers decide the "small N" upcoming window; the raw days-until-due
+ * value is returned so a card can render "due in 3d" while a detail
+ * hero renders "due Fri 25 Sep 2026". No signal when dueDate is null.
+ */
+export interface RfiDueSignal {
+  kind: "overdue" | "due-today" | "upcoming";
+  /** For overdue: how many days past due. For upcoming: how many days until due. Zero on due-today. */
+  days: number;
+  /** Short display label suitable for a chip. */
+  label: string;
+}
+
+export function rfiDueSignal(dueDate: Date, now: Date = new Date()): RfiDueSignal {
+  // Snap both to UTC midnight so the answer doesn't shift by hour-of-day
+  // and stays consistent regardless of where the reader's machine sits.
+  // Prisma stores date-only fields at 00:00Z anyway, so this preserves
+  // the raiser's intent.
+  const startOfDayUtc = (d: Date) =>
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const due = startOfDayUtc(dueDate);
+  const today = startOfDayUtc(now);
+  const diffDays = Math.round((due - today) / (24 * 60 * 60 * 1000));
+  if (diffDays < 0) {
+    const n = -diffDays;
+    return { kind: "overdue", days: n, label: `overdue by ${n}d` };
+  }
+  if (diffDays === 0) {
+    return { kind: "due-today", days: 0, label: "due today" };
+  }
+  return { kind: "upcoming", days: diffDays, label: `due in ${diffDays}d` };
+}

@@ -22,6 +22,7 @@ import {
   concernAgeFor,
   issueAgeFor,
   rfiAgeFor,
+  rfiDueSignal,
   WIR_TIERS,
   HINDRANCE_TIERS,
   PERMIT_TIERS,
@@ -189,6 +190,31 @@ describe("tierFor (generic, RFI SLA)", () => {
   it("flips to stale at 5d — same cliff as concerns; consultant SLA", () => {
     expect(tierFor(5, RFI_TIERS)).toBe("stale");
     expect(tierFor(10, RFI_TIERS)).toBe("stale");
+  });
+});
+
+describe("rfiDueSignal", () => {
+  // All checks use start-of-day snapping so a due date at 09:00 and a
+  // "now" at 15:00 on the same day still read as "due today", not "due
+  // in 1d" or "overdue by 1d".
+  it("reads as due-today when the due date is today", () => {
+    const s = rfiDueSignal(ISO("2026-09-22T09:00:00Z"), ISO("2026-09-22T15:00:00Z"));
+    expect(s).toEqual({ kind: "due-today", days: 0, label: "due today" });
+  });
+  it("reads as upcoming with days-until when the due date is in the future", () => {
+    const s = rfiDueSignal(ISO("2026-09-25T00:00:00Z"), ISO("2026-09-22T00:00:00Z"));
+    expect(s).toEqual({ kind: "upcoming", days: 3, label: "due in 3d" });
+  });
+  it("reads as overdue with days-past when the due date has passed", () => {
+    const s = rfiDueSignal(ISO("2026-09-19T00:00:00Z"), ISO("2026-09-22T00:00:00Z"));
+    expect(s).toEqual({ kind: "overdue", days: 3, label: "overdue by 3d" });
+  });
+  it("counts overdue by full calendar days, not fractional minutes", () => {
+    // Due yesterday morning, checked this evening → still 1d overdue,
+    // not 1d + something.
+    const s = rfiDueSignal(ISO("2026-09-21T09:00:00Z"), ISO("2026-09-22T20:00:00Z"));
+    expect(s.kind).toBe("overdue");
+    expect(s.days).toBe(1);
   });
 });
 

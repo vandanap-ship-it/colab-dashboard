@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { formatRfiNumber, RFI_CATEGORY_LABELS, type RfiCategory, type RfiStatus } from "@/lib/rfi";
-import { rfiAgeFor } from "@/lib/queueAge";
+import { rfiAgeFor, rfiDueSignal, type RfiDueSignal } from "@/lib/queueAge";
 import MobileRfiActions from "@/components/mobile/MobileRfiActions";
 
 export const dynamic = "force-dynamic";
@@ -53,9 +53,15 @@ export default async function MobileRfiDetailPage({
             {formatRfiNumber(rfi.number)}
           </span>
           <StatusPill status={rfi.status} />
-          {/* Aging cue on OPEN — silent when fresh, sandstone at 2d,
-              ferrous at 5d. Same math the list card uses. */}
-          {rfi.status === "OPEN" && <DetailRfiAgingChip createdAt={rfi.createdAt} />}
+          {/* Two-tier signal on OPEN: explicit dueDate wins over the
+              wall-clock aging chip when the raiser set one. Same rule
+              the list card uses. */}
+          {rfi.status === "OPEN" && rfi.dueDate && (
+            <DetailRfiDueChip signal={rfiDueSignal(rfi.dueDate)} />
+          )}
+          {rfi.status === "OPEN" && !rfi.dueDate && (
+            <DetailRfiAgingChip createdAt={rfi.createdAt} />
+          )}
           <PriorityPill priority={rfi.priority} />
           <span className="rounded-full bg-sandstone-100 text-ink-2 px-2 py-0.5 font-semibold text-[9.5px]">
             {RFI_CATEGORY_LABELS[rfi.category as RfiCategory] ?? rfi.category}
@@ -200,10 +206,34 @@ function PriorityPill({ priority }: { priority: string }) {
 }
 
 /**
+ * Detail-hero variant of the list card's RfiDueChip. Same three-way
+ * signal (overdue / due-today / upcoming), same "hide if > 5d out"
+ * upcoming cap. Inline `normal-case tracking-normal` cancels the
+ * hero's UPPERCASE tracking so the chip sits cleanly beside the
+ * status/priority pills.
+ */
+function DetailRfiDueChip({ signal }: { signal: RfiDueSignal }) {
+  if (signal.kind === "upcoming" && signal.days > 5) return null;
+  const cls =
+    signal.kind === "overdue"
+      ? "bg-ferrous-50 ring-ferrous-200 text-ferrous-700"
+      : signal.kind === "due-today"
+        ? "bg-sandstone-100 ring-sandstone-200 text-ink-2"
+        : "bg-stone-100 ring-stone-200 text-ink-2";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold tabular-nums normal-case tracking-normal ${cls}`}
+    >
+      {signal.label}
+    </span>
+  );
+}
+
+/**
  * Detail-hero variant of the list card's RFI aging chip. Same math,
  * inline styling that neutralizes the hero's UPPERCASE tracking so
  * the chip reads as its own tabular-num pill next to the status
- * badges.
+ * badges. Used only when the RFI has no explicit dueDate.
  */
 function DetailRfiAgingChip({ createdAt }: { createdAt: Date }) {
   const age = rfiAgeFor(createdAt);
