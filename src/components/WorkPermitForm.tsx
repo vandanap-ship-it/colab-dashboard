@@ -24,7 +24,7 @@ type Contractor = { id: string; name: string; category: string };
 
 /**
  * Mobile-first form for raising a WorkPermit. Same offline-queue pattern
- * as the other mobile forms (progress, expense, manpower) — try direct POST,
+ * as the other mobile forms (progress, manpower) — try direct POST,
  * fall through to IndexedDB queue on network / 5xx, surface 4xx errors
  * inline. Photos are uploaded inline; failure is non-blocking so the permit
  * itself still saves.

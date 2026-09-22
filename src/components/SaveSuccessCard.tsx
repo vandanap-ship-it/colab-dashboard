@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 
 /**
  * Shared "Saved · Add another / Back to home" success state for every
- * mobile Create form (Progress, Permit, Inspection, Manpower, Expense,
+ * mobile Create form (Progress, Permit, Inspection, Manpower,
  * and the ReportForm-based flows: Hindrance, Snag, Concern).
  *
  * Rationale (Shraddha, Sep 11): "They won't be adding just one progress

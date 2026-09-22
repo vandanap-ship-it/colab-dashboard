@@ -20,7 +20,6 @@ import {
   FileBarChart,
   FileStack,
   ReceiptIndianRupee,
-  Wallet,
   Upload,
   Users,
   Users as UsersIcon,
@@ -43,7 +42,6 @@ interface NavGroup {
 export interface SidebarProps {
   projectId: string;
   canAccessBilling: boolean;
-  canLogExpense: boolean;
   canImport: boolean;      // admin only
   canManageUsers: boolean; // admin only
 }
@@ -122,7 +120,6 @@ export default function Sidebar(props: SidebarProps) {
       title: "Finance",
       items: [
         { label: "Billing",  href: `/projects/${props.projectId}/bills`,    icon: ReceiptIndianRupee, hidden: !props.canAccessBilling },
-        { label: "Expenses", href: `/projects/${props.projectId}/expenses`, icon: Wallet, hidden: !props.canLogExpense },
       ],
     },
   ];

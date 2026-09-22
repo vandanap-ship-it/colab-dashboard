@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Inbox, Smartphone, ShieldCheck, Users, History, Trash2 } from "lucide-react";
-import { canAccessBilling, canLogExpense, canSeeMobile, isAdmin } from "@/lib/roles";
+import { canAccessBilling, canSeeMobile, isAdmin } from "@/lib/roles";
 import BrandMark from "./BrandMark";
 import Sidebar from "./Sidebar";
 import SwitchProjectButton from "./SwitchProjectButton";
@@ -46,7 +46,6 @@ export default function Navbar() {
             <Sidebar
               projectId={projectId}
               canAccessBilling={canAccessBilling(role)}
-              canLogExpense={canLogExpense(role)}
               canImport={isAdmin(role)}
               canManageUsers={isAdmin(role)}
             />

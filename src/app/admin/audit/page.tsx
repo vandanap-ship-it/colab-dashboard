@@ -34,7 +34,6 @@ const ENTITY_TYPES = [
   "ManpowerEntry",
   "TradePlan",
   "SubContractorBill",
-  "Expense",
   "Project",
   "ProjectDrawing",
   "DesignDrawing",

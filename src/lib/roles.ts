@@ -88,25 +88,6 @@ export function canAccessBilling(role: string): boolean {
 }
 
 /**
- * Project expenses: any internal team member can log one (site staff on mobile,
- * office staff on desktop); a Planner/Manager/Admin approves. Scoped external
- * contractors have no access. (Module scope is enforced separately for them.)
- */
-export function canLogExpense(role: string): boolean {
-  return (
-    role === ROLES.SITE_ENGINEER ||
-    role === ROLES.SITE_MANAGER ||
-    role === ROLES.PLANNER ||
-    role === ROLES.PRODUCT_TEAM ||
-    role === ROLES.ADMIN
-  );
-}
-
-export function canApproveExpense(role: string): boolean {
-  return role === ROLES.PLANNER || role === ROLES.SITE_MANAGER || role === ROLES.ADMIN;
-}
-
-/**
  * Drawing register:
  *   - Any internal user may view drawings (engineers need to reference them on site).
  *   - Only Planner/Product/Admin may add drawings or upload new revisions, so the

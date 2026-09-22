@@ -57,7 +57,7 @@ async function compressImage(file: File): Promise<File> {
  * Photo picker with inline thumbnail previews + remove-one.
  *
  * Replaces the four ad-hoc `<input type="file" multiple>` patterns in the
- * mobile forms (progress / inspection / daily report / expense). Pre this
+ * mobile forms (progress / inspection / daily report). Pre this
  * component, engineers picked 4 photos in one OS dialog and had no way to
  * drop one — if the 4th picture was blurry they had to re-pick all four.
  *
