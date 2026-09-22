@@ -77,7 +77,7 @@ export default async function EditDraftPage({
           notes: i.notes,
           photoUrl: i.photoUrl,
         })),
-        photoUrls: draft.photos.map((p) => p.url),
+        photos: draft.photos.map((p) => ({ id: p.id, url: p.url })),
       }}
     />
   );

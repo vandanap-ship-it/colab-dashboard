@@ -57,7 +57,12 @@ export type EditDraftInput = {
     notes: string | null;
     photoUrl: string | null;
   }>;
-  photoUrls: string[];
+  /**
+   * Whole-checklist photos already on this draft. Each carries its
+   * database id so the resume-edit UI can DELETE one individually
+   * from /api/inspections/[id]/photos/[photoId].
+   */
+  photos: Array<{ id: string; url: string }>;
 };
 
 const DEFAULT_ITEMS = [
@@ -149,11 +154,14 @@ export default function InspectionForm({
       : DEFAULT_ITEMS.map((label) => ({ label, passed: null, notApplicable: false, notes: "", photo: null, photoUrl: null })),
   );
   const [photos, setPhotos] = useState<File[]>([]);
-  // Whole-checklist photos already saved on this draft. Rendered as a
-  // read-only strip above the PhotoPicker so the filler can see what's
-  // there; new photos added via the picker append on save. Delete-a-
-  // saved-photo is a follow-up.
-  const [existingWholePhotos] = useState<string[]>(editDraft?.photoUrls ?? []);
+  // Whole-checklist photos already saved on this draft. Each carries
+  // its db id so the X button on a thumbnail can DELETE it. Local state
+  // updates optimistically on click; if the DELETE fails, the photo
+  // returns to the strip and the filler is told what went wrong.
+  const [existingWholePhotos, setExistingWholePhotos] = useState<Array<{ id: string; url: string }>>(
+    editDraft?.photos ?? [],
+  );
+  const [photoRemoveError, setPhotoRemoveError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -893,33 +901,68 @@ export default function InspectionForm({
         </ul>
       </div>
 
-      {/* Whole-checklist photos already saved on this draft. Read-only
-          strip so the filler can see what's already there; new photos
-          added via the PhotoPicker below append on save. Delete-a-
-          saved-photo is a follow-up (needs an InspectionPhoto DELETE
-          endpoint). */}
-      {existingWholePhotos.length > 0 && (
+      {/* Whole-checklist photos already saved on this draft. Each has
+          an X to remove it — the DELETE endpoint is filler-only + DRAFT-
+          only so a reviewer never sees an in-motion photo set. New
+          photos added via the PhotoPicker below append on save. */}
+      {existingWholePhotos.length > 0 && editDraft && (
         <div className="block">
           <span className="text-sm font-medium text-stone-700">
             Already saved <span className="text-stone-400 font-normal">({existingWholePhotos.length})</span>
           </span>
           <div className="grid grid-cols-3 gap-2 mt-2">
-            {existingWholePhotos.map((url) => (
-              <a
-                key={url}
-                href={url}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="relative aspect-square rounded-lg border border-stone-200 overflow-hidden bg-stone-50 block"
+            {existingWholePhotos.map((p) => (
+              <div
+                key={p.id}
+                className="relative aspect-square rounded-lg border border-stone-200 overflow-hidden bg-stone-50"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
-              </a>
+                <a
+                  href={p.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="block w-full h-full"
+                  aria-label="Open photo"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p.url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                </a>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const before = existingWholePhotos;
+                    setPhotoRemoveError(null);
+                    // Optimistic: strike the photo out of local state
+                    // immediately, then confirm with the server.
+                    setExistingWholePhotos((cur) => cur.filter((x) => x.id !== p.id));
+                    try {
+                      const res = await fetch(
+                        `/api/inspections/${editDraft.id}/photos/${p.id}`,
+                        { method: "DELETE" },
+                      );
+                      if (!res.ok) {
+                        const data = await res.json().catch(() => null);
+                        setExistingWholePhotos(before);
+                        setPhotoRemoveError(data?.error ?? `Couldn't remove that photo (status ${res.status}).`);
+                      }
+                    } catch {
+                      setExistingWholePhotos(before);
+                      setPhotoRemoveError("Network offline — couldn't remove the photo.");
+                    }
+                  }}
+                  className="absolute top-1 right-1 bg-stone-900/85 text-white rounded-full w-7 h-7 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-white/80"
+                  aria-label="Remove photo"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             ))}
           </div>
           <p className="text-[11px] text-stone-500 mt-1">
-            Tap to open. Any new photos below will be added alongside these on save.
+            Tap the image to open. Tap the × to remove one. Any new photos below will be added on save.
           </p>
+          {photoRemoveError && (
+            <p className="text-[12px] text-ferrous-600 mt-2">{photoRemoveError}</p>
+          )}
         </div>
       )}
 
