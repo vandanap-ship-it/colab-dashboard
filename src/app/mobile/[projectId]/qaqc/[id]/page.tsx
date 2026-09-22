@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, canAccessScopedRow, MODULES } from "@/lib/modules";
 import { canReview } from "@/lib/roles";
+import { wirAgeFor } from "@/lib/wirAge";
 import MobileQaqcReviewActions from "@/components/mobile/MobileQaqcReviewActions";
 import MobileQaqcReopenAction from "@/components/mobile/MobileQaqcReopenAction";
 
@@ -95,6 +96,9 @@ export default async function MobileInspectionDetailPage({
 
         <div className="mt-2 flex items-center gap-2 flex-wrap text-[12px] text-ink-3">
           <StatusPill status={inspection.status} />
+          {/* Same age chip the list card shows, so the two surfaces
+              read the same number from the same math. */}
+          {inspection.status === "IN_REVIEW" && <DetailAgingChip createdAt={inspection.createdAt} />}
           {inspection.module && (
             <span className="rounded-full bg-sandstone-100 text-ink-2 px-2 py-0.5 font-semibold uppercase tracking-[0.14em] text-[9.5px]">
               {inspection.module === "SAFETY" ? "EHS" : "QA/QC"}
@@ -343,4 +347,28 @@ function StatusPill({ status }: { status: string }) {
 
 function fmtDate(d: Date): string {
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/**
+ * Detail-hero variant of the list card's AgingChip. Same math, same
+ * tier→color mapping, slightly larger paddings to match the hero's
+ * denser rhythm. Kept as a local helper (not shared) so the two
+ * surfaces can style independently as the design evolves without
+ * pulling on one another.
+ */
+function DetailAgingChip({ createdAt }: { createdAt: Date }) {
+  const age = wirAgeFor(createdAt);
+  if (age.tier === "fresh") return null;
+  const cls =
+    age.tier === "stale"
+      ? "bg-ferrous-50 ring-ferrous-200 text-ferrous-700"
+      : "bg-sandstone-100 ring-sandstone-200 text-ink-2";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold tabular-nums ${cls}`}
+      title={`Filed ${fmtDate(createdAt)} · ${age.days} day${age.days === 1 ? "" : "s"} ago`}
+    >
+      {age.label}
+    </span>
+  );
 }

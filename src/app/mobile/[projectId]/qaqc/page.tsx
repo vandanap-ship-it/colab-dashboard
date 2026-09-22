@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { canReview } from "@/lib/roles";
+import { wirAgeFor } from "@/lib/wirAge";
 
 export const dynamic = "force-dynamic";
 
@@ -247,7 +248,14 @@ export default async function MobileQaqcPage({
                         </div>
                       )}
                     </div>
-                    <StatusPill status={i.status} />
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <StatusPill status={i.status} />
+                      {/* Aging cue for reviewers. Fresh WIRs (0-1d) get
+                          no chip; the signal only fires once a WIR has
+                          been waiting long enough that queue position
+                          matters. */}
+                      {i.status === "IN_REVIEW" && <AgingChip createdAt={i.createdAt} />}
+                    </div>
                   </div>
                 </Link>
               </li>
@@ -346,4 +354,27 @@ function EmptyState({ tab }: { tab: Tab }) {
 
 function fmtDate(d: Date): string {
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/**
+ * Age pill for IN_REVIEW WIRs. Deliberately silent for 0-1d rows so the
+ * card of a WIR filed today doesn't wear a chip that says nothing new.
+ * Tier colors match the SLA cliff: aging is sandstone (gentle nudge),
+ * stale flips to ferrous (missed the internal review window).
+ */
+function AgingChip({ createdAt }: { createdAt: Date }) {
+  const age = wirAgeFor(createdAt);
+  if (age.tier === "fresh") return null;
+  const cls =
+    age.tier === "stale"
+      ? "bg-ferrous-50 ring-ferrous-200 text-ferrous-700"
+      : "bg-sandstone-100 ring-sandstone-200 text-ink-2";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold tabular-nums ${cls}`}
+      title={`Filed ${fmtDate(createdAt)} · ${age.days} day${age.days === 1 ? "" : "s"} ago`}
+    >
+      {age.label}
+    </span>
+  );
 }
