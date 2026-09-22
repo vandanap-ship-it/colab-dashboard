@@ -417,6 +417,10 @@ CREATE TABLE "Inspection" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "idempotencyKey" TEXT,
+    "submitRemark" TEXT,
+    "assignedReviewerIds" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "rescheduledFor" TIMESTAMP(3),
+    "rescheduledNote" TEXT,
 
     CONSTRAINT "Inspection_pkey" PRIMARY KEY ("id")
 );
@@ -429,6 +433,7 @@ CREATE TABLE "InspectionItem" (
     "passed" BOOLEAN,
     "notApplicable" BOOLEAN NOT NULL DEFAULT false,
     "notes" TEXT,
+    "photoUrl" TEXT,
     "orderIndex" INTEGER NOT NULL DEFAULT 0,
 
     CONSTRAINT "InspectionItem_pkey" PRIMARY KEY ("id")
