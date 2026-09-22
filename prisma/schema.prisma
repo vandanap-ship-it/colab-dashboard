@@ -390,6 +390,15 @@ model ProgressEntry {
   reasonCode  String?
   reasonNote  String?
 
+  /// Progress entry lifecycle. PUBLISHED rows are the ones every rollup,
+  /// report and export considers real; DRAFT rows are the engineer's
+  /// unfinished attempts, visible only to them under the Drafts tab of
+  /// the Progress list. Kept as text (not a Prisma enum) so a future
+  /// third state can land as a data change rather than a migration.
+  /// Default keeps every existing row PUBLISHED, so this add is fully
+  /// backwards-compatible.
+  status         String    @default("PUBLISHED")
+
   createdById    String
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

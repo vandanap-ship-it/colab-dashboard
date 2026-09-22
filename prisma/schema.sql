@@ -196,6 +196,7 @@ CREATE TABLE "ProgressEntry" (
     "notes" TEXT,
     "reasonCode" TEXT,
     "reasonNote" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'PUBLISHED',
     "createdById" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
