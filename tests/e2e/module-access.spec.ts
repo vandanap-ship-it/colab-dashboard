@@ -175,15 +175,8 @@ test.describe("Module access control", () => {
       );
       expect(forMilestoneRes.status()).toBe(403);
 
-      // 17. /api/expenses/[id] PATCH + DELETE — internal-only. The list and
-      //     GET routes already gated on isScopedUser; the mutate paths did not.
-      //     Any id is fine — the gate runs before the DB lookup.
-      const expPatchRes = await page.request.patch("/api/expenses/any-id", {
-        data: { status: "APPROVED" },
-      });
-      expect(expPatchRes.status()).toBe(403);
-      const expDeleteRes = await page.request.delete("/api/expenses/any-id");
-      expect(expDeleteRes.status()).toBe(403);
+      // 17. /api/expenses/* — removed Sep 2026 with the Expense module. The
+      //     PATCH/DELETE gate checks that lived here are gone with the routes.
     } finally {
       // 8. Cleanup — deactivate the test user as admin
       await page.context().clearCookies();
