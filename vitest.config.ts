@@ -11,6 +11,17 @@ export default defineConfig({
     environment: "node",
     // Integration tests rebuild the schema + seed; give them room.
     testTimeout: 30_000,
+    // Unit tests import lib files that in turn import @/lib/prisma, whose
+    // module-load guard throws when DATABASE_URL is missing. Setting a
+    // valid-looking connection string lets the client be constructed
+    // without touching the network — Prisma only actually connects on the
+    // first query, which unit tests never issue. Integration tests
+    // override this via their own setup with a real throwaway DB.
+    env: {
+      DATABASE_URL:
+        process.env.DATABASE_URL ??
+        "postgres://vitest:vitest@localhost:5432/vitest-not-actually-connected",
+    },
   },
   resolve: {
     alias: {
