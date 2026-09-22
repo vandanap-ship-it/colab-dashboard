@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
@@ -345,22 +345,16 @@ export default function NewProgressForm({
         <Step number={1} label={selected ? "Activity" : "Pick an activity"} />
         <div className="mt-3">
           {selected ? (
-            <div className="rounded-2xl border border-sandstone-100 bg-cream px-4 py-3 flex items-start gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="text-[15px] font-semibold text-ink leading-tight">{selected.name}</div>
-                <div className="text-[12px] text-ink-3 mt-0.5 truncate">
-                  Block {selected.path.blockCode} · {selected.path.villaLabel} · {selected.path.sectionName}
-                </div>
+            /* Once the activity is picked, the card just reads it back.
+               No inline "Change" affordance — Shraddha, Sep 22: the
+               back arrow in the header is enough to abandon and pick
+               again if the wrong activity landed. Keeps the form
+               calmer during the log flow. */
+            <div className="rounded-2xl border border-sandstone-100 bg-cream px-4 py-3">
+              <div className="text-[15px] font-semibold text-ink leading-tight">{selected.name}</div>
+              <div className="text-[12px] text-ink-3 mt-0.5 truncate">
+                Block {selected.path.blockCode} · {selected.path.villaLabel} · {selected.path.sectionName}
               </div>
-              <button
-                type="button"
-                onClick={() => setSelected(null)}
-                className="text-[13px] text-ferrous-600 hover:text-ferrous-700 inline-flex items-center gap-1 shrink-0"
-                aria-label="Change activity"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Change
-              </button>
             </div>
           ) : (
             <ActivityPicker
