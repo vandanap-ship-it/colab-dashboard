@@ -183,6 +183,27 @@ export interface RfiDueSignal {
   label: string;
 }
 
+/**
+ * Adapter that returns a QueueAge-shaped chip from an RFI due signal.
+ * Useful for surfaces (like My Actions) that render one chip per row
+ * via the shared QueueAge tier→color mapping — this way the row can
+ * feed either an age or a due signal into the same slot without
+ * plumbing two prop shapes.
+ *
+ * Mapping:
+ *   overdue  → stale   ("overdue by Nd")
+ *   due-today→ aging   ("due today")
+ *   upcoming ≤ 5d → aging  ("due in Nd")
+ *   upcoming > 5d → fresh  (chip is hidden by the renderer)
+ */
+export function rfiDueSignalAsAge(signal: RfiDueSignal): QueueAge {
+  if (signal.kind === "overdue") return { days: signal.days, tier: "stale", label: signal.label };
+  if (signal.kind === "due-today") return { days: 0, tier: "aging", label: signal.label };
+  // upcoming
+  const tier: QueueAgeTier = signal.days <= 5 ? "aging" : "fresh";
+  return { days: signal.days, tier, label: signal.label };
+}
+
 export function rfiDueSignal(dueDate: Date, now: Date = new Date()): RfiDueSignal {
   // Snap both to UTC midnight so the answer doesn't shift by hour-of-day
   // and stays consistent regardless of where the reader's machine sits.

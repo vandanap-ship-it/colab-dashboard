@@ -5,7 +5,16 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
 import { formatRfiNumber } from "@/lib/rfi";
-import { concernAgeFor, issueAgeFor, permitAgeFor, rfiAgeFor, wirAgeFor, type QueueAge } from "@/lib/queueAge";
+import {
+  concernAgeFor,
+  issueAgeFor,
+  permitAgeFor,
+  rfiAgeFor,
+  rfiDueSignal,
+  rfiDueSignalAsAge,
+  wirAgeFor,
+  type QueueAge,
+} from "@/lib/queueAge";
 
 export const dynamic = "force-dynamic";
 
@@ -189,9 +198,17 @@ export default async function MobileMyActionsPage({
                     href={`/mobile/${projectId}/rfi/${r.id}?tab=open`}
                     label={formatRfiNumber(r.number)}
                     primary={r.subject}
-                    secondary={secondaryLine(r.raisedBy?.name, r.dueDate ? `due ${fmtDate(r.dueDate)}` : undefined)}
+                    // The dueDate signal now rides in the age chip on
+                    // the right, so we drop the plain "due 25 Sep" from
+                    // the meta line — otherwise the reader sees the
+                    // same date twice.
+                    secondary={secondaryLine(r.raisedBy?.name)}
                     right={r.priority !== "MEDIUM" ? priorityLabel(r.priority) : undefined}
-                    age={rfiAgeFor(r.createdAt)}
+                    // Explicit dueDate wins over wall-clock aging, same
+                    // rule the RFI list card + detail hero apply. Both
+                    // flow through the same QueueAge chip so all three
+                    // surfaces read the same way at a glance.
+                    age={r.dueDate ? rfiDueSignalAsAge(rfiDueSignal(r.dueDate)) : rfiAgeFor(r.createdAt)}
                   />
                 ))}
               </ActionSection>

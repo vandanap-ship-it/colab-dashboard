@@ -23,6 +23,7 @@ import {
   issueAgeFor,
   rfiAgeFor,
   rfiDueSignal,
+  rfiDueSignalAsAge,
   WIR_TIERS,
   HINDRANCE_TIERS,
   PERMIT_TIERS,
@@ -215,6 +216,25 @@ describe("rfiDueSignal", () => {
     const s = rfiDueSignal(ISO("2026-09-21T09:00:00Z"), ISO("2026-09-22T20:00:00Z"));
     expect(s.kind).toBe("overdue");
     expect(s.days).toBe(1);
+  });
+});
+
+describe("rfiDueSignalAsAge", () => {
+  it("maps overdue → stale tier with 'overdue by Nd' label", () => {
+    const age = rfiDueSignalAsAge({ kind: "overdue", days: 3, label: "overdue by 3d" });
+    expect(age).toEqual({ days: 3, tier: "stale", label: "overdue by 3d" });
+  });
+  it("maps due-today → aging tier with 'due today' label", () => {
+    const age = rfiDueSignalAsAge({ kind: "due-today", days: 0, label: "due today" });
+    expect(age).toEqual({ days: 0, tier: "aging", label: "due today" });
+  });
+  it("maps upcoming within 5d → aging tier (visible chip)", () => {
+    expect(rfiDueSignalAsAge({ kind: "upcoming", days: 1, label: "due in 1d" }).tier).toBe("aging");
+    expect(rfiDueSignalAsAge({ kind: "upcoming", days: 5, label: "due in 5d" }).tier).toBe("aging");
+  });
+  it("maps upcoming > 5d → fresh tier (hidden by renderer)", () => {
+    expect(rfiDueSignalAsAge({ kind: "upcoming", days: 6, label: "due in 6d" }).tier).toBe("fresh");
+    expect(rfiDueSignalAsAge({ kind: "upcoming", days: 30, label: "due in 30d" }).tier).toBe("fresh");
   });
 });
 
