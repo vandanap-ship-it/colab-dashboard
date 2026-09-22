@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessModule, canAccessScopedRow, MODULES } from "@/lib/modules";
 import { canReview } from "@/lib/roles";
 import MobileQaqcReviewActions from "@/components/mobile/MobileQaqcReviewActions";
+import MobileQaqcReopenAction from "@/components/mobile/MobileQaqcReopenAction";
 
 export const dynamic = "force-dynamic";
 
@@ -141,7 +142,9 @@ export default async function MobileInspectionDetailPage({
         {/* Reschedule callout · answers "when does this reopen and why".
             Only rendered when the WIR is currently parked; a WIR that
             was rescheduled and then reviewed keeps the historical
-            rescheduledFor on the row but stops showing it prominently. */}
+            rescheduledFor on the row but stops showing it prominently.
+            The Reopen button sits at the bottom of the callout so the
+            unpark affordance lives next to the parked-state context. */}
         {inspection.status === "RESCHEDULED" && inspection.rescheduledFor && (
           <section className="rounded-xl border border-sandstone-200 bg-sandstone-50 p-3">
             <div className="flex items-center gap-2 mb-1">
@@ -153,6 +156,10 @@ export default async function MobileInspectionDetailPage({
             {inspection.rescheduledNote && (
               <p className="text-sm text-ink leading-snug mt-1">“{inspection.rescheduledNote}”</p>
             )}
+            <MobileQaqcReopenAction
+              inspectionId={inspection.id}
+              expectedUpdatedAt={inspection.updatedAt.toISOString()}
+            />
           </section>
         )}
 

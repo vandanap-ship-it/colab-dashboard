@@ -74,12 +74,14 @@ export default function MobileQaqcReviewActions({
   }
 
   // Already reviewed → don't offer buttons. Keep a subtle hint so the reviewer
-  // knows why they can't act again from here.
+  // knows why they can't act again from here. (A parked RESCHEDULED WIR is
+  // filtered out one level up, in the detail page, so it never reaches this
+  // component — the sandstone callout owns that state instead.)
   if (currentStatus !== "IN_REVIEW") {
     return (
       <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-center text-xs text-stone-500">
         This inspection has already been {currentStatus === "PASSED" ? "passed" : "rejected"}.
-        Reopen it from the desktop QA/QC list if it needs another look.
+        A fresh WIR is the way to raise it again.
       </div>
     );
   }
