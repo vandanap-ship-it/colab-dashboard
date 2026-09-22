@@ -110,6 +110,7 @@ async function compressImage(file: File): Promise<File> {
 export default function InspectionForm({
   projectId,
   editDraft,
+  initialWbsNodeId,
 }: {
   projectId: string;
   // `redirectTo` was accepted in an earlier iteration but never wired up.
@@ -122,12 +123,17 @@ export default function InspectionForm({
   // Review promotes the DRAFT to IN_REVIEW instead of creating a new
   // one. Absent → the standard "new WIR" flow (POST creates fresh).
   editDraft?: EditDraftInput;
+  // Deep-link entry point — a caller (typically the Log Progress
+  // precheck callout) passes the activity the WIR should be filed
+  // against. Ignored when editDraft is set, since that snapshot
+  // already carries its own wbsNodeId.
+  initialWbsNodeId?: string | null;
 }) {
   const router = useRouter();
   const toast = useToast();
   const isEditingDraft = !!editDraft;
   const [activities, setActivities] = useState<Activity[] | null>(null);
-  const [activityId, setActivityId] = useState(editDraft?.wbsNodeId ?? "");
+  const [activityId, setActivityId] = useState(editDraft?.wbsNodeId ?? initialWbsNodeId ?? "");
   const [activitySearch, setActivitySearch] = useState("");
   const [title, setTitle] = useState(editDraft?.title ?? "");
   const [items, setItems] = useState<ChecklistItem[]>(

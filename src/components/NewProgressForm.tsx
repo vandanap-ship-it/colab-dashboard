@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Lock } from "lucide-react";
 import VoiceTextarea from "./VoiceTextarea";
@@ -76,7 +77,13 @@ export default function NewProgressForm({
   const [gate, setGate] = useState<
     | null
     | { ok: true }
-    | { ok: false; reason: string }
+    // When blocked, we also carry the prerequisite's wbsNodeId + name so
+    // the callout can offer a one-tap "Raise the WIR" shortcut that
+    // deep-links into /inspection/new with the required activity
+    // pre-selected. `requiredWbsNodeId` is null when the gate can't
+    // pinpoint a specific node — the callout omits the shortcut in
+    // that case rather than sending the engineer somewhere ambiguous.
+    | { ok: false; reason: string; requiredWbsNodeId: string | null; requiredActivityName: string }
   >(null);
   const [gateLoading, setGateLoading] = useState(false);
   // Formerly collapsed the notes/photos/labour section behind a toggle —
@@ -117,7 +124,16 @@ export default function NewProgressForm({
           return;
         }
         const data = await res.json();
-        setGate(data.ok ? { ok: true } : { ok: false, reason: data.reason ?? "Prerequisite not met" });
+        if (data.ok) {
+          setGate({ ok: true });
+        } else {
+          setGate({
+            ok: false,
+            reason: data.reason ?? "Prerequisite not met",
+            requiredWbsNodeId: typeof data.requiredWbsNodeId === "string" ? data.requiredWbsNodeId : null,
+            requiredActivityName: typeof data.requiredActivityName === "string" ? data.requiredActivityName : "the prerequisite",
+          });
+        }
       })
       .catch(() => {
         if (!cancelled) setGate({ ok: true });
@@ -371,6 +387,20 @@ export default function NewProgressForm({
                 Raise a Work Inspection Request for the prerequisite, get it
                 passed, then come back here to log progress.
               </p>
+              {/* One-tap shortcut into /inspection/new with the required
+                  activity pre-selected. Only shown when the gate knows
+                  exactly which wbsNode to raise the WIR against —
+                  otherwise the button would either send the engineer
+                  somewhere ambiguous or force them to search from a
+                  cold start. */}
+              {gate.requiredWbsNodeId && (
+                <Link
+                  href={`/mobile/${projectId}/inspection/new?wbsNodeId=${encodeURIComponent(gate.requiredWbsNodeId)}`}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-ferrous-500 text-white text-[13px] font-semibold px-4 py-2 shadow-card active:scale-[0.99]"
+                >
+                  Raise the WIR for {gate.requiredActivityName}
+                </Link>
+              )}
             </div>
           </div>
         </section>
