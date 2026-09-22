@@ -21,11 +21,13 @@ import {
   permitAgeFor,
   concernAgeFor,
   issueAgeFor,
+  rfiAgeFor,
   WIR_TIERS,
   HINDRANCE_TIERS,
   PERMIT_TIERS,
   CONCERN_TIERS,
   ISSUE_TIERS,
+  RFI_TIERS,
 } from "@/lib/queueAge";
 
 const ISO = (s: string) => new Date(s);
@@ -173,6 +175,35 @@ describe("issueAgeFor", () => {
   it("flips to stale at exactly 4d — four days without a fix is a supervision gap", () => {
     const age = issueAgeFor(ISO("2026-09-18T10:00:00Z"), ISO("2026-09-22T10:00:00Z"));
     expect(age).toEqual({ days: 4, tier: "stale", label: "waiting 4d" });
+  });
+});
+
+describe("tierFor (generic, RFI SLA)", () => {
+  it("stays fresh through 1d", () => {
+    expect(tierFor(0, RFI_TIERS)).toBe("fresh");
+    expect(tierFor(1, RFI_TIERS)).toBe("fresh");
+  });
+  it("flips to aging at 2d", () => {
+    expect(tierFor(2, RFI_TIERS)).toBe("aging");
+  });
+  it("flips to stale at 5d — same cliff as concerns; consultant SLA", () => {
+    expect(tierFor(5, RFI_TIERS)).toBe("stale");
+    expect(tierFor(10, RFI_TIERS)).toBe("stale");
+  });
+});
+
+describe("rfiAgeFor", () => {
+  it("stays fresh at 1d — an RFI raised yesterday", () => {
+    const age = rfiAgeFor(ISO("2026-09-21T10:00:00Z"), ISO("2026-09-22T10:00:00Z"));
+    expect(age).toEqual({ days: 1, tier: "fresh", label: "waiting 1d" });
+  });
+  it("flips to aging at exactly 2d", () => {
+    const age = rfiAgeFor(ISO("2026-09-20T10:00:00Z"), ISO("2026-09-22T10:00:00Z"));
+    expect(age).toEqual({ days: 2, tier: "aging", label: "waiting 2d" });
+  });
+  it("flips to stale at exactly 5d — the consultant SLA cliff", () => {
+    const age = rfiAgeFor(ISO("2026-09-17T10:00:00Z"), ISO("2026-09-22T10:00:00Z"));
+    expect(age).toEqual({ days: 5, tier: "stale", label: "waiting 5d" });
   });
 });
 

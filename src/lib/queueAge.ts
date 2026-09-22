@@ -138,3 +138,24 @@ export const ISSUE_TIERS: AgeTiers = { agingAt: 2, staleAt: 4 };
 export function issueAgeFor(createdAt: Date, now: Date = new Date()): QueueAge {
   return computeAge(createdAt, ISSUE_TIERS, now);
 }
+
+/**
+ * RFI SLA · 2d aging, 5d stale.
+ *
+ * An RFI is a question waiting for an answer from the consultant or
+ * designer — not a blocker per se, but a real drag on the work it's
+ * asking about. Site engineers watch the RFI queue to make sure their
+ * questions haven't fallen through the cracks; a five-day-old OPEN
+ * RFI reads as a supervision gap.
+ *
+ * Same tier as concerns because both are "waiting on someone else"
+ * signals (concern → leadership, RFI → consultant); tighter than WIRs
+ * because that's the SLA the White Lotus team runs consultants to.
+ * Applied to OPEN rows only; ANSWERED / CLOSED have their outcome
+ * captured elsewhere.
+ */
+export const RFI_TIERS: AgeTiers = { agingAt: 2, staleAt: 5 };
+
+export function rfiAgeFor(createdAt: Date, now: Date = new Date()): QueueAge {
+  return computeAge(createdAt, RFI_TIERS, now);
+}

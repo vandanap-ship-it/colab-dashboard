@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
 import { RFI_STATUSES, RFI_STATUS_LABELS, RFI_CATEGORY_LABELS, formatRfiNumber, type RfiStatus, type RfiCategory } from "@/lib/rfi";
+import { rfiAgeFor } from "@/lib/queueAge";
 
 export const dynamic = "force-dynamic";
 
@@ -160,7 +161,14 @@ export default async function MobileRfiListPage({
                         <span>{RFI_CATEGORY_LABELS[r.category as RfiCategory] ?? r.category}</span>
                       </div>
                     </div>
-                    <PriorityPill priority={r.priority} />
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <PriorityPill priority={r.priority} />
+                      {/* Aging cue on OPEN RFIs — silent for 0-1d,
+                          sandstone at 2d, ferrous at 5d. Skipped once
+                          answered or closed (the queue-position signal
+                          is done at that point). */}
+                      {r.status === "OPEN" && <RfiAgingChip createdAt={r.createdAt} />}
+                    </div>
                   </div>
                 </Link>
               </li>
@@ -241,6 +249,31 @@ function EmptyState({ tab }: { tab: Tab }) {
       <p className="text-sm text-stone-500 mt-2">{copy}</p>
       <p className="text-[11px] text-stone-400 mt-1">Status: {RFI_STATUS_LABELS[STATUS_FOR_TAB[tab]]}</p>
     </div>
+  );
+}
+
+/**
+ * Age pill for OPEN RFIs. Silent for 0-1d (question just filed);
+ * sandstone at 2d; ferrous at 5d — the SLA cliff Colab-culture runs
+ * consultants to, and where an unanswered RFI reads as a real
+ * supervision gap. Explicit dueDate (when set on the row) still
+ * shows in the meta line under the subject; this chip is the
+ * queue-position signal, not the calendar deadline.
+ */
+function RfiAgingChip({ createdAt }: { createdAt: Date }) {
+  const age = rfiAgeFor(createdAt);
+  if (age.tier === "fresh") return null;
+  const cls =
+    age.tier === "stale"
+      ? "bg-ferrous-50 ring-ferrous-200 text-ferrous-700"
+      : "bg-sandstone-100 ring-sandstone-200 text-ink-2";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold tabular-nums ${cls}`}
+      title={`Raised ${fmtDate(createdAt)} · ${age.days} day${age.days === 1 ? "" : "s"} ago`}
+    >
+      {age.label}
+    </span>
   );
 }
 
