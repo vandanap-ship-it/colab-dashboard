@@ -94,6 +94,10 @@ export default async function MobileProjectHome({
   const staleConcernCutoff = new Date(nowMs - CONCERN_TIERS.staleAt * 86_400_000);
   const staleIssueCutoff = new Date(nowMs - ISSUE_TIERS.staleAt * 86_400_000);
   const staleRfiCutoff = new Date(nowMs - RFI_TIERS.staleAt * 86_400_000);
+  // "Now" as a Date object for the RFI dueDate < now comparison. A
+  // separate binding so the `lt` filter doesn't have to reconstruct
+  // the same value inline.
+  const nowDate = new Date(nowMs);
 
   const canSeeHindrance = canAccessModule(userModules, MODULES.HINDRANCE);
   const canSeePermit = canAccessModule(userModules, MODULES.PERMIT);
@@ -162,12 +166,23 @@ export default async function MobileProjectHome({
           },
         })
       : Promise.resolve(0),
-    // RFI stale count — OPEN questions past the consultant SLA cliff.
-    // Gated on RFI module access; a HINDRANCE-only contractor doesn't
-    // see the RFI queue and shouldn't see the rollup either.
+    // RFI stale count — OPEN questions that have crossed the consultant
+    // SLA cliff, EITHER by wall-clock age (5d+) OR by the raiser's
+    // explicit dueDate having passed. The two conditions OR together so
+    // a young-but-overdue-by-promise RFI is counted once. Matches the
+    // list card + detail hero, which prefer the dueDate signal over
+    // the aging chip when both apply.
     canSeeRfi
       ? prisma.rfi.count({
-          where: { projectId, deletedAt: null, status: "OPEN", createdAt: { lt: staleRfiCutoff } },
+          where: {
+            projectId,
+            deletedAt: null,
+            status: "OPEN",
+            OR: [
+              { createdAt: { lt: staleRfiCutoff } },
+              { dueDate: { lt: nowDate } },
+            ],
+          },
         })
       : Promise.resolve(0),
     // Own drafts count — only meaningful when the caller can raise WIRs.

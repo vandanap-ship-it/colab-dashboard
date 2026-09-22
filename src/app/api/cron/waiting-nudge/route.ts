@@ -88,6 +88,9 @@ export async function runNudge(overrideRecipients?: Array<{ id: string; name: st
   const concernCutoff = new Date(nowMs - CONCERN_TIERS.staleAt * 86_400_000);
   const issueCutoff = new Date(nowMs - ISSUE_TIERS.staleAt * 86_400_000);
   const rfiCutoff = new Date(nowMs - RFI_TIERS.staleAt * 86_400_000);
+  // "Now" as a Date so the RFI query can OR in a `dueDate < now` clause
+  // alongside the age cutoff.
+  const nowDate = new Date(nowMs);
 
   const projects = await prisma.project.findMany({
     select: { id: true, name: true },
@@ -119,7 +122,19 @@ export async function runNudge(overrideRecipients?: Array<{ id: string; name: st
       prisma.issue.count({ where: { ...base, status: { in: ["OPEN", "IN_REINSPECTION"] }, module: "QAQC", createdAt: { lt: issueCutoff } } }),
       prisma.issue.count({ where: { ...base, status: { in: ["OPEN", "IN_REINSPECTION"] }, module: "SAFETY", createdAt: { lt: issueCutoff } } }),
       prisma.issue.count({ where: { ...base, status: { in: ["OPEN", "IN_REINSPECTION"] }, module: null, createdAt: { lt: issueCutoff } } }),
-      prisma.rfi.count({ where: { ...base, status: "OPEN", createdAt: { lt: rfiCutoff } } }),
+      // RFI stale = crossed the 5d age cliff OR past its explicit
+      // dueDate. Matches the list card + detail hero, which use the
+      // dueDate signal in preference to the aging chip when set.
+      prisma.rfi.count({
+        where: {
+          ...base,
+          status: "OPEN",
+          OR: [
+            { createdAt: { lt: rfiCutoff } },
+            { dueDate: { lt: nowDate } },
+          ],
+        },
+      }),
       prisma.concern.count({ where: { ...base, status: "PENDING", createdAt: { lt: concernCutoff } } }),
     ]);
     projectStale.push({
