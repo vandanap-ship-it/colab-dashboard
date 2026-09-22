@@ -354,6 +354,7 @@ export default function NewProgressForm({
           selected
             ? {
                 label: `Log another on ${selected.path.villaLabel}`,
+                sublabel: "Same villa, pick a new activity",
                 onSelect: resetForNextOnSameVilla,
               }
             : undefined

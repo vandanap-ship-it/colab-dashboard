@@ -46,8 +46,11 @@ export default function SaveSuccessCard({
    * Add another. Progress uses it for "Log another on Villa 15" so
    * the second and subsequent logs on the same villa skip the
    * block/villa drilldown. Callers set the label + reset function.
+   * The optional `sublabel` is a small secondary line rendered
+   * beneath the button label — good for spelling out what the
+   * shortcut keeps and what it drops.
    */
-  contextAction?: { label: string; onSelect: () => void };
+  contextAction?: { label: string; sublabel?: string; onSelect: () => void };
   /** True when the save was queued locally (offline). Adjusts the
    *  detail line so the engineer knows their entry is on the device
    *  and will sync later — not lost. */
@@ -80,9 +83,12 @@ export default function SaveSuccessCard({
           <button
             type="button"
             onClick={contextAction.onSelect}
-            className="rounded-xl bg-stone-900 text-white text-base font-medium py-4 active:scale-[0.99] transition-all"
+            className="rounded-xl bg-stone-900 text-white py-3.5 active:scale-[0.99] transition-all"
           >
-            {contextAction.label}
+            <span className="block text-base font-medium leading-tight">{contextAction.label}</span>
+            {contextAction.sublabel && (
+              <span className="block text-[12px] text-stone-300 mt-0.5">{contextAction.sublabel}</span>
+            )}
           </button>
         ) : null}
         <button

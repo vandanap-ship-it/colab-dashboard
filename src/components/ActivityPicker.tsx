@@ -132,6 +132,11 @@ export default function ActivityPicker({
   // Back out of the preseeded milestone list on purpose, and we don't
   // want the effect to yank them back in.
   const initialVillaJumpedRef = useRef(false);
+  // True while the user is still standing on the preseeded milestone
+  // step (i.e. reached it via the initial-villa jump, and hasn't
+  // navigated away). Drives the "Continuing on {villa}" hint that
+  // makes it obvious the picker was pre-scoped. Cleared on any Back.
+  const [showPreseedHint, setShowPreseedHint] = useState(false);
 
   // ------- initial index load -------
   useEffect(() => {
@@ -260,9 +265,12 @@ export default function ActivityPicker({
 
   const goBack = useCallback(() => {
     if (step === "activity") { setStep("milestone"); setActivities(null); setVillaMilestoneId(null); return; }
-    if (step === "milestone") { setStep("villa"); setVillaId(null); return; }
-    if (step === "villa") { setStep("contractor"); setContractorKey(null); return; }
-    if (step === "contractor") { setStep("root"); return; }
+    // Any step-out from milestone or upstream means the user has left
+    // the preseeded context on purpose. Drop the hint so it doesn't
+    // reappear if they later drill back down to the same villa.
+    if (step === "milestone") { setStep("villa"); setVillaId(null); setShowPreseedHint(false); return; }
+    if (step === "villa") { setStep("contractor"); setContractorKey(null); setShowPreseedHint(false); return; }
+    if (step === "contractor") { setStep("root"); setShowPreseedHint(false); return; }
   }, [step]);
 
   const jumpToMilestone = useCallback((match: { villaId: string; villaMilestoneId: string; villaLabel: string }) => {
@@ -344,6 +352,7 @@ export default function ActivityPicker({
           setContractorKey(contractorOfVilla(v.label));
           setVillaId(v.id);
           setStep("milestone");
+          setShowPreseedHint(true);
           initialVillaJumpedRef.current = true;
           return;
         }
@@ -490,7 +499,19 @@ export default function ActivityPicker({
 
       {/* Milestone level */}
       {step === "milestone" && currentVilla && (
-        <ul className="divide-y divide-stone-100 rounded-md border border-stone-200 bg-white max-h-96 overflow-y-auto">
+        <>
+          {/* Preseed hint — reassures the engineer that the picker
+              already jumped them to the villa they were on, and points
+              at how to leave. Only shown right after the "Log another
+              on {villa}" shortcut lands them here; drops as soon as
+              they Back out. */}
+          {showPreseedHint && (
+            <div className="rounded-md bg-sandstone-100/60 border border-sandstone-200 px-3 py-2 text-[12px] text-ink-3 leading-snug">
+              Continuing on <span className="font-semibold text-ink">{currentVilla.label}</span>.
+              Pick the next activity, or tap Back to change villa.
+            </div>
+          )}
+          <ul className="divide-y divide-stone-100 rounded-md border border-stone-200 bg-white max-h-96 overflow-y-auto">
           {currentVilla.milestones.map((m) => (
             <li key={m.id}>
               <button
@@ -510,6 +531,7 @@ export default function ActivityPicker({
             </li>
           ))}
         </ul>
+        </>
       )}
 
       {/* Activity (leaf) level */}
