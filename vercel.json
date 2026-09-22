@@ -21,6 +21,10 @@
     {
       "path": "/api/cron/waiting-nudge",
       "schedule": "30 2 * * 1-6"
+    },
+    {
+      "path": "/api/cron/notification-cleanup",
+      "schedule": "30 21 * * *"
     }
   ]
 }
