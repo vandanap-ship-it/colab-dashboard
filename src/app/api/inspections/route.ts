@@ -24,13 +24,24 @@ const PostInspectionSchema = z.object({
       // response equivalent to Yes/No.
       notApplicable: z.boolean().optional(),
       notes: z.string().max(500).optional(),
+      // Colab parity — each checklist row can carry a single photo of the
+      // checkpoint. Already uploaded by the client via /api/upload; here
+      // we just store the URL against the row.
+      photoUrl: z.string().url().nullable().optional(),
     }),
   ).max(100).optional(),
   photoUrls: z.array(z.string().url()).max(10).optional(),
+  // Colab parity — reviewers explicitly picked at submit time. When empty,
+  // the API falls back to the role-based broadcast (planners + product +
+  // admin) so the queue never sits with no one notified.
+  assignedReviewerIds: z.array(z.string().min(1)).max(20).optional(),
+  // Free-text remark shown in the Send For Review popup on Colab. Optional
+  // — draft submissions and pre-Sep-2026 clients don't send it.
+  submitRemark: z.string().max(2000).optional(),
   idempotencyKey: z.string().max(120).optional(),
 });
 
-const STATUSES = new Set(["IN_REVIEW", "PASSED", "REJECTED"]);
+const STATUSES = new Set(["IN_REVIEW", "PASSED", "REJECTED", "RESCHEDULED"]);
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -97,7 +108,7 @@ export async function POST(req: Request) {
   const parsed = await parseBody(req, PostInspectionSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
-  const { projectId, wbsNodeId, title, items, photoUrls } = body;
+  const { projectId, wbsNodeId, title, items, photoUrls, assignedReviewerIds, submitRemark } = body;
   const t = title.trim();
 
   // Refuse the submission if any non-empty item is unanswered. Since the
@@ -105,7 +116,7 @@ export async function POST(req: Request) {
   // means Yes, No, OR NA (the Colab three-way). Only untouched
   // (notApplicable === false AND passed === null) rows fail.
   const candidateItems = Array.isArray(items) ? items : [];
-  const itemsClean: Array<{ label: string; passed: boolean | null; notApplicable: boolean; notes: string | null; orderIndex: number }> = [];
+  const itemsClean: Array<{ label: string; passed: boolean | null; notApplicable: boolean; notes: string | null; photoUrl: string | null; orderIndex: number }> = [];
   for (let idx = 0; idx < candidateItems.length; idx++) {
     const i = candidateItems[idx];
     const label = (i.label ?? "").trim();
@@ -124,6 +135,10 @@ export async function POST(req: Request) {
       passed: isNA ? null : (i.passed as boolean),
       notApplicable: isNA,
       notes: i.notes?.trim() || null,
+      // Per-row photo (Colab step 6): a single URL, already uploaded by
+      // the client. Blank string is normalized to null so downstream
+      // readers can rely on a truthy check.
+      photoUrl: (i.photoUrl?.trim?.() || null) as string | null,
       orderIndex: idx,
     });
   }
@@ -136,6 +151,15 @@ export async function POST(req: Request) {
   const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 8) : [];
   const moduleTag = primaryModuleFor(session.user.modules);
   const idempotencyKey = readIdempotencyKey(body);
+
+  // De-dupe assigned reviewers and drop the filler themselves — a WIR
+  // reviewed by its own author defeats the checklist. Cap at 20 to match
+  // the schema; a WIR with dozens of "reviewers" is a signal something is
+  // structurally off, not that we should silently accept it.
+  const cleanReviewerIds = Array.isArray(assignedReviewerIds)
+    ? [...new Set(assignedReviewerIds.filter((id) => typeof id === "string" && id.length > 0 && id !== session.user.id))].slice(0, 20)
+    : [];
+  const cleanSubmitRemark = submitRemark?.trim() || null;
   const inspectionInclude = {
     filledBy: { select: { id: true, name: true } },
     reviewedBy: { select: { id: true, name: true } },
@@ -156,6 +180,8 @@ export async function POST(req: Request) {
           module: moduleTag,
           filledById: session.user.id,
           idempotencyKey,
+          submitRemark: cleanSubmitRemark,
+          assignedReviewerIds: cleanReviewerIds,
           items: { create: itemsClean },
           photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
         },
@@ -174,24 +200,42 @@ export async function POST(req: Request) {
       summary: `Inspection submitted: "${t}" (${passedCount}/${itemsClean.length} passed)`,
     });
 
-    // Push every project reviewer so the queue doesn't sit unnoticed. WIRs
-    // have no assignee; the "person who should look at this" set is
-    // whoever can review inspections on this project — planners, product
-    // team, admins. First-reviewer-wins in practice; we notify them all
-    // so any of them can pick it up. Skip the filler themselves — they
-    // just clicked submit and know what they did.
-    const reviewers = await prisma.user.findMany({
-      where: {
-        active: true,
-        role: { in: [ROLES.PLANNER, ROLES.PRODUCT_TEAM, ROLES.ADMIN] },
-        id: { not: session.user.id },
-      },
-      select: { id: true },
-    });
-    for (const r of reviewers) {
-      void sendPushToUser(r.id, {
-        title: `New WIR to review · ${t.slice(0, 40)}`,
-        body: `${session.user.name ?? session.user.username} submitted ${itemsClean.length} item${itemsClean.length === 1 ? "" : "s"}.${passedCount === itemsClean.length ? " All Yes so far." : ""}`,
+    // Push the WIR to the people who need to review it. Colab lets the
+    // filler pick reviewers explicitly at submit time; when they do, only
+    // those people get pinged (and the push body names it as an
+    // assignment, not a broadcast). When they don't, fall back to the
+    // legacy role-based broadcast so the queue never sits with no one
+    // notified. The filler themselves is always skipped.
+    let reviewerIds: string[];
+    let assigned = false;
+    if (cleanReviewerIds.length > 0) {
+      const eligible = await prisma.user.findMany({
+        where: {
+          active: true,
+          id: { in: cleanReviewerIds },
+          role: { in: [ROLES.PLANNER, ROLES.PRODUCT_TEAM, ROLES.ADMIN, ROLES.SITE_MANAGER] },
+        },
+        select: { id: true },
+      });
+      reviewerIds = eligible.map((u) => u.id);
+      assigned = true;
+    } else {
+      const reviewers = await prisma.user.findMany({
+        where: {
+          active: true,
+          role: { in: [ROLES.PLANNER, ROLES.PRODUCT_TEAM, ROLES.ADMIN] },
+          id: { not: session.user.id },
+        },
+        select: { id: true },
+      });
+      reviewerIds = reviewers.map((u) => u.id);
+    }
+    for (const rid of reviewerIds) {
+      void sendPushToUser(rid, {
+        title: assigned
+          ? `Assigned WIR · ${t.slice(0, 40)}`
+          : `New WIR to review · ${t.slice(0, 40)}`,
+        body: `${session.user.name ?? session.user.username} submitted ${itemsClean.length} item${itemsClean.length === 1 ? "" : "s"}.${passedCount === itemsClean.length ? " All Yes so far." : ""}${cleanSubmitRemark ? ` · "${cleanSubmitRemark.slice(0, 80)}"` : ""}`,
         url: `/mobile/${projectId}/qaqc/${inspection.id}?tab=pending${moduleTag ? `&module=${moduleTag}` : ""}`,
         tag: `wir-new-${inspection.id}`,
       });

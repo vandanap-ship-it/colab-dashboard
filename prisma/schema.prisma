@@ -701,7 +701,7 @@ model Inspection {
   projectId       String
   wbsNodeId       String?
   title           String
-  status          String  @default("IN_REVIEW")
+  status          String  @default("IN_REVIEW") // IN_REVIEW | PASSED | REJECTED | RESCHEDULED
   rejectionReason String?
 
   filledById     String
@@ -712,6 +712,20 @@ model Inspection {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
   idempotencyKey String?   @unique // de-dupes offline-queue replays
+
+  // Colab-parity fields — added Sep 2026:
+  //   submitRemark        - free-text sent alongside Send For Review, so the
+  //                         reviewer opens the WIR with the filler's context.
+  //   assignedReviewerIds - the specific reviewers the filler picked. When
+  //                         empty, the API falls back to a role-based
+  //                         broadcast (planners + product + admin).
+  //   rescheduledFor      - when status=RESCHEDULED, the date the inspection
+  //                         should be reopened. Null on any other status.
+  //   rescheduledNote     - optional reason (e.g. "waiting on rebar delivery").
+  submitRemark        String?
+  assignedReviewerIds String[]  @default([])
+  rescheduledFor      DateTime?
+  rescheduledNote     String?
 
   project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   wbsNode    WBSNode?          @relation(fields: [wbsNodeId], references: [id])
@@ -737,6 +751,11 @@ model InspectionItem {
   passed        Boolean?
   notApplicable Boolean  @default(false)
   notes         String?
+  // Optional per-checkpoint photo (Colab parity). One photo per row, not a
+  // gallery — the reviewer just needs "did you actually see this row" not
+  // a documentary. The whole-checklist InspectionPhoto[] remains for the
+  // wider evidence (progress shot, overall context photo).
+  photoUrl      String?
   orderIndex    Int      @default(0)
 
   inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
