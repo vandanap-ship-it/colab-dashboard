@@ -17,7 +17,7 @@
  * on next page load.
  */
 
-const SW_VERSION = "siddhi-sw-v1";
+const SW_VERSION = "siddhi-sw-v2";
 
 self.addEventListener("install", (event) => {
   // Skip the "wait for old worker" step so a fresh version activates
@@ -54,8 +54,10 @@ self.addEventListener("push", (event) => {
     // wants to know their permit was approved even if the phone was
     // face-down.
     vibrate: [100, 50, 100],
-    // Stash the target URL for notificationclick to read.
-    data: { url: payload.url || "/" },
+    // Stash the target URL + inbox id for notificationclick to read.
+    // notificationId is set when the server managed to write the inbox
+    // row; on tap we PATCH it read so the bell doesn't lie.
+    data: { url: payload.url || "/", notificationId: payload.notificationId || null },
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -63,11 +65,30 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data && event.notification.data.url;
-  if (!url) return;
+  const data = event.notification.data || {};
+  const url = data.url;
+  const notificationId = data.notificationId;
+  if (!url && !notificationId) return;
 
   event.waitUntil(
     (async () => {
+      // Fire the mark-read PATCH first, but don't await it — the tap
+      // should feel instant regardless of the API round-trip. Wrapped
+      // in Promise.resolve so an error inside fetch() rejection can't
+      // escape the waitUntil chain.
+      if (notificationId) {
+        Promise.resolve(
+          fetch(`/api/notifications/${notificationId}/read`, {
+            method: "PATCH",
+            credentials: "include",
+          }),
+        ).catch(() => {
+          // Best-effort — the inbox page will pick up the read state
+          // on its next fetch either way.
+        });
+      }
+
+      if (!url) return;
       const clientsList = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,

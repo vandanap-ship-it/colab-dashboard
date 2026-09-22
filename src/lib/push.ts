@@ -60,8 +60,12 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
   // Inbox write first — separately try/catch'd so a failed insert never
   // blocks the browser push (or vice versa). Best-effort by design; the
   // push itself is the source of truth for "did the user get notified".
-  await prisma.notification
-    .create({
+  // Capture the inserted row's id so the browser-push payload can carry
+  // it downstream — the service worker uses it to mark the inbox row
+  // read the moment the user taps the notification.
+  let notificationId: string | undefined;
+  try {
+    const row = await prisma.notification.create({
       data: {
         userId,
         title: payload.title,
@@ -69,10 +73,12 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
         url: payload.url ?? null,
         tag: payload.tag ?? null,
       },
-    })
-    .catch((err) => {
-      console.warn("[push] inbox insert failed", { userId, title: payload.title, msg: (err as Error).message });
+      select: { id: true },
     });
+    notificationId = row.id;
+  } catch (err) {
+    console.warn("[push] inbox insert failed", { userId, title: payload.title, msg: (err as Error).message });
+  }
 
   if (!CONFIGURED) {
     if (process.env.NODE_ENV !== "test") {
@@ -85,7 +91,12 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
 
   let sent = 0;
   let pruned = 0;
-  const payloadStr = JSON.stringify(payload);
+  // Carry the inbox row's id in the browser-push payload as
+  // `notificationId` so the service worker can PATCH it read on tap. Not
+  // set if the inbox insert failed above — the SW handles that as "no
+  // read call, just open the URL" so the tap still works.
+  const wirePayload = notificationId ? { ...payload, notificationId } : payload;
+  const payloadStr = JSON.stringify(wirePayload);
 
   await Promise.all(
     subs.map(async (s) => {
