@@ -9,6 +9,7 @@ import {
   type WorkPermitStatus,
   type WorkPermitType,
 } from "@/lib/workPermit";
+import { permitAgeFor } from "@/lib/queueAge";
 import { useToast } from "./Toast";
 
 type WorkPermit = {
@@ -22,6 +23,7 @@ type WorkPermit = {
   location: string | null;
   approverIds: string; // JSON
   status: WorkPermitStatus;
+  createdAt: string; // ISO — anchor for the "waiting Nd" chip on PENDING rows
   updatedAt: string; // ISO — echoed on PATCH for optimistic-lock
   rejectionReason: string | null;
   requester: { id: string; name: string; username: string };
@@ -258,6 +260,11 @@ function PermitRow({
             >
               {WORK_PERMIT_STATUS_LABELS[permit.status]}
             </span>
+            {/* Aging chip on PENDING permits · a permit that sits blocks
+                the work it authorizes, so the SLA is the tightest in the
+                app (1d aging, 2d stale). Skipped on APPROVED/REJECTED/
+                CLOSED where the queue-position signal is done. */}
+            {permit.status === "PENDING" && <PermitAgingChip createdAt={permit.createdAt} />}
             <span className="text-[10px] text-stone-500">
               {WORK_PERMIT_TYPE_LABELS[permit.type as WorkPermitType] ?? permit.type}
             </span>
@@ -373,5 +380,30 @@ function PermitRow({
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * Age pill for PENDING permits. Silent for 0d — a permit filed this
+ * morning is expected to sit until the shift's ready to run it.
+ * Sandstone at 1d, ferrous at 2d. The tightest SLA in the app because
+ * a pending permit is holding up authorized work: hot work, night
+ * work, deshuttering. Every day of delay is either idle crew or work
+ * running unpermitted.
+ */
+function PermitAgingChip({ createdAt }: { createdAt: string }) {
+  const age = permitAgeFor(new Date(createdAt));
+  if (age.tier === "fresh") return null;
+  const cls =
+    age.tier === "stale"
+      ? "bg-red-50 ring-red-200 text-red-800"
+      : "bg-amber-50 ring-amber-200 text-amber-800";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold tabular-nums ${cls}`}
+      title={`Raised ${new Date(createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })} · ${age.days} day${age.days === 1 ? "" : "s"} ago`}
+    >
+      {age.label}
+    </span>
   );
 }

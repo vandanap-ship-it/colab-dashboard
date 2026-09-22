@@ -18,8 +18,10 @@ import {
   computeAge,
   wirAgeFor,
   hindranceAgeFor,
+  permitAgeFor,
   WIR_TIERS,
   HINDRANCE_TIERS,
+  PERMIT_TIERS,
 } from "@/lib/queueAge";
 
 const ISO = (s: string) => new Date(s);
@@ -94,6 +96,34 @@ describe("wirAgeFor", () => {
     const age = wirAgeFor(ISO("2026-09-15T10:00:00Z"), ISO("2026-09-22T10:00:00Z"));
     expect(age.days).toBe(7);
     expect(age.tier).toBe("stale");
+  });
+});
+
+describe("tierFor (generic, permit SLA)", () => {
+  it("only stays fresh at 0d — permits are on the tightest SLA in the app", () => {
+    expect(tierFor(0, PERMIT_TIERS)).toBe("fresh");
+  });
+  it("flips to aging at 1d — earlier than WIRs and hindrances", () => {
+    expect(tierFor(1, PERMIT_TIERS)).toBe("aging");
+  });
+  it("flips to stale at 2d — a permit sitting two days blocks the work it authorizes", () => {
+    expect(tierFor(2, PERMIT_TIERS)).toBe("stale");
+    expect(tierFor(5, PERMIT_TIERS)).toBe("stale");
+  });
+});
+
+describe("permitAgeFor", () => {
+  it("stays fresh at 0d — a permit filed this morning", () => {
+    const age = permitAgeFor(ISO("2026-09-22T08:00:00Z"), ISO("2026-09-22T18:00:00Z"));
+    expect(age).toEqual({ days: 0, tier: "fresh", label: "waiting 0d" });
+  });
+  it("flips to aging at exactly 1d", () => {
+    const age = permitAgeFor(ISO("2026-09-21T10:00:00Z"), ISO("2026-09-22T10:00:00Z"));
+    expect(age).toEqual({ days: 1, tier: "aging", label: "waiting 1d" });
+  });
+  it("flips to stale at 2d — blocks the work it authorizes", () => {
+    const age = permitAgeFor(ISO("2026-09-20T10:00:00Z"), ISO("2026-09-22T10:00:00Z"));
+    expect(age).toEqual({ days: 2, tier: "stale", label: "waiting 2d" });
   });
 });
 

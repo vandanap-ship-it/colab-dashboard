@@ -90,3 +90,18 @@ export const HINDRANCE_TIERS: AgeTiers = { agingAt: 2, staleAt: 3 };
 export function hindranceAgeFor(startDate: Date, now: Date = new Date()): QueueAge {
   return computeAge(startDate, HINDRANCE_TIERS, now);
 }
+
+/**
+ * Work-permit SLA · 1d aging, 2d stale.
+ *
+ * A pending permit blocks the work it authorizes: hot work, night work,
+ * deshuttering. If a supervisor lets one sit for two days, the crew
+ * either starts unpermitted (a safety-culture failure) or loses two
+ * days of scheduled work. Both are bad — so the chip fires at 1d and
+ * flips ferrous at 2d, the tightest SLA in the app.
+ */
+export const PERMIT_TIERS: AgeTiers = { agingAt: 1, staleAt: 2 };
+
+export function permitAgeFor(createdAt: Date, now: Date = new Date()): QueueAge {
+  return computeAge(createdAt, PERMIT_TIERS, now);
+}
