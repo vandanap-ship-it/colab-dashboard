@@ -3,13 +3,13 @@ import { auth } from "@/lib/auth";
 import { canSeeMobile } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getPendingActionCount } from "@/lib/pendingActions";
-import { canAccessModule, MODULES } from "@/lib/modules";
 import MobileHeaderBack from "@/components/MobileHeaderBack";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import MobileOnboarding from "@/components/MobileOnboarding";
 import PendingSyncBadge from "@/components/PendingSyncBadge";
 import PushOptIn from "@/components/PushOptIn";
-import QuickAddFab, { type QuickAddKey } from "@/components/mobile/QuickAddFab";
+import QuickAddFab from "@/components/mobile/QuickAddFab";
+import { quickActionsFor } from "@/lib/quickActions";
 
 export default async function MobileProjectLayout({
   children,
@@ -40,18 +40,10 @@ export default async function MobileProjectLayout({
   ).catch(() => 0);
 
   // Filter the quick-add sheet to actions the current user's modules
-  // actually permit. A HINDRANCE-only contractor doesn't see "Log
-  // progress" or "Raise WIR"; a scoped user with no PROGRESS access
-  // stays out of those flows entirely.
-  const mods = session.user.modules;
-  const quickActions: QuickAddKey[] = [];
-  if (canAccessModule(mods, MODULES.PROGRESS)) quickActions.push("log-progress", "log-manpower");
-  if (canAccessModule(mods, MODULES.QAQC) || canAccessModule(mods, MODULES.SAFETY)) {
-    quickActions.push("raise-wir");
-  }
-  if (canAccessModule(mods, MODULES.HINDRANCE)) quickActions.push("add-hindrance");
-  if (canAccessModule(mods, MODULES.CONCERN)) quickActions.push("add-concern");
-  if (canAccessModule(mods, MODULES.RFI)) quickActions.push("raise-rfi");
+  // actually permit. Derivation lives in src/lib/quickActions so the
+  // gating is pure and the role-visibility golden tests can exercise
+  // every persona directly.
+  const quickActions = quickActionsFor(session.user.modules);
 
   return (
     <div className="flex-1 flex flex-col bg-ivory">

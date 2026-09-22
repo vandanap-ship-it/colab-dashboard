@@ -13,14 +13,12 @@ import {
   HelpCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { QuickAddKey } from "@/lib/quickActions";
 
-export type QuickAddKey =
-  | "log-progress"
-  | "log-manpower"
-  | "add-hindrance"
-  | "add-concern"
-  | "raise-wir"
-  | "raise-rfi";
+// Re-export so existing `import { QuickAddKey } from "@/components/mobile/QuickAddFab"`
+// sites keep working. Canonical definition lives in the lib now so the
+// server-side gating and the golden tests share one source of truth.
+export type { QuickAddKey };
 
 /**
  * Central "+" FAB that opens a bottom sheet with the day's most-used actions.

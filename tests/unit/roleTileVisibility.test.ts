@@ -20,6 +20,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { canAccessTool, MODULES, TOOL_MODULES, type ModuleKey } from "@/lib/modules";
+import { quickActionsFor } from "@/lib/quickActions";
 
 // Every tile the mobile home (src/app/mobile/[projectId]/page.tsx)
 // registers as a Tool row. Kept as a plain literal here so the test
@@ -122,6 +123,53 @@ describe("mobile home tile visibility", () => {
   it("multi-scope QAQC+SAFETY contractor sees both quality tiles (still no progress/permits)", () => {
     const visible = visibleTiles(serialize([MODULES.QAQC, MODULES.SAFETY]));
     expect([...visible].sort()).toEqual(["ehs-tile", "qaqc-tile", "search"].sort());
+  });
+});
+
+describe("QuickAdd FAB action visibility", () => {
+  it("internal / full-access user sees every quick action", () => {
+    expect(quickActionsFor(serialize(null)).sort()).toEqual(
+      ["log-progress", "log-manpower", "raise-wir", "add-hindrance", "add-concern", "raise-rfi"].sort(),
+    );
+  });
+
+  it("QAQC-scoped contractor sees only Raise WIR (WIRs can be raised by QAQC or Safety)", () => {
+    expect(quickActionsFor(serialize([MODULES.QAQC]))).toEqual(["raise-wir"]);
+  });
+
+  it("SAFETY-scoped contractor sees only Raise WIR", () => {
+    expect(quickActionsFor(serialize([MODULES.SAFETY]))).toEqual(["raise-wir"]);
+  });
+
+  it("PROGRESS-scoped contractor sees Log Progress + Log Manpower (no WIR / hindrance / concern / RFI)", () => {
+    expect(quickActionsFor(serialize([MODULES.PROGRESS])).sort()).toEqual(
+      ["log-progress", "log-manpower"].sort(),
+    );
+  });
+
+  it("HINDRANCE-scoped contractor sees only Add Hindrance", () => {
+    expect(quickActionsFor(serialize([MODULES.HINDRANCE]))).toEqual(["add-hindrance"]);
+  });
+
+  it("CONCERN-scoped contractor sees only Add Concern", () => {
+    expect(quickActionsFor(serialize([MODULES.CONCERN]))).toEqual(["add-concern"]);
+  });
+
+  it("RFI-scoped contractor sees only Raise RFI", () => {
+    expect(quickActionsFor(serialize([MODULES.RFI]))).toEqual(["raise-rfi"]);
+  });
+
+  it("PERMIT-scoped contractor sees no quick actions — permit-raise runs from its own new page", () => {
+    // Permits have their own dedicated New button on the permit list; the
+    // FAB deliberately doesn't carry that action. Locking this so no one
+    // silently adds "raise-permit" without matching module gating.
+    expect(quickActionsFor(serialize([MODULES.PERMIT]))).toEqual([]);
+  });
+
+  it("multi-scope PROGRESS+HINDRANCE contractor sees the union", () => {
+    expect(quickActionsFor(serialize([MODULES.PROGRESS, MODULES.HINDRANCE])).sort()).toEqual(
+      ["log-progress", "log-manpower", "add-hindrance"].sort(),
+    );
   });
 });
 
