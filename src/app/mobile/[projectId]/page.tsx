@@ -5,6 +5,7 @@ import {
   Bug,
   ClipboardCheck,
   ClipboardList,
+  FileEdit,
   HardHat,
   HelpCircle,
   IndianRupee,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/modules";
 import { getDashboardManpowerStrip } from "@/lib/manpowerServer";
 import { istDayStart } from "@/lib/istDay";
+import { WIR_TIERS, PERMIT_TIERS, HINDRANCE_TIERS, CONCERN_TIERS } from "@/lib/queueAge";
 
 // Amanvana-native mobile home. Editorial serif hero + warm sandstone cards
 // + ferrous accent — reads like the villa brochure a site engineer already
@@ -74,7 +76,39 @@ export default async function MobileProjectHome({
     ...(scopedModule ? { module: scopedModule } : {}),
   } as const;
 
-  const [myProgressToday, manpower, wirPendingCount, issuesOpenCount] = await Promise.all([
+  // "Waiting on you" strip · counts rows that have already crossed each
+  // domain's stale cliff. Same tier boundaries the per-domain aging chips
+  // use (queueAge.ts), so a row that reads ferrous on its list card is
+  // exactly the row counted here. Every count is gated on module access
+  // — a HINDRANCE-scoped contractor sees only the hindrance pill;
+  // scoped users don't see cross-module rollups they can't act on.
+  //
+  // Server components run once per request, not on every re-render, so
+  // Date.now() is legit here — the react-hooks/purity rule doesn't know
+  // the difference and would rather see this in a lib helper. Overriding
+  // for the reason above.
+  // eslint-disable-next-line react-hooks/purity -- Server component; per-request execution, not client render
+  const nowMs = Date.now();
+  const staleWirCutoff = new Date(nowMs - WIR_TIERS.staleAt * 86_400_000);
+  const stalePermitCutoff = new Date(nowMs - PERMIT_TIERS.staleAt * 86_400_000);
+  const staleHindranceCutoff = new Date(nowMs - HINDRANCE_TIERS.staleAt * 86_400_000);
+  const staleConcernCutoff = new Date(nowMs - CONCERN_TIERS.staleAt * 86_400_000);
+
+  const canSeeHindrance = canAccessModule(userModules, MODULES.HINDRANCE);
+  const canSeePermit = canAccessModule(userModules, MODULES.PERMIT);
+  const canSeeConcern = canAccessModule(userModules, MODULES.CONCERN);
+
+  const [
+    myProgressToday,
+    manpower,
+    wirPendingCount,
+    issuesOpenCount,
+    staleWirCount,
+    stalePermitCount,
+    staleHindranceCount,
+    staleConcernCount,
+    myDraftCount,
+  ] = await Promise.all([
     session?.user
       ? prisma.progressEntry.count({
           where: {
@@ -91,7 +125,37 @@ export default async function MobileProjectHome({
     canSeeQualityStrip
       ? prisma.issue.count({ where: { ...qualityBaseWhere, status: "OPEN" } })
       : Promise.resolve(0),
+    canSeeQualityStrip
+      ? prisma.inspection.count({
+          where: { ...qualityBaseWhere, status: "IN_REVIEW", createdAt: { lt: staleWirCutoff } },
+        })
+      : Promise.resolve(0),
+    canSeePermit
+      ? prisma.workPermit.count({
+          where: { projectId, deletedAt: null, status: "PENDING", createdAt: { lt: stalePermitCutoff } },
+        })
+      : Promise.resolve(0),
+    canSeeHindrance
+      ? prisma.hindrance.count({
+          where: { projectId, deletedAt: null, status: "OPEN", startDate: { lt: staleHindranceCutoff } },
+        })
+      : Promise.resolve(0),
+    canSeeConcern
+      ? prisma.concern.count({
+          where: { projectId, deletedAt: null, status: "PENDING", createdAt: { lt: staleConcernCutoff } },
+        })
+      : Promise.resolve(0),
+    // Own drafts count — only meaningful when the caller can raise WIRs.
+    // Scoped strictly to filledById so nothing leaks between authors.
+    canSeeQualityStrip && session?.user
+      ? prisma.inspection.count({
+          where: { ...qualityBaseWhere, status: "DRAFT", filledById: session.user.id },
+        })
+      : Promise.resolve(0),
   ]);
+
+  const totalWaitingOnYou =
+    staleWirCount + stalePermitCount + staleHindranceCount + staleConcernCount + myDraftCount;
 
   // The full date in a real editorial format — Fraunces will read it well
   // even at eyebrow scale. Rendered on the server so the FCP has the real
@@ -277,6 +341,23 @@ export default async function MobileProjectHome({
             the Colab home. Only rendered for users with QA/QC or SAFETY
             access; a hindrance-only or progress-only contractor doesn't
             need to see either count. */}
+        {/* "Waiting on you" strip · sits above the calmer QualityStrip
+            because it's an escalation, not a summary. Every pill counts
+            rows that have crossed the domain's stale cliff — so a chip
+            only fires when something is genuinely overdue for
+            attention. Hidden entirely when everything is fresh. */}
+        {totalWaitingOnYou > 0 && (
+          <WaitingOnYouStrip
+            projectId={projectId}
+            moduleFilter={scopedModule}
+            staleWirCount={staleWirCount}
+            stalePermitCount={stalePermitCount}
+            staleHindranceCount={staleHindranceCount}
+            staleConcernCount={staleConcernCount}
+            myDraftCount={myDraftCount}
+          />
+        )}
+
         {canSeeQualityStrip && (
           <QualityStrip
             projectId={projectId}
@@ -411,6 +492,87 @@ function QualityCard({
         </div>
       </div>
     </Link>
+  );
+}
+
+/**
+ * Compact escalation strip — one pill per domain that has stale rows.
+ * "Stale" here means "past the domain's own SLA cliff" (WIR 7d+,
+ * Permit 2d+, Hindrance 3d+, Concern 5d+, all from queueAge tiers).
+ * Only pills with a non-zero count render, and the whole strip is
+ * hidden by the caller when the total is 0 — so on a clean day the
+ * home has no visual noise saying "you're up to date".
+ *
+ * Each pill deep-links into the filtered queue: WIR → Pending tab
+ * (module-preserving for scoped users), Permit → default list,
+ * Hindrance → Open tab, Concern → Pending tab, Drafts → own drafts
+ * tab. Every tap lands on the exact rows the count is measuring.
+ */
+function WaitingOnYouStrip({
+  projectId,
+  moduleFilter,
+  staleWirCount,
+  stalePermitCount,
+  staleHindranceCount,
+  staleConcernCount,
+  myDraftCount,
+}: {
+  projectId: string;
+  moduleFilter: string | null;
+  staleWirCount: number;
+  stalePermitCount: number;
+  staleHindranceCount: number;
+  staleConcernCount: number;
+  myDraftCount: number;
+}) {
+  const wirHref = `/mobile/${projectId}/qaqc?tab=pending${moduleFilter ? `&module=${moduleFilter}` : ""}`;
+  const draftsHref = `/mobile/${projectId}/qaqc?tab=drafts${moduleFilter ? `&module=${moduleFilter}` : ""}`;
+
+  // Ordered by escalation strength: WIRs and permits (SLA-shipped) lead;
+  // hindrances and concerns follow; own drafts sit last since a draft is
+  // an internal to-do rather than an external clock ticking.
+  type Pill = {
+    key: string;
+    href: string;
+    count: number;
+    label: string;
+    Icon: LucideIcon;
+    tone: "stale" | "draft";
+  };
+  const pills: Pill[] = [
+    { key: "wir", href: wirHref, count: staleWirCount, label: staleWirCount === 1 ? "stale WIR" : "stale WIRs", Icon: ClipboardList, tone: "stale" as const },
+    { key: "permit", href: `/mobile/${projectId}/permit`, count: stalePermitCount, label: stalePermitCount === 1 ? "stale permit" : "stale permits", Icon: ShieldCheck, tone: "stale" as const },
+    { key: "hindrance", href: `/mobile/${projectId}/hindrance?tab=open`, count: staleHindranceCount, label: staleHindranceCount === 1 ? "stale blocker" : "stale blockers", Icon: AlertTriangle, tone: "stale" as const },
+    { key: "concern", href: `/mobile/${projectId}/concern?tab=pending`, count: staleConcernCount, label: staleConcernCount === 1 ? "stale concern" : "stale concerns", Icon: MessageSquare, tone: "stale" as const },
+    { key: "drafts", href: draftsHref, count: myDraftCount, label: myDraftCount === 1 ? "draft to finish" : "drafts to finish", Icon: FileEdit, tone: "draft" as const },
+  ].filter((p) => p.count > 0);
+
+  return (
+    <section aria-label="Rows past their SLA">
+      <SectionEyebrow>Waiting on you</SectionEyebrow>
+      <div className="flex flex-wrap gap-2">
+        {pills.map((p) => (
+          <Link
+            key={p.key}
+            href={p.href}
+            className={
+              // Stale rows read as an escalating warning (ferrous outline
+              // + ferrous count), drafts read as a to-do (sandstone).
+              // Two-tone so the eye can separate "external clock" from
+              // "your own work in progress" at a glance.
+              "inline-flex items-center gap-1.5 rounded-full ring-1 px-3 py-1.5 text-[13px] font-semibold tabular-nums active:scale-[0.99] " +
+              (p.tone === "stale"
+                ? "bg-ferrous-50 ring-ferrous-200 text-ferrous-700"
+                : "bg-sandstone-100 ring-sandstone-200 text-ink-2")
+            }
+          >
+            <p.Icon className="w-3.5 h-3.5" />
+            <span>{p.count}</span>
+            <span className="font-medium">{p.label}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
