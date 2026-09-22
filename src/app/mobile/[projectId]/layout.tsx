@@ -9,6 +9,7 @@ import MobileBottomNav from "@/components/MobileBottomNav";
 import MobileOnboarding from "@/components/MobileOnboarding";
 import PendingSyncBadge from "@/components/PendingSyncBadge";
 import PushOptIn from "@/components/PushOptIn";
+import BellAutoRefresh from "@/components/BellAutoRefresh";
 import QuickAddFab from "@/components/mobile/QuickAddFab";
 import { quickActionsFor } from "@/lib/quickActions";
 
@@ -81,6 +82,10 @@ export default async function MobileProjectLayout({
         {/* Push-notification opt-in — hides itself when permission is
             already granted or denied, or when previously dismissed. */}
         <PushOptIn />
+        {/* Zero-render helper — refreshes the bell badge when the tab
+            becomes visible again after being backgrounded. Debounced
+            to at most one refresh every 15s. */}
+        <BellAutoRefresh />
         <div className="px-4 pt-2 flex justify-center">
           <PendingSyncBadge />
         </div>
