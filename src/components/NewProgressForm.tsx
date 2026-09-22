@@ -9,6 +9,7 @@ import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
 import ActivityPicker from "./ActivityPicker";
 import SaveSuccessCard from "./SaveSuccessCard";
+import HowThisWorks from "./HowThisWorks";
 import { HINDRANCE_REASONS } from "@/lib/hindranceReasons";
 import { istDayString } from "@/lib/istDay";
 
@@ -374,11 +375,23 @@ export default function NewProgressForm({
         <h1 className="font-serif text-[28px] leading-tight text-ink">
           Log progress
         </h1>
-        <p className="text-[13px] text-ink-3 mt-1">
-          Pick an activity, drag the % slider, then fill photos / notes /
-          labour before you save.
-        </p>
       </header>
+
+      {/* Onboarding · plain-English walkthrough for the site team.
+          Auto-expanded on first visit, collapsed once dismissed. */}
+      <HowThisWorks
+        title="How to log progress"
+        storageKey="siddhi.htw.progress"
+        steps={[
+          "Pick the villa and the activity you worked on today (for example: Villa 15, Footing Concreting).",
+          "Drag the % slider to show how much of that activity is done in total — not just today's work.",
+          "Add 2 or 3 photos: one of the activity, one of the workers, one of anything unusual.",
+          "Type or say what got done today — tap the mic if you'd rather talk.",
+          "Add a labour row for each trade that worked, with how many people.",
+          "If work was delayed, pick a delay reason so the team knows.",
+          "Tap Save progress at the bottom.",
+        ]}
+      />
 
       {/* Step 1 · Activity */}
       <section>
