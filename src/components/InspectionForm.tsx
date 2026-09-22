@@ -122,7 +122,11 @@ export default function InspectionForm({
     return d.toISOString().slice(0, 10);
   });
   const [reschedNote, setReschedNote] = useState("");
-  const [saved, setSaved] = useState<null | { queued: boolean; title: string; rescheduled: boolean }>(null);
+  // Three finish paths: sent for review (default), rescheduled, or saved
+  // as a draft. The saved state carries which so the success card can
+  // pick the right copy and the reset flow works the same way for all
+  // three.
+  const [saved, setSaved] = useState<null | { queued: boolean; title: string; outcome: "review" | "reschedule" | "draft" }>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -222,7 +226,8 @@ export default function InspectionForm({
   // Reschedule — a WIR must have a real title, at least one non-empty row,
   // and every non-empty row must be answered Yes / No / NA. Reschedule
   // deliberately does NOT relax this: an inspection you park should still
-  // reflect the state of what you saw on site today.
+  // reflect the state of what you saw on site today. Save-as-Draft uses a
+  // separate looser validation below.
   function validate(): { ok: true; usable: ChecklistItem[] } | { ok: false; error: string } {
     if (title.trim().length < 3) return { ok: false, error: "Title too short" };
     const usable = items.filter((i) => i.label.trim().length > 0);
@@ -233,6 +238,18 @@ export default function InspectionForm({
       const more = untouched.length > 1 ? ` (+${untouched.length - 1} more)` : "";
       return { ok: false, error: `Tick Yes, No or N/A for "${first}"${more}.` };
     }
+    return { ok: true, usable };
+  }
+
+  // Save-as-Draft validation. Only two invariants a draft has to hold:
+  //   1. A real title, so the filler can find the draft again.
+  //   2. At least one non-empty row, so we don't stack up empty drafts.
+  // Every row's Yes/No/NA state is open — the whole point of a draft is
+  // that the checklist isn't finished yet.
+  function validateDraft(): { ok: true; usable: ChecklistItem[] } | { ok: false; error: string } {
+    if (title.trim().length < 3) return { ok: false, error: "Give the draft a title so you can find it later." };
+    const usable = items.filter((i) => i.label.trim().length > 0);
+    if (usable.length === 0) return { ok: false, error: "Add at least one row before saving as draft." };
     return { ok: true, usable };
   }
 
@@ -352,7 +369,89 @@ export default function InspectionForm({
     if (rowPhotos.warning) toast.warning(rowPhotos.warning);
     if (wholePhotos.warning) toast.warning(wholePhotos.warning);
 
-    setSaved({ queued, title: title.trim(), rescheduled: false });
+    setSaved({ queued, title: title.trim(), outcome: "review" });
+    router.refresh();
+  }
+
+  // Save-as-Draft — Colab step 7 third button. Same POST endpoint with
+  // mode=draft, which server-side skips the "every row must be answered"
+  // validation and skips the reviewer push. Client-side we run the
+  // looser validation (title + at least one non-empty row) so a filler
+  // can pause partway through a 20-item checklist without losing the
+  // work they've already done.
+  async function saveDraft() {
+    const v = validateDraft();
+    if (!v.ok) {
+      setError(v.error);
+      return;
+    }
+    setPending(true);
+    setError(null);
+
+    const [rowPhotos, wholePhotos] = await Promise.all([
+      uploadItemPhotos(v.usable),
+      uploadWholePhotos(),
+    ]);
+
+    const payload = {
+      idempotencyKey: crypto.randomUUID(),
+      projectId,
+      wbsNodeId: activityId || undefined,
+      title: title.trim(),
+      // Row payload mirrors the review shape — the server accepts a
+      // draft row with passed=null / notApplicable=false as "not
+      // answered yet" and stores that state for the eventual
+      // resume-edit (a follow-up task).
+      items: v.usable.map((it, idx) => ({
+        label: it.label,
+        passed: it.passed,
+        notApplicable: it.notApplicable,
+        notes: it.notes,
+        photoUrl: rowPhotos.urls[idx] ?? null,
+      })),
+      photoUrls: wholePhotos.urls,
+      // Reviewers + submitRemark are deliberately included even though
+      // the API skips the push for drafts — they belong to the WIR the
+      // draft will BECOME on Send For Review, so preserving them
+      // through the resume-edit round trip means the filler doesn't
+      // have to re-pick the same reviewers when they come back.
+      assignedReviewerIds: Array.from(selectedReviewerIds),
+      submitRemark: submitRemark.trim() || undefined,
+      mode: "draft" as const,
+    };
+
+    let queued = false;
+    try {
+      const res = await fetch("/api/inspections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        // saved
+      } else if (res.status >= 400 && res.status < 500) {
+        const data = await res.json().catch(() => null);
+        setPending(false);
+        setError(data?.error ?? `Draft save failed (${res.status})`);
+        return;
+      } else {
+        const { enqueue } = await import("@/lib/offlineQueue");
+        await enqueue({ endpoint: "/api/inspections", method: "POST", body: payload, label: `Draft: ${title.trim()}` });
+        queued = true;
+      }
+    } catch {
+      const { enqueue } = await import("@/lib/offlineQueue");
+      await enqueue({ endpoint: "/api/inspections", method: "POST", body: payload, label: `Draft: ${title.trim()}` });
+      queued = true;
+    }
+    setPending(false);
+
+    if (queued) toast.info("Draft saved on this device. It will sync when you're back online.");
+    else toast.success("Draft saved.");
+    if (rowPhotos.warning) toast.warning(rowPhotos.warning);
+    if (wholePhotos.warning) toast.warning(wholePhotos.warning);
+
+    setSaved({ queued, title: title.trim(), outcome: "draft" });
     router.refresh();
   }
 
@@ -434,14 +533,14 @@ export default function InspectionForm({
         const data = await res.json().catch(() => null);
         setPending(false);
         toast.warning(`Saved, but reschedule failed: ${data?.error ?? res.status}`);
-        setSaved({ queued: false, title: title.trim(), rescheduled: false });
+        setSaved({ queued: false, title: title.trim(), outcome: "review" });
         router.refresh();
         return;
       }
     } catch {
       setPending(false);
       toast.warning("Saved, but reschedule couldn't reach the server.");
-      setSaved({ queued: false, title: title.trim(), rescheduled: false });
+      setSaved({ queued: false, title: title.trim(), outcome: "review" });
       router.refresh();
       return;
     }
@@ -450,7 +549,7 @@ export default function InspectionForm({
     toast.success(`Rescheduled to ${date}.`);
     if (rowPhotos.warning) toast.warning(rowPhotos.warning);
     if (wholePhotos.warning) toast.warning(wholePhotos.warning);
-    setSaved({ queued: false, title: title.trim(), rescheduled: true });
+    setSaved({ queued: false, title: title.trim(), outcome: "reschedule" });
     router.refresh();
   }
 
@@ -469,14 +568,24 @@ export default function InspectionForm({
   }
 
   if (saved) {
+    // One SaveSuccessCard, three outcomes — pick the copy the filler
+    // needs based on which of the three finish paths they took.
+    const cardTitle =
+      saved.outcome === "reschedule"
+        ? "Inspection rescheduled"
+        : saved.outcome === "draft"
+          ? "Draft saved"
+          : "Inspection saved";
+    const cardDetail =
+      saved.outcome === "reschedule"
+        ? `${saved.title} — parked for a later day.`
+        : saved.outcome === "draft"
+          ? `${saved.title} — saved as a draft. Only you can see it in your Drafts tab.`
+          : `${saved.title} — sent for planner review.`;
     return (
       <SaveSuccessCard
-        title={saved.rescheduled ? "Inspection rescheduled" : "Inspection saved"}
-        detail={
-          saved.rescheduled
-            ? `${saved.title} — parked for a later day.`
-            : `${saved.title} — sent for planner review.`
-        }
+        title={cardTitle}
+        detail={cardDetail}
         projectId={projectId}
         onAddAnother={resetForm}
         queued={saved.queued}
@@ -496,7 +605,7 @@ export default function InspectionForm({
           Fill a checklist
         </h1>
         <p className="text-[13px] text-ink-3 mt-1.5">
-          Pick a template, mark every row, then Send For Review or Reschedule.
+          Pick a template, mark every row, then Save Draft, Reschedule, or Send For Review.
         </p>
       </header>
 
@@ -727,33 +836,49 @@ export default function InspectionForm({
 
       {error && <p className="text-[13px] text-ferrous-600">{error}</p>}
 
-      {/* Action row — Colab step 7: Reschedule + Send For Review side by
-          side. Skipping Save-As-Draft for now (bigger separate task).
-          Reschedule is a secondary action, Send is the primary. */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Action row — Colab step 7: three buttons.
+            Save Draft (weakest visual weight — light chip) is a pause
+              action, so it doesn't compete with the finish paths;
+            Reschedule (outlined) is a secondary finish path;
+            Send For Review (filled ink) is the primary finish.
+          Save Draft only needs a title + one non-empty row, so it stays
+          enabled while Send For Review is still blocked by untouched
+          rows. The visual hierarchy tells the filler which one is the
+          "shipped" state at a glance. */}
+      <div className="space-y-2">
         <button
           type="button"
           disabled={pending}
-          onClick={() => {
-            const v = validate();
-            if (!v.ok) {
-              setError(v.error);
-              return;
-            }
-            setError(null);
-            setReschedPopupOpen(true);
-          }}
-          className="rounded-full border border-ink text-ink py-4 text-[15px] font-semibold disabled:opacity-60"
+          onClick={saveDraft}
+          className="w-full rounded-full bg-sandstone-100 text-ink py-3 text-[14px] font-semibold disabled:opacity-60"
         >
-          Reschedule
+          {pending ? "Saving…" : "Save Draft"}
         </button>
-        <button
-          type="submit"
-          disabled={pending || untouchedCount > 0}
-          className="rounded-full bg-ink text-cream py-4 text-[15px] font-semibold shadow-card disabled:opacity-60 active:scale-[0.99]"
-        >
-          {pending ? "Sending…" : "Send For Review"}
-        </button>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              const v = validate();
+              if (!v.ok) {
+                setError(v.error);
+                return;
+              }
+              setError(null);
+              setReschedPopupOpen(true);
+            }}
+            className="rounded-full border border-ink text-ink py-4 text-[15px] font-semibold disabled:opacity-60"
+          >
+            Reschedule
+          </button>
+          <button
+            type="submit"
+            disabled={pending || untouchedCount > 0}
+            className="rounded-full bg-ink text-cream py-4 text-[15px] font-semibold shadow-card disabled:opacity-60 active:scale-[0.99]"
+          >
+            {pending ? "Sending…" : "Send For Review"}
+          </button>
+        </div>
       </div>
 
       {sendPopupOpen && (

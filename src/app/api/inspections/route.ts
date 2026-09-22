@@ -38,10 +38,16 @@ const PostInspectionSchema = z.object({
   // Free-text remark shown in the Send For Review popup on Colab. Optional
   // — draft submissions and pre-Sep-2026 clients don't send it.
   submitRemark: z.string().max(2000).optional(),
+  // Save-as-Draft (Colab step 7 · third button). "draft" skips the
+  // every-row-answered validation, skips the reviewer push, and lands
+  // the WIR in status=DRAFT so it only shows up in the filler's own
+  // "Drafts" tab. "review" (the default) is the pre-existing Send For
+  // Review flow — untouched clients keep working exactly like before.
+  mode: z.enum(["draft", "review"]).optional(),
   idempotencyKey: z.string().max(120).optional(),
 });
 
-const STATUSES = new Set(["IN_REVIEW", "PASSED", "REJECTED", "RESCHEDULED"]);
+const STATUSES = new Set(["IN_REVIEW", "PASSED", "REJECTED", "RESCHEDULED", "DRAFT"]);
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -62,9 +68,26 @@ export async function GET(req: Request) {
   const filledById = searchParams.get("filledById");
   if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
 
-  const where: { projectId: string; status?: string; filledById?: string; module?: string; deletedAt: null } = { projectId, deletedAt: null };
-  if (status && STATUSES.has(status)) where.status = status;
+  const where: {
+    projectId: string;
+    status?: string | { not: string };
+    filledById?: string;
+    module?: string;
+    deletedAt: null;
+  } = { projectId, deletedAt: null };
+  if (status && STATUSES.has(status)) {
+    where.status = status;
+  } else {
+    // No explicit status filter → drafts are per-filler and shouldn't
+    // leak into anyone else's list. The default list dumps everything
+    // except DRAFT so reviewers never see in-progress checklists.
+    where.status = { not: "DRAFT" };
+  }
   if (filledById) where.filledById = filledById;
+  // A ?status=DRAFT query is only legitimate when the caller is asking
+  // for their own drafts. Force the filter so the request can't scrape
+  // another user's in-progress checklists.
+  if (status === "DRAFT") where.filledById = session.user.id;
   // Scoped contractors only see inspections tagged to their module.
   const scopedModule = isScopedUser(session.user.modules) ? primaryModuleFor(session.user.modules) : null;
   if (scopedModule) where.module = scopedModule;
@@ -108,13 +131,16 @@ export async function POST(req: Request) {
   const parsed = await parseBody(req, PostInspectionSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
-  const { projectId, wbsNodeId, title, items, photoUrls, assignedReviewerIds, submitRemark } = body;
+  const { projectId, wbsNodeId, title, items, photoUrls, assignedReviewerIds, submitRemark, mode } = body;
   const t = title.trim();
+  const isDraft = mode === "draft";
 
   // Refuse the submission if any non-empty item is unanswered. Since the
   // Jun-2026 tightening we need an explicit answer per item — now that
   // means Yes, No, OR NA (the Colab three-way). Only untouched
-  // (notApplicable === false AND passed === null) rows fail.
+  // (notApplicable === false AND passed === null) rows fail. Drafts
+  // (mode=draft) skip this — the whole point of a draft is that the
+  // filler hasn't finished answering every row yet.
   const candidateItems = Array.isArray(items) ? items : [];
   const itemsClean: Array<{ label: string; passed: boolean | null; notApplicable: boolean; notes: string | null; photoUrl: string | null; orderIndex: number }> = [];
   for (let idx = 0; idx < candidateItems.length; idx++) {
@@ -122,7 +148,7 @@ export async function POST(req: Request) {
     const label = (i.label ?? "").trim();
     if (label.length === 0) continue;
     const isNA = i.notApplicable === true;
-    if (!isNA && typeof i.passed !== "boolean") {
+    if (!isDraft && !isNA && typeof i.passed !== "boolean") {
       return NextResponse.json(
         { error: `Item "${label}" was not marked Yes, No or N/A.` },
         { status: 400 },
@@ -131,8 +157,11 @@ export async function POST(req: Request) {
     itemsClean.push({
       label,
       // NA stores passed=null + notApplicable=true so downstream readers
-      // don't confuse "not applicable" with "not answered yet".
-      passed: isNA ? null : (i.passed as boolean),
+      // don't confuse "not applicable" with "not answered yet". A draft
+      // row that's still untouched writes passed=null too — same
+      // storage shape as pre-answer state, exactly what a resume-edit
+      // (once we ship it) would need to render the row untouched.
+      passed: isNA ? null : (typeof i.passed === "boolean" ? i.passed : null),
       notApplicable: isNA,
       notes: i.notes?.trim() || null,
       // Per-row photo (Colab step 6): a single URL, already uploaded by
@@ -177,6 +206,10 @@ export async function POST(req: Request) {
           projectId,
           wbsNodeId: wbsNodeId || null,
           title: t,
+          // Draft submissions land in DRAFT, not IN_REVIEW — the whole
+          // point is that the filler hasn't sent it for review yet. The
+          // default @default("IN_REVIEW") applies for every other mode.
+          ...(isDraft ? { status: "DRAFT" } : {}),
           module: moduleTag,
           filledById: session.user.id,
           idempotencyKey,
@@ -197,8 +230,22 @@ export async function POST(req: Request) {
       action: "CREATE",
       entityType: "Inspection",
       entityId: inspection.id,
-      summary: `Inspection submitted: "${t}" (${passedCount}/${itemsClean.length} passed)`,
+      // Two audit summaries: drafts read as "Draft saved" so the
+      // history says who paused and when. Send-for-review keeps the
+      // pass/total in the summary so the audit trail is scannable.
+      summary: isDraft
+        ? `Inspection saved as draft: "${t}" (${itemsClean.length} row${itemsClean.length === 1 ? "" : "s"})`
+        : `Inspection submitted: "${t}" (${passedCount}/${itemsClean.length} passed)`,
     });
+
+    // Skip the reviewer push entirely for drafts — nothing has been
+    // sent for review, so pinging planners about a WIR they can't see
+    // would be worse than useless. When it later transitions to
+    // IN_REVIEW (via the resume-edit + Send For Review path, once
+    // shipped), the push fires from that endpoint instead.
+    if (isDraft) {
+      return NextResponse.json({ inspection }, { status: 201 });
+    }
 
     // Push the WIR to the people who need to review it. Colab lets the
     // filler pick reviewers explicitly at submit time; when they do, only

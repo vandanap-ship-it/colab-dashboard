@@ -1,12 +1,13 @@
 import { notFound, redirect } from "next/navigation";
-import { CalendarClock, CheckCircle2, MessageSquare, X, Clock, User as UserIcon, Users as UsersIcon, Camera } from "lucide-react";
+import { CalendarClock, CheckCircle2, FileEdit, MessageSquare, X, Clock, User as UserIcon, Users as UsersIcon, Camera } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, canAccessScopedRow, MODULES } from "@/lib/modules";
-import { canReview } from "@/lib/roles";
+import { canReview, isAdmin } from "@/lib/roles";
 import { wirAgeFor } from "@/lib/wirAge";
 import MobileQaqcReviewActions from "@/components/mobile/MobileQaqcReviewActions";
 import MobileQaqcReopenAction from "@/components/mobile/MobileQaqcReopenAction";
+import MobileQaqcDraftActions from "@/components/mobile/MobileQaqcDraftActions";
 
 export const dynamic = "force-dynamic";
 
@@ -68,7 +69,21 @@ export default async function MobileInspectionDetailPage({
     redirect(`/mobile/${projectId}/qaqc`);
   }
 
+  // Draft privacy gate — a DRAFT WIR is a private in-progress checklist
+  // that only the filler themselves (and admins) may open. Anyone else
+  // (a reviewer trying to peek, a hand-crafted URL) bounces back to the
+  // list. Same shape as the module gate above so both invariants are
+  // enforced in one spot at page-load.
+  if (
+    inspection.status === "DRAFT" &&
+    inspection.filledBy.id !== session.user.id &&
+    !isAdmin(session.user.role)
+  ) {
+    redirect(`/mobile/${projectId}/qaqc`);
+  }
+
   const iCanReview = canReview(session.user.role);
+  const iAmTheFiller = inspection.filledBy.id === session.user.id;
   // The layout's single Back arrow uses router.back(), which already
   // lands on whichever list view the engineer came from (no extra
   // plumbing needed for the *header* back).
@@ -277,12 +292,23 @@ export default async function MobileInspectionDetailPage({
         )}
       </div>
 
-      {/* Sticky review actions — reviewers only, and NOT on a rescheduled
-          WIR (Pass/Reject on a parked inspection would be a category
-          error; the reviewer waits until it reopens). Server component
-          decides who sees the bar; the client component owns the
-          transitions. */}
-      {iCanReview && inspection.status !== "RESCHEDULED" && (
+      {/* Sticky bottom bar — three variants depending on status.
+            DRAFT     → filler-only Delete-draft button. No reviewer
+                        actions; a draft hasn't been sent for review.
+            RESCHEDULED → owns its bar in the sandstone callout above
+                        (the Reopen button). Nothing sticky here.
+            other     → Pass/Reject for reviewers on IN_REVIEW; the
+                        "already reviewed" hint on PASSED/REJECTED. */}
+      {inspection.status === "DRAFT" && iAmTheFiller && (
+        <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3">
+          <MobileQaqcDraftActions
+            inspectionId={inspection.id}
+            projectId={projectId}
+            title={inspection.title}
+          />
+        </div>
+      )}
+      {iCanReview && inspection.status !== "RESCHEDULED" && inspection.status !== "DRAFT" && (
         <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3">
           <MobileQaqcReviewActions
             inspectionId={inspection.id}
@@ -334,6 +360,7 @@ function StatusPill({ status }: { status: string }) {
     PASSED: { bg: "bg-emerald-50 ring-emerald-200", fg: "text-emerald-800", label: "Passed", Icon: CheckCircle2 },
     REJECTED: { bg: "bg-red-50 ring-red-200", fg: "text-red-800", label: "Rejected", Icon: X },
     RESCHEDULED: { bg: "bg-sandstone-100 ring-sandstone-200", fg: "text-ink-2", label: "Rescheduled", Icon: CalendarClock },
+    DRAFT: { bg: "bg-stone-100 ring-stone-300", fg: "text-stone-700", label: "Draft", Icon: FileEdit },
   };
   const cfg = map[status] ?? map.IN_REVIEW;
   const Icon = cfg.Icon;

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ClipboardCheck, Plus, AlertTriangle, CalendarClock, CheckCircle2, X, Clock } from "lucide-react";
+import { ClipboardCheck, Plus, AlertTriangle, CalendarClock, CheckCircle2, FileEdit, X, Clock } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
@@ -11,23 +11,28 @@ export const dynamic = "force-dynamic";
 
 /**
  * Mobile QA/QC list — replaces the "tap goes to desktop /qaqc" fallback
- * with a phone-native list of inspections. Five tabs:
+ * with a phone-native list of inspections. Six tabs:
  *
  *   - My Pending    — inspections still IN_REVIEW that this user filled OR
  *                     is eligible to review. Landing tab, so the reviewer
  *                     sees their queue on first open.
- *   - All           — every inspection in the project (respects module scoping).
+ *   - All           — every inspection in the project (respects module
+ *                     scoping). Drafts are excluded here — a draft is a
+ *                     private in-progress checklist, not project state.
  *   - Rescheduled   — status RESCHEDULED, sorted by rescheduledFor asc so
  *                     the soonest reopen is first.
  *   - Passed        — status PASSED, most recent first.
  *   - Rejected      — status REJECTED, most recent first.
+ *   - My Drafts     — status DRAFT, filtered to the current user's own
+ *                     drafts. Reviewers see only their own drafts here
+ *                     too; no one ever sees anyone else's draft.
  *
  * Rows tap into /mobile/[projectId]/qaqc/[id] which does review-in-place.
  */
 
-type Tab = "pending" | "all" | "rescheduled" | "passed" | "rejected";
+type Tab = "pending" | "all" | "rescheduled" | "passed" | "rejected" | "drafts";
 
-const VALID_TABS: readonly Tab[] = ["pending", "all", "rescheduled", "passed", "rejected"] as const;
+const VALID_TABS: readonly Tab[] = ["pending", "all", "rescheduled", "passed", "rejected", "drafts"] as const;
 function normaliseTab(v: string | undefined): Tab {
   return (VALID_TABS as readonly string[]).includes(v ?? "") ? (v as Tab) : "pending";
 }
@@ -102,19 +107,29 @@ export default async function MobileQaqcPage({
     ...(moduleFilter ? { module: moduleFilter } : {}),
   } as const;
 
+  // Base filter for "everything but drafts" — used on every tab except
+  // Drafts. A draft is a private, in-progress checklist; it isn't
+  // project state and doesn't belong in the All or Pending views.
+  const nonDraftWhere = { ...baseWhere, status: { not: "DRAFT" } } as const;
+
   // Tab → status filter. `pending` shows IN_REVIEW inspections the current
   // user should care about (they filled it OR they can review it), which is
-  // the queue people actually want to walk on their phone.
+  // the queue people actually want to walk on their phone. `drafts` is
+  // always scoped to the caller's own filledById — draft leakage between
+  // fillers is a data-privacy footgun, not a feature.
   const tabWhere = (() => {
     if (tab === "passed") return { ...baseWhere, status: "PASSED" };
     if (tab === "rejected") return { ...baseWhere, status: "REJECTED" };
     if (tab === "rescheduled") return { ...baseWhere, status: "RESCHEDULED" };
+    if (tab === "drafts") return { ...baseWhere, status: "DRAFT", filledById: userId };
     if (tab === "pending") {
       return iCanReview
         ? { ...baseWhere, status: "IN_REVIEW" }
         : { ...baseWhere, status: "IN_REVIEW", filledById: userId };
     }
-    return baseWhere;
+    // "All" tab · exclude drafts so a reviewer doesn't see their
+    // teammates' in-progress checklists.
+    return nonDraftWhere;
   })();
 
   // Rescheduled sorts by rescheduledFor ASC so the soonest-to-reopen is on
@@ -124,10 +139,12 @@ export default async function MobileQaqcPage({
     ? ({ rescheduledFor: "asc" } as const)
     : ({ createdAt: "desc" } as const);
 
-  // Counts for the tab badges. Cheap groupBy — every status value the list
-  // surfaces gets its own tally, so the pills stay accurate as inspections
-  // move between buckets.
-  const [inspections, statusCounts] = await Promise.all([
+  // Counts for the tab badges. The status groupBy uses nonDraftWhere so
+  // drafts don't inflate the PASSED / REJECTED / RESCHEDULED tallies
+  // that reviewers actually walk. The draft count runs as its own
+  // scoped-to-filler query so the "My Drafts" badge is always exactly
+  // the caller's own count.
+  const [inspections, statusCounts, myDraftCount] = await Promise.all([
     prisma.inspection.findMany({
       where: tabWhere,
       orderBy: tabOrderBy,
@@ -146,8 +163,11 @@ export default async function MobileQaqcPage({
     }),
     prisma.inspection.groupBy({
       by: ["status"],
-      where: baseWhere,
+      where: nonDraftWhere,
       _count: { _all: true },
+    }),
+    prisma.inspection.count({
+      where: { ...baseWhere, status: "DRAFT", filledById: userId },
     }),
   ]);
 
@@ -194,6 +214,11 @@ export default async function MobileQaqcPage({
           <TabLink projectId={projectId} tab="rescheduled" current={tab} moduleFilter={moduleFilter} label="Rescheduled" count={countByStatus.get("RESCHEDULED") ?? 0} icon={CalendarClock} />
           <TabLink projectId={projectId} tab="passed" current={tab} moduleFilter={moduleFilter} label="Passed" count={countByStatus.get("PASSED") ?? 0} icon={CheckCircle2} />
           <TabLink projectId={projectId} tab="rejected" current={tab} moduleFilter={moduleFilter} label="Rejected" count={countByStatus.get("REJECTED") ?? 0} icon={AlertTriangle} />
+          {/* My Drafts is only meaningful when the caller has at least
+              one — the tab still shows when they don't, so they can
+              hop in and confirm nothing's parked, but the badge stays
+              silent instead of showing "0". */}
+          <TabLink projectId={projectId} tab="drafts" current={tab} moduleFilter={moduleFilter} label="My Drafts" count={myDraftCount} icon={FileEdit} />
         </div>
       </nav>
 
@@ -325,6 +350,10 @@ function StatusPill({ status }: { status: string }) {
     // finish" reading. Same neutral family as the module chip so the
     // eye reads them as related metadata.
     RESCHEDULED: { bg: "bg-sandstone-100 ring-sandstone-200", fg: "text-ink-2", label: "Rescheduled", Icon: CalendarClock },
+    // Draft reads as "not yet sent" — stone family (colder than
+    // sandstone, no shipping-culture claim to make). Icon is a
+    // pencil-on-page so the intent (still editing) is unmistakable.
+    DRAFT: { bg: "bg-stone-100 ring-stone-300", fg: "text-stone-700", label: "Draft", Icon: FileEdit },
   };
   const cfg = map[status] ?? map.IN_REVIEW;
   const Icon = cfg.Icon;
@@ -343,6 +372,7 @@ function EmptyState({ tab }: { tab: Tab }) {
     rescheduled: "No inspections parked for later.",
     passed: "No passed inspections yet.",
     rejected: "No rejected inspections. Good.",
+    drafts: "You have no unfinished drafts. Start a new WIR from the button above.",
   }[tab];
   return (
     <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-8 text-center">
