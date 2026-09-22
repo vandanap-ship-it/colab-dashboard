@@ -26,16 +26,13 @@ interface PickedActivity {
 
 const LABOUR_CATEGORIES = ["Skilled", "Unskilled", "Mason", "Helper", "Supervisor"];
 
-// Progress type — matches the Colab three-way. Labour Supply is the
-// day-in day-out deployment count; PRW (Piece Rate Work) is paid per
-// unit produced; Misc covers everything that isn't either. API zod
-// accepts exactly these three literals.
-type ProgressType = "LABOUR_SUPPLY" | "PRW" | "MISC";
-const PROGRESS_TYPES: Array<{ code: ProgressType; label: string; hint: string }> = [
-  { code: "LABOUR_SUPPLY", label: "Labour Supply", hint: "Daily labour deployment count" },
-  { code: "PRW", label: "PRW", hint: "Piece-rate work · pay per unit" },
-  { code: "MISC", label: "Misc.", hint: "Other progress" },
-];
+// The API still expects a type literal (Colab-legacy field on the
+// ProgressEntry schema), but White Lotus doesn't distinguish billing
+// models per row — every entry is treated as Labour Supply. Kept as a
+// const so a future re-split, if it ever comes back, has one place to
+// widen the type from and the payload stays honest to the schema.
+// Shraddha, Sep 22: "you can remove the Type tab".
+const PROGRESS_TYPE = "LABOUR_SUPPLY" as const;
 
 export default function NewProgressForm({
   projectId,
@@ -48,10 +45,6 @@ export default function NewProgressForm({
   const toast = useToast();
   const today = istDayString();
 
-  // Which kind of progress this row is — defaults to Labour Supply because
-  // that's ~95% of the daily entries. Segmented pills at the top of the
-  // form so the engineer picks the type before they fill anything else.
-  const [type, setType] = useState<ProgressType>("LABOUR_SUPPLY");
   const [selected, setSelected] = useState<PickedActivity | null>(null);
   const activityId = selected?.id ?? "";
   // Contractor is derived from the picked activity — the schedule already
@@ -200,16 +193,12 @@ export default function NewProgressForm({
       idempotencyKey: crypto.randomUUID(),
       wbsNodeId: activityId,
       date,
-      type,
+      type: PROGRESS_TYPE,
       achievedQuantity: achieved,
       cumulativeQuantity: cumulative,
       contractorId: contractorId || null,
       notes,
-      // Labour headcount is a Labour Supply concept — PRW and Misc rows
-      // shouldn't carry it, even if the engineer left the default zero-row
-      // there before switching type at the last moment. Blank array keeps
-      // the API contract simple.
-      labour: type === "LABOUR_SUPPLY" ? labour : [],
+      labour,
       photoUrls,
       reasonCode: reasonCode || undefined,
       reasonNote: reasonNote.trim() || undefined,
@@ -332,13 +321,6 @@ export default function NewProgressForm({
           labour before you save.
         </p>
       </header>
-
-      {/* Type tabs — segmented pills at the very top so the engineer
-          picks Labour Supply / PRW / Misc. before anything else. The
-          Colab equivalent is a mandatory dropdown; the pills are the
-          same choice, one tap. Default is Labour Supply because that's
-          ~95% of daily entries. */}
-      <TypeTabs value={type} onChange={setType} />
 
       {/* Step 1 · Activity */}
       <section>
@@ -471,11 +453,9 @@ export default function NewProgressForm({
                 </div>
 
                 {/* Labour rows — same repeating pattern the manpower form
-                    already uses, kept small since the site engineer will
-                    only fill it if they're the person logging labour.
-                    Hidden for PRW and Misc, where headcount isn't the
-                    thing being tracked. */}
-                {type === "LABOUR_SUPPLY" && (
+                    already uses. Always visible now that the Type tabs
+                    are gone; every progress entry treats labour as the
+                    primary thing being tracked. */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[13px] font-semibold text-ink">Labour</span>
@@ -519,7 +499,6 @@ export default function NewProgressForm({
                     </div>
                   ))}
                 </div>
-                )}
 
                 {/* Delay reason — compact single line so it doesn't
                     dominate the form; the picker is still there when the
@@ -589,46 +568,6 @@ export default function NewProgressForm({
 
       {error && <p className="text-sm text-ferrous-600">{error}</p>}
     </form>
-  );
-}
-
-/**
- * Segmented pills for Labour Supply / PRW / Misc — Colab parity. Sits
- * above the activity picker because the type frames what the rest of the
- * form is asking for (Labour Supply cares about headcount, PRW / Misc
- * don't). The active tab uses the same ferrous fill as the primary
- * action, so the "picked" state is unmistakable at a glance.
- */
-function TypeTabs({ value, onChange }: { value: ProgressType; onChange: (v: ProgressType) => void }) {
-  const active = PROGRESS_TYPES.find((t) => t.code === value) ?? PROGRESS_TYPES[0];
-  return (
-    <section aria-labelledby="progress-type-label">
-      <div id="progress-type-label" className="text-[11px] font-semibold text-ink-3 uppercase tracking-[0.14em] mb-2">
-        Type
-      </div>
-      <div role="tablist" aria-label="Progress type" className="grid grid-cols-3 gap-2">
-        {PROGRESS_TYPES.map((t) => {
-          const isActive = t.code === value;
-          return (
-            <button
-              key={t.code}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => onChange(t.code)}
-              className={`rounded-full py-2.5 text-[14px] font-semibold transition ${
-                isActive
-                  ? "bg-ferrous-500 text-white shadow-card"
-                  : "bg-sandstone-100 text-ink-2 hover:bg-sandstone-200"
-              }`}
-            >
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-      <p className="text-[12px] text-ink-3 mt-2 leading-snug">{active.hint}</p>
-    </section>
   );
 }
 
