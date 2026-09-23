@@ -63,17 +63,28 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
   // Capture the inserted row's id so the browser-push payload can carry
   // it downstream — the service worker uses it to mark the inbox row
   // read the moment the user taps the notification.
+  //
+  // Tag dedup: when payload.tag is set, remove any prior inbox row for
+  // this (userId, tag) before inserting. Matches the browser-side
+  // Notification API's tag semantics — a re-send of the same permit
+  // approval / waiting nudge / etc. replaces the earlier one rather
+  // than stacking a second unread badge for the same event.
   let notificationId: string | undefined;
   try {
-    const row = await prisma.notification.create({
-      data: {
-        userId,
-        title: payload.title,
-        body: payload.body,
-        url: payload.url ?? null,
-        tag: payload.tag ?? null,
-      },
-      select: { id: true },
+    const row = await prisma.$transaction(async (tx) => {
+      if (payload.tag) {
+        await tx.notification.deleteMany({ where: { userId, tag: payload.tag } });
+      }
+      return tx.notification.create({
+        data: {
+          userId,
+          title: payload.title,
+          body: payload.body,
+          url: payload.url ?? null,
+          tag: payload.tag ?? null,
+        },
+        select: { id: true },
+      });
     });
     notificationId = row.id;
   } catch (err) {
