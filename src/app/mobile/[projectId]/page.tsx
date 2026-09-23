@@ -29,6 +29,7 @@ import {
 import { getDashboardManpowerStrip } from "@/lib/manpowerServer";
 import { istDayStart } from "@/lib/istDay";
 import { WIR_TIERS, PERMIT_TIERS, HINDRANCE_TIERS, CONCERN_TIERS, ISSUE_TIERS, RFI_TIERS } from "@/lib/queueAge";
+import { getWaitingByVilla, type VillaWaitingCount } from "@/lib/waitingByVilla";
 
 // Amanvana-native mobile home. Editorial serif hero + warm sandstone cards
 // + ferrous accent — reads like the villa brochure a site engineer already
@@ -196,6 +197,14 @@ export default async function MobileProjectHome({
 
   const totalWaitingOnYou =
     staleWirCount + stalePermitCount + staleHindranceCount + staleConcernCount + staleIssueCount + staleRfiCount + myDraftCount;
+
+  // "Focus your walk" — top villas with the most waiting rows across all
+  // queues. Only queried when the engineer has ≥ 3 waiting items total, so
+  // engineers with a light load don't get a section that says "cluster by
+  // villa" over a list of 1 chip. Empty array falls through to hiding the
+  // section entirely.
+  const villaFocus: VillaWaitingCount[] =
+    totalWaitingOnYou >= 3 ? await getWaitingByVilla(projectId, session).catch(() => []) : [];
 
   // The full date in a real editorial format — Fraunces will read it well
   // even at eyebrow scale. Rendered on the server so the FCP has the real
@@ -390,6 +399,15 @@ export default async function MobileProjectHome({
             staleRfiCount={staleRfiCount}
             myDraftCount={myDraftCount}
           />
+        )}
+
+        {/* "Focus your walk" · villa-first rollup that sits under the
+            per-queue strip. Only rendered when the engineer has at
+            least 2 villas carrying waiting rows — a single-villa
+            focus strip would just duplicate what the queue counts
+            already say. */}
+        {villaFocus.length >= 2 && (
+          <VillaFocusStrip projectId={projectId} villas={villaFocus} />
         )}
 
         {canSeeQualityStrip && (
@@ -612,6 +630,59 @@ function WaitingOnYouStrip({
           </Link>
         ))}
       </div>
+    </section>
+  );
+}
+
+/**
+ * "Focus your walk" · villa-first rollup that sits under the per-queue
+ * strip. Same source rows the WaitingOnYou strip counts (WIR + Permit
+ * + Hindrance + Concern + Issue + RFI, all past their SLA cliff), but
+ * grouped by villa instead of by queue so the engineer can plan a site
+ * walk villa-by-villa instead of jumping between five inboxes.
+ *
+ * Each row: villa label + total count. Tap goes to My Actions today —
+ * a proper per-villa filter is a follow-up. Kept intentionally small
+ * (one row per villa, no per-queue breakdown line) so the section
+ * stays quiet under the queue strip.
+ */
+function VillaFocusStrip({
+  projectId,
+  villas,
+}: {
+  projectId: string;
+  villas: VillaWaitingCount[];
+}) {
+  return (
+    <section>
+      <SectionEyebrow>Focus your walk</SectionEyebrow>
+      <ul className="space-y-1.5">
+        {villas.map((v) => (
+          <li key={v.villaLabel}>
+            <Link
+              href={`/mobile/${projectId}/my-actions`}
+              className="flex items-center justify-between gap-2 rounded-xl bg-white border border-sandstone-100 px-3.5 py-2.5 active:scale-[0.99]"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-medium text-ink truncate">
+                  {v.villaLabel}
+                </span>
+                <span className="block text-[11px] text-ink-3 mt-0.5">
+                  Block {v.blockCode}
+                </span>
+              </span>
+              <span className="flex-shrink-0 text-right">
+                <span className="block text-[16px] font-serif text-ink tabular-nums leading-none">
+                  {v.total}
+                </span>
+                <span className="block text-[10px] text-ink-3 uppercase tracking-[0.12em] mt-1">
+                  {v.total === 1 ? "item" : "items"}
+                </span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
