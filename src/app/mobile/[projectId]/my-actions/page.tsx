@@ -39,12 +39,21 @@ export const dynamic = "force-dynamic";
  */
 export default async function MobileMyActionsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  /** ?villa=Villa%2015 filters every queue to rows whose wbsNode is on
+   *  that villa. Set by the "Focus your walk" strip on the mobile home
+   *  when the engineer taps a specific villa. Rows without a wbsNode
+   *  link (project-level permits, general WIRs) are dropped from the
+   *  filtered view — a slight false negative in exchange for honest
+   *  per-villa focus. Cleared via the banner's Clear link. */
+  searchParams: Promise<{ villa?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const { projectId } = await params;
+  const { villa: villaFilter } = await searchParams;
   const userId = session.user.id;
 
   const project = await prisma.project.findUnique({
@@ -55,11 +64,24 @@ export default async function MobileMyActionsPage({
 
   const iCanReview = canReview(session.user.role);
 
+  // When ?villa= is set, everything below narrows to rows whose wbsNode
+  // resolves to that villa label. Attached as an AND to each queue's
+  // existing where clause via Prisma's relation-filter shape.
+  const villaWhere = villaFilter
+    ? {
+        wbsNode: {
+          villaMilestone: {
+            villa: { label: villaFilter },
+          },
+        },
+      }
+    : {};
+
   // All five queues in parallel — this is the tightest server-fetch on the
   // app, so we lean into Promise.all to keep the page open time low.
   const [snags, rfis, concerns, permits, wirsToReview] = await Promise.all([
     prisma.issue.findMany({
-      where: { projectId, deletedAt: null, assignedToId: userId, status: "OPEN" },
+      where: { projectId, deletedAt: null, assignedToId: userId, status: "OPEN", ...villaWhere },
       orderBy: { createdAt: "desc" },
       take: 30,
       select: {
@@ -72,7 +94,7 @@ export default async function MobileMyActionsPage({
       },
     }),
     prisma.rfi.findMany({
-      where: { projectId, deletedAt: null, assignedToId: userId, status: "OPEN" },
+      where: { projectId, deletedAt: null, assignedToId: userId, status: "OPEN", ...villaWhere },
       orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
       take: 30,
       select: {
@@ -91,6 +113,7 @@ export default async function MobileMyActionsPage({
         deletedAt: null,
         assignedToId: userId,
         status: { in: ["PENDING", "TASK_ASSIGNED"] },
+        ...villaWhere,
       },
       orderBy: { createdAt: "desc" },
       take: 30,
@@ -112,6 +135,7 @@ export default async function MobileMyActionsPage({
         deletedAt: null,
         status: "PENDING",
         approverIds: { contains: userId },
+        ...villaWhere,
       },
       orderBy: { createdAt: "desc" },
       take: 30,
@@ -129,7 +153,7 @@ export default async function MobileMyActionsPage({
     }),
     iCanReview
       ? prisma.inspection.findMany({
-          where: { projectId, deletedAt: null, status: "IN_REVIEW" },
+          where: { projectId, deletedAt: null, status: "IN_REVIEW", ...villaWhere },
           orderBy: { createdAt: "desc" },
           take: 30,
           select: {
@@ -159,9 +183,22 @@ export default async function MobileMyActionsPage({
         </h1>
         <p className="text-[13px] text-ink-3 mt-1.5">
           {total === 0
-            ? "Nothing waiting for you. Nice."
-            : `${total} item${total === 1 ? "" : "s"} across your queues.`}
+            ? villaFilter
+              ? `Nothing waiting for you on ${villaFilter}.`
+              : "Nothing waiting for you. Nice."
+            : `${total} item${total === 1 ? "" : "s"} across your queues${villaFilter ? ` on ${villaFilter}` : ""}.`}
         </p>
+        {villaFilter && (
+          <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-sandstone-100 px-3 py-1.5 text-[12px] text-ink-2">
+            <span className="font-semibold text-ink">Filtered · {villaFilter}</span>
+            <Link
+              href={`/mobile/${projectId}/my-actions`}
+              className="text-ferrous-600 font-medium hover:underline"
+            >
+              Clear
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-5">

@@ -660,7 +660,7 @@ function VillaFocusStrip({
         {villas.map((v) => (
           <li key={v.villaLabel}>
             <Link
-              href={`/mobile/${projectId}/my-actions`}
+              href={`/mobile/${projectId}/my-actions?villa=${encodeURIComponent(v.villaLabel)}`}
               className="flex items-center justify-between gap-2 rounded-xl bg-white border border-sandstone-100 px-3.5 py-2.5 active:scale-[0.99]"
             >
               <span className="min-w-0 flex-1">
