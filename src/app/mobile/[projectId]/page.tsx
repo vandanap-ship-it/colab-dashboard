@@ -115,6 +115,7 @@ export default async function MobileProjectHome({
     staleHindranceCount,
     staleConcernCount,
     staleIssueCount,
+    overdueRfiCount,
     staleRfiCount,
     myDraftCount,
   ] = await Promise.all([
@@ -167,22 +168,35 @@ export default async function MobileProjectHome({
           },
         })
       : Promise.resolve(0),
-    // RFI stale count — OPEN questions that have crossed the consultant
-    // SLA cliff, EITHER by wall-clock age (5d+) OR by the raiser's
-    // explicit dueDate having passed. The two conditions OR together so
-    // a young-but-overdue-by-promise RFI is counted once. Matches the
-    // list card + detail hero, which prefer the dueDate signal over
-    // the aging chip when both apply.
+    // RFI attention count — OPEN questions that need eyes. Split UP the
+    // wire from a single "stale" count into two pills on the strip:
+    // OVERDUE (dueDate promised and already past) and STALE (no explicit
+    // due date but older than the 5d SLA cliff). Overdue is a broken
+    // promise; stale is neglect. The list card + detail hero already
+    // treat these two signals separately — the home strip now matches.
+    // OVERDUE: dueDate has passed. A broken promise from the raiser.
     canSeeRfi
       ? prisma.rfi.count({
           where: {
             projectId,
             deletedAt: null,
             status: "OPEN",
-            OR: [
-              { createdAt: { lt: staleRfiCutoff } },
-              { dueDate: { lt: nowDate } },
-            ],
+            dueDate: { lt: nowDate },
+          },
+        })
+      : Promise.resolve(0),
+    // STALE: no explicit due date (or a due date still in the future),
+    // but the row is older than the 5d SLA cliff. Neglected rather
+    // than overdue. The two counts don't overlap — a past-due row is
+    // counted only as OVERDUE, never both.
+    canSeeRfi
+      ? prisma.rfi.count({
+          where: {
+            projectId,
+            deletedAt: null,
+            status: "OPEN",
+            createdAt: { lt: staleRfiCutoff },
+            OR: [{ dueDate: null }, { dueDate: { gte: nowDate } }],
           },
         })
       : Promise.resolve(0),
@@ -196,7 +210,7 @@ export default async function MobileProjectHome({
   ]);
 
   const totalWaitingOnYou =
-    staleWirCount + stalePermitCount + staleHindranceCount + staleConcernCount + staleIssueCount + staleRfiCount + myDraftCount;
+    staleWirCount + stalePermitCount + staleHindranceCount + staleConcernCount + staleIssueCount + overdueRfiCount + staleRfiCount + myDraftCount;
 
   // "Focus your walk" — top villas with the most waiting rows across all
   // queues. Only queried when the engineer has ≥ 3 waiting items total, so
@@ -396,6 +410,7 @@ export default async function MobileProjectHome({
             staleHindranceCount={staleHindranceCount}
             staleConcernCount={staleConcernCount}
             staleIssueCount={staleIssueCount}
+            overdueRfiCount={overdueRfiCount}
             staleRfiCount={staleRfiCount}
             myDraftCount={myDraftCount}
           />
@@ -568,6 +583,7 @@ function WaitingOnYouStrip({
   staleHindranceCount,
   staleConcernCount,
   staleIssueCount,
+  overdueRfiCount,
   staleRfiCount,
   myDraftCount,
 }: {
@@ -578,6 +594,10 @@ function WaitingOnYouStrip({
   staleHindranceCount: number;
   staleConcernCount: number;
   staleIssueCount: number;
+  /** RFIs past their raiser-promised dueDate. A broken promise. */
+  overdueRfiCount: number;
+  /** OPEN RFIs older than the 5d SLA cliff without an explicit dueDate
+   *  (or with a dueDate still in the future). Neglect, not overdue. */
   staleRfiCount: number;
   myDraftCount: number;
 }) {
@@ -600,7 +620,8 @@ function WaitingOnYouStrip({
     { key: "permit", href: `/mobile/${projectId}/permit`, count: stalePermitCount, label: stalePermitCount === 1 ? "stale permit" : "stale permits", Icon: ShieldCheck, tone: "stale" as const },
     { key: "hindrance", href: `/mobile/${projectId}/hindrance?tab=open`, count: staleHindranceCount, label: staleHindranceCount === 1 ? "stale blocker" : "stale blockers", Icon: AlertTriangle, tone: "stale" as const },
     { key: "issue", href: `/mobile/${projectId}/issue?tab=open`, count: staleIssueCount, label: staleIssueCount === 1 ? "stale snag" : "stale snags", Icon: Bug, tone: "stale" as const },
-    { key: "rfi", href: `/mobile/${projectId}/rfi?tab=open`, count: staleRfiCount, label: staleRfiCount === 1 ? "stale RFI" : "stale RFIs", Icon: HelpCircle, tone: "stale" as const },
+    { key: "rfi-overdue", href: `/mobile/${projectId}/rfi?tab=open`, count: overdueRfiCount, label: overdueRfiCount === 1 ? "overdue RFI" : "overdue RFIs", Icon: HelpCircle, tone: "stale" as const },
+    { key: "rfi-stale", href: `/mobile/${projectId}/rfi?tab=open`, count: staleRfiCount, label: staleRfiCount === 1 ? "stale RFI" : "stale RFIs", Icon: HelpCircle, tone: "stale" as const },
     { key: "concern", href: `/mobile/${projectId}/concern?tab=pending`, count: staleConcernCount, label: staleConcernCount === 1 ? "stale concern" : "stale concerns", Icon: MessageSquare, tone: "stale" as const },
     { key: "drafts", href: draftsHref, count: myDraftCount, label: myDraftCount === 1 ? "draft to finish" : "drafts to finish", Icon: FileEdit, tone: "draft" as const },
   ].filter((p) => p.count > 0);
