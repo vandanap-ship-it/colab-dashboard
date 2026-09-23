@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, KeyRound, Pencil, Plus, X } from "lucide-react";
 import { ROLE_LABELS, ROLES } from "@/lib/roles";
+import { ALL_MODULES, MODULE_LABELS, parseUserModules, type ModuleKey } from "@/lib/modules";
 
 type UserRow = {
   id: string;
@@ -14,6 +15,11 @@ type UserRow = {
   // Echoed back on PATCH so the server can reject stale writes when two
   // admins edit the same user at the same time (optimistic-lock guard).
   updatedAt: string;
+  // Module scope. NULL = full access (internal staff). A JSON array
+  // string like `["QAQC","SAFETY"]` = scoped user, sees only mobile
+  // tools + records tagged with those modules. Parsed via
+  // parseUserModules from @/lib/modules.
+  modules: string | null;
   // Optional contractor tie — surfaces contractor-attributed inspections
   // and issues in QA/QC + EHS Contractor Performance matrices.
   contractorId: string | null;
@@ -53,6 +59,11 @@ export default function UsersAdmin() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [resettingId, setResettingId] = useState<string | null>(null);
+  // Modules picker · null when closed. When set to a user id, the module
+  // picker sheet opens for that user. Local edits stage in
+  // pendingModules; Save posts them, Cancel closes without saving.
+  const [modulesPickerId, setModulesPickerId] = useState<string | null>(null);
+  const [pendingModules, setPendingModules] = useState<Set<ModuleKey>>(new Set());
 
   const load = useCallback(async () => {
     const res = await fetch("/api/admin/users", { cache: "no-store" });
@@ -159,6 +170,49 @@ export default function UsersAdmin() {
       setError(data?.error ?? "Failed");
       return;
     }
+    load();
+  }
+
+  function openModulesPicker(u: UserRow) {
+    const current = parseUserModules(u.modules) ?? new Set<ModuleKey>();
+    setPendingModules(new Set(current));
+    setModulesPickerId(u.id);
+  }
+
+  function toggleModuleInPicker(module: ModuleKey) {
+    setPendingModules((prev) => {
+      const next = new Set(prev);
+      if (next.has(module)) next.delete(module);
+      else next.add(module);
+      return next;
+    });
+  }
+
+  /**
+   * Save the pending module set to the current picker user. An empty
+   * set clears scoping — internal staff = null modules = full access.
+   * Any non-empty subset scopes the user to those modules only.
+   */
+  async function saveModules(u: UserRow) {
+    const arr = Array.from(pendingModules);
+    const bodyModules: string[] | null = arr.length === 0 ? null : arr;
+    const res = await fetch(`/api/admin/users/${u.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modules: bodyModules, expectedUpdatedAt: u.updatedAt }),
+    });
+    if (res.status === 409) {
+      alert("Another admin just edited this user. Refreshing so you see the latest.");
+      setModulesPickerId(null);
+      load();
+      return;
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setError(data?.error ?? "Failed");
+      return;
+    }
+    setModulesPickerId(null);
     load();
   }
 
@@ -338,6 +392,7 @@ export default function UsersAdmin() {
                 <th className="px-4 py-2 font-medium">Username</th>
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">Role</th>
+                <th className="px-4 py-2 font-medium">Modules</th>
                 <th className="px-4 py-2 font-medium">Contractor</th>
                 <th
                   className="px-4 py-2 font-medium"
@@ -402,6 +457,13 @@ export default function UsersAdmin() {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="px-4 py-2">
+                      {/* Modules picker — module scope determines which
+                          mobile tools and records the user sees. NULL =
+                          full access (internal); scoped users see only
+                          their picked modules. Click to open picker. */}
+                      <ModulesCell user={u} onEdit={() => openModulesPicker(u)} />
                     </td>
                     <td className="px-4 py-2">
                       {/* Contractor picker — nullable. Sets User.contractorId
@@ -509,6 +571,174 @@ export default function UsersAdmin() {
           onClose={() => setResettingId(null)}
         />
       )}
+
+      {modulesPickerId && (() => {
+        const user = users?.find((u) => u.id === modulesPickerId) ?? null;
+        if (!user) return null;
+        return (
+          <ModulesPickerDialog
+            user={user}
+            pending={pendingModules}
+            onToggle={toggleModuleInPicker}
+            onSave={() => saveModules(user)}
+            onClearAll={() => setPendingModules(new Set())}
+            onClose={() => setModulesPickerId(null)}
+          />
+        );
+      })()}
+    </div>
+  );
+}
+
+/**
+ * Table-cell display for a user's module scope. Shows either a "Full
+ * access" pill (null modules, internal staff) or a compact list of
+ * module labels (scoped user). Click opens the picker sheet.
+ */
+function ModulesCell({ user, onEdit }: { user: UserRow; onEdit: () => void }) {
+  const parsed = parseUserModules(user.modules);
+  return (
+    <button
+      type="button"
+      onClick={onEdit}
+      className="text-left inline-flex items-center gap-1.5 rounded-md border border-transparent hover:border-stone-200 hover:bg-stone-50 px-1.5 py-1 max-w-[220px]"
+      title="Edit module scope"
+    >
+      {parsed === null ? (
+        <span className="text-[11px] font-medium text-stone-500 italic">Full access</span>
+      ) : (
+        <span className="flex flex-wrap gap-1">
+          {Array.from(parsed).map((m) => (
+            <span
+              key={m}
+              className="inline-block text-[10px] font-semibold uppercase tracking-wider bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded"
+            >
+              {shortLabelFor(m)}
+            </span>
+          ))}
+        </span>
+      )}
+      <Pencil className="w-3 h-3 text-stone-400 flex-shrink-0" />
+    </button>
+  );
+}
+
+/** Compact label for a module chip. MODULE_LABELS are long — this
+ *  chops them so 3 modules still fit in a table cell. */
+function shortLabelFor(m: string): string {
+  const short: Record<string, string> = {
+    PROGRESS: "Progress",
+    QAQC: "QA/QC",
+    SAFETY: "Safety",
+    HINDRANCE: "Hindrance",
+    CONCERN: "Concern",
+    RFI: "RFI",
+    PERMIT: "Permit",
+  };
+  return short[m] ?? m;
+}
+
+/**
+ * Small modal dialog for editing a user's module scope. Local state
+ * lives in the parent (pendingModules) so a stray Cancel doesn't lose
+ * changes if the user goes back. Save fires the PATCH; Cancel closes.
+ * "Full access" button clears every module — the same as unchecking
+ * everything and saving.
+ */
+function ModulesPickerDialog({
+  user,
+  pending,
+  onToggle,
+  onSave,
+  onClearAll,
+  onClose,
+}: {
+  user: UserRow;
+  pending: Set<ModuleKey>;
+  onToggle: (m: ModuleKey) => void;
+  onSave: () => void;
+  onClearAll: () => void;
+  onClose: () => void;
+}) {
+  const scopeSummary = pending.size === 0 ? "Full access (all modules)" : `Scoped to ${pending.size} of ${ALL_MODULES.length}`;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-stone-900/40 backdrop-blur-sm overflow-y-auto p-6"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl border border-stone-200 shadow-elevated w-full max-w-md mt-12"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-3">
+          <h2 className="text-sm font-semibold text-stone-900">
+            Modules for {user.name}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-stone-500 hover:text-stone-900 p-1 rounded-md hover:bg-stone-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <p className="text-xs text-stone-500 leading-snug">
+            Leave every module unchecked for full access (internal staff, sees
+            everything). Check specific modules to scope this user — they&apos;ll
+            only see mobile tools + records tagged with those modules.
+          </p>
+          <div className="space-y-1.5">
+            {ALL_MODULES.map((m) => {
+              const checked = pending.has(m);
+              return (
+                <label
+                  key={m}
+                  className="flex items-center gap-3 rounded-md border border-stone-200 px-3 py-2 cursor-pointer hover:bg-stone-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggle(m)}
+                    className="w-4 h-4"
+                  />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium text-stone-900">
+                      {MODULE_LABELS[m] ?? m}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          <div className="text-[11px] text-stone-500 italic">{scopeSummary}</div>
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t border-stone-200 px-5 py-3">
+          <button
+            type="button"
+            onClick={onClearAll}
+            className="text-xs text-stone-600 hover:text-stone-900 underline-offset-2 hover:underline"
+          >
+            Clear all (full access)
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-xs rounded-md border border-stone-300 bg-white px-3 py-1.5 hover:bg-stone-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              className="text-xs font-semibold rounded-md bg-stone-900 text-white px-3 py-1.5 hover:bg-stone-800"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
