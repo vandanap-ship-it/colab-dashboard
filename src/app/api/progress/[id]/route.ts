@@ -30,6 +30,13 @@ const PatchProgressSchema = z.object({
       count: z.number().finite().min(0).max(500).optional(),
     }),
   ).max(20).optional(),
+  // Draft-resume fields: on a draft, the engineer may have re-uploaded
+  // photos, changed the delay reason, etc. Published PATCH doesn't
+  // typically move these (they're set at create time), but nothing
+  // stops it — the widened schema serves both paths.
+  photoUrls: z.array(z.string().url()).max(6).optional(),
+  reasonCode: z.string().max(40).optional(),
+  reasonNote: z.string().max(500).optional(),
   expectedUpdatedAt: z.string().optional(),
 });
 
@@ -81,8 +88,12 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
   if (!canAccessModule(session.user.modules, MODULES.PROGRESS)) return forbidden();
 
   const { id } = await ctx.params;
-  const entry = await prisma.progressEntry.findUnique({
-    where: { id },
+  // findFirst with an explicit status filter — the Prisma soft-filter
+  // on progressEntry otherwise limits reads to PUBLISHED, and PATCH
+  // must be able to update DRAFT rows too so the engineer can save
+  // an updated draft without publishing it.
+  const entry = await prisma.progressEntry.findFirst({
+    where: { id, status: { in: ["DRAFT", "PUBLISHED"] } },
     select: {
       id: true,
       createdById: true,
@@ -94,10 +105,12 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
       cumulativeQuantity: true,
       contractorId: true,
       notes: true,
+      status: true,
       updatedAt: true,
     },
   });
   if (!entry) return notFound();
+  const isDraft = entry.status === "DRAFT";
 
   // Engineer can only edit own; Planner+ can edit any.
   if (entry.createdById !== session.user.id && !canEditAnyEntry(session.user.role)) {
@@ -107,7 +120,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
   const parsed = await parseBody(req, PatchProgressSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
-  const { date, type, achievedQuantity, cumulativeQuantity, contractorId, notes, labour, expectedUpdatedAt } = body;
+  const {
+    date, type, achievedQuantity, cumulativeQuantity, contractorId,
+    notes, labour, photoUrls, reasonCode, reasonNote, expectedUpdatedAt,
+  } = body;
   const conflict = checkConflict(expectedUpdatedAt, entry.updatedAt, {
     id: entry.id, date: entry.date, achievedQuantity: entry.achievedQuantity, cumulativeQuantity: entry.cumulativeQuantity,
   });
@@ -120,6 +136,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
     cumulativeQuantity?: number;
     contractorId?: string | null;
     notes?: string | null;
+    reasonCode?: string | null;
+    reasonNote?: string | null;
   } = {};
 
   if (date !== undefined) data.date = new Date(date);
@@ -128,6 +146,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
   if (cumulativeQuantity !== undefined) data.cumulativeQuantity = cumulativeQuantity;
   if (contractorId !== undefined) data.contractorId = contractorId || null;
   if (notes !== undefined) data.notes = notes.trim() || null;
+  if (reasonCode !== undefined) data.reasonCode = reasonCode || null;
+  if (reasonNote !== undefined) data.reasonNote = reasonNote.trim() || null;
 
   // A contractor must belong to the entry's project — otherwise a foreign
   // contractor would pollute this project's labour/contractor rollups.
@@ -160,6 +180,24 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
           });
         }
       }
+
+      // Replace photos if provided. Full-replace matches the /publish
+      // endpoint's pattern: the client sends the URL list it wants
+      // attached, we nuke-and-repave.
+      if (photoUrls !== undefined) {
+        await tx.progressPhoto.deleteMany({ where: { progressEntryId: id } });
+        if (photoUrls.length > 0) {
+          await tx.progressPhoto.createMany({
+            data: photoUrls.slice(0, 6).map((url) => ({ progressEntryId: id, url })),
+          });
+        }
+      }
+
+      // Drafts skip the rollup + milestone-close side-effects: an
+      // unfinished stashed entry shouldn't move the dashboard's
+      // percent-complete or trigger a milestone-completion email.
+      // Those fire when the draft publishes (see /publish route).
+      if (isDraft) return u;
 
       // Recompute activity % if cumulative changed
       if (data.cumulativeQuantity !== undefined) {
@@ -213,33 +251,39 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
       await maybeSendMilestoneCompletionEmail(updated.wbsNodeId, justClosed);
     }
 
-    const diff = diffSummary(
-      {
-        date: entry.date,
-        type: entry.type,
-        achievedQuantity: entry.achievedQuantity,
-        cumulativeQuantity: entry.cumulativeQuantity,
-        contractorId: entry.contractorId,
-        notes: entry.notes,
-      },
-      {
-        date: updated.date,
-        type: updated.type,
-        achievedQuantity: updated.achievedQuantity,
-        cumulativeQuantity: updated.cumulativeQuantity,
-        contractorId: updated.contractorId,
-        notes: updated.notes,
-      },
-    );
-    await recordAudit({
-      projectId: entry.projectId,
-      userId: session.user.id,
-      action: "UPDATE",
-      entityType: "ProgressEntry",
-      entityId: entry.id,
-      summary: diff.summary || "Progress entry updated",
-      changes: diff.changes,
-    });
+    // Drafts don't audit: a work-in-progress row can be saved dozens
+    // of times before publish, and each keystroke-batch shouldn't add
+    // an audit line. The row's lifecycle events (CREATE draft, PUBLISH,
+    // DISCARD) are audited separately in their own routes.
+    if (!isDraft) {
+      const diff = diffSummary(
+        {
+          date: entry.date,
+          type: entry.type,
+          achievedQuantity: entry.achievedQuantity,
+          cumulativeQuantity: entry.cumulativeQuantity,
+          contractorId: entry.contractorId,
+          notes: entry.notes,
+        },
+        {
+          date: updated.date,
+          type: updated.type,
+          achievedQuantity: updated.achievedQuantity,
+          cumulativeQuantity: updated.cumulativeQuantity,
+          contractorId: updated.contractorId,
+          notes: updated.notes,
+        },
+      );
+      await recordAudit({
+        projectId: entry.projectId,
+        userId: session.user.id,
+        action: "UPDATE",
+        entityType: "ProgressEntry",
+        entityId: entry.id,
+        summary: diff.summary || "Progress entry updated",
+        changes: diff.changes,
+      });
+    }
 
     return NextResponse.json({ entry: updated });
   } catch (e) {

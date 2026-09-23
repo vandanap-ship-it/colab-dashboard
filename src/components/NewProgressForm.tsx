@@ -373,23 +373,37 @@ export default function NewProgressForm({
       ? `Progress draft for ${selected?.name ?? "activity"}`
       : `Progress for ${selected?.name ?? "activity"}`;
 
-    // Resumed drafts publish through the /publish endpoint on the draft's
-    // own id — the server upgrades DRAFT → PUBLISHED, runs the rollup +
-    // milestone email + audit that were skipped on save. Fresh entries
-    // and re-saved drafts go through POST /api/progress as usual.
+    // Resume-mode routing splits into two:
+    //   · Publish → POST /api/progress/{id}/publish — server upgrades
+    //     DRAFT → PUBLISHED and runs the rollup + milestone + audit
+    //     that were skipped on the original save.
+    //   · Re-save as draft → PATCH /api/progress/{id} — updates the
+    //     existing draft row in place. Without this it would POST a
+    //     duplicate row, leaving two half-finished drafts for the same
+    //     activity.
+    // Fresh entries (isResume=false) always POST /api/progress with
+    // mode "publish" or "draft".
     const isPublishingResumedDraft = isResume && mode === "publish";
-    const endpoint = isPublishingResumedDraft
-      ? `/api/progress/${resumeDraftId}/publish`
-      : "/api/progress";
-    // /publish takes the same shape as POST /api/progress minus the
-    // mode flag (it's implied by the endpoint).
-    const publishPayload = isPublishingResumedDraft ? { ...payload, mode: undefined } : payload;
+    const isResavingResumedDraft = isResume && mode === "draft";
+    let endpoint = "/api/progress";
+    let method: "POST" | "PATCH" = "POST";
+    if (isPublishingResumedDraft) {
+      endpoint = `/api/progress/${resumeDraftId}/publish`;
+    } else if (isResavingResumedDraft) {
+      endpoint = `/api/progress/${resumeDraftId}`;
+      method = "PATCH";
+    }
+    // /publish and PATCH take the payload minus mode + idempotency +
+    // wbsNodeId (activity can't change on an existing row).
+    const remotePayload = isPublishingResumedDraft || isResavingResumedDraft
+      ? { ...payload, mode: undefined, idempotencyKey: undefined, wbsNodeId: undefined }
+      : payload;
 
-    // Photos couldn't upload → queue the WHOLE entry with raw blobs. Skip the
-    // online entry POST entirely so we don't create an entry without its
-    // photos. Skipped for /publish (the draft already has its photos on
-    // the server, so a failed new-photo upload isn't a data-loss risk).
-    if (photosNeedQueue.length > 0 && !isPublishingResumedDraft) {
+    // Photos couldn't upload → queue the WHOLE entry with raw blobs. Skip
+    // this branch for resume-mode calls: /publish and PATCH act on an
+    // existing server row, so a failed new-photo upload isn't a
+    // data-loss risk — the engineer just retries when back online.
+    if (photosNeedQueue.length > 0 && !isPublishingResumedDraft && !isResavingResumedDraft) {
       const { enqueue } = await import("@/lib/offlineQueue");
       await enqueue({
         endpoint: "/api/progress",
@@ -408,13 +422,15 @@ export default function NewProgressForm({
 
     // Try the network first. If it succeeds, great — entry is saved and we
     // navigate away. If it fails (offline, slow signal, server hiccup), we
-    // drop the entry into the offline queue.
+    // drop fresh entries into the offline queue; resume-mode calls
+    // surface the error inline (the server row still exists, so nothing
+    // is lost — the engineer just retries).
     let saved = false;
     try {
       const res = await fetch(endpoint, {
-        method: "POST",
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(publishPayload),
+        body: JSON.stringify(remotePayload),
       });
       if (res.ok) {
         saved = true;
@@ -423,13 +439,22 @@ export default function NewProgressForm({
         setPending(false);
         setError(data?.error ?? `Save failed (${res.status})`);
         return;
+      } else if (isPublishingResumedDraft || isResavingResumedDraft) {
+        setPending(false);
+        setError("Couldn't save right now. Try again in a moment.");
+        return;
       } else {
-        // 5xx — queue it and let the user keep moving.
+        // 5xx on a fresh entry — queue it and let the user keep moving.
         const { enqueue } = await import("@/lib/offlineQueue");
         await enqueue({ endpoint: "/api/progress", method: "POST", body: payload, label: entryLabel });
       }
     } catch {
-      // Network error → queue.
+      if (isPublishingResumedDraft || isResavingResumedDraft) {
+        setPending(false);
+        setError("You're offline — reconnect and try saving the draft again.");
+        return;
+      }
+      // Network error on a fresh entry → queue.
       const { enqueue } = await import("@/lib/offlineQueue");
       await enqueue({ endpoint: "/api/progress", method: "POST", body: payload, label: entryLabel });
     }
@@ -835,19 +860,19 @@ export default function NewProgressForm({
 
           {/* Save Draft · secondary escape hatch for site engineers
               interrupted mid-entry. Skips the % and precheck gates so
-              even a half-typed entry stashes cleanly. Shown only when
-              an activity is picked — a draft with no activity has
-              nothing to attach to. Hidden in resume mode: updating an
-              existing draft in place isn't in step 3 yet; the engineer
-              either publishes or discards. */}
-          {activityId && !isResume && (
+              even a half-typed entry stashes cleanly. Shown whenever
+              an activity is picked — in resume mode it updates the
+              existing draft row in place (PATCH), so the engineer can
+              stash changes to a draft they already resumed without
+              publishing yet. */}
+          {activityId && (
             <button
               type="button"
               onClick={handleSaveDraft}
               disabled={pending}
               className="w-full rounded-full bg-white border border-stone-200 text-ink py-4 text-[15px] font-medium disabled:opacity-60 active:scale-[0.99]"
             >
-              {pending ? "Saving…" : "Save as Draft"}
+              {pending ? "Saving…" : isResume ? "Save draft" : "Save as Draft"}
             </button>
           )}
 
