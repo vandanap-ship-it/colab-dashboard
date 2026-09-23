@@ -17,10 +17,5 @@ export default async function NewHindrancePage({
   if (!canAccessModule(session.user.modules, MODULES.HINDRANCE)) {
     redirect(`/mobile/${projectId}`);
   }
-  return (
-    <MobileHindranceForm
-      projectId={projectId}
-      successPath={`/mobile/${projectId}`}
-    />
-  );
+  return <MobileHindranceForm projectId={projectId} />;
 }

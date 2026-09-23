@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, Calendar, Camera, X } from "lucide-react";
 import { useToast } from "@/components/Toast";
 import HowThisWorks from "@/components/HowThisWorks";
+import SaveSuccessCard from "@/components/SaveSuccessCard";
 import { HINDRANCE_REASONS } from "@/lib/hindranceReasons";
 
 // Types for the data we load on mount.
@@ -35,10 +36,8 @@ type Contractor = { id: string; name: string; category: string };
  */
 export default function MobileHindranceForm({
   projectId,
-  successPath,
 }: {
   projectId: string;
-  successPath: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -67,6 +66,7 @@ export default function MobileHindranceForm({
   const [error, setError] = useState<string | null>(null);
   const [locationOpen, setLocationOpen] = useState(false);
   const [locationSearch, setLocationSearch] = useState("");
+  const [saved, setSaved] = useState<null | { queued: boolean }>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -204,7 +204,7 @@ export default function MobileHindranceForm({
         setPending(false);
         if (photoWarning) toast.warning(photoWarning);
         toast.success("Hindrance logged.");
-        router.push(successPath);
+        setSaved({ queued: false });
         router.refresh();
         return;
       }
@@ -219,7 +219,7 @@ export default function MobileHindranceForm({
       await enqueue({ endpoint: "/api/hindrances", method: "POST", body: payload, label: "Hindrance" });
       setPending(false);
       toast.info("Saved on this device. It will sync when you're back online.");
-      router.push(successPath);
+      setSaved({ queued: true });
     } catch (err) {
       // Network offline. Queue and continue.
       try {
@@ -227,7 +227,7 @@ export default function MobileHindranceForm({
         await enqueue({ endpoint: "/api/hindrances", method: "POST", body: payload, label: "Hindrance" });
         setPending(false);
         toast.info("Saved on this device. It will sync when you're back online.");
-        router.push(successPath);
+        setSaved({ queued: true });
       } catch (qe) {
         setPending(false);
         setError(
@@ -237,6 +237,75 @@ export default function MobileHindranceForm({
         );
       }
     }
+  }
+
+  /** Full reset — every field back to blank (or the sensible default,
+   *  like nowLocal for the datetimes). Used by the plain "Add another"
+   *  CTA on the success card. */
+  function resetForm() {
+    const now = toDatetimeLocal(new Date());
+    setReasonCode("");
+    setResponsibleContractorId("");
+    setResponsibleTeam("");
+    setWbsNodeId("");
+    setDescription("");
+    setReasonNote("");
+    setStartAt(now);
+    setEndAt(now);
+    setPhotos([]);
+    setError(null);
+    setSaved(null);
+  }
+
+  /** Reset for the "Log another on {location}" shortcut: keeps the
+   *  picked location and the responsible contractor + team so an
+   *  engineer walking one villa can file multiple hindrances against
+   *  the same location + contractor without re-picking. The rest of
+   *  the entry (reason, description, times, photos) clears. */
+  function resetForNextOnSameLocation() {
+    const now = toDatetimeLocal(new Date());
+    setReasonCode("");
+    setDescription("");
+    setReasonNote("");
+    setStartAt(now);
+    setEndAt(now);
+    setPhotos([]);
+    setError(null);
+    setSaved(null);
+    // wbsNodeId, responsibleContractorId, responsibleTeam stay set
+  }
+
+  if (saved) {
+    // Villa/location crumb for the "Log another on X" shortcut. Falls
+    // back to a plain "Add another" when the picked WBS node isn't a
+    // recognisable location (some Colab imports land as leaf activity
+    // nodes with no villa prefix).
+    const locLabel = selectedLocation
+      ? selectedLocation.path.filter((p) => !/amanvana/i.test(p)).slice(-1)[0] ?? selectedLocation.name
+      : null;
+    return (
+      <SaveSuccessCard
+        title="Hindrance logged"
+        detail={
+          locLabel
+            ? `Logged against ${locLabel}. Someone will pick it up in the Hindrance list.`
+            : "Someone will pick it up in the Hindrance list."
+        }
+        projectId={projectId}
+        onAddAnother={resetForm}
+        addAnotherSublabel="Fresh hindrance, blank fields"
+        contextAction={
+          locLabel
+            ? {
+                label: `Log another on ${locLabel}`,
+                sublabel: "Keeps the location and contractor",
+                onSelect: resetForNextOnSameLocation,
+              }
+            : undefined
+        }
+        queued={saved.queued}
+      />
+    );
   }
 
   return (
