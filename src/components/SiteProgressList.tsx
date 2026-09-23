@@ -4,6 +4,24 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, FileEdit } from "lucide-react";
 import { ScreenHeading } from "./mobile/ui";
+import { AMANVANA_CONTRACTORS, AMANVANA_VILLA_NUMBER_TO_BLOCK } from "@/lib/projects/amanvana";
+
+// Contractor-of-villa lookup. Same logic ActivityPicker uses: villa labels
+// carry ints ("Villa 3", "Villa 10 & 11", "Villa Set ( V32, V33 )") and any
+// of them landing in the Abraham set flags the villa as Abraham's; else
+// Elegant. Grouped-pair labels hit both by design.
+const ABRAHAM_NUMBERS = new Set(
+  Object.keys(AMANVANA_VILLA_NUMBER_TO_BLOCK).map((n) => parseInt(n, 10)),
+);
+function contractorOfVillaLabel(label: string): "abraham" | "elegant" {
+  const nums: number[] = [];
+  for (const m of label.matchAll(/\d+/g)) {
+    const n = parseInt(m[0], 10);
+    if (Number.isFinite(n)) nums.push(n);
+  }
+  if (nums.length === 0) return "elegant";
+  return nums.some((n) => ABRAHAM_NUMBERS.has(n)) ? "abraham" : "elegant";
+}
 
 // The picker endpoint already carries the villa/milestone shape we want
 // here — Block → Villa → VillaMilestone (with pctComplete + done). Reading
@@ -80,10 +98,13 @@ interface DraftRow {
   };
 }
 
+type ContractorKey = "all" | "abraham" | "elegant";
+
 export default function SiteProgressList({ projectId }: { projectId: string }) {
   const [data, setData] = useState<PickerResp | null>(null);
   const [tab, setTab] = useState<StatusKey>("ONGOING");
   const [search, setSearch] = useState("");
+  const [contractor, setContractor] = useState<ContractorKey>("all");
   const [openVillaId, setOpenVillaId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -144,13 +165,14 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
     const q = search.trim().toLowerCase();
     return villasFlat.filter(({ villa, blockCode }) => {
       if (villaStatus(villa) !== tab) return false;
+      if (contractor !== "all" && contractorOfVillaLabel(villa.label) !== contractor) return false;
       if (!q) return true;
       return (
         villa.label.toLowerCase().includes(q) ||
         blockCode.toLowerCase().includes(q)
       );
     });
-  }, [villasFlat, tab, search]);
+  }, [villasFlat, tab, search, contractor]);
 
   const counts = useMemo(() => {
     const c = { UPCOMING: 0, ONGOING: 0, QUEUE: 0 };
@@ -209,6 +231,31 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
           </ul>
         </section>
       )}
+
+      {/* Contractor filter · Amanvana has two awarded contractors. Chips
+          sit above the status tabs so the engineer can narrow the whole
+          list to one contractor's scope in a single tap. "All" is the
+          default so no engineer is surprised by hidden villas on load. */}
+      <div className="flex gap-2">
+        {([
+          { key: "all" as const, label: "All contractors" },
+          { key: "abraham" as const, label: AMANVANA_CONTRACTORS.abraham },
+          { key: "elegant" as const, label: AMANVANA_CONTRACTORS.elegant },
+        ]).map((c) => (
+          <button
+            key={c.key}
+            type="button"
+            onClick={() => setContractor(c.key)}
+            className={`rounded-full px-3.5 py-1.5 text-[12px] font-semibold ${
+              contractor === c.key
+                ? "bg-ferrous-500 text-white"
+                : "bg-sandstone-100 text-ink-2"
+            }`}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
 
       <div className="flex gap-2">
         {(["UPCOMING", "ONGOING", "QUEUE"] as const).map((t) => (
