@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, FileEdit } from "lucide-react";
 import { ScreenHeading } from "./mobile/ui";
 
 // The picker endpoint already carries the villa/milestone shape we want
@@ -69,6 +69,17 @@ function villaMilestoneCounts(v: Villa) {
   return { done, ongoing, upcoming, total: v.milestones.length };
 }
 
+interface DraftRow {
+  id: string;
+  createdAt: string;
+  cumulativeQuantity: number;
+  wbsNode: {
+    id: string;
+    name: string;
+    totalQuantity: number | null;
+  };
+}
+
 export default function SiteProgressList({ projectId }: { projectId: string }) {
   const [data, setData] = useState<PickerResp | null>(null);
   const [tab, setTab] = useState<StatusKey>("ONGOING");
@@ -76,6 +87,28 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
   const [openVillaId, setOpenVillaId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // Draft rows for the current user on this project. Small query,
+  // runs alongside the picker fetch. Empty by default → strip renders
+  // nothing. On failure we silently drop it — a broken drafts strip
+  // shouldn't block the main villa list.
+  const [drafts, setDrafts] = useState<DraftRow[]>([]);
+
+  // Drafts fetch — user-scoped by the server route; no need to filter here.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/progress?projectId=${encodeURIComponent(projectId)}&status=draft&limit=20`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { entries: [] }))
+      .then((j: { entries?: DraftRow[] }) => {
+        if (cancelled) return;
+        setDrafts(Array.isArray(j.entries) ? j.entries : []);
+      })
+      .catch(() => {
+        if (!cancelled) setDrafts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, reloadKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,6 +164,51 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
         title="Site progress"
         lede="Every villa on the site, most-active first. Tap one to see its milestones."
       />
+
+      {/* Drafts strip · surfaces the current user's unfinished
+          Progress entries. Tap one to resume in the form (pre-filled).
+          Only shown when the engineer has drafts, so the section
+          doesn't take space for engineers who never save drafts. */}
+      {drafts.length > 0 && (
+        <section
+          className="rounded-2xl border border-sandstone-100 bg-cream overflow-hidden"
+          aria-label="Your drafts"
+        >
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-sandstone-100">
+            <FileEdit className="w-4 h-4 text-ferrous-500" />
+            <span className="text-[13px] font-semibold text-ink">
+              Your drafts <span className="text-ink-3 font-normal">({drafts.length})</span>
+            </span>
+          </div>
+          <ul className="divide-y divide-sandstone-100">
+            {drafts.map((d) => {
+              const total = d.wbsNode.totalQuantity ?? 0;
+              const pct =
+                total > 0
+                  ? Math.max(0, Math.min(100, Math.round((d.cumulativeQuantity / total) * 100)))
+                  : Math.max(0, Math.min(100, Math.round(d.cumulativeQuantity)));
+              return (
+                <li key={d.id}>
+                  <Link
+                    href={`/mobile/${projectId}/progress/new?draftId=${d.id}`}
+                    className="flex items-center gap-3 px-4 py-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[14px] font-medium text-ink truncate">
+                        {d.wbsNode.name}
+                      </div>
+                      <div className="text-[12px] text-ink-3 mt-0.5">
+                        {pct}% saved &middot; {new Date(d.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-ink-3 flex-shrink-0" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <div className="flex gap-2">
         {(["UPCOMING", "ONGOING", "QUEUE"] as const).map((t) => (

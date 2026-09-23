@@ -39,9 +39,15 @@ const PROGRESS_TYPE = "LABOUR_SUPPLY" as const;
 export default function NewProgressForm({
   projectId,
   initialActivityId,
+  resumeDraftId,
 }: {
   projectId: string;
   initialActivityId?: string;
+  /** When set, load this draft on mount and pre-fill the form. In
+   *  resume mode, Save progress becomes "Publish", Save Draft
+   *  becomes "Update draft" (still writes DRAFT status), and a
+   *  Discard action lets the engineer delete without publishing. */
+  resumeDraftId?: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -108,6 +114,103 @@ export default function NewProgressForm({
   const pct = pctState;
   const cumulative = totalQty > 0 ? (totalQty * pctState) / 100 : pctState;
 
+  // Draft resume · fetch the draft on mount if the parent handed us a
+  // resumeDraftId. Pre-fills every field the form supports so the
+  // engineer picks up exactly where they left off. Photos come back as
+  // URLs (stored server-side); the picker below carries them as
+  // existingPhotoUrls so the form doesn't try to re-upload them.
+  const [existingPhotoUrls, setExistingPhotoUrls] = useState<string[]>([]);
+  const isResume = Boolean(resumeDraftId);
+  const [draftLoadFailed, setDraftLoadFailed] = useState(false);
+  useEffect(() => {
+    if (!resumeDraftId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        // Query the draft directly via the id-scoped route with an
+        // explicit status filter opt-in — the GET list route only
+        // returns drafts when status=draft, so we hit the single-row
+        // endpoint that filters by id + createdById. There isn't a
+        // /api/progress/[id] GET yet, so we fetch the list and pick
+        // the matching row.
+        const res = await fetch(
+          `/api/progress?projectId=${encodeURIComponent(projectId)}&status=draft&limit=100`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) throw new Error(`Failed (${res.status})`);
+        const j = await res.json();
+        interface DraftFromApi {
+          id: string;
+          date: string;
+          cumulativeQuantity: number;
+          achievedQuantity: number;
+          notes: string | null;
+          reasonCode: string | null;
+          reasonNote: string | null;
+          contractor: { id: string; name: string } | null;
+          photos: Array<{ id: string; url: string }>;
+          labour: Array<{ id: string; category: string; count: number }>;
+          wbsNode: {
+            id: string;
+            name: string;
+            taskCode: string;
+            totalQuantity: number | null;
+            unit: string | null;
+          };
+        }
+        const drafts = j.entries as DraftFromApi[];
+        const draft = drafts.find((d) => d.id === resumeDraftId);
+        if (cancelled) return;
+        if (!draft) {
+          setDraftLoadFailed(true);
+          return;
+        }
+        // Pre-fill state. Path (block/villa/section) isn't stored on
+        // the entry so we synthesize a minimal PickedActivity — the
+        // form only uses path for the save-card detail line and the
+        // "Log another on villa" shortcut, both of which read cleanly
+        // when the values are blank.
+        setSelected({
+          id: draft.wbsNode.id,
+          name: draft.wbsNode.name,
+          taskCode: draft.wbsNode.taskCode,
+          totalQuantity: draft.wbsNode.totalQuantity,
+          unit: draft.wbsNode.unit,
+          contractor: draft.contractor,
+          path: { blockCode: "", villaLabel: "", sectionName: "" },
+        });
+        setDate(draft.date.slice(0, 10));
+        setAchieved(draft.achievedQuantity);
+        // Slider value: derive from cumulative + total, else assume the
+        // stored cumulative IS the slider value (activities without a
+        // scheduled quantity).
+        const total = draft.wbsNode.totalQuantity ?? 0;
+        setPctState(
+          total > 0
+            ? Math.max(0, Math.min(100, Math.round((draft.cumulativeQuantity / total) * 100)))
+            : Math.max(0, Math.min(100, Math.round(draft.cumulativeQuantity))),
+        );
+        setNotes(draft.notes ?? "");
+        setReasonCode(draft.reasonCode ?? "");
+        setReasonNote(draft.reasonNote ?? "");
+        setLabour(
+          draft.labour.length > 0
+            ? draft.labour.map((l) => ({ category: l.category, count: l.count }))
+            : [{ category: "Skilled", count: 0 }],
+        );
+        setExistingPhotoUrls(draft.photos.map((p) => p.url));
+      } catch (e) {
+        if (!cancelled) {
+          setDraftLoadFailed(true);
+          setError(e instanceof Error ? e.message : "Couldn't load the draft.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [resumeDraftId, projectId]);
+
   // Fetch the precheck gate as soon as an activity is picked (or the
   // engineer swaps to a different activity). Server enforces the same
   // rule on POST — this is the pre-submit UX so nobody scrolls to Save
@@ -169,6 +272,22 @@ export default function NewProgressForm({
     await submitEntry("publish");
   }
 
+  async function handleDiscardDraft() {
+    if (!resumeDraftId) return;
+    if (!window.confirm("Discard this draft? You can't get it back.")) return;
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/progress/${resumeDraftId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`Discard failed (${res.status})`);
+      toast.info("Draft discarded.");
+      router.push(`/mobile/${projectId}/site-progress`);
+    } catch (e) {
+      setPending(false);
+      setError(e instanceof Error ? e.message : "Couldn't discard the draft.");
+    }
+  }
+
   async function handleSaveDraft() {
     // Save Draft skips both the precheck gate and the 0% check — the
     // whole point of a draft is that the engineer isn't ready to
@@ -211,7 +330,9 @@ export default function NewProgressForm({
     // fails, we queue the whole entry WITH the raw photo blobs — the offline
     // queue's upload step will retry the photos on flush and then fire the
     // main entry POST. Nothing gets saved to prod without its photos.
-    let photoUrls: string[] = [];
+    // Resumed drafts start from `existingPhotoUrls` (server-stored URLs
+    // from the draft) so photos aren't re-uploaded on publish.
+    let photoUrls: string[] = [...existingPhotoUrls];
     let photosNeedQueue: { filename: string; scope: string; blob: Blob }[] = [];
     if (photos.length > 0) {
       const scope = `progress-${projectId}`;
@@ -222,7 +343,7 @@ export default function NewProgressForm({
         const upRes = await fetch("/api/upload", { method: "POST", body: fd });
         if (upRes.ok) {
           const upData = await upRes.json();
-          photoUrls = upData.urls;
+          photoUrls = [...photoUrls, ...upData.urls];
         } else {
           photosNeedQueue = photos.map((f) => ({ filename: f.name, scope, blob: f }));
         }
@@ -252,10 +373,23 @@ export default function NewProgressForm({
       ? `Progress draft for ${selected?.name ?? "activity"}`
       : `Progress for ${selected?.name ?? "activity"}`;
 
+    // Resumed drafts publish through the /publish endpoint on the draft's
+    // own id — the server upgrades DRAFT → PUBLISHED, runs the rollup +
+    // milestone email + audit that were skipped on save. Fresh entries
+    // and re-saved drafts go through POST /api/progress as usual.
+    const isPublishingResumedDraft = isResume && mode === "publish";
+    const endpoint = isPublishingResumedDraft
+      ? `/api/progress/${resumeDraftId}/publish`
+      : "/api/progress";
+    // /publish takes the same shape as POST /api/progress minus the
+    // mode flag (it's implied by the endpoint).
+    const publishPayload = isPublishingResumedDraft ? { ...payload, mode: undefined } : payload;
+
     // Photos couldn't upload → queue the WHOLE entry with raw blobs. Skip the
     // online entry POST entirely so we don't create an entry without its
-    // photos.
-    if (photosNeedQueue.length > 0) {
+    // photos. Skipped for /publish (the draft already has its photos on
+    // the server, so a failed new-photo upload isn't a data-loss risk).
+    if (photosNeedQueue.length > 0 && !isPublishingResumedDraft) {
       const { enqueue } = await import("@/lib/offlineQueue");
       await enqueue({
         endpoint: "/api/progress",
@@ -277,10 +411,10 @@ export default function NewProgressForm({
     // drop the entry into the offline queue.
     let saved = false;
     try {
-      const res = await fetch("/api/progress", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(publishPayload),
       });
       if (res.ok) {
         saved = true;
@@ -402,14 +536,26 @@ export default function NewProgressForm({
           home. Kept the H1 here so the page title stays with the form and
           readers land on the right heading level. */}
       <header>
+        {isResume && (
+          <p className="font-serif italic text-[13px] text-ferrous-600 tracking-wide mb-1">
+            Resuming your draft
+          </p>
+        )}
         <h1 className="font-serif text-[28px] leading-tight text-ink">
-          Log progress
+          {isResume ? "Finish your progress" : "Log progress"}
         </h1>
+        {draftLoadFailed && (
+          <p className="text-[13px] text-ferrous-600 mt-2">
+            Couldn&apos;t load that draft. It may have been discarded or published from another device.
+          </p>
+        )}
       </header>
 
       {/* Onboarding · plain-English walkthrough for the site team.
-          Auto-expanded on first visit, collapsed once dismissed. */}
-      <HowThisWorks
+          Auto-expanded on first visit, collapsed once dismissed.
+          Hidden in resume mode since the engineer already knows the flow. */}
+      {!isResume && (
+        <HowThisWorks
         title="How to log progress"
         storageKey="siddhi.htw.progress"
         steps={[
@@ -421,7 +567,8 @@ export default function NewProgressForm({
           "If work was delayed, pick a delay reason so the team knows.",
           "Tap Save progress at the bottom.",
         ]}
-      />
+        />
+      )}
 
       {/* Step 1 · Activity */}
       <section>
@@ -675,21 +822,25 @@ export default function NewProgressForm({
           {/* Save · sits at the very end so the engineer scrolls through
               every part of the entry before committing. Disabled while
               the precheck gate is loading or blocked, so a slow network
-              can't let a gated activity through by accident. */}
+              can't let a gated activity through by accident.
+              In resume mode this becomes "Publish" — the draft gets
+              promoted to PUBLISHED status. */}
           <button
             type="submit"
             disabled={pending || !activityId || pctState <= 0 || gateLoading || (gate ? !gate.ok : false)}
             className="w-full rounded-full bg-ink text-cream py-4 text-[16px] font-semibold shadow-card disabled:opacity-60 active:scale-[0.99]"
           >
-            {pending ? "Saving…" : "Save progress"}
+            {pending ? "Saving…" : isResume ? "Publish progress" : "Save progress"}
           </button>
 
           {/* Save Draft · secondary escape hatch for site engineers
               interrupted mid-entry. Skips the % and precheck gates so
               even a half-typed entry stashes cleanly. Shown only when
               an activity is picked — a draft with no activity has
-              nothing to attach to. */}
-          {activityId && (
+              nothing to attach to. Hidden in resume mode: updating an
+              existing draft in place isn't in step 3 yet; the engineer
+              either publishes or discards. */}
+          {activityId && !isResume && (
             <button
               type="button"
               onClick={handleSaveDraft}
@@ -697,6 +848,21 @@ export default function NewProgressForm({
               className="w-full rounded-full bg-white border border-stone-200 text-ink py-4 text-[15px] font-medium disabled:opacity-60 active:scale-[0.99]"
             >
               {pending ? "Saving…" : "Save as Draft"}
+            </button>
+          )}
+
+          {/* Discard · resume-mode-only. Soft-deletes the draft and
+              sends the engineer back to the Progress list. Guarded
+              with a browser confirm so a stray tap doesn't wipe a
+              draft they were still using. */}
+          {isResume && (
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              disabled={pending}
+              className="w-full rounded-full bg-white border border-ferrous-200 text-ferrous-600 py-4 text-[14px] font-medium disabled:opacity-60 active:scale-[0.99]"
+            >
+              Discard draft
             </button>
           )}
         </>

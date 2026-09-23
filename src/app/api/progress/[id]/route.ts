@@ -253,9 +253,13 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/progress/[id
   if (!canAccessModule(session.user.modules, MODULES.PROGRESS)) return forbidden();
 
   const { id } = await ctx.params;
-  const entry = await prisma.progressEntry.findUnique({
-    where: { id },
-    select: { id: true, createdById: true, projectId: true },
+  // findFirst instead of findUnique so we can pass the status filter
+  // explicitly — the Prisma soft-filter on progressEntry defaults reads
+  // to PUBLISHED-only, but a Discard on a draft (or trashing a
+  // published row from the admin trash view) has to work on either.
+  const entry = await prisma.progressEntry.findFirst({
+    where: { id, status: { in: ["DRAFT", "PUBLISHED"] } },
+    select: { id: true, createdById: true, projectId: true, status: true },
   });
   if (!entry) return notFound();
 
@@ -266,6 +270,7 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/progress/[id
   try {
     // Soft-delete: mark deletedAt instead of removing. Admin can restore from
     // /admin/trash. Photos and labour rows stay attached to the entry.
+    // Applies to both drafts (Discard) and published rows (Trash).
     await prisma.progressEntry.update({
       where: { id },
       data: { deletedAt: new Date() },
@@ -276,7 +281,7 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/progress/[id
       action: "DELETE",
       entityType: "ProgressEntry",
       entityId: entry.id,
-      summary: "Progress entry moved to trash",
+      summary: entry.status === "DRAFT" ? "Progress draft discarded" : "Progress entry moved to trash",
     });
     return NextResponse.json({ ok: true });
   } catch (e) {

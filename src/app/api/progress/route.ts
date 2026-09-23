@@ -65,12 +65,28 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");
   const wbsNodeId = searchParams.get("wbsNodeId");
+  const status = searchParams.get("status"); // "draft" for the Drafts tab
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "50", 10) || 50, 200);
 
   if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
 
-  const where: { projectId: string; wbsNodeId?: string; deletedAt: null } = { projectId, deletedAt: null };
+  // Drafts are private to the author: return only the current user's
+  // rows and only when they explicitly asked for status=draft. Without
+  // that param, the query defaults to PUBLISHED-only via the Prisma
+  // soft-filter (see @/lib/prisma).
+  const isDraftQuery = status === "draft";
+  const where: {
+    projectId: string;
+    wbsNodeId?: string;
+    deletedAt: null;
+    status?: string;
+    createdById?: string;
+  } = { projectId, deletedAt: null };
   if (wbsNodeId) where.wbsNodeId = wbsNodeId;
+  if (isDraftQuery) {
+    where.status = "DRAFT";
+    where.createdById = session.user.id;
+  }
 
   const entries = await prisma.progressEntry.findMany({
     where,
