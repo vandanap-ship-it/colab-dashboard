@@ -61,7 +61,6 @@ export default async function MobileHindranceListPage({
         endDate: true,
         resolvedDate: true,
         daysImpact: true,
-        costImpact: true,
         reasonCode: true,
         responsibleContractor: { select: { name: true } },
         wbsNode: { select: { name: true } },
@@ -138,12 +137,6 @@ export default async function MobileHindranceListPage({
                       <>
                         <span>·</span>
                         <span>{h.daysImpact}d impact</span>
-                      </>
-                    )}
-                    {h.costImpact != null && h.costImpact > 0 && (
-                      <>
-                        <span>·</span>
-                        <span>{fmtInr(h.costImpact)}</span>
                       </>
                     )}
                     {h.reasonCode && (
@@ -249,9 +242,4 @@ function HindranceAgingChip({ startDate }: { startDate: Date }) {
       {age.label}
     </span>
   );
-}
-function fmtInr(n: number): string {
-  if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
-  if (n >= 1000) return `₹${(n / 1000).toFixed(1)}k`;
-  return `₹${Math.round(n).toLocaleString("en-IN")}`;
 }

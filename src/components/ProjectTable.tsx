@@ -30,10 +30,6 @@ function fmtPct(n: number | null | undefined): string {
   if (n == null) return "—";
   return `${n.toFixed(2)}%`;
 }
-function fmtCurrency(n: number | null | undefined): string {
-  if (n == null) return "—";
-  return `₹${n.toLocaleString("en-IN")}`;
-}
 
 // ---------------------------------------------------------------------------
 // Column definitions — each cell renderer takes the row and returns a node.
@@ -209,20 +205,6 @@ const COLUMNS: Column[] = [
     width: "120px",
     render: (r) => <span className="text-sm tabular-nums text-stone-700">{r.activePermits}</span>,
     sortValue: (r) => r.activePermits,
-  },
-  {
-    key: null,
-    label: "Cost",
-    align: "right",
-    width: "120px",
-    render: (r) => <span className="text-sm tabular-nums text-stone-400 italic">{fmtCurrency(r.costTotal)}</span>,
-  },
-  {
-    key: null,
-    label: "Fin. progress",
-    align: "right",
-    width: "120px",
-    render: (r) => <span className="text-sm tabular-nums text-stone-400 italic">{fmtPct(r.financialProgressPct)}</span>,
   },
   {
     key: null,

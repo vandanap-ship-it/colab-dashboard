@@ -241,7 +241,6 @@ CREATE TABLE "Hindrance" (
     "reasonNote" TEXT,
     "responsibleContractorId" TEXT,
     "responsibleTeam" TEXT,
-    "costImpact" DOUBLE PRECISION,
     "createdById" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -559,39 +558,6 @@ CREATE TABLE "SubContractorBillLine" (
 );
 
 -- CreateTable
-CREATE TABLE "Expense" (
-    "id" TEXT NOT NULL,
-    "projectId" TEXT NOT NULL,
-    "category" TEXT NOT NULL,
-    "description" TEXT NOT NULL,
-    "amount" DOUBLE PRECISION NOT NULL,
-    "date" TIMESTAMP(3) NOT NULL,
-    "paidTo" TEXT,
-    "status" TEXT NOT NULL DEFAULT 'SUBMITTED',
-    "rejectionReason" TEXT,
-    "notes" TEXT,
-    "loggedById" TEXT NOT NULL,
-    "approvedById" TEXT,
-    "approvedAt" TIMESTAMP(3),
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
-    "idempotencyKey" TEXT,
-
-    CONSTRAINT "Expense_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "ExpensePhoto" (
-    "id" TEXT NOT NULL,
-    "expenseId" TEXT NOT NULL,
-    "url" TEXT NOT NULL,
-    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "ExpensePhoto_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "DesignDrawing" (
     "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
@@ -904,15 +870,6 @@ CREATE INDEX "SubContractorBill_contractorId_idx" ON "SubContractorBill"("contra
 CREATE INDEX "SubContractorBillLine_billId_idx" ON "SubContractorBillLine"("billId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Expense_idempotencyKey_key" ON "Expense"("idempotencyKey");
-
--- CreateIndex
-CREATE INDEX "Expense_projectId_idx" ON "Expense"("projectId");
-
--- CreateIndex
-CREATE INDEX "ExpensePhoto_expenseId_idx" ON "ExpensePhoto"("expenseId");
-
--- CreateIndex
 CREATE INDEX "DesignDrawing_projectId_idx" ON "DesignDrawing"("projectId");
 
 -- CreateIndex
@@ -1148,18 +1105,6 @@ ALTER TABLE "SubContractorBillLine" ADD CONSTRAINT "SubContractorBillLine_billId
 
 -- AddForeignKey
 ALTER TABLE "SubContractorBillLine" ADD CONSTRAINT "SubContractorBillLine_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Expense" ADD CONSTRAINT "Expense_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Expense" ADD CONSTRAINT "Expense_loggedById_fkey" FOREIGN KEY ("loggedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Expense" ADD CONSTRAINT "Expense_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ExpensePhoto" ADD CONSTRAINT "ExpensePhoto_expenseId_fkey" FOREIGN KEY ("expenseId") REFERENCES "Expense"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "DesignDrawing" ADD CONSTRAINT "DesignDrawing_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;

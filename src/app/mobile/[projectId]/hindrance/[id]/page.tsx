@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { User as UserIcon, Camera, Calendar, IndianRupee, Wrench, TimerReset } from "lucide-react";
+import { User as UserIcon, Camera, Calendar, Wrench, TimerReset } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
@@ -122,28 +122,17 @@ export default async function MobileHindranceDetailPage({
           )}
         </section>
 
-        {/* Impact tiles — days lost + rupees. Only render when the field is
-            actually filled so we don't scream "₹0" at people. */}
-        {(h.daysImpact != null || (h.costImpact != null && h.costImpact > 0)) && (
-          <section className="grid grid-cols-2 gap-2">
-            {h.daysImpact != null && (
-              <div className="rounded-xl border border-stone-200 bg-white p-3">
-                <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Days lost</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <TimerReset className="w-4 h-4 text-ferrous-600" />
-                  <span className="text-xl font-semibold tabular-nums text-stone-900">{h.daysImpact}</span>
-                </div>
+        {/* Days-lost tile — only renders when the field is actually filled
+            so we don't scream "0 days" at people who left it blank. */}
+        {h.daysImpact != null && (
+          <section>
+            <div className="rounded-xl border border-stone-200 bg-white p-3">
+              <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Days lost</div>
+              <div className="flex items-center gap-2 mt-1">
+                <TimerReset className="w-4 h-4 text-ferrous-600" />
+                <span className="text-xl font-semibold tabular-nums text-stone-900">{h.daysImpact}</span>
               </div>
-            )}
-            {h.costImpact != null && h.costImpact > 0 && (
-              <div className="rounded-xl border border-stone-200 bg-white p-3">
-                <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Cost impact</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <IndianRupee className="w-4 h-4 text-ferrous-600" />
-                  <span className="text-xl font-semibold tabular-nums text-stone-900">{fmtInr(h.costImpact)}</span>
-                </div>
-              </div>
-            )}
+            </div>
           </section>
         )}
 
@@ -200,11 +189,6 @@ function StatusPill({ status }: { status: string }) {
 
 function fmtDate(d: Date): string {
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
-function fmtInr(n: number): string {
-  if (n >= 100000) return `${(n / 100000).toFixed(1)}L`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return Math.round(n).toLocaleString("en-IN");
 }
 
 /**

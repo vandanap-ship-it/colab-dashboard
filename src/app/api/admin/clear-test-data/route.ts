@@ -44,8 +44,6 @@ async function summarise() {
     tradePlans,
     bills,
     billLines,
-    expenses,
-    expensePhotos,
     projectDrawings,
     designDrawings,
     designDrawingRevisions,
@@ -75,8 +73,6 @@ async function summarise() {
     prisma.tradePlan.count(),
     prisma.subContractorBill.count(),
     prisma.subContractorBillLine.count(),
-    prisma.expense.count(),
-    prisma.expensePhoto.count(),
     prisma.projectDrawing.count(),
     prisma.designDrawing.count(),
     prisma.designDrawingRevision.count(),
@@ -116,8 +112,6 @@ async function summarise() {
       tradePlans,
       bills,
       billLines,
-      expenses,
-      expensePhotos,
       projectDrawings,
       designDrawings,
       designDrawingRevisions,
@@ -163,7 +157,7 @@ export async function POST(req: Request) {
 
   const result = await prisma.$transaction(async (tx) => {
     // Photo/child tables where the cascade isn't declared — clear them
-    // first. For SubContractorBillLine, ExpensePhoto, RfiPhoto and
+    // first. For SubContractorBillLine, RfiPhoto and
     // DesignDrawingRevision the parent-side onDelete: Cascade takes care
     // of it, so we only need the parent deleteMany.
     const ipDel = await tx.inspectionPhoto.deleteMany();
@@ -185,13 +179,12 @@ export async function POST(req: Request) {
 
     // Newly-added test-data wipes — the pre-launch walkthrough will
     // exercise these modules and their rows have to disappear too, else
-    // ghost RFIs / permits / expenses linger in prod after the reset.
+    // ghost RFIs / permits linger in prod after the reset.
     const rfiDel = await tx.rfi.deleteMany(); // cascades RfiPhoto
     const permitDel = await tx.permit.deleteMany();
     const workPermitDel = await tx.workPermit.deleteMany(); // cascades WorkPermitPhoto
     const manpowerDel = await tx.manpowerEntry.deleteMany();
     const tradePlanDel = await tx.tradePlan.deleteMany();
-    const expenseDel = await tx.expense.deleteMany(); // cascades ExpensePhoto
     const billDel = await tx.subContractorBill.deleteMany(); // cascades SubContractorBillLine
     const projectDrawingDel = await tx.projectDrawing.deleteMany();
     const designDrawingDel = await tx.designDrawing.deleteMany(); // cascades DesignDrawingRevision
@@ -231,7 +224,6 @@ export async function POST(req: Request) {
         workPermits: workPermitDel.count,
         manpowerEntries: manpowerDel.count,
         tradePlans: tradePlanDel.count,
-        expenses: expenseDel.count,
         bills: billDel.count,
         projectDrawings: projectDrawingDel.count,
         designDrawings: designDrawingDel.count,

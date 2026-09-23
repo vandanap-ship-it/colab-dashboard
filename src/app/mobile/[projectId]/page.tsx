@@ -329,7 +329,7 @@ export default async function MobileProjectHome({
       key: "hindrance-list",
       href: `/mobile/${projectId}/hindrance?tab=open`,
       label: "Hindrances",
-      hint: "Open blockers · days & cost impact",
+      hint: "Open blockers · days impact",
       icon: AlertTriangle,
       tier: "secondary",
     },

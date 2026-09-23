@@ -8,7 +8,7 @@ const globalForPrisma = globalThis as unknown as { prisma?: ExtendedClient };
 // hooks below). Reads against them automatically exclude soft-deleted rows
 // unless the caller passes an explicit deletedAt in `where`.
 // Current coverage: progressEntry, issue, hindrance, concern, inspection,
-// subContractorBill, expense, designDrawing, rfi, permit, manpowerEntry,
+// subContractorBill, designDrawing, rfi, permit, manpowerEntry,
 // tradePlan, workPermit — everything on the schema with a deletedAt column.
 const READ_OPERATIONS = new Set([
   "findMany",
@@ -94,11 +94,6 @@ function createClient() {
         },
       },
       subContractorBill: {
-        async $allOperations({ operation, args, query }) {
-          return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
-        },
-      },
-      expense: {
         async $allOperations({ operation, args, query }) {
           return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
         },

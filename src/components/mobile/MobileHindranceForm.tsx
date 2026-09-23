@@ -26,8 +26,7 @@ type Contractor = { id: string; name: string; category: string };
  *   7. From Date & Time  — start of the blocker window
  *   8. To Date & Time    — end (expected or actual)
  *   9. Calculated Duration (derived; not sent)
- *  10. Cost Impact       — INR ₹
- *  11. Upload File/Photo — up to 4 photos
+ *  10. Upload File/Photo — up to 4 photos
  *
  * We deliberately keep this as a single component rather than plugging into
  * the generic ReportForm — the reference layout is opinionated (card grid,
@@ -62,7 +61,6 @@ export default function MobileHindranceForm({
   const nowLocal = toDatetimeLocal(new Date());
   const [startAt, setStartAt] = useState(nowLocal);
   const [endAt, setEndAt] = useState(nowLocal);
-  const [costImpact, setCostImpact] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
 
   const [pending, setPending] = useState(false);
@@ -181,7 +179,6 @@ export default function MobileHindranceForm({
 
     const start = parseDatetimeLocal(startAt);
     const end = parseDatetimeLocal(endAt);
-    const costNum = costImpact.trim() ? Number(costImpact) : undefined;
 
     const payload: Record<string, unknown> = {
       idempotencyKey: crypto.randomUUID(),
@@ -194,7 +191,6 @@ export default function MobileHindranceForm({
       endDate: end ? end.toISOString() : null,
       responsibleContractorId: responsibleContractorId || null,
       responsibleTeam: responsibleTeam.trim() || null,
-      costImpact: Number.isFinite(costNum) ? costNum : null,
       photoUrls,
     };
 
@@ -270,7 +266,7 @@ export default function MobileHindranceForm({
             "Pick where on site it is — the block or the villa.",
             "If you know which contractor or team is responsible, tag them so the right person sees the hindrance.",
             "Add photos if they help show the condition.",
-            "Fill in the estimated end date and cost impact if you have an idea — leave blank if not.",
+            "Fill in the estimated end date if you have one — leave blank if not.",
             "Tap Save. It'll show up on the DLR under Hindrances automatically, and leadership gets a nudge in the next digest.",
           ]}
         />
@@ -427,24 +423,7 @@ export default function MobileHindranceForm({
         {/* 9. Calculated Duration — derived, no input */}
         <FieldCard label={`Calculated Duration : ${durationLabel}`} inline />
 
-        {/* 10. Cost Impact */}
-        <FieldCard label="Cost Impact">
-          <div className="relative flex items-center rounded-lg bg-stone-100 px-4 h-12">
-            <span className="text-stone-500 mr-2">₹</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="1"
-              value={costImpact}
-              onChange={(e) => setCostImpact(e.target.value)}
-              placeholder="Enter Amount"
-              className="w-full bg-transparent outline-none text-stone-900 placeholder:text-stone-400"
-            />
-          </div>
-        </FieldCard>
-
-        {/* 11. Upload File/Photo */}
+        {/* 10. Upload File/Photo */}
         <FieldCard
           label="Upload File/Photo"
           rightAdornment={

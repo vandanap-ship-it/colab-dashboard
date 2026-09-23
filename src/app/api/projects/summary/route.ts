@@ -26,8 +26,6 @@ export type ProjectSummary = {
   activePermits: number;
   actualLabourToday: number;
   plannedLabourToday: number | null;
-  costTotal: number | null;
-  financialProgressPct: number | null;
 };
 
 // Defensive wrappers around the queries that touch tables/columns added by
@@ -75,9 +73,9 @@ async function safeTradePlansFindMany(projectIds: string[], today: Date) {
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  // Portfolio rollup is planning-side data — counts, delay days, labour,
-  // financial progress. Scoped external contractors are single-project and
-  // shouldn't get a portfolio-wide view of every other subcontractor.
+  // Portfolio rollup is planning-side data — counts, delay days, labour.
+  // Scoped external contractors are single-project and shouldn't get a
+  // portfolio-wide view of every other subcontractor.
   if (isScopedUser(session.user.modules)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -204,8 +202,6 @@ export async function GET() {
       activePermits: permitByProject.get(p.id) ?? 0,
       actualLabourToday: actualByProject.get(p.id) ?? 0,
       plannedLabourToday: hasPlanByProject.has(p.id) ? (plannedByProject.get(p.id) ?? 0) : null,
-      costTotal: null,
-      financialProgressPct: null,
     };
   });
 
