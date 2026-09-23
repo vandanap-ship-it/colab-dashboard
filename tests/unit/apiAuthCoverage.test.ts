@@ -27,6 +27,8 @@ const EXEMPT_ROUTES: Record<string, string> = {
     "NextAuth's own catch-all handler — IS the auth system, doesn't gate itself.",
   "admin/bootstrap/route.ts":
     "One-time bootstrap: gated by BOOTSTRAP_TOKEN env var (timing-safe compare) AND refuses once any user exists. Documented in the file.",
+  "admin/reset-admin-password/route.ts":
+    "One-shot admin password reset: gated by BOOTSTRAP_TOKEN env var (timing-safe compare, disabled by default). Only resets the 'admin'/ADMIN row, never arbitrary users. Documented in the file.",
   "cron/overdue-digest/route.ts":
     "Vercel Cron endpoint: gated by CRON_SECRET Bearer token. Fails closed if the env var is missing.",
   "cron/progress-nudge/route.ts":
