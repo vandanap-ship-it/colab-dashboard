@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, KeyRound, Pencil, Plus, X } from "lucide-react";
+import { Check, ChevronDown, KeyRound, Pencil, Plus, X } from "lucide-react";
 import { ROLE_LABELS, ROLES } from "@/lib/roles";
 import { ALL_MODULES, MODULE_LABELS, parseUserModules, type ModuleKey } from "@/lib/modules";
 
@@ -645,9 +645,12 @@ export default function UsersAdmin() {
 }
 
 /**
- * Table-cell display for a user's module scope. Shows either a "Full
- * access" pill (null modules, internal staff) or a compact list of
- * module labels (scoped user). Click opens the picker sheet.
+ * Table-cell display for a user's module scope. Styled like the
+ * neighbouring Role and Contractor dropdowns so it reads as an
+ * interactive control at a glance — border, chevron, hover state.
+ * Shows either "All modules" (null = internal staff, full access) or
+ * a compact list of module labels (scoped user). Click opens the
+ * picker dialog.
  */
 function ModulesCell({ user, onEdit }: { user: UserRow; onEdit: () => void }) {
   const parsed = parseUserModules(user.modules);
@@ -655,24 +658,24 @@ function ModulesCell({ user, onEdit }: { user: UserRow; onEdit: () => void }) {
     <button
       type="button"
       onClick={onEdit}
-      className="text-left inline-flex items-center gap-1.5 rounded-md border border-transparent hover:border-stone-200 hover:bg-stone-50 px-1.5 py-1 max-w-[220px]"
+      className="inline-flex items-center gap-2 rounded-md border border-stone-200 bg-white px-2 py-1 text-xs hover:border-stone-900 hover:bg-stone-50 focus:outline-none focus:border-stone-900 max-w-[240px] transition-colors"
       title="Edit module scope"
     >
       {parsed === null ? (
-        <span className="text-[11px] font-medium text-stone-500 italic">Full access</span>
+        <span className="text-stone-900 font-medium">All modules</span>
       ) : (
         <span className="flex flex-wrap gap-1">
           {Array.from(parsed).map((m) => (
             <span
               key={m}
-              className="inline-block text-[10px] font-semibold uppercase tracking-wider bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded"
+              className="inline-block text-[10px] font-semibold uppercase tracking-wider bg-ferrous-50 text-ferrous-600 px-1.5 py-0.5 rounded"
             >
               {shortLabelFor(m)}
             </span>
           ))}
         </span>
       )}
-      <Pencil className="w-3 h-3 text-stone-400 flex-shrink-0" />
+      <ChevronDown className="w-3.5 h-3.5 text-stone-400 flex-shrink-0 ml-auto" />
     </button>
   );
 }
