@@ -51,6 +51,10 @@ export default function UsersAdmin() {
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<string>(ROLES.SITE_ENGINEER);
+  // Module scope on create. Empty set = full access (internal staff);
+  // pick specific modules to scope the new user immediately, so admin
+  // doesn't have to create + re-open the picker as a second step.
+  const [newModules, setNewModules] = useState<Set<ModuleKey>>(new Set());
   const [password, setPassword] = useState("");
   const [pwGenerated, setPwGenerated] = useState(false);
   const [pwCopied, setPwCopied] = useState(false);
@@ -133,10 +137,20 @@ export default function UsersAdmin() {
     e.preventDefault();
     setPending(true);
     setError(null);
+    const modulesArr = Array.from(newModules);
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, name, role, password }),
+      body: JSON.stringify({
+        username,
+        name,
+        role,
+        password,
+        // Null means full access on the server side; sending an empty
+        // array would also work, but null reads clearer in the audit
+        // trail as "no scope set" rather than "scoped to nothing".
+        modules: modulesArr.length === 0 ? null : modulesArr,
+      }),
     });
     setPending(false);
     if (!res.ok) {
@@ -150,6 +164,7 @@ export default function UsersAdmin() {
     setPwGenerated(false);
     setPwCopied(false);
     setRole(ROLES.SITE_ENGINEER);
+    setNewModules(new Set());
     setCreating(false);
     load();
   }
@@ -365,6 +380,45 @@ export default function UsersAdmin() {
                 {pwCopied ? "✓" : "Copy"}
               </button>
             )}
+          </div>
+          {/* Module scope on create · lets an admin scope the new user
+              on the same submission as their username + role. Empty =
+              full access (internal staff). */}
+          <div className="col-span-full">
+            <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
+              Module scope (optional)
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_MODULES.map((m) => {
+                const active = newModules.has(m);
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() =>
+                      setNewModules((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(m)) next.delete(m);
+                        else next.add(m);
+                        return next;
+                      })
+                    }
+                    className={`text-[11px] font-medium rounded-md px-2 py-1 border transition-colors ${
+                      active
+                        ? "bg-stone-900 text-white border-stone-900"
+                        : "bg-white text-stone-700 border-stone-300 hover:bg-stone-50"
+                    }`}
+                  >
+                    {MODULE_LABELS[m] ?? m}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-[10px] text-stone-500 mt-1.5 italic">
+              {newModules.size === 0
+                ? "Leave all off for full access (internal staff)."
+                : `Scoped to ${newModules.size} of ${ALL_MODULES.length} module${newModules.size === 1 ? "" : "s"}.`}
+            </div>
           </div>
           <button
             type="submit"
