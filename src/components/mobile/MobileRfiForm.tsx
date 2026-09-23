@@ -149,6 +149,22 @@ export default function MobileRfiForm({ projectId }: { projectId: string }) {
     setSaved(null);
   }
 
+  /**
+   * Keep the picked category + priority so an engineer filing a batch
+   * of related RFIs (say three Structural High questions after a design
+   * review) doesn't re-tap the same pills every time. Everything else
+   * clears — this is a fresh RFI, just narrowed to a category and
+   * urgency the engineer already knows.
+   */
+  function resetForNextOfSameKind() {
+    setSubject("");
+    setDescription("");
+    setPhotos([]);
+    setError(null);
+    setSaved(null);
+    // category, priority stay set
+  }
+
   if (saved) {
     return (
       <SaveSuccessCard
@@ -160,6 +176,12 @@ export default function MobileRfiForm({ projectId }: { projectId: string }) {
         }
         projectId={projectId}
         onAddAnother={resetForm}
+        addAnotherSublabel="Fresh RFI, blank fields"
+        contextAction={{
+          label: `Log another ${RFI_CATEGORY_LABELS[category]} ${RFI_PRIORITY_LABELS[priority]} RFI`,
+          sublabel: "Keeps the category and priority",
+          onSelect: resetForNextOfSameKind,
+        }}
         queued={saved.queued}
       />
     );

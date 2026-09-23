@@ -198,6 +198,25 @@ export default function WorkPermitForm({
     setSaved(null);
   }
 
+  /**
+   * Keep the picked type, location, contractor, and approver set —
+   * everything a supervisor typically re-uses across permits raised
+   * in the same shift (e.g. a run of Hot Work permits for the welding
+   * team on the same slab). Only the title, description, and photos
+   * reset; the date + times bump to their sensible defaults.
+   */
+  function resetForNextOfSameType() {
+    setTitle("");
+    setDescription("");
+    setWorkDate(new Date().toISOString().slice(0, 10));
+    setStartTime("09:00");
+    setEndTime("18:00");
+    setPhotos([]);
+    setError(null);
+    setSaved(null);
+    // type, location, contractorId, selectedApprovers stay set
+  }
+
   if (saved) {
     return (
       <SaveSuccessCard
@@ -205,6 +224,12 @@ export default function WorkPermitForm({
         detail={`${saved.title} — approvers notified.`}
         projectId={projectId}
         onAddAnother={resetForm}
+        addAnotherSublabel="Fresh permit, blank fields"
+        contextAction={{
+          label: `Log another ${WORK_PERMIT_TYPE_LABELS[type]} permit`,
+          sublabel: "Keeps the type, location, contractor, and approvers",
+          onSelect: resetForNextOfSameType,
+        }}
         queued={saved.queued}
       />
     );
