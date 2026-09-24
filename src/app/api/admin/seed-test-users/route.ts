@@ -87,6 +87,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Optional body: { commonPassword?: string }. When present, every
+  // test-* user gets the same password — useful when a human wants to
+  // log in as several personas back-to-back without looking each one
+  // up. Minimum 8 chars so a typo doesn't leave prod trivially open
+  // even for the walled-off test-* namespace.
+  let commonPassword: string | null = null;
+  try {
+    const body = (await req.json().catch(() => null)) as { commonPassword?: unknown } | null;
+    if (body && typeof body.commonPassword === "string") {
+      const trimmed = body.commonPassword.trim();
+      if (trimmed.length < 8) {
+        return NextResponse.json(
+          { error: "commonPassword must be at least 8 characters." },
+          { status: 400 },
+        );
+      }
+      commonPassword = trimmed;
+    }
+  } catch {
+    // No body / not JSON → fall through to random per-user passwords.
+  }
+
   const results: Array<{
     username: string;
     password: string;
@@ -98,7 +120,10 @@ export async function POST(req: Request) {
 
   for (const persona of TEST_USERS) {
     const username = `${TEST_PREFIX}${persona.key}`;
-    const password = randomBytes(16).toString("base64url");
+    // Common password from the caller wins; otherwise fresh random
+    // per-user. 22-char base64url ≈ 128 bits — plenty for a
+    // walkthrough throwaway.
+    const password = commonPassword ?? randomBytes(16).toString("base64url");
     const passwordHash = await bcrypt.hash(password, 10);
     // JSON string like the rest of the app expects (parseUserModules
     // reads null-or-JSON-array from this column).
