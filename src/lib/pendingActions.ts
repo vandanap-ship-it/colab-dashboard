@@ -27,6 +27,19 @@ export async function getPendingActionCount(
 ): Promise<number> {
   const canReviewInspections =
     role === ROLES.PLANNER || role === ROLES.PRODUCT_TEAM || role === ROLES.ADMIN;
+
+  // Gate the permit count on the caller's CURRENT
+  // canApproveWorkPermits flag. Legacy permits created before the
+  // approver picker was tightened may still carry a non-approver
+  // user's id in their approverIds JSON string; without this gate,
+  // a substring match would surface them in the nav badge for a
+  // user who shouldn't be counting them any more.
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { canApproveWorkPermits: true },
+  });
+  const iCanApprovePermits = me?.canApproveWorkPermits ?? false;
+
   const [concernsAssigned, issuesAssigned, permitsToApprove, inspectionsToReview] =
     await Promise.all([
       prisma.concern.count({
@@ -37,9 +50,11 @@ export async function getPendingActionCount(
         },
       }),
       prisma.issue.count({ where: { projectId, status: "OPEN", assignedToId: userId } }),
-      prisma.workPermit.count({
-        where: { projectId, status: "PENDING", approverIds: { contains: userId } },
-      }),
+      iCanApprovePermits
+        ? prisma.workPermit.count({
+            where: { projectId, status: "PENDING", approverIds: { contains: userId } },
+          })
+        : Promise.resolve(0),
       canReviewInspections
         ? prisma.inspection.count({ where: { projectId, status: "IN_REVIEW" } })
         : Promise.resolve(0),

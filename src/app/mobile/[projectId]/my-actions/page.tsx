@@ -59,6 +59,20 @@ export default async function MobileMyActionsPage({
 
   const iCanReview = canReview(session.user.role);
 
+  // Permits query is expensive to answer honestly — approverIds is a
+  // JSON string on WorkPermit and every row on a project could
+  // theoretically match `contains: userId`. Gate on the caller's
+  // CURRENT canApproveWorkPermits flag so legacy permits (created
+  // before we tightened the approver picker) don't keep showing up
+  // for a user who's no longer a designated approver. Flip
+  // canApproveWorkPermits false in /admin/users → permits disappear
+  // from Inbox immediately.
+  const meRow = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { canApproveWorkPermits: true },
+  });
+  const iCanApprovePermits = meRow?.canApproveWorkPermits ?? false;
+
   // When ?villa= is set, everything below narrows to rows whose wbsNode
   // resolves to that villa label. Attached as an AND to each queue's
   // existing where clause via Prisma's relation-filter shape.
@@ -108,30 +122,33 @@ export default async function MobileMyActionsPage({
     }),
     // WorkPermit.approverIds is a JSON-encoded array of userIds stored in a
     // text column. `contains: userId` gives us "my ID appears in the
-    // approvers list" without a JSON scan. That's the same query the
-    // desktop permit inbox uses.
-    prisma.workPermit.findMany({
-      where: {
-        projectId,
-        deletedAt: null,
-        status: "PENDING",
-        approverIds: { contains: userId },
-        ...villaWhere,
-      },
-      orderBy: { createdAt: "desc" },
-      take: 30,
-      select: {
-        id: true,
-        type: true,
-        title: true,
-        workDate: true,
-        startTime: true,
-        endTime: true,
-        location: true,
-        createdAt: true,
-        requester: { select: { name: true } },
-      },
-    }),
+    // approvers list" without a JSON scan. Gated on iCanApprovePermits
+    // above so a non-approver whose id happens to sit in a legacy
+    // permit's approverIds string doesn't see the row.
+    iCanApprovePermits
+      ? prisma.workPermit.findMany({
+          where: {
+            projectId,
+            deletedAt: null,
+            status: "PENDING",
+            approverIds: { contains: userId },
+            ...villaWhere,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 30,
+          select: {
+            id: true,
+            type: true,
+            title: true,
+            workDate: true,
+            startTime: true,
+            endTime: true,
+            location: true,
+            createdAt: true,
+            requester: { select: { name: true } },
+          },
+        })
+      : Promise.resolve([]),
     iCanReview
       ? prisma.inspection.findMany({
           where: { projectId, deletedAt: null, status: "IN_REVIEW", ...villaWhere },
