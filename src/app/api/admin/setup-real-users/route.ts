@@ -41,6 +41,7 @@ type UserUpdate = {
   role?: string;
   modules?: string[] | null;
   canApproveWorkPermits?: boolean;
+  contractorName?: string | null;
 };
 
 function tokenMatches(presented: string, expected: string): boolean {
@@ -138,6 +139,18 @@ export async function POST(req: Request) {
       }
       entry.canApproveWorkPermits = u.canApproveWorkPermits;
     }
+    if ("contractorName" in u) {
+      if (u.contractorName === null) {
+        entry.contractorName = null;
+      } else if (typeof u.contractorName === "string") {
+        entry.contractorName = u.contractorName.trim();
+      } else {
+        return NextResponse.json(
+          { error: `contractorName for ${username} must be a string or null.` },
+          { status: 400 },
+        );
+      }
+    }
     updates.push(entry);
   }
 
@@ -151,6 +164,8 @@ export async function POST(req: Request) {
       role?: string;
       modules?: string[] | null;
       canApproveWorkPermits?: boolean;
+      contractor?: string | null;
+      contractorLookup?: "matched" | "not_found" | "ambiguous";
     };
   }> = [];
 
@@ -190,7 +205,35 @@ export async function POST(req: Request) {
       data.canApproveWorkPermits = u.canApproveWorkPermits;
       changes.canApproveWorkPermits = u.canApproveWorkPermits;
     }
+    // Contractor lookup by name. Case-insensitive exact match across
+    // every project — Amanvana currently ships one "Abraham" / one
+    // "Elegant", so a single string is enough. null explicitly
+    // detaches the user from any contractor.
+    let contractorLookup: "matched" | "not_found" | "ambiguous" | undefined;
+    if ("contractorName" in u) {
+      if (u.contractorName === null) {
+        data.contractorId = null;
+        (changes as { contractor?: string | null }).contractor = null;
+      } else if (u.contractorName) {
+        const matches = await prisma.contractor.findMany({
+          where: { name: { equals: u.contractorName, mode: "insensitive" } },
+          select: { id: true, name: true },
+        });
+        if (matches.length === 0) {
+          contractorLookup = "not_found";
+        } else if (matches.length > 1) {
+          contractorLookup = "ambiguous";
+        } else {
+          data.contractorId = matches[0].id;
+          (changes as { contractor?: string | null }).contractor = matches[0].name;
+          contractorLookup = "matched";
+        }
+      }
+    }
     await prisma.user.update({ where: { id: found.id }, data });
+    if (contractorLookup) {
+      (changes as { contractorLookup?: string }).contractorLookup = contractorLookup;
+    }
     results.push({ username: u.username, found: true, changes });
   }
 

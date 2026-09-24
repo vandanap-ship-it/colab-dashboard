@@ -98,6 +98,45 @@ export default async function MobileProjectHome({
   const canSeePermit = canAccessModule(userModules, MODULES.PERMIT);
   const canSeeConcern = canAccessModule(userModules, MODULES.CONCERN);
 
+  // For scoped contractors, "Waiting on you" pills should count only
+  // items THIS user or their contractor is responsible for — not every
+  // stale row on the project (which is what the pills should mean for
+  // internal planners doing project oversight). We fetch the caller's
+  // contractorId here so the per-queue filters below can OR-in the
+  // "or my contractor's" clause when applicable.
+  //
+  // Full-access users (modules=null) skip this scoping entirely so
+  // planners still see the project-wide roll-up they expect.
+  const userContractorId = scoped && session?.user
+    ? (await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { contractorId: true },
+      }))?.contractorId ?? null
+    : null;
+  const userId = session?.user?.id ?? null;
+
+  // Hindrance "waiting on me" filter for scoped contractors:
+  //   raised BY me OR my contractor is the responsible party.
+  // The two ORs never double-count (the count() dedups on id) even
+  // if a user raises a hindrance against their own contractor.
+  const hindranceWaitingWhere = scoped && userId
+    ? {
+        projectId,
+        deletedAt: null,
+        status: "OPEN",
+        startDate: { lt: staleHindranceCutoff },
+        OR: [
+          { createdById: userId },
+          ...(userContractorId ? [{ responsibleContractorId: userContractorId }] : []),
+        ],
+      }
+    : {
+        projectId,
+        deletedAt: null,
+        status: "OPEN",
+        startDate: { lt: staleHindranceCutoff },
+      };
+
   const [
     myProgressToday,
     manpower,
@@ -137,9 +176,7 @@ export default async function MobileProjectHome({
         })
       : Promise.resolve(0),
     canSeeHindrance
-      ? prisma.hindrance.count({
-          where: { projectId, deletedAt: null, status: "OPEN", startDate: { lt: staleHindranceCutoff } },
-        })
+      ? prisma.hindrance.count({ where: hindranceWaitingWhere })
       : Promise.resolve(0),
     canSeeConcern
       ? prisma.concern.count({
