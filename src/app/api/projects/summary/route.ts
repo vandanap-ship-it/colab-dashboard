@@ -64,11 +64,11 @@ async function safeTradePlansFindMany(projectIds: string[], today: Date) {
 /**
  * Portfolio rollup that powers the multi-project landing page.
  *
- * Guarded against the four-pending-migrations state: if projectType /
- * manpower / trade-plan tables + columns aren't in the DB yet, this endpoint
- * still returns a valid response so the landing table renders. Once the
- * admin runs `/api/admin/migrate` the full data appears without a code
- * change.
+ * Guarded against pending-migration states: if projectType /
+ * manpower / trade-plan tables + columns aren't in the DB yet, this
+ * endpoint still returns a valid response so the landing table
+ * renders. `prisma migrate deploy` runs on Vercel build so the full
+ * data appears the next time the app deploys.
  */
 export async function GET() {
   const session = await auth();
