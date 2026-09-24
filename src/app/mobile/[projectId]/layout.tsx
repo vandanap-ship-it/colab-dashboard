@@ -48,7 +48,24 @@ export default async function MobileProjectLayout({
   // actually permit. Derivation lives in src/lib/quickActions so the
   // gating is pure and the role-visibility golden tests can exercise
   // every persona directly.
-  const quickActions = quickActionsFor(session.user.modules);
+  //
+  // Approver-role filter: an approver doesn't raise the thing they
+  // approve. Strip raise-permit from the FAB for anyone with
+  // canApproveWorkPermits, and raise-wir for anyone in a reviewer
+  // role (PLANNER / PRODUCT_TEAM / ADMIN). Mirrors the tile-level
+  // filter on the mobile home so the FAB and the tiles agree.
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { canApproveWorkPermits: true },
+  });
+  const canApprovePermits = me?.canApproveWorkPermits ?? false;
+  const isReviewer =
+    session.user.role === "PLANNER" ||
+    session.user.role === "PRODUCT_TEAM" ||
+    session.user.role === "ADMIN";
+  const quickActions = quickActionsFor(session.user.modules).filter(
+    (a) => !(a === "raise-permit" && canApprovePermits) && !(a === "raise-wir" && isReviewer),
+  );
 
   // Documents tab is a Safety-only surface right now — every doc
   // uploaded is a safety document (MSDS, method statements, PPE

@@ -385,9 +385,16 @@ export default async function MobileProjectHome({
     },
   ];
 
-  const tools = allTools.filter((t) =>
-    canAccessTool(userModules, TOOL_MODULES[t.key] ?? []),
-  );
+  const tools = allTools
+    .filter((t) => canAccessTool(userModules, TOOL_MODULES[t.key] ?? []))
+    // Approvers don't need the raise-flow tile for the module they
+    // approve. Girish (SITE_MANAGER, canApproveWorkPermits) shouldn't
+    // see "Raise work permit" — he signs off, not raises. Thangamani
+    // (QAQC PLANNER, canReview) shouldn't see "Raise WIR" — she
+    // reviews. Contractors (SITE_ENGINEER without the approver flag)
+    // still see both raise CTAs.
+    .filter((t) => !(t.key === "permit" && userCanApprovePermits))
+    .filter((t) => !(t.key === "raise-wir" && userCanReviewInspections));
   const primaryTools = tools.filter((t) => t.tier === "primary");
 
   // Secondary "MORE" tiles for scoped users. Duplicate list views
