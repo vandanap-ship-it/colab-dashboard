@@ -32,7 +32,6 @@ import {
   HINDRANCE_TIERS,
   CONCERN_TIERS,
   ISSUE_TIERS,
-  RFI_TIERS,
 } from "@/lib/queueAge";
 
 export const dynamic = "force-dynamic";
@@ -54,7 +53,6 @@ interface ProjectStaleCounts {
   staleIssuesAll: number;
   staleIssuesQaqc: number;
   staleIssuesSafety: number;
-  staleRfis: number;
   staleConcerns: number;
 }
 
@@ -87,10 +85,6 @@ export async function runNudge(overrideRecipients?: Array<{ id: string; name: st
   const hindranceCutoff = new Date(nowMs - HINDRANCE_TIERS.staleAt * 86_400_000);
   const concernCutoff = new Date(nowMs - CONCERN_TIERS.staleAt * 86_400_000);
   const issueCutoff = new Date(nowMs - ISSUE_TIERS.staleAt * 86_400_000);
-  const rfiCutoff = new Date(nowMs - RFI_TIERS.staleAt * 86_400_000);
-  // "Now" as a Date so the RFI query can OR in a `dueDate < now` clause
-  // alongside the age cutoff.
-  const nowDate = new Date(nowMs);
 
   const projects = await prisma.project.findMany({
     select: { id: true, name: true },
@@ -111,7 +105,6 @@ export async function runNudge(overrideRecipients?: Array<{ id: string; name: st
       staleIssuesQaqc,
       staleIssuesSafety,
       staleIssuesGeneral,
-      staleRfis,
       staleConcerns,
     ] = await Promise.all([
       prisma.inspection.count({ where: { ...base, status: "IN_REVIEW", module: "QAQC", createdAt: { lt: wirCutoff } } }),
@@ -122,19 +115,6 @@ export async function runNudge(overrideRecipients?: Array<{ id: string; name: st
       prisma.issue.count({ where: { ...base, status: { in: ["OPEN", "IN_REINSPECTION"] }, module: "QAQC", createdAt: { lt: issueCutoff } } }),
       prisma.issue.count({ where: { ...base, status: { in: ["OPEN", "IN_REINSPECTION"] }, module: "SAFETY", createdAt: { lt: issueCutoff } } }),
       prisma.issue.count({ where: { ...base, status: { in: ["OPEN", "IN_REINSPECTION"] }, module: null, createdAt: { lt: issueCutoff } } }),
-      // RFI stale = crossed the 5d age cliff OR past its explicit
-      // dueDate. Matches the list card + detail hero, which use the
-      // dueDate signal in preference to the aging chip when set.
-      prisma.rfi.count({
-        where: {
-          ...base,
-          status: "OPEN",
-          OR: [
-            { createdAt: { lt: rfiCutoff } },
-            { dueDate: { lt: nowDate } },
-          ],
-        },
-      }),
       prisma.concern.count({ where: { ...base, status: "PENDING", createdAt: { lt: concernCutoff } } }),
     ]);
     projectStale.push({
@@ -148,7 +128,6 @@ export async function runNudge(overrideRecipients?: Array<{ id: string; name: st
       staleIssuesAll: staleIssuesQaqc + staleIssuesSafety + staleIssuesGeneral,
       staleIssuesQaqc,
       staleIssuesSafety,
-      staleRfis,
       staleConcerns,
     });
   }
@@ -184,7 +163,6 @@ export async function runNudge(overrideRecipients?: Array<{ id: string; name: st
     const canHINDRANCE = isFullAccess || (mods?.has("HINDRANCE") ?? false);
     const canPERMIT = isFullAccess || (mods?.has("PERMIT") ?? false);
     const canCONCERN = isFullAccess || (mods?.has("CONCERN") ?? false);
-    const canRFI = isFullAccess || (mods?.has("RFI") ?? false);
     void canAccessModule; void MODULES; void primaryModuleFor; // silence-unused when hot-swapping helpers later
 
     // Draft count for THIS user across all projects (drafts are strictly
@@ -220,7 +198,6 @@ export async function runNudge(overrideRecipients?: Array<{ id: string; name: st
         stalePermits: canPERMIT ? pStale.stalePermits : 0,
         staleHindrances: canHINDRANCE ? pStale.staleHindrances : 0,
         staleIssues: staleIssuesForUser,
-        staleRfis: canRFI ? pStale.staleRfis : 0,
         staleConcerns: canCONCERN ? pStale.staleConcerns : 0,
         myDrafts: myDraftCount,
       };
@@ -282,7 +259,6 @@ function buildPushBody(buckets: {
   stalePermits: number;
   staleHindrances: number;
   staleIssues: number;
-  staleRfis: number;
   staleConcerns: number;
   myDrafts: number;
 }): string | null {
@@ -291,7 +267,6 @@ function buildPushBody(buckets: {
     { n: buckets.stalePermits, label: buckets.stalePermits === 1 ? "stale permit" : "stale permits" },
     { n: buckets.staleHindrances, label: buckets.staleHindrances === 1 ? "stale blocker" : "stale blockers" },
     { n: buckets.staleIssues, label: buckets.staleIssues === 1 ? "stale snag" : "stale snags" },
-    { n: buckets.staleRfis, label: buckets.staleRfis === 1 ? "stale RFI" : "stale RFIs" },
     { n: buckets.staleConcerns, label: buckets.staleConcerns === 1 ? "stale concern" : "stale concerns" },
     { n: buckets.staleWirs, label: buckets.staleWirs === 1 ? "stale WIR" : "stale WIRs" },
     { n: buckets.myDrafts, label: buckets.myDrafts === 1 ? "draft to finish" : "drafts to finish" },

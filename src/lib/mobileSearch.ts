@@ -8,7 +8,6 @@ import {
   primaryModuleFor,
   MODULES,
 } from "@/lib/modules";
-import { formatRfiNumber } from "@/lib/rfi";
 import {
   WORK_PERMIT_TYPE_LABELS,
   type WorkPermitType,
@@ -18,9 +17,9 @@ import {
  * Cross-entity search for the mobile app.
  *
  * One free-text query hits every "thing" on the project the user has access
- * to — activities, snags, RFIs, concerns, hindrances, work permits, and
- * WIRs — and returns a small (≤ 5 per type) list of matches. The scoped
- * user checks are applied per-table so a QAQC-only contractor searching
+ * to — activities, snags, concerns, hindrances, work permits, and WIRs —
+ * and returns a small (≤ 5 per type) list of matches. The scoped user
+ * checks are applied per-table so a QAQC-only contractor searching
  * for "concrete" only sees their own QAQC snags and inspections, not
  * SAFETY ones or general items outside their module.
  *
@@ -45,13 +44,6 @@ export interface MobileSearchResult {
     id: string;
     description: string;
     severity: string | null;
-    status: string;
-  }[];
-  rfis: {
-    id: string;
-    number: number;
-    display: string; // "RFI-0012"
-    subject: string;
     status: string;
   }[];
   concerns: {
@@ -102,7 +94,6 @@ export async function mobileSearch(
 
   const canQAQC = canAccessModule(modulesField, MODULES.QAQC);
   const canSAFETY = canAccessModule(modulesField, MODULES.SAFETY);
-  const canRFI = canAccessModule(modulesField, MODULES.RFI);
   const canCONCERN = canAccessModule(modulesField, MODULES.CONCERN);
   const canHINDRANCE = canAccessModule(modulesField, MODULES.HINDRANCE);
   const canPERMIT = canAccessModule(modulesField, MODULES.PERMIT);
@@ -174,22 +165,6 @@ export async function mobileSearch(
         })
       : Promise.resolve([]);
 
-  const rfisPromise = canRFI
-    ? prisma.rfi.findMany({
-        where: {
-          projectId,
-          deletedAt: null,
-          OR: [
-            { subject: { contains: q, mode: "insensitive" } },
-            { description: { contains: q, mode: "insensitive" } },
-          ],
-        },
-        orderBy: { createdAt: "desc" },
-        take: PER_TYPE_LIMIT,
-        select: { id: true, number: true, subject: true, status: true },
-      })
-    : Promise.resolve([]);
-
   const concernsPromise = canCONCERN
     ? prisma.concern.findMany({
         where: {
@@ -248,11 +223,10 @@ export async function mobileSearch(
         })
       : Promise.resolve([]);
 
-  const [activities, snags, rfis, concerns, hindrances, permits, inspections] =
+  const [activities, snags, concerns, hindrances, permits, inspections] =
     await Promise.all([
       activitiesPromise,
       snagsPromise,
-      rfisPromise,
       concernsPromise,
       hindrancesPromise,
       permitsPromise,
@@ -312,13 +286,6 @@ export async function mobileSearch(
       severity: s.severity,
       status: s.status,
     })),
-    rfis: rfis.map((r) => ({
-      id: r.id,
-      number: r.number,
-      display: formatRfiNumber(r.number),
-      subject: r.subject,
-      status: r.status,
-    })),
     concerns: concerns.map((c) => ({ id: c.id, description: c.description, status: c.status })),
     hindrances: hindrances.map((h) => ({ id: h.id, description: h.description, status: h.status })),
     permits: permits.map((p) => ({
@@ -339,7 +306,6 @@ export async function mobileSearch(
   result.total =
     result.activities.length +
     result.snags.length +
-    result.rfis.length +
     result.concerns.length +
     result.hindrances.length +
     result.permits.length +
@@ -351,7 +317,6 @@ function emptyResult(): MobileSearchResult {
   return {
     activities: [],
     snags: [],
-    rfis: [],
     concerns: [],
     hindrances: [],
     permits: [],

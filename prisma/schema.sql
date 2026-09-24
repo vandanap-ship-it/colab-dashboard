@@ -318,41 +318,6 @@ CREATE TABLE "IssuePhoto" (
 );
 
 -- CreateTable
-CREATE TABLE "Rfi" (
-    "id" TEXT NOT NULL,
-    "projectId" TEXT NOT NULL,
-    "number" INTEGER NOT NULL,
-    "subject" TEXT NOT NULL,
-    "description" TEXT NOT NULL,
-    "category" TEXT NOT NULL,
-    "priority" TEXT NOT NULL DEFAULT 'MEDIUM',
-    "status" TEXT NOT NULL DEFAULT 'OPEN',
-    "dueDate" TIMESTAMP(3),
-    "raisedById" TEXT NOT NULL,
-    "assignedToId" TEXT,
-    "wbsNodeId" TEXT,
-    "answer" TEXT,
-    "answeredById" TEXT,
-    "answeredAt" TIMESTAMP(3),
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
-    "idempotencyKey" TEXT,
-
-    CONSTRAINT "Rfi_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "RfiPhoto" (
-    "id" TEXT NOT NULL,
-    "rfiId" TEXT NOT NULL,
-    "url" TEXT NOT NULL,
-    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "RfiPhoto_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "Permit" (
     "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
@@ -774,24 +739,6 @@ CREATE INDEX "Issue_assignedToId_idx" ON "Issue"("assignedToId");
 CREATE INDEX "IssuePhoto_issueId_idx" ON "IssuePhoto"("issueId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Rfi_idempotencyKey_key" ON "Rfi"("idempotencyKey");
-
--- CreateIndex
-CREATE INDEX "Rfi_projectId_idx" ON "Rfi"("projectId");
-
--- CreateIndex
-CREATE INDEX "Rfi_assignedToId_idx" ON "Rfi"("assignedToId");
-
--- CreateIndex
-CREATE INDEX "Rfi_raisedById_idx" ON "Rfi"("raisedById");
-
--- CreateIndex
-CREATE UNIQUE INDEX "Rfi_projectId_number_key" ON "Rfi"("projectId", "number");
-
--- CreateIndex
-CREATE INDEX "RfiPhoto_rfiId_idx" ON "RfiPhoto"("rfiId");
-
--- CreateIndex
 CREATE INDEX "Permit_projectId_idx" ON "Permit"("projectId");
 
 -- CreateIndex
@@ -1018,24 +965,6 @@ ALTER TABLE "Issue" ADD CONSTRAINT "Issue_assignedToId_fkey" FOREIGN KEY ("assig
 
 -- AddForeignKey
 ALTER TABLE "IssuePhoto" ADD CONSTRAINT "IssuePhoto_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "Issue"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_raisedById_fkey" FOREIGN KEY ("raisedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_answeredById_fkey" FOREIGN KEY ("answeredById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Rfi" ADD CONSTRAINT "Rfi_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "RfiPhoto" ADD CONSTRAINT "RfiPhoto_rfiId_fkey" FOREIGN KEY ("rfiId") REFERENCES "Rfi"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Permit" ADD CONSTRAINT "Permit_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;

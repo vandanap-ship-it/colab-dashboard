@@ -7,15 +7,14 @@ import {
   HINDRANCE_TIERS,
   CONCERN_TIERS,
   ISSUE_TIERS,
-  RFI_TIERS,
 } from "@/lib/queueAge";
 
 /**
  * Cross-queue villa breakdown for the mobile home's "Focus your walk"
- * strip. Same six queues + same SLA cutoffs the top-level Waiting-on-You
+ * strip. Same five queues + same SLA cutoffs the top-level Waiting-on-You
  * strip counts against — WIR (7d review SLA), Permit (2d), Hindrance
- * (3d), Concern (5d), Issue (4d), RFI (5d or past dueDate). Everything a
- * villa carries across those six queues is summed, then villas with the
+ * (3d), Concern (5d), Issue (4d). Everything a
+ * villa carries across those five queues is summed, then villas with the
  * most waiting rows bubble to the top.
  *
  * Rationale: engineers who see "6 stale RFIs, 4 stale snags" on the home
@@ -33,7 +32,7 @@ import {
  * "no villa" bucket that isn't actionable from a site-walk view.
  */
 
-export type QueueKey = "wir" | "permit" | "hindrance" | "concern" | "issue" | "rfi";
+export type QueueKey = "wir" | "permit" | "hindrance" | "concern" | "issue";
 
 export interface VillaWaitingCount {
   villaLabel: string;
@@ -80,16 +79,13 @@ export async function getWaitingByVilla(
   const canSeeHindrance = canAccessModule(modules, MODULES.HINDRANCE);
   const canSeePermit = canAccessModule(modules, MODULES.PERMIT);
   const canSeeConcern = canAccessModule(modules, MODULES.CONCERN);
-  const canSeeRfi = canAccessModule(modules, MODULES.RFI);
 
   const nowMs = Date.now();
-  const nowDate = new Date(nowMs);
   const wirCutoff = new Date(nowMs - WIR_TIERS.staleAt * 86_400_000);
   const permitCutoff = new Date(nowMs - PERMIT_TIERS.staleAt * 86_400_000);
   const hindranceCutoff = new Date(nowMs - HINDRANCE_TIERS.staleAt * 86_400_000);
   const concernCutoff = new Date(nowMs - CONCERN_TIERS.staleAt * 86_400_000);
   const issueCutoff = new Date(nowMs - ISSUE_TIERS.staleAt * 86_400_000);
-  const rfiCutoff = new Date(nowMs - RFI_TIERS.staleAt * 86_400_000);
 
   const villaSelect = {
     wbsNode: {
@@ -109,7 +105,7 @@ export async function getWaitingByVilla(
     },
   } as const;
 
-  const [wirs, permits, hindrances, concerns, issues, rfis] = await Promise.all([
+  const [wirs, permits, hindrances, concerns, issues] = await Promise.all([
     canSeeQuality
       ? prisma.inspection.findMany({
           where: { projectId, status: "IN_REVIEW", createdAt: { lt: wirCutoff } },
@@ -149,17 +145,6 @@ export async function getWaitingByVilla(
           take: ROW_CAP,
         })
       : Promise.resolve([]),
-    canSeeRfi
-      ? prisma.rfi.findMany({
-          where: {
-            projectId,
-            status: "OPEN",
-            OR: [{ createdAt: { lt: rfiCutoff } }, { dueDate: { lt: nowDate } }],
-          },
-          select: villaSelect,
-          take: ROW_CAP,
-        })
-      : Promise.resolve([]),
   ]);
 
   // Bucket by villa label. blockCode is captured on first sighting; a
@@ -178,7 +163,7 @@ export async function getWaitingByVilla(
           villaLabel: v.label,
           blockCode: v.block,
           total: 1,
-          byQueue: { wir: 0, permit: 0, hindrance: 0, concern: 0, issue: 0, rfi: 0, [key]: 1 } as Record<QueueKey, number>,
+          byQueue: { wir: 0, permit: 0, hindrance: 0, concern: 0, issue: 0, [key]: 1 } as Record<QueueKey, number>,
         });
       }
     }
@@ -188,7 +173,6 @@ export async function getWaitingByVilla(
   tally(hindrances, "hindrance");
   tally(concerns, "concern");
   tally(issues, "issue");
-  tally(rfis, "rfi");
 
   // Top villas by total; alphabetical (label) as tiebreak so the order
   // is stable across renders and doesn't jitter when counts match.

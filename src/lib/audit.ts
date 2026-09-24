@@ -45,7 +45,6 @@ export type AuditEntityType =
   | "WBSNode"
   | "SubContractorBill"
   | "DesignDrawing"
-  | "Rfi"
   | "Permit"
   | "WorkPermit"
   | "TradePlan"

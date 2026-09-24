@@ -47,9 +47,6 @@ model User {
   assignedConcerns         Concern[]               @relation("ConcernAssignee")
   createdIssues            Issue[]                 @relation("IssueCreator")
   assignedIssues           Issue[]                 @relation("IssueAssignee")
-  raisedRfis               Rfi[]                   @relation("RfiRaiser")
-  assignedRfis             Rfi[]                   @relation("RfiAssignee")
-  answeredRfis             Rfi[]                   @relation("RfiAnswerer")
   responsiblePermits       Permit[]                @relation("PermitResponsible")
   filledInspections        Inspection[]            @relation("InspectionFiller")
   reviewedInspections      Inspection[]            @relation("InspectionReviewer")
@@ -160,7 +157,6 @@ model Project {
   blocks             Block[]
   villas             Villa[]
   milestoneSections  MilestoneSection[]
-  rfis               Rfi[]
   permits            Permit[]
   workPermits        WorkPermit[]
   tradePlans         TradePlan[]
@@ -355,7 +351,6 @@ model WBSNode {
   concerns        Concern[]
   issues          Issue[]
   inspections     Inspection[]
-  rfis            Rfi[]
   workPermits     WorkPermit[]
   billLines       SubContractorBillLine[]
 
@@ -556,63 +551,6 @@ model IssuePhoto {
   issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
 
   @@index([issueId])
-}
-
-// ---------------------------------------------------------------------------
-// RFI — Request for Information.
-//
-// Formal query from site to a consultant / designer / authority. Distinct
-// from Concern (internal alert) and Issue (open snag). A typical RFI:
-//   "Foundation depth on Villa 28 hits rock at -1.4m; RCC drawing shows -2m.
-//    Do we redesign the footing or blast? Please clarify by 20-Aug."
-//
-// Lifecycle: OPEN → ANSWERED → CLOSED. Assignee is who owes the answer.
-// Auto-numbered per-project as RFI-0001, RFI-0002, ...
-// ---------------------------------------------------------------------------
-model Rfi {
-  id           String    @id @default(cuid())
-  projectId    String
-  number       Int // sequential per project
-  subject      String // one-line summary
-  description  String // detailed question
-  category     String // STRUCTURAL | MEP | ARCHITECTURAL | FINISHING | OTHER
-  priority     String    @default("MEDIUM") // LOW | MEDIUM | HIGH
-  status       String    @default("OPEN") // OPEN | ANSWERED | CLOSED
-  dueDate      DateTime?
-  raisedById   String
-  assignedToId String? // who owes the answer
-  wbsNodeId    String? // optional link to activity
-  answer       String? // consultant's response
-  answeredById String?
-  answeredAt   DateTime?
-
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  deletedAt      DateTime?
-  idempotencyKey String?   @unique // de-dupes offline-queue replays
-
-  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  raisedBy   User       @relation("RfiRaiser", fields: [raisedById], references: [id])
-  assignedTo User?      @relation("RfiAssignee", fields: [assignedToId], references: [id])
-  answeredBy User?      @relation("RfiAnswerer", fields: [answeredById], references: [id])
-  wbsNode    WBSNode?   @relation(fields: [wbsNodeId], references: [id])
-  photos     RfiPhoto[]
-
-  @@unique([projectId, number])
-  @@index([projectId])
-  @@index([assignedToId])
-  @@index([raisedById])
-}
-
-model RfiPhoto {
-  id         String   @id @default(cuid())
-  rfiId      String
-  url        String
-  uploadedAt DateTime @default(now())
-
-  rfi Rfi @relation(fields: [rfiId], references: [id], onDelete: Cascade)
-
-  @@index([rfiId])
 }
 
 // ---------------------------------------------------------------------------

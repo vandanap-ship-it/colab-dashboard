@@ -20,8 +20,7 @@ export type QuickAddKey =
   | "log-manpower"
   | "add-hindrance"
   | "add-concern"
-  | "raise-wir"
-  | "raise-rfi";
+  | "raise-wir";
 
 export function quickActionsFor(modulesField: string | null | undefined): QuickAddKey[] {
   const out: QuickAddKey[] = [];
@@ -39,6 +38,5 @@ export function quickActionsFor(modulesField: string | null | undefined): QuickA
   }
   if (canAccessModule(modulesField, MODULES.HINDRANCE)) out.push("add-hindrance");
   if (canAccessModule(modulesField, MODULES.CONCERN)) out.push("add-concern");
-  if (canAccessModule(modulesField, MODULES.RFI)) out.push("raise-rfi");
   return out;
 }

@@ -35,7 +35,6 @@ const HOME_TILE_KEYS = [
   "site-progress",
   "qaqc-tile",
   "ehs-tile",
-  "rfi",
   "concern",
   "hindrance-list",
   "manpower-list",
@@ -115,11 +114,6 @@ describe("mobile home tile visibility", () => {
     expect([...visible].sort()).toEqual(["concern", "search"].sort());
   });
 
-  it("RFI-scoped contractor sees only the RFI tile", () => {
-    const visible = visibleTiles(serialize([MODULES.RFI]));
-    expect([...visible].sort()).toEqual(["rfi", "search"].sort());
-  });
-
   it("multi-scope QAQC+SAFETY contractor sees both quality tiles (still no progress/permits)", () => {
     const visible = visibleTiles(serialize([MODULES.QAQC, MODULES.SAFETY]));
     expect([...visible].sort()).toEqual(["ehs-tile", "qaqc-tile", "search"].sort());
@@ -129,7 +123,7 @@ describe("mobile home tile visibility", () => {
 describe("QuickAdd FAB action visibility", () => {
   it("internal / full-access user sees every quick action", () => {
     expect(quickActionsFor(serialize(null)).sort()).toEqual(
-      ["log-progress", "log-manpower", "raise-wir", "add-hindrance", "add-concern", "raise-rfi"].sort(),
+      ["log-progress", "log-manpower", "raise-wir", "add-hindrance", "add-concern"].sort(),
     );
   });
 
@@ -141,7 +135,7 @@ describe("QuickAdd FAB action visibility", () => {
     expect(quickActionsFor(serialize([MODULES.SAFETY]))).toEqual(["raise-wir"]);
   });
 
-  it("PROGRESS-scoped contractor sees Log Progress + Log Manpower (no WIR / hindrance / concern / RFI)", () => {
+  it("PROGRESS-scoped contractor sees Log Progress + Log Manpower (no WIR / hindrance / concern)", () => {
     expect(quickActionsFor(serialize([MODULES.PROGRESS])).sort()).toEqual(
       ["log-progress", "log-manpower"].sort(),
     );
@@ -153,10 +147,6 @@ describe("QuickAdd FAB action visibility", () => {
 
   it("CONCERN-scoped contractor sees only Add Concern", () => {
     expect(quickActionsFor(serialize([MODULES.CONCERN]))).toEqual(["add-concern"]);
-  });
-
-  it("RFI-scoped contractor sees only Raise RFI", () => {
-    expect(quickActionsFor(serialize([MODULES.RFI]))).toEqual(["raise-rfi"]);
   });
 
   it("PERMIT-scoped contractor sees no quick actions — permit-raise runs from its own new page", () => {
@@ -186,7 +176,6 @@ describe("scoped-user leakage guards", () => {
       MODULES.SAFETY,
       MODULES.HINDRANCE,
       MODULES.CONCERN,
-      MODULES.RFI,
       MODULES.PERMIT,
     ];
     for (const m of scopedModules) {

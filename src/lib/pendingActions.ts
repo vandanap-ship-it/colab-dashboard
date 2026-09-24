@@ -12,7 +12,6 @@ import { ROLES } from "@/lib/roles";
  * same filters, so the badge and the page always agree):
  *   - concerns explicitly assigned to me and still open (TASK_ASSIGNED or PENDING)
  *   - snags (Issues) explicitly assigned to me and still OPEN
- *   - RFIs explicitly assigned to me and still OPEN
  *   - work permits pending my approval (my id in approverIds JSON string)
  *   - inspections in IN_REVIEW status — only for reviewers (planner /
  *     product / admin); anyone else sees 0 from this bucket
@@ -28,7 +27,7 @@ export async function getPendingActionCount(
 ): Promise<number> {
   const canReviewInspections =
     role === ROLES.PLANNER || role === ROLES.PRODUCT_TEAM || role === ROLES.ADMIN;
-  const [concernsAssigned, issuesAssigned, rfisAssigned, permitsToApprove, inspectionsToReview] =
+  const [concernsAssigned, issuesAssigned, permitsToApprove, inspectionsToReview] =
     await Promise.all([
       prisma.concern.count({
         where: {
@@ -38,7 +37,6 @@ export async function getPendingActionCount(
         },
       }),
       prisma.issue.count({ where: { projectId, status: "OPEN", assignedToId: userId } }),
-      prisma.rfi.count({ where: { projectId, status: "OPEN", assignedToId: userId } }),
       prisma.workPermit.count({
         where: { projectId, status: "PENDING", approverIds: { contains: userId } },
       }),
@@ -49,7 +47,6 @@ export async function getPendingActionCount(
   return (
     concernsAssigned +
     issuesAssigned +
-    rfisAssigned +
     permitsToApprove +
     inspectionsToReview
   );

@@ -10,7 +10,6 @@ import {
   AlertTriangle,
   MessageSquare,
   ClipboardList,
-  HelpCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { QuickAddKey } from "@/lib/quickActions";
@@ -201,12 +200,5 @@ const ACTION_ITEMS: readonly {
     hint: "Heads-up for leadership",
     icon: MessageSquare,
     hrefFor: (p) => `/mobile/${p}/concern/new`,
-  },
-  {
-    key: "raise-rfi",
-    label: "Raise an RFI",
-    hint: "Ask consultants for a decision",
-    icon: HelpCircle,
-    hrefFor: (p) => `/mobile/${p}/rfi/new`,
   },
 ];

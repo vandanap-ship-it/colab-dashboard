@@ -36,8 +36,6 @@ async function summarise() {
     inspections,
     inspectionItems,
     inspectionPhotos,
-    rfis,
-    rfiPhotos,
     permits,
     workPermits,
     manpowerEntries,
@@ -65,8 +63,6 @@ async function summarise() {
     prisma.inspection.count(),
     prisma.inspectionItem.count(),
     prisma.inspectionPhoto.count(),
-    prisma.rfi.count(),
-    prisma.rfiPhoto.count(),
     prisma.permit.count(),
     prisma.workPermit.count(),
     prisma.manpowerEntry.count(),
@@ -104,8 +100,6 @@ async function summarise() {
       inspections,
       inspectionItems,
       inspectionPhotos,
-      rfis,
-      rfiPhotos,
       permits,
       workPermits,
       manpowerEntries,
@@ -157,9 +151,9 @@ export async function POST(req: Request) {
 
   const result = await prisma.$transaction(async (tx) => {
     // Photo/child tables where the cascade isn't declared — clear them
-    // first. For SubContractorBillLine, RfiPhoto and
-    // DesignDrawingRevision the parent-side onDelete: Cascade takes care
-    // of it, so we only need the parent deleteMany.
+    // first. For SubContractorBillLine and DesignDrawingRevision the
+    // parent-side onDelete: Cascade takes care of it, so we only need
+    // the parent deleteMany.
     const ipDel = await tx.inspectionPhoto.deleteMany();
     const iiDel = await tx.inspectionItem.deleteMany();
     const insDel = await tx.inspection.deleteMany();
@@ -179,8 +173,7 @@ export async function POST(req: Request) {
 
     // Newly-added test-data wipes — the pre-launch walkthrough will
     // exercise these modules and their rows have to disappear too, else
-    // ghost RFIs / permits linger in prod after the reset.
-    const rfiDel = await tx.rfi.deleteMany(); // cascades RfiPhoto
+    // ghost permits linger in prod after the reset.
     const permitDel = await tx.permit.deleteMany();
     const workPermitDel = await tx.workPermit.deleteMany(); // cascades WorkPermitPhoto
     const manpowerDel = await tx.manpowerEntry.deleteMany();
@@ -219,7 +212,6 @@ export async function POST(req: Request) {
         progressEntries: pDel.count,
         progressLabour: plDel.count,
         progressPhotos: ppDel.count,
-        rfis: rfiDel.count,
         permits: permitDel.count,
         workPermits: workPermitDel.count,
         manpowerEntries: manpowerDel.count,

@@ -6,7 +6,6 @@ import {
   Search as SearchIcon,
   Layers,
   Bug,
-  HelpCircle,
   MessageSquare,
   AlertTriangle,
   ShieldCheck,
@@ -92,7 +91,7 @@ export default function MobileSearchClient({ projectId }: { projectId: string })
             value={q}
             onChange={(e) => setQ(e.target.value)}
             enterKeyHint="search"
-            placeholder="Try 'V15 concreting', 'RFI-0012', or 'honeycombing'"
+            placeholder="Try 'V15 concreting', 'WIR-0012', or 'honeycombing'"
             className="w-full rounded-full border border-sandstone-200 bg-white pl-9 pr-3 py-2.5 text-[15px] placeholder:text-ink-3/70 focus:outline-none focus:ring-2 focus:ring-ferrous-500/30"
           />
           {loading && (
@@ -153,20 +152,6 @@ export default function MobileSearchClient({ projectId }: { projectId: string })
                     primary={s.description}
                     secondary={metaLine(statusLabel(s.status))}
                     right={s.severity ?? undefined}
-                  />
-                ))}
-              </ResultSection>
-            )}
-
-            {result.rfis.length > 0 && (
-              <ResultSection title="RFIs" count={result.rfis.length} icon={HelpCircle}>
-                {result.rfis.map((r) => (
-                  <ResultRow
-                    key={r.id}
-                    href={`/mobile/${projectId}/rfi/${r.id}?tab=${statusToRfiTab(r.status)}`}
-                    label={r.display}
-                    primary={r.subject}
-                    secondary={metaLine(statusLabel(r.status))}
                   />
                 ))}
               </ResultSection>
@@ -236,11 +221,11 @@ function EmptyStart() {
     <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-6">
       <p className="text-[13px] text-ink-3 leading-relaxed">
         Search hits activities (by villa number, name or task code), snags,
-        RFIs, WIRs, concerns, hindrances and work permits — all in one go.
+        WIRs, concerns, hindrances and work permits — all in one go.
       </p>
       <ul className="mt-3 space-y-1.5 text-[13px] text-ink-3">
         <li>· <span className="text-ink font-medium">V15</span> or <span className="text-ink font-medium">Villa 15</span> — activities on a villa</li>
-        <li>· <span className="text-ink font-medium">RFI-0012</span> — jump straight to an RFI</li>
+        <li>· <span className="text-ink font-medium">WIR-0012</span> — jump straight to an inspection</li>
         <li>· <span className="text-ink font-medium">honeycombing</span> — snags mentioning it</li>
       </ul>
     </div>
@@ -342,11 +327,6 @@ function statusLabel(status: string): string {
 function statusToIssueTab(status: string): string {
   if (status === "IN_REINSPECTION") return "reinspection";
   if (status === "RESOLVED") return "resolved";
-  return "open";
-}
-function statusToRfiTab(status: string): string {
-  if (status === "ANSWERED") return "answered";
-  if (status === "CLOSED") return "closed";
   return "open";
 }
 function statusToConcernTab(status: string): string {

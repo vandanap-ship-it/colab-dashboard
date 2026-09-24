@@ -37,7 +37,7 @@ export async function GET(
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Planned headcount is planning-side data. Scoped external contractors
-  // (QAQC, SAFETY, PERMIT, RFI, etc.) shouldn't read every subcontractor's
+  // (QAQC, SAFETY, PERMIT, etc.) shouldn't read every subcontractor's
   // planned counts. A scoped PROGRESS contractor legitimately would, so
   // gate on PROGRESS rather than a blanket isScopedUser block.
   if (isScopedUser(session.user.modules) && !canAccessModule(session.user.modules, MODULES.PROGRESS)) {

@@ -1,17 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Bug, HelpCircle, MessageSquare, ShieldCheck, ClipboardList, Inbox } from "lucide-react";
+import { Bug, MessageSquare, ShieldCheck, ClipboardList, Inbox } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
-import { formatRfiNumber } from "@/lib/rfi";
 import {
   concernAgeFor,
   issueAgeFor,
   permitAgeFor,
-  rfiAgeFor,
-  rfiDueSignal,
-  rfiDueSignalAsAge,
   wirAgeFor,
   type QueueAge,
 } from "@/lib/queueAge";
@@ -20,22 +16,21 @@ export const dynamic = "force-dynamic";
 
 /**
  * Mobile "My Actions" — the single screen a site engineer / planner opens to
- * see everything that needs THEM today. Server-fetches five queues:
+ * see everything that needs THEM today. Server-fetches four queues:
  *
  *   1. Snags assigned to me + still OPEN            → tap to detail
- *   2. RFIs assigned to me + still OPEN             → tap to detail
- *   3. Concerns assigned to me (PENDING/TASK_ASSIGNED)
- *   4. Work permits pending my approval (I'm in the approver set)
- *   5. WIRs in review (reviewers only — planners / product / admin)
+ *   2. Concerns assigned to me (PENDING/TASK_ASSIGNED)
+ *   3. Work permits pending my approval (I'm in the approver set)
+ *   4. WIRs in review (reviewers only — planners / product / admin)
  *
  * Each section is its own card. Empty sections DON'T render — a clean page
  * with three items is more honest than a page with two lists and three
  * empty "no items" tiles. Section counts show at the eyebrow so the
  * engineer scans quickly.
  *
- * Copy leans on ownership: "Snags to fix", "RFIs to answer", "Concerns
- * to address", "Permits to approve", "WIRs to review". Verbs, not
- * nouns, because verbs are the whole point of this screen.
+ * Copy leans on ownership: "Snags to fix", "Concerns to address",
+ * "Permits to approve", "WIRs to review". Verbs, not nouns, because
+ * verbs are the whole point of this screen.
  */
 export default async function MobileMyActionsPage({
   params,
@@ -77,9 +72,9 @@ export default async function MobileMyActionsPage({
       }
     : {};
 
-  // All five queues in parallel — this is the tightest server-fetch on the
+  // All four queues in parallel — this is the tightest server-fetch on the
   // app, so we lean into Promise.all to keep the page open time low.
-  const [snags, rfis, concerns, permits, wirsToReview] = await Promise.all([
+  const [snags, concerns, permits, wirsToReview] = await Promise.all([
     prisma.issue.findMany({
       where: { projectId, deletedAt: null, assignedToId: userId, status: "OPEN", ...villaWhere },
       orderBy: { createdAt: "desc" },
@@ -91,20 +86,6 @@ export default async function MobileMyActionsPage({
         createdAt: true,
         createdBy: { select: { name: true } },
         wbsNode: { select: { name: true } },
-      },
-    }),
-    prisma.rfi.findMany({
-      where: { projectId, deletedAt: null, assignedToId: userId, status: "OPEN", ...villaWhere },
-      orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
-      take: 30,
-      select: {
-        id: true,
-        number: true,
-        subject: true,
-        priority: true,
-        dueDate: true,
-        createdAt: true,
-        raisedBy: { select: { name: true } },
       },
     }),
     prisma.concern.findMany({
@@ -167,7 +148,7 @@ export default async function MobileMyActionsPage({
       : Promise.resolve([]),
   ]);
 
-  const total = snags.length + rfis.length + concerns.length + permits.length + wirsToReview.length;
+  const total = snags.length + concerns.length + permits.length + wirsToReview.length;
 
   return (
     <div className="flex-1 flex flex-col bg-ivory min-h-0">
@@ -222,30 +203,6 @@ export default async function MobileMyActionsPage({
                     secondary={secondaryLine(s.createdBy?.name, s.wbsNode?.name, fmtDate(s.createdAt))}
                     right={s.severity ? severityLabel(s.severity) : undefined}
                     age={issueAgeFor(s.createdAt)}
-                  />
-                ))}
-              </ActionSection>
-            )}
-
-            {rfis.length > 0 && (
-              <ActionSection eyebrow="RFIs to answer" count={rfis.length} icon={HelpCircle}>
-                {rfis.map((r) => (
-                  <ActionRow
-                    key={r.id}
-                    href={`/mobile/${projectId}/rfi/${r.id}?tab=open`}
-                    label={formatRfiNumber(r.number)}
-                    primary={r.subject}
-                    // The dueDate signal now rides in the age chip on
-                    // the right, so we drop the plain "due 25 Sep" from
-                    // the meta line — otherwise the reader sees the
-                    // same date twice.
-                    secondary={secondaryLine(r.raisedBy?.name)}
-                    right={r.priority !== "MEDIUM" ? priorityLabel(r.priority) : undefined}
-                    // Explicit dueDate wins over wall-clock aging, same
-                    // rule the RFI list card + detail hero apply. Both
-                    // flow through the same QueueAge chip so all three
-                    // surfaces read the same way at a glance.
-                    age={r.dueDate ? rfiDueSignalAsAge(rfiDueSignal(r.dueDate)) : rfiAgeFor(r.createdAt)}
                   />
                 ))}
               </ActionSection>
@@ -413,7 +370,4 @@ function fmtDate(d: Date): string {
 }
 function severityLabel(sev: string): string {
   return sev === "HIGH" ? "High" : sev === "MEDIUM" ? "Med" : sev === "LOW" ? "Low" : sev;
-}
-function priorityLabel(pri: string): string {
-  return pri === "HIGH" ? "High" : pri === "LOW" ? "Low" : pri === "MEDIUM" ? "Med" : pri;
 }

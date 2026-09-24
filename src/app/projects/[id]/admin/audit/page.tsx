@@ -39,7 +39,6 @@ const ENTITY_TYPES = [
   "WBSNode",
   "SubContractorBill",
   "DesignDrawing",
-  "Rfi",
   "Permit",
   "WorkPermit",
   "TradePlan",

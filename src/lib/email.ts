@@ -170,7 +170,7 @@ export function shell(opts: {
 export interface AssignmentEmailInput {
   to: string;
   assigneeName: string;
-  itemType: "Concern" | "Issue" | "Task" | "RFI" | "Work Permit";
+  itemType: "Concern" | "Issue" | "Task" | "Work Permit";
   itemTitle: string;
   itemUrl: string;
   raisedByName?: string;
@@ -701,7 +701,6 @@ export interface WaitingNudgeInput {
     stalePermits: number;           // Permits PENDING past the 2d SLA
     staleHindrances: number;        // Hindrances OPEN past the 3d SLA
     staleIssues: number;            // Snags OPEN/IN_REINSPECTION past the 4d SLA
-    staleRfis: number;              // RFIs OPEN past the 5d SLA
     staleConcerns: number;          // Concerns PENDING past the 5d SLA
     myDrafts: number;               // Filler's own DRAFT WIRs, any age
   };
@@ -720,7 +719,6 @@ export function waitingNudgeEmail(input: WaitingNudgeInput): SendEmailInput | nu
     buckets.stalePermits +
     buckets.staleHindrances +
     buckets.staleIssues +
-    buckets.staleRfis +
     buckets.staleConcerns +
     buckets.myDrafts;
   if (total === 0) return null;
@@ -734,7 +732,6 @@ export function waitingNudgeEmail(input: WaitingNudgeInput): SendEmailInput | nu
     { n: buckets.stalePermits, label: buckets.stalePermits === 1 ? "stale permit" : "stale permits", href: "/permit", stale: true },
     { n: buckets.staleHindrances, label: buckets.staleHindrances === 1 ? "stale blocker" : "stale blockers", href: "/hindrance?tab=open", stale: true },
     { n: buckets.staleIssues, label: buckets.staleIssues === 1 ? "stale snag" : "stale snags", href: "/issue?tab=open", stale: true },
-    { n: buckets.staleRfis, label: buckets.staleRfis === 1 ? "stale RFI" : "stale RFIs", href: "/rfi?tab=open", stale: true },
     { n: buckets.staleConcerns, label: buckets.staleConcerns === 1 ? "stale concern" : "stale concerns", href: "/concern?tab=pending", stale: true },
     { n: buckets.staleWirs, label: buckets.staleWirs === 1 ? "stale WIR" : "stale WIRs", href: "/qaqc?tab=pending", stale: true },
     { n: buckets.myDrafts, label: buckets.myDrafts === 1 ? "draft to finish" : "drafts to finish", href: "/qaqc?tab=drafts", stale: false },

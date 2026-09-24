@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
  * Several POST handlers accept both `projectId` and an activity FK
  * (`wbsNodeId`) in the request body. Without a check, a client can post
  * `projectId: "A", wbsNodeId: "node-in-project-B"` and end up with a snag /
- * hindrance / inspection / RFI / concern that's linked to an activity in a
+ * hindrance / inspection / concern that's linked to an activity in a
  * different project than it claims to belong to — reports double-count,
  * dashboards mis-attribute, and scoped contractors can be tricked into
  * mutating records that visually appear to be theirs.

@@ -28,7 +28,6 @@ const ENTITY_TYPES = [
   "Hindrance",
   "Concern",
   "Inspection",
-  "Rfi",
   "Permit",
   "WorkPermit",
   "ManpowerEntry",

@@ -19,20 +19,6 @@ test.describe("Cross-project FK guards on wbsNodeId", () => {
     const projectId = await getProjectId(page);
     const bogusWbsNodeId = `bogus-node-${uniqueId()}`;
 
-    // POST /api/rfi
-    const rfi = await page.request.post("/api/rfi", {
-      data: {
-        projectId,
-        subject: "cross-project fk test",
-        description: "should be rejected",
-        category: "STRUCTURAL",
-        priority: "MEDIUM",
-        wbsNodeId: bogusWbsNodeId,
-      },
-    });
-    expect(rfi.status()).toBe(400);
-    expect((await rfi.json()).error).toMatch(/does not belong to this project/i);
-
     // POST /api/hindrances
     const hind = await page.request.post("/api/hindrances", {
       data: {

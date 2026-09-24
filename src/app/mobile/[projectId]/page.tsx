@@ -7,7 +7,6 @@ import {
   ClipboardList,
   FileEdit,
   HardHat,
-  HelpCircle,
   ListChecks,
   MessageSquare,
   PlusCircle,
@@ -28,7 +27,7 @@ import {
 } from "@/lib/modules";
 import { getDashboardManpowerStrip } from "@/lib/manpowerServer";
 import { istDayStart } from "@/lib/istDay";
-import { WIR_TIERS, PERMIT_TIERS, HINDRANCE_TIERS, CONCERN_TIERS, ISSUE_TIERS, RFI_TIERS } from "@/lib/queueAge";
+import { WIR_TIERS, PERMIT_TIERS, HINDRANCE_TIERS, CONCERN_TIERS, ISSUE_TIERS } from "@/lib/queueAge";
 import { getWaitingByVilla, type VillaWaitingCount } from "@/lib/waitingByVilla";
 
 // Amanvana-native mobile home. Editorial serif hero + warm sandstone cards
@@ -94,16 +93,10 @@ export default async function MobileProjectHome({
   const staleHindranceCutoff = new Date(nowMs - HINDRANCE_TIERS.staleAt * 86_400_000);
   const staleConcernCutoff = new Date(nowMs - CONCERN_TIERS.staleAt * 86_400_000);
   const staleIssueCutoff = new Date(nowMs - ISSUE_TIERS.staleAt * 86_400_000);
-  const staleRfiCutoff = new Date(nowMs - RFI_TIERS.staleAt * 86_400_000);
-  // "Now" as a Date object for the RFI dueDate < now comparison. A
-  // separate binding so the `lt` filter doesn't have to reconstruct
-  // the same value inline.
-  const nowDate = new Date(nowMs);
 
   const canSeeHindrance = canAccessModule(userModules, MODULES.HINDRANCE);
   const canSeePermit = canAccessModule(userModules, MODULES.PERMIT);
   const canSeeConcern = canAccessModule(userModules, MODULES.CONCERN);
-  const canSeeRfi = canAccessModule(userModules, MODULES.RFI);
 
   const [
     myProgressToday,
@@ -115,8 +108,6 @@ export default async function MobileProjectHome({
     staleHindranceCount,
     staleConcernCount,
     staleIssueCount,
-    overdueRfiCount,
-    staleRfiCount,
     myDraftCount,
   ] = await Promise.all([
     session?.user
@@ -168,38 +159,6 @@ export default async function MobileProjectHome({
           },
         })
       : Promise.resolve(0),
-    // RFI attention count — OPEN questions that need eyes. Split UP the
-    // wire from a single "stale" count into two pills on the strip:
-    // OVERDUE (dueDate promised and already past) and STALE (no explicit
-    // due date but older than the 5d SLA cliff). Overdue is a broken
-    // promise; stale is neglect. The list card + detail hero already
-    // treat these two signals separately — the home strip now matches.
-    // OVERDUE: dueDate has passed. A broken promise from the raiser.
-    canSeeRfi
-      ? prisma.rfi.count({
-          where: {
-            projectId,
-            deletedAt: null,
-            status: "OPEN",
-            dueDate: { lt: nowDate },
-          },
-        })
-      : Promise.resolve(0),
-    // STALE: no explicit due date (or a due date still in the future),
-    // but the row is older than the 5d SLA cliff. Neglected rather
-    // than overdue. The two counts don't overlap — a past-due row is
-    // counted only as OVERDUE, never both.
-    canSeeRfi
-      ? prisma.rfi.count({
-          where: {
-            projectId,
-            deletedAt: null,
-            status: "OPEN",
-            createdAt: { lt: staleRfiCutoff },
-            OR: [{ dueDate: null }, { dueDate: { gte: nowDate } }],
-          },
-        })
-      : Promise.resolve(0),
     // Own drafts count — only meaningful when the caller can raise WIRs.
     // Scoped strictly to filledById so nothing leaks between authors.
     canSeeQualityStrip && session?.user
@@ -210,7 +169,7 @@ export default async function MobileProjectHome({
   ]);
 
   const totalWaitingOnYou =
-    staleWirCount + stalePermitCount + staleHindranceCount + staleConcernCount + staleIssueCount + overdueRfiCount + staleRfiCount + myDraftCount;
+    staleWirCount + stalePermitCount + staleHindranceCount + staleConcernCount + staleIssueCount + myDraftCount;
 
   // "Focus your walk" — top villas with the most waiting rows across all
   // queues. Only queried when the engineer has ≥ 3 waiting items total, so
@@ -310,14 +269,6 @@ export default async function MobileProjectHome({
       tier: "secondary",
     },
     {
-      key: "rfi",
-      href: `/mobile/${projectId}/rfi?tab=open`,
-      label: "RFIs",
-      hint: "Ask consultants for a decision",
-      icon: HelpCircle,
-      tier: "secondary",
-    },
-    {
       key: "concern",
       href: `/mobile/${projectId}/concern?tab=pending`,
       label: "Concerns",
@@ -345,7 +296,7 @@ export default async function MobileProjectHome({
       key: "search",
       href: `/mobile/${projectId}/search`,
       label: "Search",
-      hint: "Villa, RFI, snag, activity — one query",
+      hint: "Villa, snag, activity — one query",
       icon: SearchIcon,
       tier: "secondary",
     },
@@ -410,8 +361,6 @@ export default async function MobileProjectHome({
             staleHindranceCount={staleHindranceCount}
             staleConcernCount={staleConcernCount}
             staleIssueCount={staleIssueCount}
-            overdueRfiCount={overdueRfiCount}
-            staleRfiCount={staleRfiCount}
             myDraftCount={myDraftCount}
           />
         )}
@@ -583,8 +532,6 @@ function WaitingOnYouStrip({
   staleHindranceCount,
   staleConcernCount,
   staleIssueCount,
-  overdueRfiCount,
-  staleRfiCount,
   myDraftCount,
 }: {
   projectId: string;
@@ -594,11 +541,6 @@ function WaitingOnYouStrip({
   staleHindranceCount: number;
   staleConcernCount: number;
   staleIssueCount: number;
-  /** RFIs past their raiser-promised dueDate. A broken promise. */
-  overdueRfiCount: number;
-  /** OPEN RFIs older than the 5d SLA cliff without an explicit dueDate
-   *  (or with a dueDate still in the future). Neglect, not overdue. */
-  staleRfiCount: number;
   myDraftCount: number;
 }) {
   const wirHref = `/mobile/${projectId}/qaqc?tab=pending${moduleFilter ? `&module=${moduleFilter}` : ""}`;
@@ -620,8 +562,6 @@ function WaitingOnYouStrip({
     { key: "permit", href: `/mobile/${projectId}/permit`, count: stalePermitCount, label: stalePermitCount === 1 ? "stale permit" : "stale permits", Icon: ShieldCheck, tone: "stale" as const },
     { key: "hindrance", href: `/mobile/${projectId}/hindrance?tab=open`, count: staleHindranceCount, label: staleHindranceCount === 1 ? "stale blocker" : "stale blockers", Icon: AlertTriangle, tone: "stale" as const },
     { key: "issue", href: `/mobile/${projectId}/issue?tab=open`, count: staleIssueCount, label: staleIssueCount === 1 ? "stale snag" : "stale snags", Icon: Bug, tone: "stale" as const },
-    { key: "rfi-overdue", href: `/mobile/${projectId}/rfi?tab=open`, count: overdueRfiCount, label: overdueRfiCount === 1 ? "overdue RFI" : "overdue RFIs", Icon: HelpCircle, tone: "stale" as const },
-    { key: "rfi-stale", href: `/mobile/${projectId}/rfi?tab=open`, count: staleRfiCount, label: staleRfiCount === 1 ? "stale RFI" : "stale RFIs", Icon: HelpCircle, tone: "stale" as const },
     { key: "concern", href: `/mobile/${projectId}/concern?tab=pending`, count: staleConcernCount, label: staleConcernCount === 1 ? "stale concern" : "stale concerns", Icon: MessageSquare, tone: "stale" as const },
     { key: "drafts", href: draftsHref, count: myDraftCount, label: myDraftCount === 1 ? "draft to finish" : "drafts to finish", Icon: FileEdit, tone: "draft" as const },
   ].filter((p) => p.count > 0);
@@ -658,7 +598,7 @@ function WaitingOnYouStrip({
 /**
  * "Focus your walk" · villa-first rollup that sits under the per-queue
  * strip. Same source rows the WaitingOnYou strip counts (WIR + Permit
- * + Hindrance + Concern + Issue + RFI, all past their SLA cliff), but
+ * + Hindrance + Concern + Issue, all past their SLA cliff), but
  * grouped by villa instead of by queue so the engineer can plan a site
  * walk villa-by-villa instead of jumping between five inboxes.
  *

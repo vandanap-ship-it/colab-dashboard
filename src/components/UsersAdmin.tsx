@@ -689,7 +689,6 @@ function shortLabelFor(m: string): string {
     SAFETY: "Safety",
     HINDRANCE: "Hindrance",
     CONCERN: "Concern",
-    RFI: "RFI",
     PERMIT: "Permit",
   };
   return short[m] ?? m;
