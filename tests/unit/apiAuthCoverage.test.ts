@@ -31,6 +31,8 @@ const EXEMPT_ROUTES: Record<string, string> = {
     "One-shot admin password reset: gated by BOOTSTRAP_TOKEN env var (timing-safe compare, disabled by default). Only resets the 'admin'/ADMIN row, never arbitrary users. Documented in the file.",
   "admin/seed-test-users/route.ts":
     "One-shot test-user seeder: gated by BOOTSTRAP_TOKEN env var (timing-safe compare, disabled by default). Only touches usernames prefixed 'test-'; real users are walled off from this path. Documented in the file.",
+  "admin/setup-real-users/route.ts":
+    "One-shot bulk setup for real users: gated by BOOTSTRAP_TOKEN env var (timing-safe compare, disabled by default). Never creates or deletes users; only updates existing ones. Documented in the file.",
   "cron/overdue-digest/route.ts":
     "Vercel Cron endpoint: gated by CRON_SECRET Bearer token. Fails closed if the env var is missing.",
   "cron/progress-nudge/route.ts":
