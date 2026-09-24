@@ -4,6 +4,7 @@ import { canSeeMobile } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getPendingActionCount } from "@/lib/pendingActions";
 import { getUnreadNotificationCount } from "@/lib/notifications";
+import { canAccessModule, MODULES } from "@/lib/modules";
 import MobileHeaderBack from "@/components/MobileHeaderBack";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import MobileOnboarding from "@/components/MobileOnboarding";
@@ -48,6 +49,13 @@ export default async function MobileProjectLayout({
   // gating is pure and the role-visibility golden tests can exercise
   // every persona directly.
   const quickActions = quickActionsFor(session.user.modules);
+
+  // Documents tab is a Safety-only surface right now — every doc
+  // uploaded is a safety document (MSDS, method statements, PPE
+  // guides). A Progress or QA/QC contractor doesn't need the tab, so
+  // it drops off the bottom nav for them. Internal / full-access
+  // users still see it via canAccessModule's null-mods pass.
+  const showDocuments = canAccessModule(session.user.modules, MODULES.SAFETY);
 
   return (
     <div className="flex-1 flex flex-col bg-ivory">
@@ -99,6 +107,7 @@ export default async function MobileProjectLayout({
           projectId={project.id}
           pendingActions={pendingActions}
           unreadNotifications={unreadNotifications}
+          showDocuments={showDocuments}
         />
       </div>
       {/* Central "+" FAB above the bottom nav — one tap opens a sheet of

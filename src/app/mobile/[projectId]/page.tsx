@@ -351,7 +351,26 @@ export default async function MobileProjectHome({
     canAccessTool(userModules, TOOL_MODULES[t.key] ?? []),
   );
   const primaryTools = tools.filter((t) => t.tier === "primary");
-  const secondaryTools = tools.filter((t) => t.tier === "secondary");
+
+  // Secondary "MORE" tiles are trimmed for scoped contractors: list-
+  // view tiles (Site progress, Hindrances list, Manpower history,
+  // DLR, Concerns) duplicate the primary Log CTAs those users already
+  // have and add noise without adding a job they need. Kept for
+  // scoped users only when the tile is actually the primary way to
+  // act on that module (QA/QC and EHS tiles route to Inspections;
+  // Permits list is the approver's queue). Search stays universal.
+  //
+  // Internal / full-access users see the full MORE section since
+  // they're doing oversight and legitimately need every list view.
+  const scopedKeepSecondary = new Set([
+    "qaqc-tile",
+    "ehs-tile",
+    "permit-list",
+    "search",
+  ]);
+  const secondaryTools = tools
+    .filter((t) => t.tier === "secondary")
+    .filter((t) => !scoped || scopedKeepSecondary.has(t.key));
 
   return (
     <div className="pb-8">

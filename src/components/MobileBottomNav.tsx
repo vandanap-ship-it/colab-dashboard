@@ -9,6 +9,7 @@ export default function MobileBottomNav({
   projectId,
   pendingActions = 0,
   unreadNotifications = 0,
+  showDocuments = true,
 }: {
   projectId: string;
   /** Total items assigned to the current user that need action — shown as
@@ -19,12 +20,19 @@ export default function MobileBottomNav({
    *  sendPushToUser lands in Notification and shows up here until the
    *  engineer opens the inbox or hits Mark all as read. */
   unreadNotifications?: number;
+  /** Show the Documents tab. Every doc uploaded today is a safety
+   *  document, so contractors without SAFETY module access don't
+   *  need the tab and drop from 5 → 4 in the bottom nav. Internal
+   *  users default to true. */
+  showDocuments?: boolean;
 }) {
   const pathname = usePathname();
   const home = `/mobile/${projectId}`;
   const items: { href: string; label: string; icon: LucideIcon; badge?: number }[] = [
     { href: home, label: "Home", icon: Home },
-    { href: `${home}/documents`, label: "Documents", icon: FolderClosed },
+    ...(showDocuments
+      ? [{ href: `${home}/documents`, label: "Documents", icon: FolderClosed }]
+      : []),
     { href: `${home}/my-actions`, label: "Inbox", icon: Inbox, badge: pendingActions },
     { href: `${home}/notifications`, label: "Alerts", icon: Bell, badge: unreadNotifications },
     { href: `${home}/profile`, label: "Profile", icon: User },
@@ -39,9 +47,13 @@ export default function MobileBottomNav({
     (it) => it.href !== home && pathname.startsWith(it.href),
   );
 
+  // Dynamic column count so the icons stay evenly spaced whether the
+  // Documents tab is present (5 cols) or hidden (4 cols).
+  const colClass = items.length === 4 ? "grid-cols-4" : "grid-cols-5";
+
   return (
     <nav
-      className="border-t border-stone-200 bg-white grid grid-cols-5"
+      className={`border-t border-stone-200 bg-white grid ${colClass}`}
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       {items.map((it) => {
