@@ -33,6 +33,7 @@ const HOME_TILE_KEYS = [
   "permit",
   "permit-list",
   "raise-wir",
+  "raise-snag",
   "site-progress",
   "qaqc-tile",
   "ehs-tile",
@@ -82,17 +83,20 @@ describe("mobile home tile visibility", () => {
     expect([...visible].sort()).toEqual([...HOME_TILE_KEYS].sort());
   });
 
-  it("QAQC-scoped contractor sees Raise WIR primary + qaqc-tile + search", () => {
+  it("QAQC-scoped contractor sees Raise WIR + Raise snag + qaqc-tile + search", () => {
     const visible = visibleTiles(serialize([MODULES.QAQC]));
-    expect([...visible].sort()).toEqual(["qaqc-tile", "raise-wir", "search"].sort());
+    expect([...visible].sort()).toEqual(
+      ["qaqc-tile", "raise-wir", "raise-snag", "search"].sort(),
+    );
   });
 
-  it("SAFETY-scoped contractor sees Raise permit + Work permits list + ehs-tile + search", () => {
+  it("SAFETY-scoped contractor sees Raise permit + Raise snag + Work permits list + ehs-tile + search", () => {
     // permit + permit-list moved from PERMIT module to SAFETY on Sep 24
     // to match the real workflow (Safety persona raises work permits).
+    // raise-snag is universal across QAQC + SAFETY.
     const visible = visibleTiles(serialize([MODULES.SAFETY]));
     expect([...visible].sort()).toEqual(
-      ["ehs-tile", "permit", "permit-list", "search"].sort(),
+      ["ehs-tile", "permit", "permit-list", "raise-snag", "search"].sort(),
     );
   });
 
@@ -124,7 +128,7 @@ describe("mobile home tile visibility", () => {
   it("multi-scope QAQC+SAFETY contractor sees the union of both", () => {
     const visible = visibleTiles(serialize([MODULES.QAQC, MODULES.SAFETY]));
     expect([...visible].sort()).toEqual(
-      ["ehs-tile", "permit", "permit-list", "qaqc-tile", "raise-wir", "search"].sort(),
+      ["ehs-tile", "permit", "permit-list", "qaqc-tile", "raise-wir", "raise-snag", "search"].sort(),
     );
   });
 });

@@ -308,6 +308,14 @@ export default async function MobileProjectHome({
       tier: "primary",
     },
     {
+      key: "raise-snag",
+      href: `/mobile/${projectId}/issue/new`,
+      label: "Raise snag",
+      hint: "Defect or safety issue — tagged to an activity",
+      icon: Bug,
+      tier: "primary",
+    },
+    {
       key: "permit-list",
       href: `/mobile/${projectId}/permit`,
       label: "Work permits",

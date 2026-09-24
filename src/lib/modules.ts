@@ -130,6 +130,11 @@ export const TOOL_MODULES: Record<string, ModuleKey[]> = {
   // Deliberately NOT gated on SAFETY: Safety persona raises work permits,
   // not WIRs; the two workflows are distinct.
   "raise-wir": [MODULES.QAQC],
+  // "raise-snag" — standalone defect/safety-issue raise flow, no WIR
+  // required. Shraddha, Sep 24: "the in-house QAQC person only will
+  // raise snags without a WIR." Available to both quality and safety
+  // scopes since snags exist under both modules.
+  "raise-snag": [MODULES.QAQC, MODULES.SAFETY],
   // Work permit raise + approver queue — sit under SAFETY, not PERMIT.
   // MODULES.PERMIT is legal/regulatory permits (unused as a mobile
   // surface today); work permits belong to the safety domain.
