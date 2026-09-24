@@ -126,8 +126,15 @@ export const TOOL_MODULES: Record<string, ModuleKey[]> = {
   manpower: [MODULES.PROGRESS],
   "manpower-list": [MODULES.PROGRESS],
   concern: [MODULES.CONCERN],
-  permit: [MODULES.PERMIT],
-  "permit-list": [MODULES.PERMIT],
+  // "raise-wir" (Work Inspection Request) — QAQC contractor's whole job.
+  // Deliberately NOT gated on SAFETY: Safety persona raises work permits,
+  // not WIRs; the two workflows are distinct.
+  "raise-wir": [MODULES.QAQC],
+  // Work permit raise + approver queue — sit under SAFETY, not PERMIT.
+  // MODULES.PERMIT is legal/regulatory permits (unused as a mobile
+  // surface today); work permits belong to the safety domain.
+  permit: [MODULES.SAFETY],
+  "permit-list": [MODULES.SAFETY],
 };
 
 /** True when the user can access a tool given the tool's owning modules. */

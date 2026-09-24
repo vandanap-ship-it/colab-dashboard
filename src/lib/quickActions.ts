@@ -20,21 +20,24 @@ export type QuickAddKey =
   | "log-manpower"
   | "add-hindrance"
   | "add-concern"
-  | "raise-wir";
+  | "raise-wir"
+  | "raise-permit";
 
 export function quickActionsFor(modulesField: string | null | undefined): QuickAddKey[] {
   const out: QuickAddKey[] = [];
   if (canAccessModule(modulesField, MODULES.PROGRESS)) {
     out.push("log-progress", "log-manpower");
   }
-  // A WIR can be raised by anyone with QA/QC or Safety module access —
-  // both teams file inspection requests against their respective
-  // module. The row is tagged with primaryModuleFor() on create.
-  if (
-    canAccessModule(modulesField, MODULES.QAQC) ||
-    canAccessModule(modulesField, MODULES.SAFETY)
-  ) {
+  // WIRs are QAQC's whole raise-flow (quality inspections). Safety
+  // has a separate raise-flow (work permits), gated below. The two
+  // are distinct workflows on purpose — Shraddha, Sep 24: "safety
+  // personnel will raise only permit requests, and the quality
+  // person will raise work inspection requests."
+  if (canAccessModule(modulesField, MODULES.QAQC)) {
     out.push("raise-wir");
+  }
+  if (canAccessModule(modulesField, MODULES.SAFETY)) {
+    out.push("raise-permit");
   }
   if (canAccessModule(modulesField, MODULES.HINDRANCE)) out.push("add-hindrance");
   if (canAccessModule(modulesField, MODULES.CONCERN)) out.push("add-concern");

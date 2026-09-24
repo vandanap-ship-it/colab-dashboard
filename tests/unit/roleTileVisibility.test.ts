@@ -32,6 +32,7 @@ const HOME_TILE_KEYS = [
   "hindrance",
   "permit",
   "permit-list",
+  "raise-wir",
   "site-progress",
   "qaqc-tile",
   "ehs-tile",
@@ -81,15 +82,18 @@ describe("mobile home tile visibility", () => {
     expect([...visible].sort()).toEqual([...HOME_TILE_KEYS].sort());
   });
 
-  it("QAQC-scoped contractor sees only QA/QC tools (no permits, no progress, no safety)", () => {
+  it("QAQC-scoped contractor sees Raise WIR primary + qaqc-tile + search", () => {
     const visible = visibleTiles(serialize([MODULES.QAQC]));
-    // qaqc-tile · inspection paths — the two ways they act on QA/QC
-    expect([...visible].sort()).toEqual(["qaqc-tile", "search"].sort());
+    expect([...visible].sort()).toEqual(["qaqc-tile", "raise-wir", "search"].sort());
   });
 
-  it("SAFETY-scoped contractor sees only Safety tools (no permits, no progress, no QA/QC)", () => {
+  it("SAFETY-scoped contractor sees Raise permit + Work permits list + ehs-tile + search", () => {
+    // permit + permit-list moved from PERMIT module to SAFETY on Sep 24
+    // to match the real workflow (Safety persona raises work permits).
     const visible = visibleTiles(serialize([MODULES.SAFETY]));
-    expect([...visible].sort()).toEqual(["ehs-tile", "search"].sort());
+    expect([...visible].sort()).toEqual(
+      ["ehs-tile", "permit", "permit-list", "search"].sort(),
+    );
   });
 
   it("PROGRESS-scoped contractor sees the log-progress trio + related lists (no QA/QC / Safety / permits)", () => {
@@ -99,9 +103,12 @@ describe("mobile home tile visibility", () => {
     );
   });
 
-  it("PERMIT-scoped contractor sees only the permits pair", () => {
+  it("PERMIT-scoped user sees no tiles beyond search — permits moved to SAFETY", () => {
+    // MODULES.PERMIT is legal/regulatory permits (no mobile surface).
+    // Work permits are gated on SAFETY now, so a PERMIT-only user
+    // sees only Search.
     const visible = visibleTiles(serialize([MODULES.PERMIT]));
-    expect([...visible].sort()).toEqual(["permit", "permit-list", "search"].sort());
+    expect([...visible].sort()).toEqual(["search"].sort());
   });
 
   it("HINDRANCE-scoped contractor sees only the hindrance pair", () => {
@@ -114,25 +121,27 @@ describe("mobile home tile visibility", () => {
     expect([...visible].sort()).toEqual(["concern", "search"].sort());
   });
 
-  it("multi-scope QAQC+SAFETY contractor sees both quality tiles (still no progress/permits)", () => {
+  it("multi-scope QAQC+SAFETY contractor sees the union of both", () => {
     const visible = visibleTiles(serialize([MODULES.QAQC, MODULES.SAFETY]));
-    expect([...visible].sort()).toEqual(["ehs-tile", "qaqc-tile", "search"].sort());
+    expect([...visible].sort()).toEqual(
+      ["ehs-tile", "permit", "permit-list", "qaqc-tile", "raise-wir", "search"].sort(),
+    );
   });
 });
 
 describe("QuickAdd FAB action visibility", () => {
   it("internal / full-access user sees every quick action", () => {
     expect(quickActionsFor(serialize(null)).sort()).toEqual(
-      ["log-progress", "log-manpower", "raise-wir", "add-hindrance", "add-concern"].sort(),
+      ["log-progress", "log-manpower", "raise-wir", "raise-permit", "add-hindrance", "add-concern"].sort(),
     );
   });
 
-  it("QAQC-scoped contractor sees only Raise WIR (WIRs can be raised by QAQC or Safety)", () => {
+  it("QAQC-scoped contractor sees only Raise WIR — quality persona's whole raise-flow", () => {
     expect(quickActionsFor(serialize([MODULES.QAQC]))).toEqual(["raise-wir"]);
   });
 
-  it("SAFETY-scoped contractor sees only Raise WIR", () => {
-    expect(quickActionsFor(serialize([MODULES.SAFETY]))).toEqual(["raise-wir"]);
+  it("SAFETY-scoped contractor sees only Raise permit — safety persona's whole raise-flow", () => {
+    expect(quickActionsFor(serialize([MODULES.SAFETY]))).toEqual(["raise-permit"]);
   });
 
   it("PROGRESS-scoped contractor sees Log Progress + Log Manpower (no WIR / hindrance / concern)", () => {

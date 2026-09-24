@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   MessageSquare,
   ClipboardList,
+  ShieldCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { QuickAddKey } from "@/lib/quickActions";
@@ -186,6 +187,13 @@ const ACTION_ITEMS: readonly {
     hint: "Work Inspection Request — pass this activity",
     icon: ClipboardList,
     hrefFor: (p) => `/mobile/${p}/inspection/new`,
+  },
+  {
+    key: "raise-permit",
+    label: "Raise a permit",
+    hint: "Hot work · night work · deshuttering",
+    icon: ShieldCheck,
+    hrefFor: (p) => `/mobile/${p}/permit/new`,
   },
   {
     key: "add-hindrance",
