@@ -98,22 +98,26 @@ export default async function MobileProjectHome({
   const canSeePermit = canAccessModule(userModules, MODULES.PERMIT);
   const canSeeConcern = canAccessModule(userModules, MODULES.CONCERN);
 
-  // For scoped contractors, "Waiting on you" pills should count only
-  // items THIS user or their contractor is responsible for — not every
-  // stale row on the project (which is what the pills should mean for
-  // internal planners doing project oversight). We fetch the caller's
-  // contractorId here so the per-queue filters below can OR-in the
-  // "or my contractor's" clause when applicable.
-  //
-  // Full-access users (modules=null) skip this scoping entirely so
-  // planners still see the project-wide roll-up they expect.
-  const userContractorId = scoped && session?.user
-    ? (await prisma.user.findUnique({
+  // "Waiting on you" pills should count items THIS user needs to act
+  // on — not every stale row on the project. Fetch the caller's
+  // contractorId + canApproveWorkPermits once so the per-queue filters
+  // below can plug in the right "or my …" clause per queue.
+  const userRow = session?.user
+    ? await prisma.user.findUnique({
         where: { id: session.user.id },
-        select: { contractorId: true },
-      }))?.contractorId ?? null
+        select: { contractorId: true, canApproveWorkPermits: true },
+      })
     : null;
+  const userContractorId = userRow?.contractorId ?? null;
+  const userCanApprovePermits = userRow?.canApproveWorkPermits ?? false;
   const userId = session?.user?.id ?? null;
+
+  // Reviewer status for WIRs: only these roles pick up inspections
+  // out of IN_REVIEW. Mirrors canReview() in @/lib/roles — inlined
+  // here so the mobile home stays a single import surface.
+  const userRole = session?.user?.role ?? "";
+  const userCanReviewInspections =
+    userRole === "PLANNER" || userRole === "PRODUCT_TEAM" || userRole === "ADMIN";
 
   // Hindrance "waiting on me" filter for scoped contractors:
   //   raised BY me OR my contractor is the responsible party.
@@ -165,14 +169,40 @@ export default async function MobileProjectHome({
     canSeeQualityStrip
       ? prisma.issue.count({ where: { ...qualityBaseWhere, status: "OPEN" } })
       : Promise.resolve(0),
-    canSeeQualityStrip
+    // WIR stale count is a REVIEWER'S number — "how many WIRs are
+    // waiting for MY sign-off, past their SLA." Contractors raise
+    // WIRs, they don't review them, so the pill shows 0. For
+    // reviewers, count WIRs where they're picked as reviewer OR
+    // assignedReviewerIds is empty (which broadcasts to every
+    // eligible reviewer).
+    canSeeQualityStrip && userCanReviewInspections && userId
       ? prisma.inspection.count({
-          where: { ...qualityBaseWhere, status: "IN_REVIEW", createdAt: { lt: staleWirCutoff } },
+          where: {
+            ...qualityBaseWhere,
+            status: "IN_REVIEW",
+            createdAt: { lt: staleWirCutoff },
+            OR: [
+              { assignedReviewerIds: { has: userId } },
+              { assignedReviewerIds: { isEmpty: true } },
+            ],
+          },
         })
       : Promise.resolve(0),
-    canSeePermit
+    // Permit stale count is an APPROVER'S number — "how many
+    // permits sit in my queue past their SLA." Only users with the
+    // canApproveWorkPermits flag are in the picker; contractors and
+    // non-approvers see 0. approverIds is a JSON string of user IDs
+    // ("first-approver-wins"), so a substring check is the shape
+    // pendingActions already uses.
+    canSeePermit && userCanApprovePermits && userId
       ? prisma.workPermit.count({
-          where: { projectId, deletedAt: null, status: "PENDING", createdAt: { lt: stalePermitCutoff } },
+          where: {
+            projectId,
+            deletedAt: null,
+            status: "PENDING",
+            createdAt: { lt: stalePermitCutoff },
+            approverIds: { contains: userId },
+          },
         })
       : Promise.resolve(0),
     canSeeHindrance
@@ -360,15 +390,22 @@ export default async function MobileProjectHome({
   );
   const primaryTools = tools.filter((t) => t.tier === "primary");
 
-  // Secondary "MORE" tiles are trimmed hard for scoped contractors:
-  // only Search stays. Every other secondary tile is either a list
-  // view (Site progress, Hindrances list, Manpower history, DLR,
-  // Concerns) that duplicates the primary Log CTAs, or an approver's
-  // queue (QA/QC tile, EHS tile, Permits list) that a raise-focused
-  // contractor doesn't own. Contractors get "raise X" as a primary
-  // CTA; approver queues stay for full-access internal users doing
-  // oversight.
-  const scopedKeepSecondary = new Set(["search"]);
+  // Secondary "MORE" tiles for scoped users. Duplicate list views
+  // (Site progress, Hindrances list, Manpower history, DLR, Concerns)
+  // stay CUT — they duplicate the primary Log CTAs.
+  //
+  // Status tiles (qaqc-tile, ehs-tile, permit-list) STAY for scoped
+  // users because they're the raiser's "did the approver reply?"
+  // surface — a QAQC contractor opens qaqc-tile to see the status
+  // of the WIR he raised; a Safety contractor opens permit-list to
+  // check whether the approver has signed off yet. For in-house
+  // approvers on those tiles, they're the review queue itself.
+  const scopedKeepSecondary = new Set([
+    "qaqc-tile",
+    "ehs-tile",
+    "permit-list",
+    "search",
+  ]);
   const secondaryTools = tools
     .filter((t) => t.tier === "secondary")
     .filter((t) => !scoped || scopedKeepSecondary.has(t.key));
