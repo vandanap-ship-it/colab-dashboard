@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isScopedUser } from "@/lib/modules";
 
 /**
  * Compact index for the mobile activity picker. Returns:
@@ -20,9 +19,14 @@ export async function GET(
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (isScopedUser(session.user.modules)) {
-    return NextResponse.json({ blocks: [], recent: [], recentVillaLabel: null });
-  }
+  // Scoped users get the full picker tree too — a PROGRESS-scoped
+  // contractor logging today's progress needs to see every block →
+  // villa → milestone the same way an internal planner does. The
+  // per-entry contractor attribution happens at write time
+  // (createdById + contractor rollup), not here. Previously this
+  // route early-exited with an empty tree for scoped users, which
+  // silently broke Log Progress → Pick an activity for every
+  // contractor persona.
 
   const { id: projectId } = await params;
 
