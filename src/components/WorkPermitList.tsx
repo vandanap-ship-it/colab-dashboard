@@ -53,7 +53,11 @@ export default function WorkPermitList({
   isFullAccess: boolean;
 }) {
   const toast = useToast();
-  const [tab, setTab] = useState<TabKey>("approvals");
+  // Default tab varies by persona: full-access users are likely
+  // approvers and land on the approvals queue; scoped contractors are
+  // raisers and land on their own requests. This makes the same list
+  // page act as the raiser's status board without a separate route.
+  const [tab, setTab] = useState<TabKey>(isFullAccess ? "approvals" : "requests");
   const [permits, setPermits] = useState<WorkPermit[] | null>(null);
   const [counts, setCounts] = useState<Record<WorkPermitStatus, number>>({
     PENDING: 0,

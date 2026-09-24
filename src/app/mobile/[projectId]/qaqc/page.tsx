@@ -99,12 +99,23 @@ export default async function MobileQaqcPage({
   const userId = session.user.id;
   const iCanReview = canReview(session.user.role);
 
+  // Scoped contractor filter: when a user is scoped AND isn't a
+  // reviewer (i.e., SITE_ENGINEER / SITE_MANAGER outside canReview),
+  // narrow every tab query to WIRs they filled. A contractor like
+  // Nagarjuna doesn't need to see peer contractors' passed / rejected
+  // WIRs — this page is their "status of what I raised" board.
+  // Scoped reviewers (like Thangamani, scoped QAQC + PLANNER) still
+  // see every WIR in scope so they can review peers' rows.
+  const isScopedRaiser = !!session.user.modules && !iCanReview;
+  const raiserFilter = isScopedRaiser ? { filledById: userId } : {};
+
   // Base filter. All tabs share it, plus the optional module filter so
   // counts and rows both match the requested view.
   const baseWhere = {
     projectId,
     deletedAt: null,
     ...(moduleFilter ? { module: moduleFilter } : {}),
+    ...raiserFilter,
   } as const;
 
   // Base filter for "everything but drafts" — used on every tab except
