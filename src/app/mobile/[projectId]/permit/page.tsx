@@ -15,7 +15,7 @@ export default async function MobileWorkPermitListPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canAccessModule(session.user.modules, MODULES.PERMIT)) {
+  if (!canAccessModule(session.user.modules, MODULES.SAFETY)) {
     redirect(`/mobile/${(await params).projectId}`);
   }
 

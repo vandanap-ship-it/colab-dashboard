@@ -95,7 +95,7 @@ export default async function MobileProjectHome({
   const staleIssueCutoff = new Date(nowMs - ISSUE_TIERS.staleAt * 86_400_000);
 
   const canSeeHindrance = canAccessModule(userModules, MODULES.HINDRANCE);
-  const canSeePermit = canAccessModule(userModules, MODULES.PERMIT);
+  const canSeePermit = canAccessModule(userModules, MODULES.SAFETY);
   const canSeeConcern = canAccessModule(userModules, MODULES.CONCERN);
 
   // "Waiting on you" pills should count items THIS user needs to act

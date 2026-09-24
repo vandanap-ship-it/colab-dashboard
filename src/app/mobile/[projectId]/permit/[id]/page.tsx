@@ -30,7 +30,7 @@ export default async function MobilePermitDetailPage({
 
   const { projectId, id } = await params;
 
-  if (!canAccessModule(session.user.modules, MODULES.PERMIT)) {
+  if (!canAccessModule(session.user.modules, MODULES.SAFETY)) {
     redirect(`/mobile/${projectId}`);
   }
 
