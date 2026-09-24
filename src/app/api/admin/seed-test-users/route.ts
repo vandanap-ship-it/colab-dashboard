@@ -87,14 +87,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Optional body: { commonPassword?: string }. When present, every
-  // test-* user gets the same password — useful when a human wants to
-  // log in as several personas back-to-back without looking each one
-  // up. Minimum 8 chars so a typo doesn't leave prod trivially open
-  // even for the walled-off test-* namespace.
+  // Optional body:
+  //   { commonPassword?: string, deactivateUsernames?: string[] }
+  //
+  // commonPassword: when present, every test-* user gets the same
+  //   password — useful when a human wants to log in as several
+  //   personas back-to-back without looking each one up. Minimum 8
+  //   chars so a typo doesn't leave prod trivially open even for the
+  //   walled-off test-* namespace.
+  //
+  // deactivateUsernames: an optional list of usernames to soft-disable
+  //   in the same call (sets active=false, keeps their history
+  //   intact). Useful for pre-walkthrough cleanup — hide test/dummy
+  //   accounts from the admin panel and the picker lists. Reversible
+  //   from /admin/users. Cannot touch test-* users (walled off).
   let commonPassword: string | null = null;
+  let deactivateUsernames: string[] = [];
   try {
-    const body = (await req.json().catch(() => null)) as { commonPassword?: unknown } | null;
+    const body = (await req.json().catch(() => null)) as
+      | { commonPassword?: unknown; deactivateUsernames?: unknown }
+      | null;
     if (body && typeof body.commonPassword === "string") {
       const trimmed = body.commonPassword.trim();
       if (trimmed.length < 8) {
@@ -105,8 +117,15 @@ export async function POST(req: Request) {
       }
       commonPassword = trimmed;
     }
+    if (body && Array.isArray(body.deactivateUsernames)) {
+      deactivateUsernames = body.deactivateUsernames
+        .filter((u): u is string => typeof u === "string")
+        .map((u) => u.trim())
+        .filter((u) => u.length > 0 && !u.startsWith(TEST_PREFIX));
+    }
   } catch {
-    // No body / not JSON → fall through to random per-user passwords.
+    // No body / not JSON → fall through to random per-user passwords
+    // and no deactivations.
   }
 
   const results: Array<{
@@ -175,6 +194,29 @@ export async function POST(req: Request) {
     }
   }
 
+  // Deactivate any usernames the caller asked us to. Real users only
+  // (test-* was filtered out above). Soft-delete: sets active=false,
+  // preserves history and their id references from other tables.
+  // Reversible from /admin/users.
+  const deactivated: Array<{ username: string; found: boolean }> = [];
+  if (deactivateUsernames.length > 0) {
+    for (const username of deactivateUsernames) {
+      const found = await prisma.user.findUnique({
+        where: { username },
+        select: { id: true },
+      });
+      if (found) {
+        await prisma.user.update({
+          where: { id: found.id },
+          data: { active: false },
+        });
+        deactivated.push({ username, found: true });
+      } else {
+        deactivated.push({ username, found: false });
+      }
+    }
+  }
+
   // One coarse audit row: the seeded test-admin is stamped as the
   // actor (the caller has no session — this endpoint is
   // token-gated). Passwords + hashes never logged.
@@ -183,12 +225,13 @@ export async function POST(req: Request) {
     select: { id: true },
   });
   if (testAdmin) {
+    const deactivatedCount = deactivated.filter((d) => d.found).length;
     await recordAudit({
       userId: testAdmin.id,
       action: "CREATE",
       entityType: "User",
       entityId: "*",
-      summary: `Seeded ${results.length} test-* users via /api/admin/seed-test-users (BOOTSTRAP_TOKEN)`,
+      summary: `Seeded ${results.length} test-* users${deactivatedCount > 0 ? ` and disabled ${deactivatedCount} real users` : ""} via /api/admin/seed-test-users (BOOTSTRAP_TOKEN)`,
     });
   }
 
@@ -197,5 +240,6 @@ export async function POST(req: Request) {
     message:
       "Passwords are shown only once. Save this response. Unset BOOTSTRAP_TOKEN in Vercel to disable this endpoint again.",
     users: results,
+    deactivated,
   });
 }
