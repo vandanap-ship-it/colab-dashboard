@@ -231,25 +231,6 @@ export default function UsersAdmin() {
     load();
   }
 
-  async function changeRole(u: UserRow, newRole: string) {
-    const res = await fetch(`/api/admin/users/${u.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: newRole, expectedUpdatedAt: u.updatedAt }),
-    });
-    if (res.status === 409) {
-      alert("Another admin just edited this user. Refreshing so you see the latest.");
-      load();
-      return;
-    }
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setError(data?.error ?? "Failed");
-      return;
-    }
-    load();
-  }
-
   async function saveName(u: UserRow) {
     const trimmed = editingName.trim();
     if (trimmed.length < 2) {
@@ -445,14 +426,13 @@ export default function UsersAdmin() {
               <tr className="text-[10px] uppercase tracking-wider">
                 <th className="px-4 py-2 font-medium">Username</th>
                 <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Role</th>
                 <th className="px-4 py-2 font-medium">Modules</th>
-                <th className="px-4 py-2 font-medium">Contractor</th>
+                <th className="px-4 py-2 font-medium">Type</th>
                 <th
                   className="px-4 py-2 font-medium"
-                  title="TASK = 07:00 IST 'today's schedule' email. NUDGE = 11:30 IST push if nothing logged. APPROVE = shows up in the mobile Raise Permit approver picker."
+                  title="Task = 07:00 IST daily 'today's schedule' email. Nudge = 11:30 IST push if no progress logged. Permits = user is offered in the Raise Permit approver picker."
                 >
-                  Flags
+                  Alerts
                 </th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium text-right">Actions</th>
@@ -500,19 +480,6 @@ export default function UsersAdmin() {
                       )}
                     </td>
                     <td className="px-4 py-2">
-                      <select
-                        value={u.role}
-                        onChange={(e) => changeRole(u, e.target.value)}
-                        className="rounded-md border border-stone-200 bg-white px-2 py-1 text-xs focus:outline-none focus:border-stone-900"
-                      >
-                        {ROLE_OPTIONS.map((r) => (
-                          <option key={r} value={r}>
-                            {ROLE_LABELS[r]}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-4 py-2">
                       {/* Modules picker — module scope determines which
                           mobile tools and records the user sees. NULL =
                           full access (internal); scoped users see only
@@ -558,13 +525,13 @@ export default function UsersAdmin() {
                           />
                           Nudge
                         </label>
-                        <label className="inline-flex items-center gap-1 cursor-pointer" title="Shown in the mobile Raise Permit approver picker">
+                        <label className="inline-flex items-center gap-1 cursor-pointer" title="User is offered in the mobile Raise Permit approver picker">
                           <input
                             type="checkbox"
                             checked={u.canApproveWorkPermits}
                             onChange={(e) => toggleDailyFlag(u, "canApproveWorkPermits", e.target.checked)}
                           />
-                          Approve
+                          Permits
                         </label>
                       </div>
                     </td>
