@@ -7,6 +7,7 @@ import { canAccessModule, primaryModuleFor, isScopedUser, MODULES } from "@/lib/
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { parseBody } from "@/lib/parseBody";
 import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
+import { sendPushToUser } from "@/lib/push";
 
 const SEVERITIES = new Set(["LOW", "MEDIUM", "HIGH"]);
 
@@ -98,6 +99,34 @@ export async function POST(req: Request) {
   const wbsErr = await assertWbsNodeInProject(wbsNodeId, projectId);
   if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
 
+  // Auto-tag the responsible contractor. Shraddha, Sep 24: "you know
+  // which contractor is associated with which villa. Auto-tag them and
+  // send a notification."
+  //
+  // Path: wbsNode → activity's contractorId → first active user tied to
+  // that contractor. Only runs when the caller didn't already provide
+  // an explicit assignedToId, and when a wbsNode was picked (a
+  // free-floating snag with no activity has no contractor to infer).
+  // Notifications follow from the existing assignment-side-effect
+  // hooks once assignedToId is set.
+  let resolvedAssigneeId: string | null = assignedToId ?? null;
+  if (!resolvedAssigneeId && wbsNodeId) {
+    const node = await prisma.wBSNode.findUnique({
+      where: { id: wbsNodeId },
+      select: { contractorId: true },
+    });
+    if (node?.contractorId) {
+      const contractorUser = await prisma.user.findFirst({
+        where: { contractorId: node.contractorId, active: true },
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+      });
+      if (contractorUser) {
+        resolvedAssigneeId = contractorUser.id;
+      }
+    }
+  }
+
   // Tag the snag with the creator's module so scoped contractors only ever
   // see their own module's snags. Full-access staff create untagged snags.
   const moduleTag = primaryModuleFor(session.user.modules);
@@ -122,7 +151,7 @@ export async function POST(req: Request) {
           category: cat.length > 0 ? cat : null,
           module: moduleTag,
           createdById: session.user.id,
-          assignedToId: assignedToId || null,
+          assignedToId: resolvedAssigneeId,
           idempotencyKey,
           photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
         },
@@ -139,6 +168,22 @@ export async function POST(req: Request) {
       entityId: issue.id,
       summary: `Snag raised: ${desc.length > 60 ? desc.slice(0, 60) + "…" : desc}`,
     });
+
+    // Push a notification to the assignee when we auto-tagged (or the
+    // caller supplied) an assignedToId on create. Mirrors the PATCH-
+    // time notification in issues/[id] so an assign-on-create doesn't
+    // silently skip the ping. Never notifies self — a QAQC reviewer
+    // raising a snag on an activity they somehow own shouldn't get
+    // their own push tile.
+    if (resolvedAssigneeId && resolvedAssigneeId !== session.user.id) {
+      const preview = desc.length > 60 ? desc.slice(0, 60) + "…" : desc;
+      void sendPushToUser(resolvedAssigneeId, {
+        title: "Snag assigned to you",
+        body: `${preview} · from ${session.user.name ?? "site team"}`,
+        url: `/mobile/${projectId}/my-actions`,
+        tag: `snag-${issue.id}`,
+      });
+    }
   }
 
   return NextResponse.json({ issue }, { status: duplicate ? 200 : 201 });
