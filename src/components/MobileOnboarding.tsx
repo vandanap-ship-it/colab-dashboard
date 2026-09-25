@@ -23,21 +23,28 @@ interface Slide {
   title: string;
   body: string;
 }
+// Copy stays generic on purpose. This overlay ships to six different
+// personas (Progress contractor, Safety contractor, QAQC contractor,
+// planner, approver, safety manager) and each sees a different set of
+// tiles. Naming a specific tile in the copy ("Log progress, hindrances
+// and work permits") misled contractors who don't have those tiles.
+// Slides now describe the SHAPE of each surface rather than its
+// contents — the tile grid on Home speaks for itself for each persona.
 const SLIDES: Slide[] = [
   {
     icon: Home,
     title: "Home — your daily starting point",
-    body: "Log progress, manpower, hindrances, and work permits from here. New Progress is the big black button — the first thing most engineers tap every morning.",
+    body: "Everything you can log or raise today lives in the tiles below. What shows up here is scoped to what your role covers.",
   },
   {
     icon: Inbox,
-    title: "Info — what's waiting on you",
-    body: "Concerns assigned to you, open snags, inspections to review. The number badge on the Info tab tells you how many items need attention.",
+    title: "Inbox — what's waiting on you",
+    body: "Snags, concerns, and approvals assigned to you land here. The number badge on the Inbox tab tells you how many items need attention.",
   },
   {
     icon: FolderClosed,
-    title: "Documents & Profile",
-    body: "Documents has every permit, checklist, and record template you'll need on site. Profile is your account and sign-out.",
+    title: "The rest of the app",
+    body: "Bottom nav takes you to Alerts (recent notifications) and Profile (account, sign-out). Documents shows there too if your role uses it.",
   },
 ];
 

@@ -61,11 +61,13 @@ export default async function MobileProjectHome({
   const scoped = isScopedUser(userModules);
 
   // Quality strip counts — Work Inspection Requests currently IN_REVIEW and
-  // Issues/Defects currently OPEN. Colab surfaces these as the two things
-  // every site engineer wants to see on open, so the site's health is one
-  // glance not a menu dive. Scoped contractors only see their module's
-  // slice; users without any QA/QC or SAFETY access don't see the strip.
-  const canSeeQualityStrip =
+  // Issues/Defects currently OPEN. Both cards are project-oversight
+  // views — a planner scanning the site's health should see them.
+  // Scoped contractors, however, can't ACT on either count (they don't
+  // review WIRs; the snag total dupes their Waiting-on-you strip). So
+  // the strip is hidden from scoped non-reviewers — the persona-
+  // aware "raise + status" tiles do the work for them.
+  const hasQualityModule =
     canAccessModule(userModules, MODULES.QAQC) ||
     canAccessModule(userModules, MODULES.SAFETY);
   const scopedModule = scoped ? primaryModuleFor(userModules) : null;
@@ -118,6 +120,13 @@ export default async function MobileProjectHome({
   const userRole = session?.user?.role ?? "";
   const userCanReviewInspections =
     userRole === "PLANNER" || userRole === "PRODUCT_TEAM" || userRole === "ADMIN";
+
+  // Show the QualityStrip only to people who can act on its counts —
+  // reviewers (per the role check above) and full-access internal
+  // users. A QAQC- or SAFETY-scoped contractor is deliberately
+  // excluded so the strip stops nudging them about WIRs they can't
+  // review and snags that already show in their Waiting-on-you strip.
+  const canSeeQualityStrip = hasQualityModule && (userCanReviewInspections || !scoped);
 
   // Hindrance "waiting on me" filter for scoped contractors:
   //   raised BY me OR my contractor is the responsible party.
@@ -319,7 +328,11 @@ export default async function MobileProjectHome({
       key: "permit-list",
       href: `/mobile/${projectId}/permit`,
       label: "Work permits",
-      hint: "Approve or view raised permits",
+      // Neutral hint: the list serves both a raiser checking status
+      // and an approver working the queue. The page itself defaults
+      // to the right tab per persona (raiser → My requests,
+      // approver → Approvals).
+      hint: "Raise · approve · check status",
       icon: ShieldCheck,
       tier: "secondary",
     },
