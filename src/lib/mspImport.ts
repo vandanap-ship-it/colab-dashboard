@@ -226,6 +226,17 @@ export interface ImportOptions {
   csvText: string;
   projectName: string;
   creatorUsername: string;
+  /**
+   * Restrict the import to a specific set of villa numbers. When provided,
+   * villas outside the set are dropped during hierarchy walk, blocks with
+   * zero remaining villas are dropped too, and existing MilestoneSection
+   * rows keep their current name and orderIndex (so a partial re-import
+   * can't visibly reorder sections that other villas depend on).
+   *
+   * Use case: filling in activities for villas the earlier Colab import
+   * missed, without disturbing the working ones.
+   */
+  onlyVillas?: number[];
 }
 
 export async function importMspCsv(
@@ -244,6 +255,24 @@ export async function importMspCsv(
   };
 
   const hierarchy = buildHierarchy(rows, stats);
+
+  // Optional scoping: drop villas outside the allow-list, then any block
+  // that's left with no villas at all. Re-derive sectionNames from what
+  // survived so we don't try to upsert sections we no longer touch.
+  const onlyVillaSet = opts.onlyVillas ? new Set(opts.onlyVillas) : null;
+  if (onlyVillaSet) {
+    for (const b of hierarchy.blocks) {
+      b.villas = b.villas.filter((v) => onlyVillaSet.has(v.meta.number));
+    }
+    hierarchy.blocks = hierarchy.blocks.filter((b) => b.villas.length > 0);
+    hierarchy.sectionNames = new Set();
+    for (const b of hierarchy.blocks) {
+      for (const v of b.villas) {
+        for (const s of v.sections) hierarchy.sectionNames.add(s.sectionName);
+      }
+    }
+  }
+
   stats.totalUnits = hierarchy.blocks.reduce(
     (n, b) => n + b.villas.reduce((m, v) => m + v.meta.unitCount, 0),
     0,
@@ -278,14 +307,34 @@ export async function importMspCsv(
     stats.projectId = project.id;
     stats.projectName = project.name;
 
-    // Milestone sections (unique across project)
+    // Milestone sections (unique across project).
+    //
+    // Scoped imports (`onlyVillas`) must not disturb sections that already
+    // exist for other villas — those rows are shared across the whole
+    // project and renaming/reordering them here would visibly reshuffle
+    // the picker for the working villas. So when scoped, existing sections
+    // are left exactly as they are and only genuinely new ones get created
+    // with a fresh orderIndex appended to the end.
     const sectionByName = new Map<string, string>();
     let sectionOrder = 0;
+    if (opts.onlyVillas) {
+      const maxExisting = await tx.milestoneSection.findFirst({
+        where: { projectId: project.id },
+        orderBy: { orderIndex: "desc" },
+        select: { orderIndex: true },
+      });
+      sectionOrder = (maxExisting?.orderIndex ?? -1) + 1;
+    }
     for (const name of hierarchy.sectionNames) {
       const code = sectionCodeFor(name);
       const existing = await tx.milestoneSection.findUnique({
         where: { projectId_code: { projectId: project.id, code } },
       });
+      if (existing && opts.onlyVillas) {
+        sectionByName.set(name, existing.id);
+        stats.sections.updated++;
+        continue;
+      }
       const rec = await tx.milestoneSection.upsert({
         where: { projectId_code: { projectId: project.id, code } },
         create: { projectId: project.id, code, name, orderIndex: sectionOrder },
@@ -296,36 +345,62 @@ export async function importMspCsv(
       sectionOrder++;
     }
 
-    // Blocks + villas + villa milestones + tasks
+    // Blocks + villas + villa milestones + tasks.
+    //
+    // Same "leave existing rows alone" rule for scoped imports as for
+    // sections above — an existing Block or Villa may already anchor
+    // villas that are outside the filter set, so we must not rename the
+    // block, reorder it, or reparent a villa. Only rows that don't exist
+    // yet get created.
     let blockOrder = 0;
+    if (opts.onlyVillas) {
+      const maxBlock = await tx.block.findFirst({
+        where: { projectId: project.id },
+        orderBy: { orderIndex: "desc" },
+        select: { orderIndex: true },
+      });
+      blockOrder = (maxBlock?.orderIndex ?? -1) + 1;
+    }
     for (const b of hierarchy.blocks) {
       const existingBlock = await tx.block.findUnique({
         where: { projectId_code: { projectId: project.id, code: b.code } },
       });
-      const block = await tx.block.upsert({
-        where: { projectId_code: { projectId: project.id, code: b.code } },
-        create: {
-          projectId: project.id, code: b.code,
-          name: b.row.name, active: true, orderIndex: blockOrder,
-        },
-        update: { name: b.row.name, orderIndex: blockOrder },
-      });
-      if (existingBlock) stats.blocks.updated++; else stats.blocks.created++;
-      blockOrder++;
+      let block: { id: string };
+      if (existingBlock && opts.onlyVillas) {
+        block = existingBlock;
+        stats.blocks.updated++;
+      } else {
+        block = await tx.block.upsert({
+          where: { projectId_code: { projectId: project.id, code: b.code } },
+          create: {
+            projectId: project.id, code: b.code,
+            name: b.row.name, active: true, orderIndex: blockOrder,
+          },
+          update: { name: b.row.name, orderIndex: blockOrder },
+        });
+        if (existingBlock) stats.blocks.updated++; else stats.blocks.created++;
+        blockOrder++;
+      }
 
       for (const v of b.villas) {
         const existingVilla = await tx.villa.findUnique({
           where: { projectId_number: { projectId: project.id, number: v.meta.number } },
         });
-        const villa = await tx.villa.upsert({
-          where: { projectId_number: { projectId: project.id, number: v.meta.number } },
-          create: {
-            projectId: project.id, blockId: block.id,
-            number: v.meta.number, unitCount: v.meta.unitCount, label: v.meta.label,
-          },
-          update: { blockId: block.id, unitCount: v.meta.unitCount, label: v.meta.label },
-        });
-        if (existingVilla) stats.villas.updated++; else stats.villas.created++;
+        let villa: { id: string };
+        if (existingVilla && opts.onlyVillas) {
+          villa = existingVilla;
+          stats.villas.updated++;
+        } else {
+          villa = await tx.villa.upsert({
+            where: { projectId_number: { projectId: project.id, number: v.meta.number } },
+            create: {
+              projectId: project.id, blockId: block.id,
+              number: v.meta.number, unitCount: v.meta.unitCount, label: v.meta.label,
+            },
+            update: { blockId: block.id, unitCount: v.meta.unitCount, label: v.meta.label },
+          });
+          if (existingVilla) stats.villas.updated++; else stats.villas.created++;
+        }
 
         for (const s of v.sections) {
           const sectionId = sectionByName.get(s.sectionName);

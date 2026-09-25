@@ -18,6 +18,11 @@ const MAX_CSV_BYTES = 20 * 1024 * 1024;
 const JsonPostSchema = z.object({
   csv: z.string().min(1).max(MAX_CSV_BYTES),
   projectName: z.string().max(200).optional(),
+  // Restrict the import to a specific set of villa numbers. When present,
+  // villas outside the list are ignored and existing block / villa /
+  // section rows are left untouched so a partial re-import can't disturb
+  // the villas that are already working.
+  onlyVillas: z.array(z.number().int().min(1).max(9999)).max(500).optional(),
 });
 
 /**
@@ -42,6 +47,7 @@ export async function POST(req: Request) {
   const contentType = req.headers.get("content-type") ?? "";
   let csvText: string | null = null;
   let projectName = "Amanvana";
+  let onlyVillas: number[] | undefined;
 
   try {
     if (contentType.includes("multipart/form-data")) {
@@ -56,6 +62,23 @@ export async function POST(req: Request) {
       csvText = await file.text();
       const nameField = form.get("projectName");
       if (typeof nameField === "string" && nameField.trim()) projectName = nameField.trim();
+      const villasField = form.get("onlyVillas");
+      if (typeof villasField === "string" && villasField.trim()) {
+        const nums = villasField
+          .split(",")
+          .map((s) => parseInt(s.trim(), 10))
+          .filter((n) => Number.isInteger(n) && n > 0 && n < 10000);
+        if (nums.length === 0) {
+          return NextResponse.json(
+            { error: "onlyVillas provided but no valid villa numbers parsed" },
+            { status: 400 },
+          );
+        }
+        if (nums.length > 500) {
+          return NextResponse.json({ error: "onlyVillas: max 500 entries" }, { status: 400 });
+        }
+        onlyVillas = nums;
+      }
     } else if (contentType.includes("application/json")) {
       const raw = await req.json();
       const parsed = JsonPostSchema.safeParse(raw);
@@ -73,6 +96,7 @@ export async function POST(req: Request) {
       }
       csvText = parsed.data.csv;
       if (parsed.data.projectName) projectName = parsed.data.projectName.trim();
+      onlyVillas = parsed.data.onlyVillas;
     } else {
       return NextResponse.json(
         { error: "Send as multipart/form-data (file field) or application/json (csv field)" },
@@ -105,6 +129,7 @@ export async function POST(req: Request) {
       csvText,
       projectName,
       creatorUsername: session.user.username,
+      onlyVillas,
     });
     const elapsedMs = Date.now() - t0;
 
@@ -115,7 +140,7 @@ export async function POST(req: Request) {
         action: "CREATE",
         entityType: "Project",
         entityId: stats.projectId,
-        summary: `MSP import: ${stats.blocks.created + stats.blocks.updated} blocks, ${stats.villas.created + stats.villas.updated} villas, ${stats.wbsNodes.created + stats.wbsNodes.updated} tasks`,
+        summary: `MSP import${onlyVillas ? ` (scoped to villas ${onlyVillas.join(",")})` : ""}: ${stats.blocks.created + stats.blocks.updated} blocks, ${stats.villas.created + stats.villas.updated} villas, ${stats.wbsNodes.created + stats.wbsNodes.updated} tasks`,
       });
     }
 

@@ -21,7 +21,14 @@ import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { importMspCsv } from "@/lib/mspImport";
 
-function parseArgs(): { csv: string; project: string; creator: string } {
+interface CliArgs {
+  csv: string;
+  project: string;
+  creator: string;
+  onlyVillas?: number[];
+}
+
+function parseArgs(): CliArgs {
   const args = process.argv.slice(2);
   const out: Record<string, string> = { creator: "admin" };
   for (let i = 0; i < args.length; i++) {
@@ -29,14 +36,31 @@ function parseArgs(): { csv: string; project: string; creator: string } {
     if (a === "--csv") out.csv = args[++i];
     else if (a === "--project") out.project = args[++i];
     else if (a === "--creator") out.creator = args[++i];
+    else if (a === "--only-villas") out.onlyVillas = args[++i];
   }
   if (!out.csv) out.csv = "scratchpad-data/amanvana_msp.csv";
   if (!out.project) out.project = "Amanvana";
-  return out as { csv: string; project: string; creator: string };
+  const parsed: CliArgs = {
+    csv: out.csv,
+    project: out.project,
+    creator: out.creator,
+  };
+  if (out.onlyVillas) {
+    const nums = out.onlyVillas
+      .split(",")
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !isNaN(n));
+    if (nums.length === 0) {
+      console.error("✗ --only-villas provided but no valid numbers parsed");
+      process.exit(1);
+    }
+    parsed.onlyVillas = nums;
+  }
+  return parsed;
 }
 
 async function main() {
-  const { csv, project, creator } = parseArgs();
+  const { csv, project, creator, onlyVillas } = parseArgs();
   const csvAbs = path.resolve(process.cwd(), csv);
   if (!fs.existsSync(csvAbs)) {
     console.error(`✗ CSV not found: ${csvAbs}`);
@@ -52,6 +76,7 @@ async function main() {
   console.log(`  CSV      ${csvAbs}`);
   console.log(`  Project  ${project}`);
   console.log(`  Creator  ${creator}`);
+  if (onlyVillas) console.log(`  Villas   ${onlyVillas.join(", ")} (scoped)`);
   console.log(``);
 
   const csvText = fs.readFileSync(csvAbs, "utf-8");
@@ -65,6 +90,7 @@ async function main() {
       csvText,
       projectName: project,
       creatorUsername: creator,
+      onlyVillas,
     });
   } finally {
     await prisma.$disconnect();
