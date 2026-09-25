@@ -5,7 +5,7 @@
  *
  * Idempotent by Colab's row id: re-running skips already-imported rows.
  *
- *   PROJECT_NAME="Amanvana - Phase 1" \
+ *   PROJECT_NAME="Amanvana" \
  *   INSPECTIONS_CSV=./checklists.csv \
  *   ISSUES_CSV=./issues.csv \
  *   ALLOW_COLAB_QAQC_IMPORT=1 \
@@ -31,7 +31,7 @@ if (/neon\.tech/i.test(url) && process.env.ALLOW_COLAB_QAQC_IMPORT !== "1") {
 
 const inspectionsCsv = process.env.INSPECTIONS_CSV;
 const issuesCsv = process.env.ISSUES_CSV;
-const projectName = process.env.PROJECT_NAME ?? "Amanvana - Phase 1";
+const projectName = process.env.PROJECT_NAME ?? "Amanvana";
 if (!inspectionsCsv && !issuesCsv) {
   console.error("At least one of INSPECTIONS_CSV or ISSUES_CSV is required");
   process.exit(1);

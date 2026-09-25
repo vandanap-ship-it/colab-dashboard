@@ -4,7 +4,7 @@
  * Dashboard's active-hindrances card, and EHS's Safe Man-Hours count
  * (which is `Σ ManpowerEntry.actualCount * 8`).
  *
- *   PROJECT_NAME="Amanvana - Phase 1" \
+ *   PROJECT_NAME="Amanvana" \
  *   MANPOWER_CSV=colab-manpower.csv \
  *   HINDRANCES_CSV=colab-hindrances.csv \
  *   ALLOW_COLAB_MPWR_IMPORT=1 \
@@ -26,7 +26,7 @@ if (/neon\.tech/i.test(url) && process.env.ALLOW_COLAB_MPWR_IMPORT !== "1") {
 
 const manpowerCsv = process.env.MANPOWER_CSV;
 const hindrancesCsv = process.env.HINDRANCES_CSV;
-const projectName = process.env.PROJECT_NAME ?? "Amanvana - Phase 1";
+const projectName = process.env.PROJECT_NAME ?? "Amanvana";
 if (!manpowerCsv && !hindrancesCsv) {
   console.error("At least one of MANPOWER_CSV or HINDRANCES_CSV required");
   process.exit(1);

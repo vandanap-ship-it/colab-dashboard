@@ -104,7 +104,7 @@ function detectFromBlockShape(blockCodes: string[]): boolean {
 
 /** Amanvana's project override, registered from src/lib/projects/index.ts. */
 export const amanvanaProjectOverride = {
-  name: "Amanvana - Phase 1" as const,
+  name: "Amanvana" as const,
   detectFromBlockShape,
   abrahamScopeOverride,
   elegantScopeOverride,

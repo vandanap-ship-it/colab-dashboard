@@ -2,7 +2,7 @@
  * One-off importer for Colab's Areas of Concern (AOC) → Siddhi Concern rows.
  * Populates the Concerns module with the team's existing open items.
  *
- *   PROJECT_NAME="Amanvana - Phase 1" \
+ *   PROJECT_NAME="Amanvana" \
  *   AOC_CSV=colab-aoc.csv \
  *   ALLOW_COLAB_AOC_IMPORT=1 \
  *   npx tsx scripts/import-colab-aoc.ts
@@ -22,7 +22,7 @@ if (/neon\.tech/i.test(url) && process.env.ALLOW_COLAB_AOC_IMPORT !== "1") {
 }
 
 const csvPathEnv = process.env.AOC_CSV;
-const projectName = process.env.PROJECT_NAME ?? "Amanvana - Phase 1";
+const projectName = process.env.PROJECT_NAME ?? "Amanvana";
 if (!csvPathEnv || !existsSync(csvPathEnv)) {
   console.error("AOC_CSV env var required + must exist");
   process.exit(1);

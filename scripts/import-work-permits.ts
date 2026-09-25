@@ -6,7 +6,7 @@
  * Siddhi's DB. Idempotent by the CSV's `id` column — re-running skips
  * rows already imported.
  *
- *   PROJECT_NAME="Amanvana - Phase 1" \
+ *   PROJECT_NAME="Amanvana" \
  *   CSV_PATH=./work-permits.csv \
  *   npx tsx scripts/import-work-permits.ts
  *
@@ -31,7 +31,7 @@ if (/neon\.tech/i.test(url) && process.env.ALLOW_WORK_PERMIT_IMPORT !== "1") {
 }
 
 const csvPathEnv = process.env.CSV_PATH;
-const projectName = process.env.PROJECT_NAME ?? "Amanvana - Phase 1";
+const projectName = process.env.PROJECT_NAME ?? "Amanvana";
 if (!csvPathEnv) {
   console.error("CSV_PATH env var required");
   process.exit(1);

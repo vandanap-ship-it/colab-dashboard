@@ -3,7 +3,7 @@
  * rows. Populates the Progress tab + Dashboard KPIs + all rollup reports
  * (Master, Cash Flow, Earned Value) with the team's historical progress.
  *
- *   PROJECT_NAME="Amanvana - Phase 1" \
+ *   PROJECT_NAME="Amanvana" \
  *   PROGRESS_CSV=colab-progress.csv \
  *   ALLOW_COLAB_PROGRESS_IMPORT=1 \
  *   npx tsx scripts/import-colab-progress.ts
@@ -28,7 +28,7 @@ if (/neon\.tech/i.test(url) && process.env.ALLOW_COLAB_PROGRESS_IMPORT !== "1") 
 }
 
 const csvPathEnv = process.env.PROGRESS_CSV;
-const projectName = process.env.PROJECT_NAME ?? "Amanvana - Phase 1";
+const projectName = process.env.PROJECT_NAME ?? "Amanvana";
 if (!csvPathEnv || !existsSync(csvPathEnv)) {
   console.error("PROGRESS_CSV env var required + must exist");
   process.exit(1);

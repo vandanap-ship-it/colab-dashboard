@@ -92,8 +92,9 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
     : `${fmtDayShort(wkStart)} – ${fmtDayShort(wkEnd)} ${wkEnd.getFullYear()}`;
   const wkEndStr = fmtDayShort(wkEnd);
   const wkEndStrFull = fmtDayFull(wkEnd); // "Sun 23 Aug" — narrative form
-  // Project display name: DB stores "Amanvana - Phase 1" but Python's PDF
-  // uses "Amanvana · Phase 1" (interpunct) in the header eyebrow.
+  // Project display name: swap hyphenated segments for interpunct so a
+  // legacy "Foo - Bar" title renders as "Foo · Bar" like the Python PDF
+  // header eyebrow. Plain names ("Amanvana") pass through unchanged.
   const projectDisplay = report.project.name.replace(/\s+-\s+/g, " · ");
 
   // Abraham (Contractor 1) is the only party in the milestone maths per spec.
