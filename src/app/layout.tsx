@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Fraunces } from "next/font/google";
 import "./globals.css";
 import Providers from "./providers";
 import StagingBanner from "@/components/StagingBanner";
+import BetaBanner from "@/components/BetaBanner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -64,6 +65,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-ivory text-ink">
         <StagingBanner />
+        <BetaBanner />
         <Providers>{children}</Providers>
       </body>
     </html>
