@@ -114,7 +114,7 @@ export default function NewProgressForm({
   // After save: show an in-place "Saved · Add another / Back to home" card
   // instead of redirecting to /mobile/{id}. Site engineers log many entries
   // per shift — booting them home every time forced 2 extra taps per entry.
-  const [saved, setSaved] = useState<null | { queued: boolean; mode: "publish" | "draft" }>(null);
+  const [saved, setSaved] = useState<null | { queued: boolean; mode: "publish" | "draft"; displayId?: string }>(null);
   // When the engineer chooses "Log another on {villa}" after a save, we
   // clear the picked activity BUT keep a hint so the picker can jump the
   // user straight to that villa's milestone list on the next log. Null
@@ -487,6 +487,7 @@ export default function NewProgressForm({
     // surface the error inline (the server row still exists, so nothing
     // is lost — the engineer just retries).
     let saved = false;
+    let serverDisplayId: string | undefined;
     try {
       const res = await fetch(endpoint, {
         method,
@@ -495,6 +496,14 @@ export default function NewProgressForm({
       });
       if (res.ok) {
         saved = true;
+        // Colab-parity PROG-XXXXXXXX id — show it on the success card
+        // so the engineer has a receipt. Ignore parse errors: an old
+        // server that doesn't return the id shouldn't block the flow.
+        try {
+          const j = await res.json();
+          if (j?.entry?.displayId) serverDisplayId = j.entry.displayId;
+          else if (j?.displayId) serverDisplayId = j.displayId;
+        } catch {}
       } else if (res.status >= 400 && res.status < 500) {
         const data = await res.json().catch(() => null);
         setPending(false);
@@ -529,7 +538,7 @@ export default function NewProgressForm({
     } else {
       toast.info("Saved on this device. It will sync when you're back online.");
     }
-    setSaved({ queued: !saved, mode });
+    setSaved({ queued: !saved, mode, displayId: serverDisplayId });
     router.refresh();
   }
 
@@ -593,11 +602,13 @@ export default function NewProgressForm({
         detail={
           isDraft
             ? selected
-              ? `Stashed as a draft for ${selected.name} on ${selected.path.villaLabel}. Find it under Drafts on the Progress list to finish and publish.`
+              ? `Stashed as a draft for ${selected.name} on ${selected.path.villaLabel}${saved.displayId ? ` · ${saved.displayId}` : ""}. Find it under Drafts on the Progress list to finish and publish.`
               : "Stashed as a draft. Find it under Drafts on the Progress list to finish and publish."
             : selected
-              ? `Logged for ${selected.name} · Block ${selected.path.blockCode} · ${selected.path.villaLabel}.`
-              : undefined
+              ? `Logged for ${selected.name} · Block ${selected.path.blockCode} · ${selected.path.villaLabel}${saved.displayId ? ` · ${saved.displayId}` : ""}.`
+              : saved.displayId
+                ? `Logged as ${saved.displayId}.`
+                : undefined
         }
         projectId={projectId}
         onAddAnother={resetForm}
