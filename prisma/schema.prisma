@@ -773,6 +773,14 @@ model Inspection {
   totalQuantityPct    Float?
   executedQuantityPct Float?
 
+  // Colab-parity fields — Sep 2026 batch 5, from the Thangamani + Girish
+  // walk. `triggerType` reflects Colab's summary card: "Manual" when a
+  // filler tapped Raise, "Auto" when it was scheduled or spawned from a
+  // progress-precheck hook. Reviewer's own top-level remark on
+  // Approve & Close / Reject lands on `reviewerNote`.
+  triggerType     String?   @default("Manual") // Manual | Auto
+  reviewerNote    String?
+
   project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   wbsNode    WBSNode?          @relation(fields: [wbsNodeId], references: [id])
   filledBy   User              @relation("InspectionFiller", fields: [filledById], references: [id])
@@ -806,6 +814,17 @@ model InspectionItem {
   // wider evidence (progress shot, overall context photo).
   photoUrl      String?
   orderIndex    Int      @default(0)
+
+  // Colab-parity: per-item reviewer feedback. Screens 10-17 of the
+  // Thangamani + Girish zips show a "Approver 1" row per item where the
+  // reviewer can leave a comment (💬) or a photo (📷). Shraddha 2026-09-30:
+  // "The chat symbol is just to enter comments" — so ↩ Add Reply and 💬
+  // open the same note editor; one text column is enough. Camera is
+  // its own column. White Lotus is single-approver per WIR so a plain
+  // pair of columns is sufficient (multi-approver would become a child
+  // table).
+  reviewerNote     String?
+  reviewerPhotoUrl String?
 
   inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
 

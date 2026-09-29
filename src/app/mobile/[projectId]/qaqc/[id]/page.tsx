@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
-import { CalendarClock, CheckCircle2, FileEdit, MessageSquare, X, Clock, User as UserIcon, Users as UsersIcon, Camera, AlertTriangle } from "lucide-react";
-import Link from "next/link";
+import { CalendarClock, CheckCircle2, FileEdit, MessageSquare, X, Clock, User as UserIcon, Users as UsersIcon, Camera } from "lucide-react";
+import MobileInspectionItemReviewerControls from "@/components/mobile/MobileInspectionItemReviewerControls";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, canAccessScopedRow, MODULES } from "@/lib/modules";
@@ -275,41 +275,19 @@ export default async function MobileInspectionDetailPage({
                   </div>
 
                   {/* Colab-parity "Approver 1" row · appears while the WIR
-                      is IN_REVIEW so the reviewer can flag a specific item.
-                      ⚠️ links to the Issue form with the WIR + activity
-                      pre-filled so the raised issue tracks back to this
-                      exact checkpoint. Chat + camera icons are shown for
-                      visual parity — per-item reviewer notes / photos land
-                      in the follow-up wave. */}
-                  {inspection.status === "IN_REVIEW" && (
-                    <div className="flex items-center justify-between text-[11px] text-stone-500 pl-7">
-                      <span className="font-semibold text-ink">Approver 1</span>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          disabled
-                          aria-label="Add reviewer comment (coming soon)"
-                          className="text-stone-300"
-                        >
-                          <MessageSquare className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          disabled
-                          aria-label="Attach reviewer photo (coming soon)"
-                          className="text-stone-300"
-                        >
-                          <Camera className="w-4 h-4" />
-                        </button>
-                        <Link
-                          href={`/mobile/${projectId}/issue/new?inspectionId=${inspection.id}${inspection.wbsNode ? `&wbsNodeId=${inspection.wbsNode.id}` : ""}`}
-                          aria-label="Flag this checkpoint as an issue"
-                          className="text-amber-600 hover:text-amber-700"
-                        >
-                          <AlertTriangle className="w-4 h-4" />
-                        </Link>
-                      </div>
-                    </div>
+                      is IN_REVIEW so the reviewer can leave a comment,
+                      photo, or flag the checkpoint as an issue. Interactive
+                      pieces live in the client component so the tap
+                      handlers can call the per-item PATCH endpoint. */}
+                  {inspection.status === "IN_REVIEW" && iCanReview && (
+                    <MobileInspectionItemReviewerControls
+                      projectId={projectId}
+                      inspectionId={inspection.id}
+                      itemId={item.id}
+                      wbsNodeId={inspection.wbsNode?.id ?? null}
+                      initialNote={item.reviewerNote}
+                      initialPhotoUrl={item.reviewerPhotoUrl}
+                    />
                   )}
                 </li>
               ))}
