@@ -39,6 +39,7 @@ type TabKey = "approvals" | "requests" | "all";
 const STATUS_STYLES: Record<WorkPermitStatus, string> = {
   PENDING: "bg-amber-100 text-amber-800 border-amber-200",
   APPROVED: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  SUSPENDED: "bg-orange-100 text-orange-800 border-orange-200",
   REJECTED: "bg-red-100 text-red-800 border-red-200",
   CLOSED: "bg-stone-200 text-stone-700 border-stone-300",
 };
@@ -62,6 +63,7 @@ export default function WorkPermitList({
   const [counts, setCounts] = useState<Record<WorkPermitStatus, number>>({
     PENDING: 0,
     APPROVED: 0,
+    SUSPENDED: 0,
     REJECTED: 0,
     CLOSED: 0,
   });

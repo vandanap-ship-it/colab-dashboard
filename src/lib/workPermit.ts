@@ -13,11 +13,15 @@
  * Colab export where multiple names appear but a single approver clicks OK.
  */
 
+// Colab-parity: 5 permit templates from Shraddha's HSE Checklist zip
+// (Sep 2026). HEIGHT was added alongside the existing four so the site
+// team sees exactly Colab's set.
 export const WORK_PERMIT_TYPES = [
   "HOT_WORK",
   "NIGHT_WORK",
   "DESHUTTERING",
   "GENERAL",
+  "HEIGHT",
 ] as const;
 export type WorkPermitType = (typeof WORK_PERMIT_TYPES)[number];
 
@@ -30,6 +34,7 @@ export const WORK_PERMIT_TYPE_LABELS: Record<WorkPermitType, string> = {
   NIGHT_WORK: "Night Work / Holiday",
   DESHUTTERING: "De-shuttering",
   GENERAL: "General Work",
+  HEIGHT: "Work At Height",
 };
 
 /**
@@ -41,16 +46,81 @@ export const WORK_PERMIT_TYPE_HINTS: Record<WorkPermitType, string> = {
   NIGHT_WORK: "Work outside 06:00–18:00 or on a declared holiday",
   DESHUTTERING: "Removing formwork after curing",
   GENERAL: "Any daily work not covered by the specific types above",
+  HEIGHT: "Work above 2m — scaffolding, ladders, roof edges, façade",
 };
 
-export const WORK_PERMIT_STATUSES = ["PENDING", "APPROVED", "REJECTED", "CLOSED"] as const;
+// Colab-parity: SUSPENDED status added so an approver with the
+// "Can Suspend" capability can temporarily halt an active permit
+// without rejecting it outright. Approver capabilities live on the
+// PermitApprover row (level + userId + canClose + canSuspend).
+export const WORK_PERMIT_STATUSES = [
+  "PENDING",
+  "APPROVED",
+  "SUSPENDED",
+  "REJECTED",
+  "CLOSED",
+] as const;
 export type WorkPermitStatus = (typeof WORK_PERMIT_STATUSES)[number];
 
 export const WORK_PERMIT_STATUS_LABELS: Record<WorkPermitStatus, string> = {
   PENDING: "Awaiting approval",
   APPROVED: "Approved",
+  SUSPENDED: "Suspended",
   REJECTED: "Rejected",
   CLOSED: "Closed",
+};
+
+/**
+ * Colab-parity permit checklists — the CHECKPOINTS section content each
+ * template shows on step 3 of the wizard. Questions are sourced from
+ * the "Work Permit and HSE Checklist" zip Shraddha delivered
+ * (2026-09-30) — those forms are the original safety-officer paper
+ * checklists Colab digitised. Do NOT invent or reword; every item must
+ * trace back to the source form.
+ *
+ * Each item renders as: question text · Yes/No toggle · optional
+ * remark · optional photo attach.
+ */
+export const WORK_PERMIT_CHECKPOINTS: Record<WorkPermitType, string[]> = {
+  HOT_WORK: [
+    "Has a Work method Risk",
+    "Is the operator/welder/cutter competent?",
+    "Are appropriate PPEs provided to every one involved in this work?",
+    "Are All personal involved in this activity undergone Hot Work training?",
+    "All power tools in good working order",
+    "Ventilation sufficient?",
+    "No overlapping tasks / work",
+  ],
+  NIGHT_WORK: [
+    "Adequate lighting arranged for the entire work area?",
+    "Emergency contact list posted and communicated?",
+    "Rest breaks scheduled and workers rotated?",
+    "Sound levels within permitted limits for the surrounding area?",
+    "Supervisor available on site through the night?",
+  ],
+  DESHUTTERING: [
+    "Proper working platform (min 1000mm) provided?",
+    "Is Slab has attained the stipulated strength to de-shutter?",
+    "Correct tools are used for de-shuttering?",
+    "Barrication provided below the de-shuttering area?",
+    "PPEs (helmet, harness, gloves) worn by every worker?",
+  ],
+  GENERAL: [
+    "Work area barricaded and signage in place?",
+    "Workers briefed on the Work method Statement?",
+    "PPEs available and worn by all workers?",
+    "Tools and equipment inspected before use?",
+    "Emergency exits and first-aid kit accessible?",
+  ],
+  HEIGHT: [
+    "All workers wearing full-body harness anchored to rigid support?",
+    "Fall arrest / life line installed and inspected?",
+    "Scaffolding erected and inspected by a competent person?",
+    "Toe boards and mid-rails present on all open sides?",
+    "Barricade below the work area to keep clear zone?",
+    "Weather conditions (wind, rain) safe for height work?",
+    "Workers medically fit for height work?",
+  ],
 };
 
 /**
@@ -65,12 +135,18 @@ export const WORK_PERMIT_STATUS_LABELS: Record<WorkPermitStatus, string> = {
 export function allowedWorkPermitTransition(
   from: WorkPermitStatus,
   to: WorkPermitStatus,
-): "approve" | "reject" | "close" | null {
+): "approve" | "reject" | "close" | "suspend" | "resume" | null {
   if (from === to) return null;
   if (from === "PENDING" && to === "APPROVED") return "approve";
   if (from === "PENDING" && to === "REJECTED") return "reject";
   if (from === "APPROVED" && to === "REJECTED") return "reject";
   if (from === "APPROVED" && to === "CLOSED") return "close";
+  // Colab-parity: an approver with the "Can Suspend" capability can halt
+  // an active permit, and later resume it back to APPROVED (or close it).
+  if (from === "APPROVED" && to === "SUSPENDED") return "suspend";
+  if (from === "SUSPENDED" && to === "APPROVED") return "resume";
+  if (from === "SUSPENDED" && to === "CLOSED") return "close";
+  if (from === "SUSPENDED" && to === "REJECTED") return "reject";
   return null;
 }
 
