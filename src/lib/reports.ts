@@ -742,18 +742,39 @@ async function getMasterReportUncached(
     .filter((d): d is Date => Boolean(d))
     .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
 
-  // Latest projected end across ALL leaves. Priority: actualFinish (already
-  // done) → projectedFinish (schedule-based estimate) → baselineFinish
-  // (planned, for unstarted activities). Ignoring baselineFinish (as the
-  // old code did) let all the future baselineFinish dates drop out — the
-  // "latest" then became whatever was the most recently completed activity,
-  // which is why Amanvana's Master Report was showing a Sep 28 2026
-  // projected end even though the schedule extends to 2029.
-  const latestProjected = leaves.reduce<Date | null>((max, l) => {
-    const cand = l.actualFinish ?? l.projectedFinish ?? l.baselineFinish;
-    if (!cand) return max;
-    return !max || cand > max ? cand : max;
-  }, null);
+  // Latest projected end.
+  //
+  // Preferred path: MAX(actualEnd, plannedEnd) across every ColabActivity
+  // row. Colab's plannedEnd on the last-scheduled activity per villa is
+  // the site team's own answer to "when will this villa finish", and
+  // matches the projected end in Colab's dashboards + exports.
+  //
+  // The old WBSNode-based path returned Dec 2028 on Amanvana because the
+  // Colab importer overwrites WBSNode.baselineFinish on match, and every
+  // matched leaf carried a Colab-planned end that fell before Elegant's
+  // MPP's true Mar 2029 finish — the max then ignored the unmatched MPP
+  // leaves that still had the correct baselineFinish.
+  //
+  // Fallback (no ColabActivity yet): the historic leaf-based reduce,
+  // which still holds for MPP-only projects.
+  let latestProjected: Date | null = null;
+  const latestProjectedFromColab = await prisma.$queryRawUnsafe<
+    Array<{ latest: Date | null }>
+  >(
+    `SELECT GREATEST(MAX("actualEnd"), MAX("plannedEnd")) AS latest
+     FROM "ColabActivity"
+     WHERE "projectId" = $1`,
+    projectId,
+  );
+  if (latestProjectedFromColab[0]?.latest) {
+    latestProjected = latestProjectedFromColab[0].latest;
+  } else {
+    latestProjected = leaves.reduce<Date | null>((max, l) => {
+      const cand = l.actualFinish ?? l.projectedFinish ?? l.baselineFinish;
+      if (!cand) return max;
+      return !max || cand > max ? cand : max;
+    }, null);
+  }
 
   // Overall progress %.
   //
