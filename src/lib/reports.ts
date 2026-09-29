@@ -935,57 +935,137 @@ async function getMasterReportUncached(
     }
   }
 
-  // ---- Total activities (all leaves, with location breadcrumb) ----
-  const nameById = new Map(allNodes.map((n) => [n.id, n.name]));
-  const parentByIdMap = new Map(allNodes.map((n) => [n.id, n.parentId]));
-  function locationFor(leafId: string): string {
-    const parts: string[] = [];
-    let cur = parentByIdMap.get(leafId) ?? null;
-    let depth = 0;
-    while (cur && depth < 6) {
-      const name = nameById.get(cur);
-      // Skip the project root (depth 0 from root)
-      const node = allNodes.find((n) => n.id === cur);
-      if (node && node.level >= 1 && name) parts.push(name);
-      cur = parentByIdMap.get(cur) ?? null;
-      depth += 1;
-    }
-    return parts.reverse().join(" / ") || "—";
+  // ---- Total activities — sourced from ColabActivity for Colab parity ----
+  //
+  // Previous implementation walked the WBSNode parent chain to build the
+  // Location breadcrumb, but our MSP importer creates leaf-only WBSNodes
+  // (no block/villa parent WBSNodes), so every leaf's parent chain was
+  // empty and Location showed as "—". The old path also read planned %
+  // from MPP baseline dates and actual % from WBSNode.percentComplete,
+  // both of which drift from Colab's Total_Progress_% / Planned_Progress_%.
+  //
+  // New path: iterate ColabActivity, resolve villa label + section name
+  // from lookup maps, use Colab's own dates + planned/actual % / reason.
+  // Falls back to the old leaf-based path when no ColabActivity rows
+  // exist (fresh MPP-only project), so a picker still shows activities
+  // pre-Colab-import.
+  const [colabActivityRows, villaRowsForActivities, sectionRowsForActivities] = await Promise.all([
+    prisma.colabActivity.findMany({
+      where: { projectId },
+      select: {
+        id: true,
+        villaId: true,
+        sectionId: true,
+        plannedStart: true,
+        plannedEnd: true,
+        actualStart: true,
+        actualEnd: true,
+        progressDate: true,
+        totalPct: true,
+        plannedPct: true,
+        reasonNote: true,
+        rawColabRow: true,
+      },
+    }),
+    prisma.villa.findMany({
+      where: { projectId },
+      select: { id: true, number: true, label: true },
+    }),
+    prisma.milestoneSection.findMany({
+      where: { projectId },
+      select: { id: true, name: true, orderIndex: true },
+    }),
+  ]);
+  const villaLabelById2 = new Map(
+    villaRowsForActivities.map((v) => [v.id, v.label ?? `Villa ${v.number}`]),
+  );
+  const villaNumberById = new Map(villaRowsForActivities.map((v) => [v.id, v.number]));
+  const sectionNameById = new Map(sectionRowsForActivities.map((s) => [s.id, s.name]));
+  const sectionOrderById = new Map(sectionRowsForActivities.map((s) => [s.id, s.orderIndex]));
+
+  // Normalise a delay reason: trim, drop trailing "." / "-", collapse
+  // whitespace, treat "." or "-" alone as blank. Case is preserved so
+  // the site team's typing style stays recognisable.
+  function normalizeReason(raw: string | null | undefined): string | null {
+    if (!raw) return null;
+    const s = raw.replace(/\s+/g, " ").trim().replace(/[.\s]+$/g, "");
+    if (!s || s === "." || s === "-") return null;
+    return s;
   }
 
-  // Filter to activities that overlap the report window. Amanvana has ~7000
-  // leaves, and the pre-filter version rendered them all — a 44 MB HTML page
-  // that took 10s to load and choked print-to-PDF. An activity is "in play"
-  // during [from, to] if its planned OR actual/projected window overlaps the
-  // range. Fully-complete-before-range and not-yet-started-after-range rows
-  // both drop out. Falls back to all leaves when no range is provided so
-  // downstream callers without dates still get a sensible list.
-  function overlapsRange(l: (typeof leaves)[number]): boolean {
+  // Filter activities that overlap the report window. Same overlap rule
+  // as the old path — an activity is "in play" if its planned OR actual
+  // window intersects [rangeFrom, rangeTo]. Unbounded rows pass through.
+  function overlapsRangeColab(r: { plannedStart: Date | null; plannedEnd: Date | null; actualStart: Date | null; actualEnd: Date | null; projectedFinish?: Date | null }): boolean {
     if (!rangeFrom || !rangeTo) return true;
-    const start = l.baselineStart ?? l.actualStart;
-    const end = l.actualFinish ?? l.projectedFinish ?? l.baselineFinish;
-    // "Unknown either bound" is treated as overlapping — safer to include
-    // than silently drop.
+    const start = r.plannedStart ?? r.actualStart;
+    const end = r.actualEnd ?? r.plannedEnd ?? null;
     if (!start && !end) return true;
     if (start && start.getTime() > rangeTo.getTime()) return false;
     if (end && end.getTime() < rangeFrom.getTime()) return false;
     return true;
   }
 
-  const totalActivities: MasterReportData["totalActivities"] = leaves
-    .filter(overlapsRange)
-    .map((l) => ({
-      id: l.id,
-      name: l.name,
-      location: locationFor(l.id),
-      plannedPercent: Math.round(plannedPercentFor(l.baselineStart, l.baselineFinish, today) * 100) / 100,
-      actualPercent: Math.round((l.percentComplete ?? 0) * 100) / 100,
-      delayReason: l.delayReason,
-      plannedStart: l.baselineStart,
-      plannedEnd: l.baselineFinish,
-      projectedEnd: l.projectedFinish ?? l.actualFinish,
-    }))
-    .sort((a, b) => a.location.localeCompare(b.location) || a.name.localeCompare(b.name));
+  let totalActivities: MasterReportData["totalActivities"];
+  if (colabActivityRows.length > 0) {
+    totalActivities = colabActivityRows
+      .filter(overlapsRangeColab)
+      .map((r) => {
+        const raw = (r.rawColabRow ?? {}) as Record<string, string | undefined | null>;
+        const villaLabel = r.villaId ? villaLabelById2.get(r.villaId) ?? "" : "";
+        const sectionName = r.sectionId ? sectionNameById.get(r.sectionId) ?? "" : "";
+        // Prefer Colab's own Activity_Name so the row's naming matches the
+        // raw CSV export; fall back to composing from Sub_Location +
+        // Activity_Head where Activity_Name is a stub like "Works".
+        const activityName =
+          (raw["Activity_Name"] && raw["Activity_Name"].trim()) ||
+          [raw["Sub_Location"], raw["Activity_Head"]].filter(Boolean).join(" — ") ||
+          "(unnamed activity)";
+        return {
+          id: r.id,
+          name: activityName,
+          location: [villaLabel, sectionName].filter(Boolean).join(" · ") || "—",
+          plannedPercent: Math.round((r.plannedPct ?? 0) * 100) / 100,
+          actualPercent: Math.round((r.totalPct ?? 0) * 100) / 100,
+          delayReason: normalizeReason(r.reasonNote),
+          plannedStart: r.plannedStart,
+          plannedEnd: r.plannedEnd,
+          projectedEnd: r.actualEnd,
+          _sortVilla: r.villaId ? villaNumberById.get(r.villaId) ?? 9999 : 9999,
+          _sortSection: r.sectionId ? sectionOrderById.get(r.sectionId) ?? 999 : 999,
+        };
+      })
+      .sort((a, b) => a._sortVilla - b._sortVilla || a._sortSection - b._sortSection || a.name.localeCompare(b.name))
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      .map(({ _sortVilla: _v, _sortSection: _s, ...rest }) => rest);
+  } else {
+    // Fallback — no Colab data yet, iterate WBSNode leaves the old way
+    // but read villa label from the villa map (safer than the parent
+    // chain walk which was broken for MSP-imported schedules).
+    const overlapsRange = (l: (typeof leaves)[number]): boolean => {
+      if (!rangeFrom || !rangeTo) return true;
+      const start = l.baselineStart ?? l.actualStart;
+      const end = l.actualFinish ?? l.projectedFinish ?? l.baselineFinish;
+      if (!start && !end) return true;
+      if (start && start.getTime() > rangeTo.getTime()) return false;
+      if (end && end.getTime() < rangeFrom.getTime()) return false;
+      return true;
+    };
+    totalActivities = leaves
+      .filter(overlapsRange)
+      .map((l) => ({
+        id: l.id,
+        name: l.name,
+        location: "—",
+        plannedPercent: Math.round(plannedPercentFor(l.baselineStart, l.baselineFinish, today) * 100) / 100,
+        actualPercent: Math.round((l.percentComplete ?? 0) * 100) / 100,
+        delayReason: normalizeReason(l.delayReason),
+        plannedStart: l.baselineStart,
+        plannedEnd: l.baselineFinish,
+        projectedEnd: l.projectedFinish ?? l.actualFinish,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
 
   return { overall, perZone, totalActivities };
 }
