@@ -139,6 +139,7 @@ export default function InspectionForm({
   projectId,
   editDraft,
   initialWbsNodeId,
+  initialTemplateId,
 }: {
   projectId: string;
   // `redirectTo` was accepted in an earlier iteration but never wired up.
@@ -156,6 +157,10 @@ export default function InspectionForm({
   // against. Ignored when editDraft is set, since that snapshot
   // already carries its own wbsNodeId.
   initialWbsNodeId?: string | null;
+  // Colab-parity: the template picker screen navigates here with this
+  // set to a template id. The form pre-applies that template so the
+  // filler sees the checklist rows and title without extra taps.
+  initialTemplateId?: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -247,7 +252,35 @@ export default function InspectionForm({
     fetch("/api/inspection-templates", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : { templates: [] }))
       .then((d) => {
-        if (!cancelled) setTemplates(d.templates ?? []);
+        if (!cancelled) {
+          const list: Template[] = d.templates ?? [];
+          setTemplates(list);
+          // Colab-parity: when the picker screen deep-links here with
+          // ?templateId=…, auto-apply that template on first render so
+          // the filler doesn't have to touch a dropdown to see rows
+          // and title. Only on fresh WIRs — a draft edit already has
+          // its own items.
+          if (initialTemplateId && !editDraft) {
+            const tpl = list.find((t) => t.id === initialTemplateId);
+            if (tpl) {
+              setTemplateId(tpl.id);
+              setTitle((cur) => cur.trim() || tpl.name);
+              setItems(
+                tpl.items
+                  .slice()
+                  .sort((a, b) => a.seq - b.seq)
+                  .map((it) => ({
+                    label: it.description,
+                    passed: null,
+                    notApplicable: false,
+                    notes: "",
+                    photo: null,
+                    photoUrl: null,
+                  })),
+              );
+            }
+          }
+        }
       })
       .catch(() => {
         if (!cancelled) setTemplates([]);
@@ -255,7 +288,7 @@ export default function InspectionForm({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialTemplateId, editDraft]);
 
   // Contractors on this project — powers the Colab-parity Contractor
   // picker bottom sheet. Fetch once on mount; server scopes by project.
@@ -808,7 +841,31 @@ export default function InspectionForm({
         />
       )}
 
-      {templates.length > 0 && (
+      {/* Template chip · Colab parity: the template is picked on the
+          "Add Checklist" screen before this form loads, so the form
+          just shows what's applied with a "Change" link back to the
+          picker. Draft edits (or the rare fresh-WIR-with-no-template)
+          fall back to the old dropdown so nothing gets stranded. */}
+      {templateId && templates.length > 0 ? (
+        <div className="rounded-lg border border-stone-200 bg-white p-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-widest text-stone-400">
+              Template
+            </p>
+            <p className="mt-0.5 text-sm font-semibold text-ink truncate">
+              {templates.find((t) => t.id === templateId)?.name ?? "Applied"}
+            </p>
+          </div>
+          {!isEditingDraft && (
+            <a
+              href={`/mobile/${projectId}/inspection/new`}
+              className="text-xs font-semibold text-ferrous-600 hover:text-ferrous-700 whitespace-nowrap"
+            >
+              Change
+            </a>
+          )}
+        </div>
+      ) : templates.length > 0 ? (
         <label className="block">
           <span className="text-sm font-medium text-stone-700">
             Start from a template <span className="text-stone-400">(optional)</span>
@@ -830,7 +887,7 @@ export default function InspectionForm({
             Loads the standard checkpoints. You can still edit, add, or remove items.
           </span>
         </label>
-      )}
+      ) : null}
 
       <label className="block">
         <span className="text-sm font-medium text-stone-700">Title</span>
