@@ -707,8 +707,39 @@ async function getMasterReportUncached(
       delayReason: true,
       weightPct: true, // per-activity weight from Colab's Physical_Progress column
       contractorId: true, // needed for the contractor-zone fallback below
+      villaId: true, // needed for the placeholder-actualStart sanitization below
     },
   });
+
+  // Placeholder-actualStart sanitization: earlier Colab imports (pre the
+  // isColabPlaceholderRow filter) called WBSNode.update with
+  // actualStart = 2026-01-26 on Villa 47-50's leaves. The importer's
+  // placeholder purge dropped ColabActivity rows but never touched
+  // WBSNode fields, so downstream aggregations (earliestActual, Elegant's
+  // zone start, contractor rollup) still see 26 Jan. Neutralise those
+  // ghost values here — cheaper and more auditable than a destructive
+  // DB purge, and only affects report reads.
+  const ghostVillaIds = new Set(
+    (
+      await prisma.villa.findMany({
+        where: { projectId, number: { gte: 47, lte: 50 } },
+        select: { id: true },
+      })
+    ).map((v) => v.id),
+  );
+  const GHOST_ACTUAL_START_ISO = "2026-01-26";
+  for (const n of allNodes) {
+    if (
+      n.villaId &&
+      ghostVillaIds.has(n.villaId) &&
+      n.actualStart &&
+      n.actualStart.toISOString().startsWith(GHOST_ACTUAL_START_ISO)
+    ) {
+      n.actualStart = null;
+      n.actualFinish = null;
+      n.percentComplete = 0;
+    }
+  }
 
   const childrenOf = new Map<string, typeof allNodes>();
   for (const n of allNodes) {
@@ -1094,6 +1125,18 @@ async function getMasterReportUncached(
   if (colabActivityRows.length > 0) {
     totalActivities = colabActivityRows
       .filter(overlapsRangeColab)
+      // Drop rows where every naming field is empty — these appear at
+      // the bottom of the Section 04 table as "(unnamed activity)" and
+      // reflect malformed Colab rows (activity_id with no location,
+      // head, or name). Auditing left in on the raw CSV export;
+      // rendered report skips them.
+      .filter((r) => {
+        const raw = (r.rawColabRow ?? {}) as Record<string, string | undefined | null>;
+        const hasName = !!(raw["Activity_Name"] && raw["Activity_Name"].trim());
+        const hasSubLocation = !!(raw["Sub_Location"] && raw["Sub_Location"].trim());
+        const hasHead = !!(raw["Activity_Head"] && raw["Activity_Head"].trim());
+        return hasName || hasSubLocation || hasHead;
+      })
       .map((r) => {
         const raw = (r.rawColabRow ?? {}) as Record<string, string | undefined | null>;
         const villaLabel = r.villaId ? villaLabelById2.get(r.villaId) ?? "" : "";

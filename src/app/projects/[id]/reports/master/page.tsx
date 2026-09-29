@@ -94,9 +94,63 @@ export default async function MasterReportPage({
     include: {
       contractor: { select: { name: true } },
       photos: { select: { id: true, url: true }, orderBy: { uploadedAt: "asc" } },
-      wbsNode: { select: { id: true, name: true, parentId: true, totalQuantity: true, unit: true } },
+      wbsNode: {
+        select: {
+          id: true,
+          name: true,
+          parentId: true,
+          totalQuantity: true,
+          unit: true,
+          villaId: true,
+          sectionId: true,
+        },
+      },
     },
   });
+
+  // Villa labels for the highlight cards. Prefer Villa.label when set
+  // (handles merged pairs like "Villa 03 & 04"), fall back to
+  // "Villa {number.toString().padStart(2,'0')}" so single-digit villas
+  // render as "Villa 05" not "Villa 5".
+  const highlightVillaIds = [
+    ...new Set(
+      highlightEntries
+        .map((e) => e.wbsNode?.villaId)
+        .filter((v): v is string => Boolean(v)),
+    ),
+  ];
+  const highlightSectionIds = [
+    ...new Set(
+      highlightEntries
+        .map((e) => e.wbsNode?.sectionId)
+        .filter((v): v is string => Boolean(v)),
+    ),
+  ];
+  const [highlightVillas, highlightSections] = await Promise.all([
+    highlightVillaIds.length > 0
+      ? prisma.villa.findMany({
+          where: { id: { in: highlightVillaIds } },
+          select: { id: true, number: true, label: true },
+        })
+      : Promise.resolve([]),
+    highlightSectionIds.length > 0
+      ? prisma.milestoneSection.findMany({
+          where: { id: { in: highlightSectionIds } },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const villaLabelForHighlight = new Map(
+    highlightVillas.map((v) => [
+      v.id,
+      v.label && v.label.trim().length > 0
+        ? v.label
+        : `Villa ${String(v.number).padStart(2, "0")}`,
+    ]),
+  );
+  const sectionNameForHighlight = new Map(
+    highlightSections.map((s) => [s.id, s.name]),
+  );
 
   // Build location path — walks up to 6 parents from each highlight entry's
   // WBSNode. Previous code loaded the entire WBSNode table (~14k rows for
@@ -336,6 +390,16 @@ export default async function MasterReportPage({
                     <h3 className="text-sm font-semibold text-stone-900 leading-snug mt-0.5">
                       {e.wbsNode.name}
                     </h3>
+                    {(e.wbsNode.villaId || e.wbsNode.sectionId) && (
+                      <p className="text-[11px] text-stone-600 mt-0.5">
+                        {[
+                          e.wbsNode.villaId ? villaLabelForHighlight.get(e.wbsNode.villaId) : null,
+                          e.wbsNode.sectionId ? sectionNameForHighlight.get(e.wbsNode.sectionId) : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    )}
                   </div>
                   <span className="text-[10px] text-stone-500 whitespace-nowrap">
                     {fmt(e.date)}
@@ -349,7 +413,10 @@ export default async function MasterReportPage({
                     meta: {
                       kind: "progress",
                       project: project.name,
-                      villa: locationFor(e.wbsNode.id),
+                      villa:
+                        (e.wbsNode.villaId
+                          ? villaLabelForHighlight.get(e.wbsNode.villaId)
+                          : null) ?? locationFor(e.wbsNode.id),
                       activity: e.wbsNode.name,
                       date: e.date.toISOString().slice(0, 10),
                       percent:
