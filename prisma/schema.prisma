@@ -59,6 +59,7 @@ model User {
   requestedWorkPermits     WorkPermit[]            @relation("WorkPermitRequester")
   approvedWorkPermits      WorkPermit[]            @relation("WorkPermitApprover")
   closedWorkPermits        WorkPermit[]            @relation("WorkPermitCloser")
+  suspendedWorkPermits     WorkPermit[]            @relation("WorkPermitSuspender")
   pushSubscriptions        PushSubscription[]
   notifications            Notification[]
 }
@@ -671,6 +672,25 @@ model WorkPermit {
   rejectedAt   DateTime?
   rejectionReason String?
 
+  // Colab-parity fields (Sep 2026 batch 4 · from Abhishek zip + HSE
+  // Checklist forms Shraddha delivered 2026-09-30).
+  //
+  //   checklistResponses - answers to the per-template CHECKPOINTS array.
+  //                        Shape: [{ q: string; passed: boolean|null;
+  //                        remark?: string; photoUrl?: string }].
+  //                        Stored as JSON so a template can grow rows
+  //                        without a schema migration; the template's
+  //                        canonical questions live in
+  //                        src/lib/workPermit.ts WORK_PERMIT_CHECKPOINTS.
+  //   suspendedReason    - free-text when an approver with the "Can
+  //                        Suspend" capability halts the permit.
+  //   suspendedById +    - who + when the suspension happened.
+  //   suspendedAt
+  checklistResponses Json?
+  suspendedById      String?
+  suspendedAt        DateTime?
+  suspendedReason    String?
+
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
@@ -682,6 +702,7 @@ model WorkPermit {
   requester  User              @relation("WorkPermitRequester", fields: [requesterId], references: [id])
   approver   User?             @relation("WorkPermitApprover", fields: [approvedById], references: [id])
   closer     User?             @relation("WorkPermitCloser", fields: [closedById], references: [id])
+  suspender  User?             @relation("WorkPermitSuspender", fields: [suspendedById], references: [id])
   photos     WorkPermitPhoto[]
 
   @@index([projectId])

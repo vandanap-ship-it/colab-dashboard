@@ -20,6 +20,16 @@ import {
 
 const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
+// Colab-parity checklist response shape — one entry per template
+// CHECKPOINT. `q` mirrors the template question at capture time so
+// audit + backfill work even if the template later changes.
+const ChecklistResponseSchema = z.object({
+  q: z.string().min(1).max(500),
+  passed: z.boolean().nullable(),
+  remark: z.string().max(1000).optional(),
+  photoUrl: z.string().url().optional(),
+});
+
 const PostWorkPermitSchema = z.object({
   projectId: z.string().min(1),
   type: z.enum(WORK_PERMIT_TYPES),
@@ -33,6 +43,10 @@ const PostWorkPermitSchema = z.object({
   wbsNodeId: z.string().min(1).nullable().optional(),
   approverIds: z.array(z.string().min(1)).min(1).max(10),
   photoUrls: z.array(z.string().url()).max(6).optional(),
+  // Colab-parity: per-checkpoint responses. Optional so the existing
+  // clients that don't yet send them keep working; new mobile builds
+  // populate this from the WORK_PERMIT_CHECKPOINTS template.
+  checklistResponses: z.array(ChecklistResponseSchema).max(50).optional(),
   idempotencyKey: z.string().max(120).optional(),
 });
 
@@ -162,6 +176,10 @@ export async function POST(req: Request) {
           requesterId: session.user.id,
           approverIds: serializeApproverIds(body.approverIds),
           status: "PENDING",
+          // Colab-parity: persist the Step-3 checklist answers verbatim.
+          // Null when the client didn't send any (legacy builds or a
+          // General Work permit that skipped the checklist).
+          checklistResponses: body.checklistResponses ?? undefined,
           idempotencyKey,
           photos:
             photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,

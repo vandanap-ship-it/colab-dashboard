@@ -11,6 +11,7 @@ import {
   WORK_PERMIT_TYPES,
   WORK_PERMIT_TYPE_HINTS,
   WORK_PERMIT_TYPE_LABELS,
+  WORK_PERMIT_CHECKPOINTS,
   type WorkPermitType,
 } from "@/lib/workPermit";
 
@@ -57,6 +58,28 @@ export default function WorkPermitForm({
   );
 
   const [type, setType] = useState<WorkPermitType>("GENERAL");
+
+  // Colab-parity per-checkpoint responses. Keyed by permit type so
+  // switching types (e.g. General → Hot Work) doesn't leak answers
+  // between templates — the fresh type starts every row unanswered.
+  type ChecklistAnswer = { passed: boolean | null; remark: string };
+  const [checklistState, setChecklistState] = useState<Record<WorkPermitType, ChecklistAnswer[]>>(() => {
+    const seed: Record<string, ChecklistAnswer[]> = {};
+    for (const t of WORK_PERMIT_TYPES) {
+      seed[t] = WORK_PERMIT_CHECKPOINTS[t].map(() => ({ passed: null, remark: "" }));
+    }
+    return seed as Record<WorkPermitType, ChecklistAnswer[]>;
+  });
+  const activeChecklist = checklistState[type];
+  function setChecklistAnswer(idx: number, patch: Partial<ChecklistAnswer>) {
+    setChecklistState((prev) => {
+      const next = { ...prev };
+      const arr = next[type].slice();
+      arr[idx] = { ...arr[idx], ...patch };
+      next[type] = arr;
+      return next;
+    });
+  }
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [workDate, setWorkDate] = useState(new Date().toISOString().slice(0, 10));
@@ -121,6 +144,22 @@ export default function WorkPermitForm({
       }
     }
 
+    // Colab-parity: attach the Step-3 checklist. Skip rows that are
+    // still unanswered — a truly empty checklist should round-trip as
+    // an empty array so downstream consumers can distinguish "not
+    // filled" from "all NO".
+    const checklistResponses = WORK_PERMIT_CHECKPOINTS[type]
+      .map((q, i) => {
+        const a = activeChecklist[i];
+        if (a.passed === null && !a.remark.trim()) return null;
+        return {
+          q,
+          passed: a.passed,
+          remark: a.remark.trim() || undefined,
+        };
+      })
+      .filter((x): x is { q: string; passed: boolean | null; remark: string | undefined } => x !== null);
+
     const payload = {
       idempotencyKey: crypto.randomUUID(),
       projectId,
@@ -134,6 +173,7 @@ export default function WorkPermitForm({
       contractorId: contractorId || undefined,
       approverIds: Array.from(selectedApprovers),
       photoUrls,
+      checklistResponses: checklistResponses.length > 0 ? checklistResponses : undefined,
     };
 
     let queued = false;
@@ -310,6 +350,74 @@ export default function WorkPermitForm({
           maxLength={2000}
         />
       </label>
+
+      {/* Colab-parity CHECKPOINTS section — per-template safety
+          checklist. Rows come from WORK_PERMIT_CHECKPOINTS keyed by
+          the selected type; changing the type switches the visible
+          question set. Each row = question · Yes/No toggle · optional
+          remark. Answers ride the payload as checklistResponses. */}
+      {activeChecklist.length > 0 && (
+        <div className="rounded-lg border border-stone-200 bg-white overflow-hidden">
+          <div className="bg-ink text-white px-3 py-2 text-xs font-semibold uppercase tracking-wider">
+            Checkpoints — {WORK_PERMIT_TYPE_LABELS[type]}
+          </div>
+          <ul className="divide-y divide-stone-100">
+            {WORK_PERMIT_CHECKPOINTS[type].map((question, idx) => {
+              const answer = activeChecklist[idx];
+              return (
+                <li key={idx} className="px-3 py-3 space-y-2">
+                  <div className="flex items-start gap-3">
+                    <p className="flex-1 text-sm text-ink leading-snug">
+                      {question}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setChecklistAnswer(idx, {
+                          passed: answer.passed === true ? null : true,
+                        })
+                      }
+                      className={`px-3 py-1 rounded-md text-xs font-semibold ${
+                        answer.passed === true
+                          ? "bg-emerald-500 text-white"
+                          : "bg-stone-100 text-stone-500"
+                      }`}
+                      aria-pressed={answer.passed === true}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setChecklistAnswer(idx, {
+                          passed: answer.passed === false ? null : false,
+                        })
+                      }
+                      className={`px-3 py-1 rounded-md text-xs font-semibold ${
+                        answer.passed === false
+                          ? "bg-red-500 text-white"
+                          : "bg-stone-100 text-stone-500"
+                      }`}
+                      aria-pressed={answer.passed === false}
+                    >
+                      No
+                    </button>
+                  </div>
+                  <textarea
+                    value={answer.remark}
+                    onChange={(e) =>
+                      setChecklistAnswer(idx, { remark: e.target.value })
+                    }
+                    placeholder="Add Remark (optional)"
+                    rows={2}
+                    className="w-full rounded-md border-2 border-dashed border-amber-300 bg-white px-2 py-1.5 text-sm resize-none"
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* Photos moved up from bottom of form — a permit request photo is
           often the fastest way to give the approver context (drawing
