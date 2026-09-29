@@ -102,6 +102,12 @@ export default function NewProgressForm({
     | { ok: false; reason: string; requiredWbsNodeId: string | null; requiredActivityName: string }
   >(null);
   const [gateLoading, setGateLoading] = useState(false);
+  // Colab-parity monotonic floor. When the engineer picks an activity,
+  // fetch its max prior PUBLISHED cumulative and pin the slider min
+  // there — progress can only increase (Madhavan zip · Edit Progress
+  // shows slider min-locked to current value). Server-enforced too;
+  // this just prevents the invalid-slide-then-submit dance.
+  const [priorMaxCumulative, setPriorMaxCumulative] = useState(0);
   // Formerly collapsed the notes/photos/labour section behind a toggle —
   // Shraddha flagged that as reading "optional" when it isn't. All fields
   // now expand inline; Save moves to the very bottom.
@@ -271,6 +277,45 @@ export default function NewProgressForm({
       cancelled = true;
     };
   }, [activityId]);
+
+  // Colab-parity monotonic floor · fetch the max prior PUBLISHED
+  // cumulative on the picked activity. Runs alongside the gate check so
+  // both settle before the slider renders. The slider `min` binds to
+  // this value; if the current pctState is below it, we bump the state
+  // up so the visible thumb starts at the floor rather than at 0%.
+  useEffect(() => {
+    if (!activityId || !selected) {
+      setPriorMaxCumulative(0);
+      return;
+    }
+    let cancelled = false;
+    fetch(
+      `/api/progress?projectId=${encodeURIComponent(projectId)}&wbsNodeId=${encodeURIComponent(activityId)}&limit=200`,
+      { cache: "no-store" },
+    )
+      .then((r) => (r.ok ? r.json() : { entries: [] }))
+      .then((j: { entries?: Array<{ status: string; cumulativeQuantity: number }> }) => {
+        if (cancelled) return;
+        const entries = Array.isArray(j.entries) ? j.entries : [];
+        let max = 0;
+        for (const e of entries) {
+          if (e.status === "PUBLISHED" && typeof e.cumulativeQuantity === "number") {
+            if (e.cumulativeQuantity > max) max = e.cumulativeQuantity;
+          }
+        }
+        setPriorMaxCumulative(max);
+        // Bump the slider position if the initial state is below the floor.
+        const total = selected.totalQuantity ?? 0;
+        const floorPct = total > 0 ? (max / total) * 100 : max;
+        setPctState((cur) => (cur < Math.floor(floorPct) ? Math.floor(floorPct) : cur));
+      })
+      .catch(() => {
+        if (!cancelled) setPriorMaxCumulative(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activityId, projectId, selected]);
 
   function updateLabour(i: number, patch: Partial<{ category: string; count: number }>) {
     setLabour((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -742,7 +787,14 @@ export default function NewProgressForm({
               </div>
               <input
                 type="range"
-                min={0}
+                min={
+                  // Colab-parity: slider min-locks to current cumulative
+                  // so progress can only increase. Falls back to 0 when
+                  // the activity is fresh (no prior rows).
+                  totalQty > 0
+                    ? Math.floor((priorMaxCumulative / totalQty) * 100)
+                    : Math.floor(priorMaxCumulative)
+                }
                 max={100}
                 step={1}
                 value={pct}
