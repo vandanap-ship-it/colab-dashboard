@@ -103,6 +103,7 @@ function villaMilestoneCounts(v: Villa) {
 
 interface DraftRow {
   id: string;
+  displayId: string | null;
   createdAt: string;
   cumulativeQuantity: number;
   wbsNode: {
@@ -253,8 +254,15 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
                     className="flex items-center gap-3 px-4 py-3"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="text-[14px] font-medium text-ink truncate">
-                        {d.wbsNode.name}
+                      <div className="flex items-center gap-2">
+                        <div className="text-[14px] font-medium text-ink truncate flex-1">
+                          {d.wbsNode.name}
+                        </div>
+                        {d.displayId && (
+                          <span className="shrink-0 rounded bg-sandstone-50 border border-sandstone-100 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-ink-2">
+                            {d.displayId}
+                          </span>
+                        )}
                       </div>
                       <div className="text-[12px] text-ink-3 mt-0.5">
                         {pct}% saved &middot; {new Date(d.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
