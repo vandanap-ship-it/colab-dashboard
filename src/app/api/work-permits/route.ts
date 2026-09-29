@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -14,6 +15,7 @@ import {
   WORK_PERMIT_TYPE_LABELS,
   isValidHhMm,
   serializeApproverIds,
+  generatePermitDisplayId,
   type WorkPermitStatus,
   type WorkPermitType,
 } from "@/lib/workPermit";
@@ -30,6 +32,30 @@ const ChecklistResponseSchema = z.object({
   photoUrl: z.string().url().optional(),
 });
 
+// Colab-parity: Step-2 "Approval Levels" row. Each row is one user
+// at one level with the two capability toggles ("Can Close" / "Can
+// Suspend"). Legacy clients that only know `approverIds` continue to
+// work — the POST handler synthesizes level-1 rows for them below.
+const ApproverInputSchema = z.object({
+  userId: z.string().min(1),
+  levelIndex: z.number().int().min(1).max(10).default(1),
+  levelName: z.string().max(60).optional(),
+  canClose: z.boolean().default(true),
+  canSuspend: z.boolean().default(false),
+  isDefault: z.boolean().default(false),
+  orderIndex: z.number().int().min(0).max(20).default(0),
+});
+
+// Colab-parity: Step-2 "Labour" multi-row (Abhishek zip, screen 10).
+// Every field is optional so a requester can enter just a headcount
+// or just a crew leader — Colab does the same.
+const LabourEntryInputSchema = z.object({
+  workerName: z.string().max(120).optional().nullable(),
+  role: z.string().max(60).optional().nullable(),
+  count: z.number().int().min(0).max(9999).optional().nullable(),
+  orderIndex: z.number().int().min(0).max(50).default(0),
+});
+
 const PostWorkPermitSchema = z.object({
   projectId: z.string().min(1),
   type: z.enum(WORK_PERMIT_TYPES),
@@ -41,12 +67,19 @@ const PostWorkPermitSchema = z.object({
   location: z.string().max(200).optional(),
   contractorId: z.string().min(1).nullable().optional(),
   wbsNodeId: z.string().min(1).nullable().optional(),
-  approverIds: z.array(z.string().min(1)).min(1).max(10),
+  // Legacy field — kept working for old builds. New form uses `approvers`
+  // (per-level, with capabilities); at least one of the two is required.
+  approverIds: z.array(z.string().min(1)).min(1).max(10).optional(),
+  approvers: z.array(ApproverInputSchema).min(1).max(20).optional(),
   photoUrls: z.array(z.string().url()).max(6).optional(),
   // Colab-parity: per-checkpoint responses. Optional so the existing
   // clients that don't yet send them keep working; new mobile builds
   // populate this from the WORK_PERMIT_CHECKPOINTS template.
   checklistResponses: z.array(ChecklistResponseSchema).max(50).optional(),
+  // Colab-parity Step-2 additions.
+  labourEntries: z.array(LabourEntryInputSchema).max(30).optional(),
+  coRequesterIds: z.array(z.string().min(1)).max(20).optional(),
+  activityHead: z.string().max(120).optional().nullable(),
   idempotencyKey: z.string().max(120).optional(),
 });
 
@@ -57,7 +90,12 @@ const workPermitInclude = {
   contractor: { select: { id: true, name: true } },
   wbsNode: { select: { id: true, name: true, taskCode: true } },
   photos: { select: { id: true, url: true } },
-} as const;
+  approvers: {
+    orderBy: [{ levelIndex: "asc" }, { orderIndex: "asc" }],
+    include: { user: { select: { id: true, name: true, username: true } } },
+  },
+  labourEntries: { orderBy: { orderIndex: "asc" } },
+} satisfies Prisma.WorkPermitInclude;
 
 const STATUSES = new Set(["PENDING", "APPROVED", "REJECTED", "CLOSED"] as WorkPermitStatus[]);
 
@@ -136,22 +174,66 @@ export async function POST(req: Request) {
     }
   }
 
+  // Normalize the two accepted shapes: legacy `approverIds` -> a single
+  // level-1 row per user with default caps; new `approvers` used verbatim.
+  // At least one must be provided.
+  const approverRows =
+    body.approvers && body.approvers.length > 0
+      ? body.approvers
+      : (body.approverIds ?? []).map((userId, i) => ({
+          userId,
+          levelIndex: 1,
+          levelName: undefined as string | undefined,
+          canClose: true,
+          canSuspend: false,
+          isDefault: false,
+          orderIndex: i,
+        }));
+
+  if (approverRows.length === 0) {
+    return NextResponse.json(
+      { error: "At least one approver is required" },
+      { status: 400 },
+    );
+  }
+
   // Every approver must be an active user. Fail loud if the client sends a
   // stale id — a Pending permit assigned to a deleted user would never
   // resolve.
+  const approverUserIds = Array.from(new Set(approverRows.map((r) => r.userId)));
   const approvers = await prisma.user.findMany({
-    where: { id: { in: body.approverIds }, active: true },
+    where: { id: { in: approverUserIds }, active: true },
     select: { id: true },
   });
-  if (approvers.length !== body.approverIds.length) {
+  if (approvers.length !== approverUserIds.length) {
     return NextResponse.json(
       { error: "One or more approvers are inactive or don't exist" },
       { status: 400 },
     );
   }
 
+  // Co-requesters: same active-user guard. Silently drop the requester
+  // themselves if they appear in the list — Colab's picker permits it but
+  // it's a no-op on our side.
+  const coRequesterIds = Array.from(
+    new Set((body.coRequesterIds ?? []).filter((id) => id !== session.user.id)),
+  );
+  if (coRequesterIds.length > 0) {
+    const co = await prisma.user.findMany({
+      where: { id: { in: coRequesterIds }, active: true },
+      select: { id: true },
+    });
+    if (co.length !== coRequesterIds.length) {
+      return NextResponse.json(
+        { error: "One or more co-requesters are inactive or don't exist" },
+        { status: 400 },
+      );
+    }
+  }
+
   const idempotencyKey = readIdempotencyKey(body);
   const photos = (body.photoUrls ?? []).slice(0, 6);
+  const displayId = generatePermitDisplayId();
 
   const { record: workPermit, duplicate } = await createIdempotent(
     idempotencyKey,
@@ -174,8 +256,14 @@ export async function POST(req: Request) {
           contractorId: body.contractorId || null,
           wbsNodeId: body.wbsNodeId || null,
           requesterId: session.user.id,
-          approverIds: serializeApproverIds(body.approverIds),
+          // Keep `approverIds` populated for legacy list filters + email
+          // fan-out below. Deduped so a multi-level table with the same
+          // user at multiple levels still yields a clean id list.
+          approverIds: serializeApproverIds(approverUserIds),
           status: "PENDING",
+          displayId,
+          coRequesterIds,
+          activityHead: body.activityHead?.trim() || null,
           // Colab-parity: persist the Step-3 checklist answers verbatim.
           // Null when the client didn't send any (legacy builds or a
           // General Work permit that skipped the checklist).
@@ -183,6 +271,28 @@ export async function POST(req: Request) {
           idempotencyKey,
           photos:
             photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
+          approvers: {
+            create: approverRows.map((r, i) => ({
+              userId: r.userId,
+              levelIndex: r.levelIndex ?? 1,
+              levelName: r.levelName?.trim() || `Level ${r.levelIndex ?? 1}`,
+              canClose: r.canClose ?? true,
+              canSuspend: r.canSuspend ?? false,
+              isDefault: r.isDefault ?? false,
+              orderIndex: r.orderIndex ?? i,
+            })),
+          },
+          labourEntries:
+            body.labourEntries && body.labourEntries.length > 0
+              ? {
+                  create: body.labourEntries.map((l, i) => ({
+                    workerName: l.workerName?.trim() || null,
+                    role: l.role?.trim() || null,
+                    count: l.count ?? null,
+                    orderIndex: l.orderIndex ?? i,
+                  })),
+                }
+              : undefined,
         },
         include: workPermitInclude,
       }),
@@ -203,7 +313,7 @@ export async function POST(req: Request) {
     // set on the deploy. Batched by Promise.allSettled so one bad address
     // doesn't skip the rest.
     const approverRecipients = await prisma.user.findMany({
-      where: { id: { in: body.approverIds }, email: { not: null } },
+      where: { id: { in: approverUserIds }, email: { not: null } },
       select: { name: true, email: true },
     });
     const permitUrl = `${SIDDHI_BASE_URL}/mobile/${body.projectId}/permit`;
@@ -228,7 +338,7 @@ export async function POST(req: Request) {
     // but we notify all listed approvers so any of them can pick it up.
     const typeLabel = WORK_PERMIT_TYPE_LABELS[workPermit.type as WorkPermitType] ?? workPermit.type;
     const requesterName = workPermit.requester?.name ?? "Someone";
-    for (const approverId of body.approverIds) {
+    for (const approverId of approverUserIds) {
       void sendPushToUser(approverId, {
         title: `Permit awaiting your approval · ${workPermit.title.slice(0, 40)}`,
         body: `${typeLabel} raised by ${requesterName}. Tap to review.`,

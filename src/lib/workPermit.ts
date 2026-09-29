@@ -242,3 +242,19 @@ export function serializeApproverIds(ids: string[]): string {
 export function isValidHhMm(v: string): boolean {
   return /^([01]\d|2[0-3]):([0-5]\d)$/.test(v);
 }
+
+/**
+ * Colab-parity human-readable permit id shown on cards, headers, and
+ * outbound emails: PER-XXXXXXXX with 8 uppercase alphanumerics.
+ * The random suffix is unique per project (enforced by the DB), so
+ * collisions on the ~93-villa scale are astronomically unlikely; we
+ * still let the DB catch any freak duplicate.
+ */
+export function generatePermitDisplayId(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1 (harder to misread on paper)
+  let s = "PER-";
+  for (let i = 0; i < 8; i++) {
+    s += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return s;
+}

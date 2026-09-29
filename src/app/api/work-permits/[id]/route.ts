@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -43,7 +44,12 @@ const workPermitInclude = {
   contractor: { select: { id: true, name: true } },
   wbsNode: { select: { id: true, name: true, taskCode: true } },
   photos: { select: { id: true, url: true } },
-} as const;
+  approvers: {
+    orderBy: [{ levelIndex: "asc" }, { orderIndex: "asc" }],
+    include: { user: { select: { id: true, name: true, username: true } } },
+  },
+  labourEntries: { orderBy: { orderIndex: "asc" } },
+} satisfies Prisma.WorkPermitInclude;
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
