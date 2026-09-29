@@ -62,6 +62,7 @@ export interface MobileSearchResult {
     type: string;
     typeLabel: string;
     status: string;
+    displayId: string | null;
   }[];
   inspections: {
     id: string;
@@ -200,11 +201,16 @@ export async function mobileSearch(
             { title: { contains: q, mode: "insensitive" } },
             { description: { contains: q, mode: "insensitive" } },
             { location: { contains: q, mode: "insensitive" } },
+            // Colab-parity displayId is what site-team members
+            // screenshot and paste back — match on PER-XXXXXXXX so a
+            // pasted id lands the exact permit even when the title has
+            // drifted.
+            { displayId: { contains: q, mode: "insensitive" } },
           ],
         },
         orderBy: { createdAt: "desc" },
         take: PER_TYPE_LIMIT,
-        select: { id: true, title: true, type: true, status: true },
+        select: { id: true, title: true, type: true, status: true, displayId: true },
       })
     : Promise.resolve([]);
 
@@ -294,6 +300,7 @@ export async function mobileSearch(
       type: p.type,
       typeLabel: WORK_PERMIT_TYPE_LABELS[p.type as WorkPermitType] ?? p.type,
       status: p.status,
+      displayId: p.displayId ?? null,
     })),
     inspections: inspectionsSafe.map((i) => ({
       id: i.id,

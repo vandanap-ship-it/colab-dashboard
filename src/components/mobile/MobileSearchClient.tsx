@@ -204,7 +204,7 @@ export default function MobileSearchClient({ projectId }: { projectId: string })
                     href={`/mobile/${projectId}/permit/${p.id}`}
                     label={p.typeLabel}
                     primary={p.title}
-                    secondary={metaLine(statusLabel(p.status))}
+                    secondary={metaLine(statusLabel(p.status), p.displayId ?? undefined)}
                   />
                 ))}
               </ResultSection>
