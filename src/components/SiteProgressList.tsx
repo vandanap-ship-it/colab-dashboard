@@ -61,12 +61,17 @@ type StatusKey = "UPCOMING" | "ONGOING" | "IN_QUALITY" | "QUEUE";
 
 /**
  * A villa is:
- *   - Done      · every milestone marked done
- *   - Upcoming  · every milestone at 0% AND not done
- *   - Ongoing   · anything else (at least one milestone with 0 < pct < 100)
- * Matches how Shraddha reads the paper report.
+ *   - In Quality · at least one activity is blocked by a pending QAQC
+ *                  checklist (this bucket wins over Ongoing/Upcoming
+ *                  because the site team needs to see the gate before
+ *                  they try to log more progress).
+ *   - Completed  · every milestone marked done
+ *   - Upcoming   · every milestone at 0% AND not done
+ *   - On Going   · anything else (at least one milestone in progress)
+ * Matches how Shraddha reads the paper report and Colab's own tab order.
  */
-function villaStatus(v: Villa): StatusKey {
+function villaStatus(v: Villa, blockedIds: Set<string>): StatusKey {
+  if (blockedIds.has(v.id)) return "IN_QUALITY";
   if (v.milestones.length === 0) return "UPCOMING";
   const allDone = v.milestones.every((m) => m.done || m.pctComplete >= 100);
   if (allDone) return "QUEUE";
@@ -117,6 +122,11 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
   const [openVillaId, setOpenVillaId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // Colab-parity "In Quality" bucket. Fetched separately from the
+  // picker tree since it depends on inspection state (independent
+  // refresh cycle: an inspection PASS should flip a villa out of In
+  // Quality without needing a picker reload).
+  const [blockedVillaIds, setBlockedVillaIds] = useState<Set<string>>(new Set());
   // Draft rows for the current user on this project. Small query,
   // runs alongside the picker fetch. Empty by default → strip renders
   // nothing. On failure we silently drop it — a broken drafts strip
@@ -159,6 +169,24 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
     };
   }, [projectId, reloadKey]);
 
+  // In Quality villa set. Failure is silent — a broken gate endpoint
+  // shouldn't hide the whole list; the tab just shows 0.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/projects/${projectId}/quality-gate-status`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { blockedVillaIds: [] }))
+      .then((j: { blockedVillaIds?: string[] }) => {
+        if (cancelled) return;
+        setBlockedVillaIds(new Set(Array.isArray(j.blockedVillaIds) ? j.blockedVillaIds : []));
+      })
+      .catch(() => {
+        if (!cancelled) setBlockedVillaIds(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, reloadKey]);
+
   // Flat list of villas with their parent block code, sorted by villa number
   // (natural: V03 < V10 < V32 rather than lexicographic).
   const villasFlat = useMemo(() => {
@@ -173,7 +201,7 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
   const filteredVillas = useMemo(() => {
     const q = search.trim().toLowerCase();
     return villasFlat.filter(({ villa, blockCode }) => {
-      if (villaStatus(villa) !== tab) return false;
+      if (villaStatus(villa, blockedVillaIds) !== tab) return false;
       if (contractor !== "all" && contractorOfVillaLabel(villa.label) !== contractor) return false;
       if (!q) return true;
       return (
@@ -181,18 +209,13 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
         blockCode.toLowerCase().includes(q)
       );
     });
-  }, [villasFlat, tab, search, contractor]);
+  }, [villasFlat, tab, search, contractor, blockedVillaIds]);
 
   const counts = useMemo(() => {
     const c: Record<StatusKey, number> = { UPCOMING: 0, ONGOING: 0, IN_QUALITY: 0, QUEUE: 0 };
-    for (const { villa } of villasFlat) c[villaStatus(villa)]++;
-    // IN_QUALITY count is populated by a follow-up endpoint that lists
-    // villas with at least one activity blocked by a pending QAQC
-    // checklist (see `src/lib/progressGates.ts::checkPrecheck`). Until
-    // that endpoint is wired the tab renders as 0 — matches what the
-    // Colab screenshots showed on Madhavan's account (0 blocked).
+    for (const { villa } of villasFlat) c[villaStatus(villa, blockedVillaIds)]++;
     return c;
-  }, [villasFlat]);
+  }, [villasFlat, blockedVillaIds]);
 
   return (
     <div className="px-5 py-5 space-y-4">
