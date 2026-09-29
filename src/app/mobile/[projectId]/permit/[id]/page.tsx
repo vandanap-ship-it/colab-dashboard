@@ -22,16 +22,21 @@ import {
   type WorkPermitType,
 } from "@/lib/workPermit";
 import MobilePermitActions from "@/components/mobile/MobilePermitActions";
+import MobilePermitCheckpointReviewer from "@/components/mobile/MobilePermitCheckpointReviewer";
 
 export const dynamic = "force-dynamic";
 
 // Colab-parity shape for a single stored checklist response. Kept as
-// `unknown` in Prisma (JSON), narrowed here at read time.
+// `unknown` in Prisma (JSON), narrowed here at read time. `reviewerNote`
+// and `reviewerPhotoUrl` are the Colab-parity per-checkpoint "Add Reply"
+// fields written via PATCH /api/work-permits/[id]/checkpoints.
 type StoredChecklistResponse = {
   q: string;
   passed: boolean | null;
   remark?: string;
   photoUrl?: string;
+  reviewerNote?: string | null;
+  reviewerPhotoUrl?: string | null;
 };
 
 function narrowChecklist(v: unknown): StoredChecklistResponse[] {
@@ -45,6 +50,10 @@ function narrowChecklist(v: unknown): StoredChecklistResponse[] {
         passed: typeof r.passed === "boolean" ? (r.passed as boolean) : null,
         remark: typeof r.remark === "string" ? (r.remark as string) : undefined,
         photoUrl: typeof r.photoUrl === "string" ? (r.photoUrl as string) : undefined,
+        reviewerNote:
+          typeof r.reviewerNote === "string" ? (r.reviewerNote as string) : null,
+        reviewerPhotoUrl:
+          typeof r.reviewerPhotoUrl === "string" ? (r.reviewerPhotoUrl as string) : null,
       });
     }
   }
@@ -338,6 +347,48 @@ export default async function MobilePermitDetailPage({
                           loading="lazy"
                         />
                       </a>
+                    )}
+                    {/* Colab-parity per-checkpoint reviewer controls:
+                        editable only for a listed approver while the
+                        permit is still PENDING. Otherwise show the
+                        stored reply read-only so the audit trail is
+                        visible after approve/reject/close. */}
+                    {iAmApprover && permit.status === "PENDING" ? (
+                      <MobilePermitCheckpointReviewer
+                        permitId={permit.id}
+                        index={i}
+                        initialNote={row.reviewerNote ?? null}
+                        initialPhotoUrl={row.reviewerPhotoUrl ?? null}
+                      />
+                    ) : (
+                      (row.reviewerNote || row.reviewerPhotoUrl) && (
+                        <div className="mt-2 space-y-1.5">
+                          {row.reviewerNote && (
+                            <p className="text-[12px] text-ink bg-sandstone-50 rounded-md px-2 py-1 border border-sandstone-100 whitespace-pre-wrap">
+                              <span className="text-[10px] font-semibold text-ferrous-600 uppercase tracking-wider mr-1.5">
+                                Approver
+                              </span>
+                              {row.reviewerNote}
+                            </p>
+                          )}
+                          {row.reviewerPhotoUrl && (
+                            <a
+                              href={row.reviewerPhotoUrl}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              className="inline-block w-12 h-12 rounded-md overflow-hidden border border-stone-200 bg-stone-50"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={row.reviewerPhotoUrl}
+                                alt="Approver photo"
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                            </a>
+                          )}
+                        </div>
+                      )
                     )}
                   </div>
                 </li>

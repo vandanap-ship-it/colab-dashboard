@@ -25,11 +25,16 @@ const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotu
 // Colab-parity checklist response shape — one entry per template
 // CHECKPOINT. `q` mirrors the template question at capture time so
 // audit + backfill work even if the template later changes.
+// `reviewerNote` and `reviewerPhotoUrl` are the Colab-parity Add-Reply
+// fields; the raiser leaves them blank at create time and reviewers
+// write via PATCH /api/work-permits/[id]/checkpoints.
 const ChecklistResponseSchema = z.object({
   q: z.string().min(1).max(500),
   passed: z.boolean().nullable(),
   remark: z.string().max(1000).optional(),
   photoUrl: z.string().url().optional(),
+  reviewerNote: z.string().max(2000).nullable().optional(),
+  reviewerPhotoUrl: z.string().url().nullable().optional(),
 });
 
 // Colab-parity: Step-2 "Approval Levels" row. Each row is one user
