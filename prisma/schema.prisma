@@ -1029,6 +1029,15 @@ model ColabActivity {
   reasonCode      String?
   reasonNote      String?
 
+  // Full Colab CSV row kept verbatim (all 37 columns as a JSON object,
+  // keyed by the exact column header from Colab's export). Powers the
+  // Master Report → "Download raw activity CSV (Colab format)" export
+  // so Siddhi can serve as a drop-in replacement for Colab's own
+  // Master Report file. Null on rows imported before this column existed
+  // — those still export from the structured fields above with the
+  // Colab-hierarchy columns (Sub_Location, Activity_Head, etc.) blank.
+  rawColabRow     Json?
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

@@ -132,12 +132,24 @@ export default async function MasterReportPage({
       startDate={range.from}
       endDate={range.to}
       toolbarExtras={
-        <MasterReportCsvButton
-          projectName={project.name}
-          projectCode={project.code ?? null}
-          periodLabel={periodLabel}
-          data={data}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <MasterReportCsvButton
+            projectName={project.name}
+            projectCode={project.code ?? null}
+            periodLabel={periodLabel}
+            data={data}
+          />
+          {/* Raw activity CSV in Colab's exact 37-column shape. Drop-in
+              replacement for Colab Tools' own Master Report export so
+              the site team's Excel templates keep working. */}
+          <a
+            href={`/api/projects/${id}/reports/master/colab-csv`}
+            className="inline-flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-700 shadow-sm hover:bg-stone-50 print:hidden"
+            title="Every activity, every villa, all 37 Colab columns — matches Colab Tools' Master Report file"
+          >
+            Download raw CSV (Colab format)
+          </a>
+        </div>
       }
     >
       {/* SECTION 01 — Overall Project Health */}

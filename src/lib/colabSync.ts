@@ -375,6 +375,11 @@ export async function importColabProgress(
     totalPct: number | null;
     reasonCode: string | null;
     reasonNote: string | null;
+    // Full Colab CSV row kept verbatim so the Master Report's "Download
+    // raw activity CSV (Colab format)" export can rebuild Colab's exact
+    // 37-column file. Includes columns Siddhi doesn't otherwise store
+    // (Sub_Location, Activity_Head, UOM, Rate, Milestone_type, …).
+    rawColabRow: Record<string, string | undefined | null>;
   }
   const pendingColabActivities: ColabActivityQueue[] = [];
   // Villas that Colab had ANY progress for — used to bulk-tag every WBS node
@@ -599,6 +604,7 @@ export async function importColabProgress(
         totalPct: pct,
         reasonCode: reasonCode ?? null,
         reasonNote: reasonNote ?? null,
+        rawColabRow: { ...(r as Record<string, string | undefined | null>) },
       });
     }
 
@@ -801,6 +807,7 @@ interface ColabActivityQueueRow {
   totalPct: number | null;
   reasonCode: string | null;
   reasonNote: string | null;
+  rawColabRow: Record<string, string | undefined | null>;
 }
 interface ContractorLookup { id: string; name: string }
 
@@ -810,26 +817,30 @@ interface ContractorLookup { id: string; name: string }
 async function bulkWriteColabActivity(prisma: PrismaLike, pending: ColabActivityQueueRow[]): Promise<void> {
   if (pending.length === 0) return;
   const now = new Date();
+  // 16 params per row (was 15) — the new rawColabRow JSONB column at
+  // the end brings the batch cap slightly down but stays well under
+  // Postgres' 65k-parameter limit even at 200 rows/chunk.
   for (let i = 0; i < pending.length; i += 200) {
     const batch = pending.slice(i, i + 200);
     const values: unknown[] = [];
     const rowsSql: string[] = [];
     batch.forEach((r, j) => {
-      const base = j * 15;
+      const base = j * 16;
       rowsSql.push(
-        `(gen_random_uuid()::text, $${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5}, $${base+6}, $${base+7}, $${base+8}, $${base+9}, $${base+10}, $${base+11}, $${base+12}, $${base+13}, $${base+14}, $${base+15})`
+        `(gen_random_uuid()::text, $${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5}, $${base+6}, $${base+7}, $${base+8}, $${base+9}, $${base+10}, $${base+11}, $${base+12}, $${base+13}, $${base+14}, $${base+15}, $${base+16}::jsonb)`
       );
       values.push(
         r.projectId, r.activityId, r.villaId, r.sectionId,
         r.plannedStart, r.plannedEnd, r.actualStart, r.actualEnd, r.progressDate,
         r.physicalProgress, r.totalPct, r.reasonCode, r.reasonNote, now, now,
+        JSON.stringify(r.rawColabRow),
       );
     });
     await prisma.$executeRawUnsafe(
       `INSERT INTO "ColabActivity" (
          "id","projectId","activityId","villaId","sectionId",
          "plannedStart","plannedEnd","actualStart","actualEnd","progressDate",
-         "physicalProgress","totalPct","reasonCode","reasonNote","createdAt","updatedAt"
+         "physicalProgress","totalPct","reasonCode","reasonNote","createdAt","updatedAt","rawColabRow"
        ) VALUES ${rowsSql.join(",")}
        ON CONFLICT ("projectId","activityId") DO UPDATE SET
          "villaId"          = EXCLUDED."villaId",
@@ -843,7 +854,8 @@ async function bulkWriteColabActivity(prisma: PrismaLike, pending: ColabActivity
          "totalPct"         = EXCLUDED."totalPct",
          "reasonCode"       = EXCLUDED."reasonCode",
          "reasonNote"       = EXCLUDED."reasonNote",
-         "updatedAt"        = EXCLUDED."updatedAt"`,
+         "updatedAt"        = EXCLUDED."updatedAt",
+         "rawColabRow"      = EXCLUDED."rawColabRow"`,
       ...values,
     );
   }
