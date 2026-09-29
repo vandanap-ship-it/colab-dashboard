@@ -142,7 +142,6 @@ function ComplianceMatrixCard({ rows }: { rows: SafetyBundle["compliance"] }) {
                   <th>Closed</th>
                   <th>In review</th>
                   <th className={styles.cmObs}>OBS</th>
-                  <th className={styles.cmNcr}>NCR</th>
                   <th>Avg TAT</th>
                 </tr>
               </thead>
@@ -154,7 +153,6 @@ function ComplianceMatrixCard({ rows }: { rows: SafetyBundle["compliance"] }) {
                     <td className={styles.cmClosed}>{r.inspections.closed || "—"}</td>
                     <td className={styles.cmReview}>{r.inspections.inReview || "—"}</td>
                     <td className={styles.cmObs}>{r.inspections.obs || "—"}</td>
-                    <td className={styles.cmNcr}>{r.inspections.ncr || "—"}</td>
                     <td>{r.inspections.avgTatDays == null ? "—" : `${r.inspections.avgTatDays}d`}</td>
                   </tr>
                 ))}
