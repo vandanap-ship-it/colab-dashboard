@@ -625,6 +625,16 @@ export type MasterReportData = {
     totalDelayDays: number;
     reraDelayDays: number;
     hindrancesOpen: number;
+    // Location-wise delay: weighted mean of per-villa delay in days.
+    // Signed: negative = villas trending ahead of schedule, positive = late.
+    // Amanvana target from Colab Project Dashboard: -5 Days.
+    locationDelayDays: number;
+    // Total hindrance duration across all hindrances on this project, in
+    // milliseconds — what Colab surfaces as "RERA Delay" with day/hr/min
+    // precision (e.g. Amanvana today = 7d 7h 11min). Rendered by the page
+    // via formatDurationDHM. Not the same as reraDelayDays (which is a
+    // date-diff from RERA end date — kept for backward compatibility).
+    hindranceDurationMs: number;
   };
   perZone: Array<{
     id: string;
@@ -830,6 +840,55 @@ async function getMasterReportUncached(
     where: { projectId, status: "OPEN" },
   });
 
+  // Location-wise delay: for each villa (with any ColabActivity progress),
+  // compute (max projected/actual end) − (max planned end), then arithmetic
+  // mean across villas. Signed days, negative = ahead. Falls back to 0 when
+  // no ColabActivity rows exist yet.
+  const locationDelayAgg = await prisma.$queryRawUnsafe<
+    Array<{ avg_delay: number | null }>
+  >(
+    `SELECT AVG(delay_days)::float AS avg_delay FROM (
+       SELECT
+         "villaId",
+         EXTRACT(
+           EPOCH FROM (
+             MAX(COALESCE("actualEnd", "plannedEnd")) - MAX("plannedEnd")
+           )
+         ) / 86400.0 AS delay_days
+       FROM "ColabActivity"
+       WHERE "projectId" = $1
+         AND "villaId" IS NOT NULL
+         AND "physicalProgress" > 0
+       GROUP BY "villaId"
+     ) t`,
+    projectId,
+  );
+  const locationDelayDays = Math.round(Number(locationDelayAgg[0]?.avg_delay ?? 0));
+
+  // Total hindrance duration in milliseconds — feeds the "RERA Delay" card
+  // with day/hr/min precision (Colab's Project Dashboard shows Amanvana as
+  // 7d 7h 11min today). Uses resolvedDate when present, otherwise endDate,
+  // otherwise "now" for still-open hindrances.
+  const hindranceDurationAgg = await prisma.$queryRawUnsafe<
+    Array<{ total_seconds: number | null }>
+  >(
+    `SELECT COALESCE(SUM(
+       EXTRACT(
+         EPOCH FROM (
+           COALESCE("resolvedDate", "endDate", NOW()) - "startDate"
+         )
+       )
+     ), 0)::float AS total_seconds
+     FROM "Hindrance"
+     WHERE "projectId" = $1
+       AND "deletedAt" IS NULL`,
+    projectId,
+  );
+  const hindranceDurationMs = Math.max(
+    0,
+    Math.round(Number(hindranceDurationAgg[0]?.total_seconds ?? 0) * 1000),
+  );
+
   const overall: MasterReportData["overall"] = {
     plannedPercent: Math.round(overallPlanned * 100) / 100,
     achievedPercent: Math.round(overallAchieved * 100) / 100,
@@ -843,6 +902,8 @@ async function getMasterReportUncached(
     totalDelayDays,
     reraDelayDays,
     hindrancesOpen,
+    locationDelayDays,
+    hindranceDurationMs,
   };
 
   // ---- Per zone (= phase) ----

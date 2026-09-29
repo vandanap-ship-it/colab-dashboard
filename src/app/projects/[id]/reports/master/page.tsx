@@ -37,6 +37,24 @@ function delayTone(days: number): "danger" | "ok" | "success" {
   return "ok";
 }
 
+/**
+ * Duration in ms → "Nd Nh Nmin" — matches Colab Project Dashboard's RERA
+ * Delay display (e.g. "7d 7h 11min"). Skips zero units so a 3-hour
+ * hindrance renders "3h" not "0d 3h 0min".
+ */
+function formatDurationDHM(ms: number): string {
+  if (ms <= 0) return "0 min";
+  const totalMinutes = Math.floor(ms / 60_000);
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes - days * 24 * 60) / 60);
+  const minutes = totalMinutes - days * 24 * 60 - hours * 60;
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0 || parts.length === 0) parts.push(`${minutes}min`);
+  return parts.join(" ");
+}
+
 export default async function MasterReportPage({
   params,
   searchParams,
@@ -244,9 +262,18 @@ export default async function MasterReportPage({
                 tone={delayTone(data.overall.totalDelayDays)}
               />
               <Metric
+                label="Location Delay"
+                value={formatDelay(data.overall.locationDelayDays)}
+                tone={delayTone(data.overall.locationDelayDays)}
+              />
+              <Metric
                 label="RERA Delay"
-                value={formatDelay(data.overall.reraDelayDays)}
-                tone={delayTone(data.overall.reraDelayDays)}
+                value={
+                  data.overall.hindranceDurationMs > 0
+                    ? formatDurationDHM(data.overall.hindranceDurationMs)
+                    : "0 min"
+                }
+                tone={data.overall.hindranceDurationMs > 0 ? "danger" : "ok"}
               />
               <Metric
                 label="Hindrances"
