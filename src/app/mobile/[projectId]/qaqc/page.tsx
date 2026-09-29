@@ -166,9 +166,13 @@ export default async function MobileQaqcPage({
         status: true,
         module: true,
         createdAt: true,
+        updatedAt: true,
         rescheduledFor: true,
-        filledBy: { select: { name: true } },
-        wbsNode: { select: { name: true } },
+        triggerType: true,
+        exactLocation: true,
+        filledBy: { select: { name: true, role: true } },
+        wbsNode: { select: { name: true, taskCode: true } },
+        contractor: { select: { name: true } },
         _count: { select: { photos: true, items: true } },
       },
     }),
@@ -233,66 +237,76 @@ export default async function MobileQaqcPage({
         </div>
       </nav>
 
-      {/* List */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3">
+      {/* List — Colab-parity card layout (Girish zip screen 5):
+          - Top row: LEFT dark-ink card with title (uppercase, truncated)
+            + RIGHT light-gray card with the short WIR ID
+          - Middle: key-value pairs in two columns · Location, Activity,
+            Contractor, Trigger Type, Triggered by, Trigger Date,
+            Updated At
+          - Bottom: Approval Progress bar. Each status renders its own
+            width + colour. */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 pb-32">
         {inspections.length === 0 ? (
           <EmptyState tab={tab} />
         ) : (
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {inspections.map((i) => (
               <li key={i.id}>
                 <Link
-                  // Detail link carries tab AND module so pressing Back
-                  // from the detail returns to the same filtered view
-                  // (EHS Passed stays EHS Passed, not QAQC Pending).
                   href={`/mobile/${projectId}/qaqc/${i.id}?tab=${tab}${moduleFilter ? `&module=${moduleFilter}` : ""}`}
-                  className="rounded-2xl border border-sandstone-100 bg-cream shadow-soft p-4 block active:bg-sandstone-50"
+                  className="block rounded-xl overflow-hidden border border-stone-200 bg-white shadow-sm active:bg-stone-50"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[15px] font-semibold text-ink leading-snug line-clamp-2">
+                  {/* Top row — dark title card + gray ID card, side-by-side */}
+                  <div className="grid grid-cols-[1fr_auto]">
+                    <div className="bg-ink text-white px-3 py-2.5">
+                      <div className="text-[13px] font-bold uppercase leading-snug line-clamp-2">
                         {i.title}
                       </div>
-                      <div className="text-[12px] text-ink-3 mt-1">
-                        {i.filledBy?.name ?? "—"}
-                        {i.wbsNode?.name ? ` · ${i.wbsNode.name}` : ""}
-                      </div>
-                      <div className="text-[11px] text-ink-3 mt-0.5 flex items-center gap-2">
-                        <span>{fmtDate(i.createdAt)}</span>
-                        <span>·</span>
-                        <span>{i._count.items} item{i._count.items === 1 ? "" : "s"}</span>
-                        {i._count.photos > 0 && (
-                          <>
-                            <span>·</span>
-                            <span>{i._count.photos} photo{i._count.photos === 1 ? "" : "s"}</span>
-                          </>
-                        )}
-                        {i.module && (
-                          <>
-                            <span>·</span>
-                            <span>{i.module === "SAFETY" ? "EHS" : "QA/QC"}</span>
-                          </>
-                        )}
-                      </div>
-                      {/* Reopen date · what a reviewer opens the tab to
-                          see. Only rendered for RESCHEDULED rows; the
-                          field is null on every other status. */}
-                      {i.status === "RESCHEDULED" && i.rescheduledFor && (
-                        <div className="text-[11px] mt-1 inline-flex items-center gap-1 rounded-full bg-sandstone-100 text-ink-2 px-2 py-0.5 font-semibold">
-                          <CalendarClock className="w-3 h-3" />
-                          Reopens {fmtDate(i.rescheduledFor)}
-                        </div>
-                      )}
                     </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <StatusPill status={i.status} />
-                      {/* Aging cue for reviewers. Fresh WIRs (0-1d) get
-                          no chip; the signal only fires once a WIR has
-                          been waiting long enough that queue position
-                          matters. */}
-                      {i.status === "IN_REVIEW" && <AgingChip createdAt={i.createdAt} />}
+                    <div className="bg-stone-100 text-ink px-3 py-2.5 flex flex-col justify-center min-w-[120px] border-l border-stone-200">
+                      <div className="text-[10px] uppercase tracking-wider text-stone-500">
+                        ID
+                      </div>
+                      <div className="text-[13px] font-bold leading-tight">
+                        CHECK{i.id.slice(-6).toUpperCase()}
+                      </div>
                     </div>
                   </div>
+
+                  {/* Middle — key-value rows */}
+                  <div className="px-3 py-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[12px]">
+                    <KVBlock
+                      label="Location"
+                      value={i.exactLocation || i.wbsNode?.name || "—"}
+                    />
+                    <KVBlock label="Activity" value={i.wbsNode?.name || "—"} />
+                    <KVBlock
+                      label="Contractor"
+                      value={i.contractor?.name ?? "—"}
+                    />
+                    <KVBlock label="Trigger Type" value={i.triggerType ?? "Manual"} />
+                    <KVBlock
+                      label="Triggered by"
+                      value={i.filledBy?.name ?? "—"}
+                      hint={i.filledBy?.role ? roleLabel(i.filledBy.role) : null}
+                    />
+                    <KVBlock label="Trigger Date" value={fmtDate(i.createdAt)} />
+                    <KVBlock label="Updated At" value={fmtDate(i.updatedAt)} />
+                    <KVBlock label="Module" value={i.module === "SAFETY" ? "EHS" : "QA/QC"} />
+                  </div>
+
+                  {/* Bottom — Approval Progress bar */}
+                  <ApprovalProgressBar status={i.status} />
+
+                  {/* Reopen date · only for RESCHEDULED rows */}
+                  {i.status === "RESCHEDULED" && i.rescheduledFor && (
+                    <div className="px-3 py-2 border-t border-stone-100">
+                      <div className="text-[11px] inline-flex items-center gap-1 rounded-full bg-sandstone-100 text-ink-2 px-2 py-0.5 font-semibold">
+                        <CalendarClock className="w-3 h-3" />
+                        Reopens {fmtDate(i.rescheduledFor)}
+                      </div>
+                    </div>
+                  )}
                 </Link>
               </li>
             ))}
@@ -395,6 +409,89 @@ function EmptyState({ tab }: { tab: Tab }) {
 
 function fmtDate(d: Date): string {
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/**
+ * KVBlock — single label + value cell on the Colab-parity card grid.
+ * Optional `hint` renders under the value in smaller text (used for
+ * the "Triggered by" row where Colab shows the filler's role beneath
+ * the name).
+ */
+function KVBlock({
+  label,
+  value,
+  hint = null,
+}: {
+  label: string;
+  value: string;
+  hint?: string | null;
+}) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-stone-400">
+        {label}
+      </div>
+      <div className="text-[13px] font-semibold text-ink leading-snug">{value}</div>
+      {hint && <div className="text-[10px] text-stone-500 mt-0.5">{hint}</div>}
+    </div>
+  );
+}
+
+/**
+ * Approval Progress bar shown at the bottom of every card. Colab
+ * (Girish screen 5) uses this to visualize where the WIR sits in the
+ * approve→close→archive lifecycle. Siddhi maps its WIR statuses onto
+ * the same three logical progress stops (filed → reviewed → closed).
+ */
+function ApprovalProgressBar({ status }: { status: string }) {
+  let percent = 0;
+  let color = "bg-stone-300";
+  let label: string | null = null;
+  if (status === "DRAFT") {
+    percent = 10;
+    color = "bg-stone-400";
+    label = "Draft";
+  } else if (status === "IN_REVIEW") {
+    percent = 40;
+    color = "bg-amber-400";
+    label = "Waiting for approval";
+  } else if (status === "PASSED") {
+    percent = 100;
+    color = "bg-emerald-500";
+    label = "Approved & Closed";
+  } else if (status === "REJECTED") {
+    percent = 100;
+    color = "bg-red-500";
+    label = "Rejected";
+  } else if (status === "RESCHEDULED") {
+    percent = 25;
+    color = "bg-sandstone-400";
+    label = "Rescheduled";
+  }
+  return (
+    <div className="px-3 pt-2 pb-3 border-t border-stone-100">
+      <div className="text-[10px] uppercase tracking-wider text-stone-500 mb-1 flex items-center gap-1">
+        Approval Progress
+      </div>
+      <div className="h-2 rounded-full bg-stone-100 overflow-hidden">
+        <div className={`h-full ${color}`} style={{ width: `${percent}%` }} />
+      </div>
+      {label && (
+        <div className="text-[11px] text-stone-500 mt-1">{label}</div>
+      )}
+    </div>
+  );
+}
+
+function roleLabel(role: string): string {
+  const map: Record<string, string> = {
+    PLANNER: "Planner",
+    PRODUCT_TEAM: "Product Team",
+    ADMIN: "Admin",
+    SITE_MANAGER: "Site Manager",
+    SITE_ENGINEER: "Site Engineer",
+  };
+  return map[role] ?? role;
 }
 
 /**
