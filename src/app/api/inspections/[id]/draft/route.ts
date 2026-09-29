@@ -70,6 +70,11 @@ const PutDraftSchema = z.object({
   assignedReviewerIds: z.array(z.string().min(1)).max(20).optional(),
   submitRemark: z.string().max(2000).optional(),
   mode: z.enum(["draft", "review"]).optional(),
+  // Colab-parity fields — same shape as POST /api/inspections.
+  contractorId: z.string().min(1).nullable().optional(),
+  exactLocation: z.string().max(500).nullable().optional(),
+  totalQuantityPct: z.number().min(0).max(100).nullable().optional(),
+  executedQuantityPct: z.number().min(0).max(100).nullable().optional(),
   expectedUpdatedAt: z.string().optional(),
 });
 
@@ -184,6 +189,20 @@ export async function PUT(req: Request, ctx: RouteContext<"/api/inspections/[id]
           wbsNodeId: body.wbsNodeId || null,
           submitRemark: cleanSubmitRemark,
           assignedReviewerIds: cleanReviewerIds,
+          // Colab-parity fields — always update; body values are the
+          // authoritative next state (undefined means "no change" via
+          // Prisma's `undefined` semantic, so an unset field on the
+          // client is preserved).
+          contractorId: body.contractorId === undefined ? undefined : (body.contractorId || null),
+          exactLocation: body.exactLocation === undefined
+            ? undefined
+            : (body.exactLocation?.trim() || null),
+          totalQuantityPct: body.totalQuantityPct === undefined
+            ? undefined
+            : (typeof body.totalQuantityPct === "number" ? body.totalQuantityPct : null),
+          executedQuantityPct: body.executedQuantityPct === undefined
+            ? undefined
+            : (typeof body.executedQuantityPct === "number" ? body.executedQuantityPct : null),
           ...(isReviewSubmit ? { status: "IN_REVIEW" } : {}),
           items: { create: itemsClean },
           ...(appendedPhotos.length > 0

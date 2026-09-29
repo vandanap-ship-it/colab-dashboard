@@ -51,6 +51,13 @@ export type EditDraftInput = {
   wbsNodeId: string | null;
   submitRemark: string | null;
   assignedReviewerIds: string[];
+  // Colab-parity fields (Sep 2026 batch 2). Null for legacy drafts that
+  // predate the schema change; the form uses that as "not answered" and
+  // clears/pre-fills accordingly.
+  contractorId: string | null;
+  exactLocation: string | null;
+  totalQuantityPct: number | null;
+  executedQuantityPct: number | null;
   items: Array<{
     label: string;
     passed: boolean | null;
@@ -75,6 +82,21 @@ const DEFAULT_ITEMS = [
 ];
 
 const REVIEWER_ROLES = new Set(["PLANNER", "PRODUCT_TEAM", "ADMIN", "SITE_MANAGER"]);
+
+/**
+ * Colab-parity Total / Executed Quantity fields on the WIR are stored
+ * as strings in the form (so the input can show empty, a partial digit,
+ * or "100"), and shipped as either a number (0-100) or null.
+ */
+function parseQtyStr(s: string): number | null {
+  const t = s.trim();
+  if (t === "") return null;
+  const n = Number(t);
+  if (!Number.isFinite(n)) return null;
+  if (n < 0) return 0;
+  if (n > 100) return 100;
+  return n;
+}
 
 // Same client-side downscale as PhotoPicker. Duplicated intentionally: the
 // per-row picker is a single-file capture with a much smaller UI, and
@@ -175,6 +197,20 @@ export default function InspectionForm({
   // a remark textarea before the actual POST.
   const [sendPopupOpen, setSendPopupOpen] = useState(false);
   const [submitRemark, setSubmitRemark] = useState(editDraft?.submitRemark ?? "");
+
+  // Colab-parity fields — Contractor picker, Exact Location free text,
+  // Total / Executed Quantity (%).
+  const [contractors, setContractors] = useState<Array<{ id: string; name: string }>>([]);
+  const [contractorId, setContractorId] = useState<string>(editDraft?.contractorId ?? "");
+  const [contractorPickerOpen, setContractorPickerOpen] = useState(false);
+  const [contractorSearch, setContractorSearch] = useState("");
+  const [exactLocation, setExactLocation] = useState<string>(editDraft?.exactLocation ?? "");
+  const [totalQuantityStr, setTotalQuantityStr] = useState<string>(
+    editDraft?.totalQuantityPct == null ? "100" : String(editDraft.totalQuantityPct),
+  );
+  const [executedQuantityStr, setExecutedQuantityStr] = useState<string>(
+    editDraft?.executedQuantityPct == null ? "" : String(editDraft.executedQuantityPct),
+  );
   // Reschedule popup — Colab's third button. Opens a date picker + note.
   const [reschedPopupOpen, setReschedPopupOpen] = useState(false);
   const [reschedDate, setReschedDate] = useState(() => {
@@ -220,6 +256,23 @@ export default function InspectionForm({
       cancelled = true;
     };
   }, []);
+
+  // Contractors on this project — powers the Colab-parity Contractor
+  // picker bottom sheet. Fetch once on mount; server scopes by project.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/projects/${projectId}/contractors`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { contractors: [] }))
+      .then((d) => {
+        if (!cancelled) setContractors(d.contractors ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setContractors([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   // Load the reviewer pool once. Client-side filters to the roles that
   // can actually review inspections; the server ultimately re-checks so
@@ -401,6 +454,9 @@ export default function InspectionForm({
     // to /api/inspections as before.
     const endpoint = isEditingDraft ? `/api/inspections/${editDraft!.id}/draft` : "/api/inspections";
     const method = isEditingDraft ? "PUT" : "POST";
+    // Colab-parity fields — parse quantity strings to numbers (or null).
+    const totalQ = parseQtyStr(totalQuantityStr);
+    const executedQ = parseQtyStr(executedQuantityStr);
     const payload: Record<string, unknown> = {
       wbsNodeId: activityId || undefined,
       title: title.trim(),
@@ -410,6 +466,11 @@ export default function InspectionForm({
       photoUrls: wholePhotos.urls,
       assignedReviewerIds: Array.from(selectedReviewerIds),
       submitRemark: remark.trim() || undefined,
+      // Colab-parity fields.
+      contractorId: contractorId || null,
+      exactLocation: exactLocation.trim() || null,
+      totalQuantityPct: totalQ,
+      executedQuantityPct: executedQ,
     };
     if (isEditingDraft) {
       payload.mode = "review";
@@ -506,6 +567,8 @@ export default function InspectionForm({
     // re-pick the same reviewers when they come back.
     const endpoint = isEditingDraft ? `/api/inspections/${editDraft!.id}/draft` : "/api/inspections";
     const method = isEditingDraft ? "PUT" : "POST";
+    const totalQ = parseQtyStr(totalQuantityStr);
+    const executedQ = parseQtyStr(executedQuantityStr);
     const payload: Record<string, unknown> = {
       wbsNodeId: activityId || undefined,
       title: title.trim(),
@@ -514,6 +577,10 @@ export default function InspectionForm({
       assignedReviewerIds: Array.from(selectedReviewerIds),
       submitRemark: submitRemark.trim() || undefined,
       mode: "draft" as const,
+      contractorId: contractorId || null,
+      exactLocation: exactLocation.trim() || null,
+      totalQuantityPct: totalQ,
+      executedQuantityPct: executedQ,
     };
     if (isEditingDraft) {
       payload.expectedUpdatedAt = editDraft!.expectedUpdatedAt;
@@ -775,6 +842,73 @@ export default function InspectionForm({
           className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
         />
       </label>
+
+      {/* Colab-parity block · Contractor picker + Exact Location + Quantities.
+          The order (Contractor → Exact Location → Total/Executed) matches
+          the Colab native WIR form step-by-step so site engineers hit the
+          same fields in the same order. */}
+      <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-3">
+        <div className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wider">
+          Contractor
+        </div>
+        <button
+          type="button"
+          onClick={() => setContractorPickerOpen(true)}
+          className="w-full flex items-center justify-between rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-left"
+        >
+          <span className={contractorId ? "text-stone-900" : "text-stone-400"}>
+            {contractorId
+              ? contractors.find((c) => c.id === contractorId)?.name ?? "Choose Contractor"
+              : "Choose Contractor"}
+          </span>
+          <span className="text-stone-400">▾</span>
+        </button>
+
+        <label className="block">
+          <span className="text-sm font-medium text-stone-700">Exact Location</span>
+          <textarea
+            value={exactLocation}
+            onChange={(e) => setExactLocation(e.target.value)}
+            placeholder="Enter Exact Location"
+            rows={2}
+            className="mt-1 w-full rounded-md border-2 border-dashed border-amber-300 bg-white px-3 py-2 text-sm resize-none"
+          />
+        </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="text-sm font-medium text-stone-700">Total Quantity</span>
+            <div className="mt-1 flex items-center rounded-md border-2 border-dashed border-amber-300 bg-white px-2">
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={100}
+                value={totalQuantityStr}
+                onChange={(e) => setTotalQuantityStr(e.target.value)}
+                className="flex-1 bg-transparent py-2 text-sm outline-none"
+              />
+              <span className="text-stone-400 text-sm">%</span>
+            </div>
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-stone-700">Executed Quantity</span>
+            <div className="mt-1 flex items-center rounded-md border-2 border-dashed border-amber-300 bg-white px-2">
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={100}
+                placeholder="Enter …"
+                value={executedQuantityStr}
+                onChange={(e) => setExecutedQuantityStr(e.target.value)}
+                className="flex-1 bg-transparent py-2 text-sm outline-none"
+              />
+              <span className="text-stone-400 text-sm">%</span>
+            </div>
+          </label>
+        </div>
+      </div>
 
       <div className="space-y-2">
         <label className="block">
@@ -1149,6 +1283,51 @@ export default function InspectionForm({
             >
               {pending ? "Saving…" : "Reschedule"}
             </button>
+          </div>
+        </BottomSheet>
+      )}
+
+      {/* Contractor picker bottom sheet — Colab parity. Opens on tap of
+          the Contractor field, shows a search bar + list of active
+          contractors on this project, alphabetically. */}
+      {contractorPickerOpen && (
+        <BottomSheet onClose={() => setContractorPickerOpen(false)} title="Select Contractor">
+          <div className="space-y-3">
+            <input
+              type="search"
+              value={contractorSearch}
+              onChange={(e) => setContractorSearch(e.target.value)}
+              placeholder="Search Contractor"
+              className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+              autoFocus
+            />
+            <div className="max-h-64 overflow-y-auto space-y-2">
+              {contractors
+                .filter((c) => c.name.toLowerCase().includes(contractorSearch.trim().toLowerCase()))
+                .map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setContractorId(c.id);
+                      setContractorPickerOpen(false);
+                      setContractorSearch("");
+                    }}
+                    className={`w-full text-left rounded-md border px-3 py-2 text-sm ${
+                      contractorId === c.id
+                        ? "border-ferrous-500 bg-ferrous-50 text-ferrous-900"
+                        : "border-stone-200 bg-white text-stone-900 hover:bg-stone-50"
+                    }`}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              {contractors.length === 0 && (
+                <p className="text-xs text-stone-500 italic">
+                  No contractors on this project yet.
+                </p>
+              )}
+            </div>
           </div>
         </BottomSheet>
       )}

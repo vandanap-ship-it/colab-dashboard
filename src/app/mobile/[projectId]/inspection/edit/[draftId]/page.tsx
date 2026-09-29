@@ -70,6 +70,10 @@ export default async function EditDraftPage({
         wbsNodeId: draft.wbsNodeId,
         submitRemark: draft.submitRemark,
         assignedReviewerIds: draft.assignedReviewerIds,
+        contractorId: draft.contractorId,
+        exactLocation: draft.exactLocation,
+        totalQuantityPct: draft.totalQuantityPct,
+        executedQuantityPct: draft.executedQuantityPct,
         items: draft.items.map((i) => ({
           label: i.label,
           passed: i.passed,

@@ -290,6 +290,7 @@ model Contractor {
   manpowerEntries ManpowerEntry[]
   workPermits     WorkPermit[]
   users           User[]
+  inspections     Inspection[]
   hindrancesResponsibleFor Hindrance[] @relation("HindranceResponsibleContractor")
 
   @@unique([projectId, name])
@@ -702,15 +703,36 @@ model Inspection {
   rescheduledFor      DateTime?
   rescheduledNote     String?
 
+  // Colab-parity fields — added Sep 2026 batch 2 for exact mobile WIR
+  // parity per Shraddha's direct call after the Nagarjuna screenshot
+  // walk. All optional so legacy rows remain valid.
+  //   contractorId        - which contractor this WIR is against; picked
+  //                         from the Contractor bottom-sheet on the form.
+  //                         Nullable in DB but form treats it as required.
+  //   exactLocation       - free-text field in addition to structured
+  //                         Villa/Sub/Sub-Sub location. Site engineer's
+  //                         own words for "where exactly on the wall".
+  //   totalQuantityPct    - Colab's "Total Quantity" %. Defaults to 100
+  //                         on the UI. Kept on the record for the report.
+  //   executedQuantityPct - Colab's "Executed Quantity" %. Optional on the
+  //                         form for pre-work checklists, populated on
+  //                         post-work.
+  contractorId        String?
+  exactLocation       String?
+  totalQuantityPct    Float?
+  executedQuantityPct Float?
+
   project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   wbsNode    WBSNode?          @relation(fields: [wbsNodeId], references: [id])
   filledBy   User              @relation("InspectionFiller", fields: [filledById], references: [id])
   reviewedBy User?             @relation("InspectionReviewer", fields: [reviewedById], references: [id])
+  contractor Contractor?       @relation(fields: [contractorId], references: [id])
   items      InspectionItem[]
   photos     InspectionPhoto[]
 
   @@index([projectId])
   @@index([wbsNodeId])
+  @@index([contractorId])
 }
 
 model InspectionItem {

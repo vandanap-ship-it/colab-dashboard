@@ -44,6 +44,13 @@ const PostInspectionSchema = z.object({
   // "Drafts" tab. "review" (the default) is the pre-existing Send For
   // Review flow — untouched clients keep working exactly like before.
   mode: z.enum(["draft", "review"]).optional(),
+  // Colab-parity fields (Sep 2026 batch 2). All optional in the schema —
+  // form treats contractorId as required for Send For Review but drafts
+  // may skip it.
+  contractorId: z.string().min(1).nullable().optional(),
+  exactLocation: z.string().max(500).nullable().optional(),
+  totalQuantityPct: z.number().min(0).max(100).nullable().optional(),
+  executedQuantityPct: z.number().min(0).max(100).nullable().optional(),
   idempotencyKey: z.string().max(120).optional(),
 });
 
@@ -131,7 +138,20 @@ export async function POST(req: Request) {
   const parsed = await parseBody(req, PostInspectionSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
-  const { projectId, wbsNodeId, title, items, photoUrls, assignedReviewerIds, submitRemark, mode } = body;
+  const {
+    projectId,
+    wbsNodeId,
+    title,
+    items,
+    photoUrls,
+    assignedReviewerIds,
+    submitRemark,
+    mode,
+    contractorId,
+    exactLocation,
+    totalQuantityPct,
+    executedQuantityPct,
+  } = body;
   const t = title.trim();
   const isDraft = mode === "draft";
 
@@ -215,6 +235,11 @@ export async function POST(req: Request) {
           idempotencyKey,
           submitRemark: cleanSubmitRemark,
           assignedReviewerIds: cleanReviewerIds,
+          // Colab-parity fields.
+          contractorId: contractorId || null,
+          exactLocation: exactLocation?.trim() || null,
+          totalQuantityPct: typeof totalQuantityPct === "number" ? totalQuantityPct : null,
+          executedQuantityPct: typeof executedQuantityPct === "number" ? executedQuantityPct : null,
           items: { create: itemsClean },
           photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
         },
