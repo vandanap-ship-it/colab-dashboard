@@ -381,7 +381,7 @@ export default async function MobilePermitDetailPage({
                         permit is still PENDING. Otherwise show the
                         stored reply read-only so the audit trail is
                         visible after approve/reject/close. */}
-                    {iAmApprover && permit.status === "PENDING" ? (
+                    {iAmApprover && (permit.status === "PENDING" || permit.status === "SUSPENDED") ? (
                       <MobilePermitCheckpointReviewer
                         permitId={permit.id}
                         index={i}

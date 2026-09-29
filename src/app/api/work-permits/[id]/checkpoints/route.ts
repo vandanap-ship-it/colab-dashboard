@@ -90,9 +90,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
 
     // Only actionable while the permit is still open — once decided,
-    // the checklist is a historical record.
-    if (permit.status !== "PENDING") {
-      return badRequest("Checklist replies are only editable while the permit is pending review.");
+    // the checklist is a historical record. SUSPENDED is treated as a
+    // paused-mid-review state, so approvers can still annotate.
+    if (permit.status !== "PENDING" && permit.status !== "SUSPENDED") {
+      return badRequest("Checklist replies are only editable while the permit is pending or suspended.");
     }
 
     const rows = narrowCheckpoints(permit.checklistResponses);
