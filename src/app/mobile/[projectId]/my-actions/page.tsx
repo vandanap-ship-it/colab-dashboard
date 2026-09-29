@@ -200,6 +200,16 @@ export default async function MobileMyActionsPage({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-5">
+        {/* Colab-parity summary card — matches the "Total Actions : N"
+            row at the top of Colab's My Actions screen (Thangamani zip
+            screenshot 3). Shown even at zero so the copy stays truthful
+            about the count. */}
+        <div className="rounded-2xl bg-white border border-stone-200 py-5 px-6 text-center shadow-sm">
+          <p className="font-serif text-[26px] leading-tight text-ink">
+            Total Actions : {total}
+          </p>
+        </div>
+
         {total === 0 ? (
           <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-10 text-center">
             <Inbox className="w-6 h-6 text-stone-300 mx-auto" />
@@ -211,7 +221,7 @@ export default async function MobileMyActionsPage({
         ) : (
           <>
             {snags.length > 0 && (
-              <ActionSection eyebrow="Snags to fix" count={snags.length} icon={Bug}>
+              <ActionSection eyebrow="Issue Assigned By Me" count={snags.length} icon={Bug}>
                 {snags.map((s) => (
                   <ActionRow
                     key={s.id}
@@ -259,7 +269,7 @@ export default async function MobileMyActionsPage({
             )}
 
             {wirsToReview.length > 0 && (
-              <ActionSection eyebrow="WIRs to review" count={wirsToReview.length} icon={ClipboardList}>
+              <ActionSection eyebrow="Checklist" count={wirsToReview.length} icon={ClipboardList}>
                 {wirsToReview.map((i) => (
                   <ActionRow
                     key={i.id}
@@ -386,5 +396,12 @@ function fmtDate(d: Date): string {
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 function severityLabel(sev: string): string {
-  return sev === "HIGH" ? "High" : sev === "MEDIUM" ? "Med" : sev === "LOW" ? "Low" : sev;
+  // Colab vocab: Minor / Major / Critical. Legacy LOW/MEDIUM/HIGH values
+  // still render (won't be present after the migration, but a mid-flight
+  // WIR draft could hold one).
+  if (sev === "Minor" || sev === "Major" || sev === "Critical") return sev;
+  if (sev === "HIGH") return "Critical";
+  if (sev === "MEDIUM") return "Major";
+  if (sev === "LOW") return "Minor";
+  return sev;
 }
