@@ -1025,6 +1025,7 @@ model ColabActivity {
 
   physicalProgress Float   // Physical_Progress column (the weight)
   totalPct         Float?  // Total__Progress_% column (activity completion %)
+  plannedPct       Float?  // Planned_Progress_% column (what should be done by report date)
 
   reasonCode      String?
   reasonNote      String?

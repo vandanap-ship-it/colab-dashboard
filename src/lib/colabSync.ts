@@ -429,6 +429,7 @@ export async function importColabProgress(
     progressDate: Date | null;
     physicalProgress: number;
     totalPct: number | null;
+    plannedPct: number | null;
     reasonCode: string | null;
     reasonNote: string | null;
     // Full Colab CSV row kept verbatim so the Master Report's "Download
@@ -660,6 +661,11 @@ export async function importColabProgress(
     // count by activities that started/finished without a formal progress
     // log (27 extra rows in the current Amanvana CSV — +0.10% actual).
     const progressDateOnly = parseColabDate(r.Progress_Date);
+    // Colab's CSV header has a trailing "%" that Papa strips at parse
+    // time in some environments but not others, so we read via the
+    // Record cast to pick up whichever variant landed.
+    const rawRow = r as unknown as Record<string, string | undefined>;
+    const plannedPctFromCsv = toFloat(rawRow["Planned_Progress_%"] ?? rawRow["Planned_Progress_"]);
     if (!options.dryRun && activityId && weightPct != null) {
       pendingColabActivities.push({
         projectId,
@@ -673,6 +679,7 @@ export async function importColabProgress(
         progressDate: progressDateOnly,
         physicalProgress: weightPct,
         totalPct: pct,
+        plannedPct: plannedPctFromCsv,
         reasonCode: reasonCode ?? null,
         reasonNote: reasonNote ?? null,
         rawColabRow: { ...(r as Record<string, string | undefined | null>) },
@@ -876,6 +883,7 @@ interface ColabActivityQueueRow {
   progressDate: Date | null;
   physicalProgress: number;
   totalPct: number | null;
+  plannedPct: number | null;
   reasonCode: string | null;
   reasonNote: string | null;
   rawColabRow: Record<string, string | undefined | null>;
@@ -888,30 +896,30 @@ interface ContractorLookup { id: string; name: string }
 async function bulkWriteColabActivity(prisma: PrismaLike, pending: ColabActivityQueueRow[]): Promise<void> {
   if (pending.length === 0) return;
   const now = new Date();
-  // 16 params per row (was 15) — the new rawColabRow JSONB column at
-  // the end brings the batch cap slightly down but stays well under
-  // Postgres' 65k-parameter limit even at 200 rows/chunk.
+  // 17 params per row now (added plannedPct). Still well under
+  // Postgres' 65k-parameter limit at 200 rows/chunk (~3,400 params).
   for (let i = 0; i < pending.length; i += 200) {
     const batch = pending.slice(i, i + 200);
     const values: unknown[] = [];
     const rowsSql: string[] = [];
     batch.forEach((r, j) => {
-      const base = j * 16;
+      const base = j * 17;
       rowsSql.push(
-        `(gen_random_uuid()::text, $${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5}, $${base+6}, $${base+7}, $${base+8}, $${base+9}, $${base+10}, $${base+11}, $${base+12}, $${base+13}, $${base+14}, $${base+15}, $${base+16}::jsonb)`
+        `(gen_random_uuid()::text, $${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5}, $${base+6}, $${base+7}, $${base+8}, $${base+9}, $${base+10}, $${base+11}, $${base+12}, $${base+13}, $${base+14}, $${base+15}, $${base+16}::jsonb, $${base+17})`
       );
       values.push(
         r.projectId, r.activityId, r.villaId, r.sectionId,
         r.plannedStart, r.plannedEnd, r.actualStart, r.actualEnd, r.progressDate,
         r.physicalProgress, r.totalPct, r.reasonCode, r.reasonNote, now, now,
         JSON.stringify(r.rawColabRow),
+        r.plannedPct,
       );
     });
     await prisma.$executeRawUnsafe(
       `INSERT INTO "ColabActivity" (
          "id","projectId","activityId","villaId","sectionId",
          "plannedStart","plannedEnd","actualStart","actualEnd","progressDate",
-         "physicalProgress","totalPct","reasonCode","reasonNote","createdAt","updatedAt","rawColabRow"
+         "physicalProgress","totalPct","reasonCode","reasonNote","createdAt","updatedAt","rawColabRow","plannedPct"
        ) VALUES ${rowsSql.join(",")}
        ON CONFLICT ("projectId","activityId") DO UPDATE SET
          "villaId"          = EXCLUDED."villaId",
@@ -923,6 +931,7 @@ async function bulkWriteColabActivity(prisma: PrismaLike, pending: ColabActivity
          "progressDate"     = EXCLUDED."progressDate",
          "physicalProgress" = EXCLUDED."physicalProgress",
          "totalPct"         = EXCLUDED."totalPct",
+         "plannedPct"       = EXCLUDED."plannedPct",
          "reasonCode"       = EXCLUDED."reasonCode",
          "reasonNote"       = EXCLUDED."reasonNote",
          "updatedAt"        = EXCLUDED."updatedAt",

@@ -755,18 +755,44 @@ async function getMasterReportUncached(
     return !max || cand > max ? cand : max;
   }, null);
 
-  // Overall progress % — Colab-parity weighted math when weightPct is
-  // available (post-Colab-import), equal-weighted fallback across ALL
-  // leaves otherwise. This mirrors src/lib/projectStats.ts so the Master
-  // Report agrees with the dashboard's Physical Progress gauge.
+  // Overall progress %.
   //
-  // Historical bug: this used to average across TRACKED-only leaves — the
-  // denominator was ~230 progressed activities instead of ~15,000 total,
-  // so achieved% would balloon (89.5% on Amanvana this afternoon while the
-  // real weighted progress is ~1.5%). Fixed by reading weightPct and
-  // summing across every leaf, same as the dashboard.
-  const { planned: overallPlanned, achieved: overallAchieved } =
-    weightedOverallProgress(leaves, today);
+  // Preferred path (Colab-parity): aggregate straight from ColabActivity
+  // rows using Colab's own Physical_Progress (weight), Planned_Progress_%
+  // and Total_Progress_% columns:
+  //   overallPlanned  = SUM(physicalProgress × plannedPct) / SUM(physicalProgress)
+  //   overallAchieved = SUM(physicalProgress × totalPct)   / SUM(physicalProgress)
+  // This is what Colab's own dashboards use, so the report numbers now
+  // reconcile with Colab exports without any client-side math.
+  //
+  // Fallback (fresh MPP-only project, no Colab data): the historic
+  // WBSNode-weighted path, computing planned% from baseline dates.
+  const overallColab = await prisma.$queryRawUnsafe<
+    Array<{ planned_num: number | null; achieved_num: number | null; weight_sum: number | null }>
+  >(
+    `SELECT
+       SUM("physicalProgress" * COALESCE("plannedPct", 0)) AS planned_num,
+       SUM("physicalProgress" * COALESCE("totalPct",   0)) AS achieved_num,
+       SUM("physicalProgress")                              AS weight_sum
+     FROM "ColabActivity"
+     WHERE "projectId" = $1
+       AND "physicalProgress" > 0`,
+    projectId,
+  );
+  const cAgg = overallColab[0];
+  const totalWeight = Number(cAgg?.weight_sum ?? 0);
+  let overallPlanned: number;
+  let overallAchieved: number;
+  if (totalWeight > 0) {
+    overallPlanned  = Number(cAgg?.planned_num ?? 0) / totalWeight;
+    overallAchieved = Number(cAgg?.achieved_num ?? 0) / totalWeight;
+  } else {
+    // No ColabActivity rows yet — fall back to the leaf-based weighted
+    // math so freshly-imported MPP-only projects still show a number.
+    const fallback = weightedOverallProgress(leaves, today);
+    overallPlanned  = fallback.planned;
+    overallAchieved = fallback.achieved;
+  }
 
   // Signed: positive = days late, negative = days ahead, 0 = on the day.
   // Previously clamped at 0 which made "ahead of schedule" look identical to
