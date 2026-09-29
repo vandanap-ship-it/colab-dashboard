@@ -60,6 +60,12 @@ export async function GET(req: Request, ctx: RouteContext<"/api/projects/[id]/wb
     totalQuantity: n.totalQuantity,
     unit: n.unit,
     contractor: n.contractor,
+    // Colab-parity — the mobile WIR / progress location cascade groups
+    // leaves by villa + section, so surface those ids alongside each node.
+    // Null on structural / phase nodes; set on leaf activities and their
+    // direct parents where the importer tagged them.
+    villaId: n.villaId,
+    sectionId: n.sectionId,
   }));
 
   const filtered = leavesOnly ? nodes.filter((n) => n.isLeaf) : nodes;

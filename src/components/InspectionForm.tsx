@@ -10,7 +10,16 @@ import SaveSuccessCard from "./SaveSuccessCard";
 import HowThisWorks from "./HowThisWorks";
 import { itemState } from "@/lib/inspectionItemState";
 
-type Activity = { id: string; name: string; taskCode: string; path: string[] };
+type Activity = {
+  id: string;
+  name: string;
+  taskCode: string;
+  path: string[];
+  villaId: string | null;
+  sectionId: string | null;
+};
+type Villa = { id: string; number: number; label: string | null };
+type Section = { id: string; code: string; name: string };
 
 type TemplateItem = { seq: number; section: string | null; description: string };
 type Template = {
@@ -216,6 +225,16 @@ export default function InspectionForm({
   const [executedQuantityStr, setExecutedQuantityStr] = useState<string>(
     editDraft?.executedQuantityPct == null ? "" : String(editDraft.executedQuantityPct),
   );
+
+  // Colab-parity location cascade: Villa → Sub Location → Activity.
+  // Each level opens its own bottom sheet, matching the native app.
+  const [villas, setVillas] = useState<Villa[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [pickedVillaId, setPickedVillaId] = useState<string>("");
+  const [pickedSectionId, setPickedSectionId] = useState<string>("");
+  const [villaPickerOpen, setVillaPickerOpen] = useState(false);
+  const [sectionPickerOpen, setSectionPickerOpen] = useState(false);
+  const [activityPickerOpen, setActivityPickerOpen] = useState(false);
   // Reschedule popup — Colab's third button. Opens a date picker + note.
   const [reschedPopupOpen, setReschedPopupOpen] = useState(false);
   const [reschedDate, setReschedDate] = useState(() => {
@@ -307,6 +326,47 @@ export default function InspectionForm({
     };
   }, [projectId]);
 
+  // Villas + sections — powers the Colab-parity location cascade
+  // (Villa → Sub Location → Activity). Both fetch once; villas + sections
+  // are project-global and change rarely.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetch(`/api/projects/${projectId}/villas`, { cache: "no-store" }).then((r) =>
+        r.ok ? r.json() : { villas: [] },
+      ),
+      fetch(`/api/projects/${projectId}/sections`, { cache: "no-store" }).then((r) =>
+        r.ok ? r.json() : { sections: [] },
+      ),
+    ])
+      .then(([vd, sd]) => {
+        if (!cancelled) {
+          setVillas(vd.villas ?? []);
+          setSections(sd.sections ?? []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setVillas([]);
+          setSections([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  // If an activity is preselected (from Log Progress deep-link or a
+  // resume-edit draft), auto-fill the cascade so the pickers show the
+  // right breadcrumb from the start.
+  useEffect(() => {
+    if (!activities || !activityId) return;
+    const a = activities.find((x) => x.id === activityId);
+    if (!a) return;
+    if (a.villaId && !pickedVillaId) setPickedVillaId(a.villaId);
+    if (a.sectionId && !pickedSectionId) setPickedSectionId(a.sectionId);
+  }, [activities, activityId, pickedVillaId, pickedSectionId]);
+
   // Load the reviewer pool once. Client-side filters to the roles that
   // can actually review inspections; the server ultimately re-checks so
   // this list is only about the picker UI.
@@ -344,11 +404,29 @@ export default function InspectionForm({
   const filtered = useMemo(() => {
     if (!activities) return [];
     const q = activitySearch.trim().toLowerCase();
-    if (!q) return activities.slice(0, 50);
-    return activities
-      .filter((a) => a.name.toLowerCase().includes(q) || a.path.join(" / ").toLowerCase().includes(q))
-      .slice(0, 50);
-  }, [activities, activitySearch]);
+    let list = activities;
+    // Colab-parity: the cascade narrows by Villa, then Sub Location.
+    // Both are optional — leaving them blank falls back to search-only
+    // behaviour so the pre-cascade flow still works.
+    if (pickedVillaId) {
+      list = list.filter((a) => a.villaId === pickedVillaId);
+    }
+    if (pickedSectionId) {
+      list = list.filter((a) => a.sectionId === pickedSectionId);
+    }
+    if (q) {
+      list = list.filter(
+        (a) => a.name.toLowerCase().includes(q) || a.path.join(" / ").toLowerCase().includes(q),
+      );
+    }
+    return list.slice(0, 200);
+  }, [activities, activitySearch, pickedVillaId, pickedSectionId]);
+
+  const villaLabel = (v: Villa | undefined) =>
+    !v ? "" : v.label && v.label.trim() ? v.label : `Villa ${String(v.number).padStart(2, "0")}`;
+  const pickedVilla = villas.find((v) => v.id === pickedVillaId);
+  const pickedSection = sections.find((s) => s.id === pickedSectionId);
+  const pickedActivity = activities?.find((a) => a.id === activityId);
 
   const selected = activities?.find((a) => a.id === activityId);
 
@@ -967,42 +1045,65 @@ export default function InspectionForm({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <label className="block">
-          <span className="text-sm font-medium text-stone-700">
-            Activity <span className="text-stone-400">(optional)</span>
+      {/* Colab-parity location cascade · Villa → Sub Location → Activity.
+          Each step is a tap-to-open bottom sheet. Selecting Villa opens
+          Sub Location; selecting Sub Location opens Activity. Skipping a
+          level (leaving Villa blank) falls back to a flat activity
+          search so callers that pre-select via ?wbsNodeId still work. */}
+      <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-3">
+        <div className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wider">
+          Location
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setVillaPickerOpen(true)}
+          className="w-full flex items-center justify-between rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-left"
+        >
+          <span className={pickedVillaId ? "text-stone-900" : "text-stone-400"}>
+            {pickedVillaId ? villaLabel(pickedVilla) : "Select Villa"}
           </span>
-          <input
-            type="text"
-            placeholder="Search activity…"
-            value={activitySearch}
-            onChange={(e) => setActivitySearch(e.target.value)}
-            className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
-          />
-        </label>
-        <div className="max-h-40 overflow-y-auto rounded-md border border-stone-200 divide-y divide-stone-100">
-          <button
-            type="button"
-            onClick={() => setActivityId("")}
-            className={`w-full text-left px-3 py-2 ${activityId === "" ? "bg-amber-50" : ""}`}
-          >
-            <div className="text-xs text-stone-500">No specific activity</div>
-          </button>
-          {filtered.map((a) => (
+          <span className="text-stone-400">▾</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => pickedVillaId && setSectionPickerOpen(true)}
+          disabled={!pickedVillaId}
+          className={`w-full flex items-center justify-between rounded-md border px-3 py-2 text-sm text-left ${
+            pickedVillaId
+              ? "border-stone-300 bg-white"
+              : "border-stone-200 bg-stone-50 text-stone-300"
+          }`}
+        >
+          <span className={pickedSectionId ? "text-stone-900" : "text-stone-400"}>
+            {pickedSectionId ? pickedSection?.name : "Select Sub Location"}
+          </span>
+          <span>▾</span>
+        </button>
+
+        <div className="space-y-2">
+          <label className="block">
+            <span className="text-sm font-medium text-stone-700">
+              Activity <span className="text-stone-400">(optional)</span>
+            </span>
             <button
               type="button"
-              key={a.id}
-              onClick={() => setActivityId(a.id)}
-              className={`w-full text-left px-3 py-2 ${activityId === a.id ? "bg-amber-50" : ""}`}
+              onClick={() => setActivityPickerOpen(true)}
+              className="mt-1 w-full flex items-center justify-between rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-left"
             >
-              <div className="text-sm font-medium text-stone-900">{a.name}</div>
-              <div className="text-[10px] text-stone-500">{a.path.slice(0, -1).join(" / ")}</div>
+              <span className={activityId ? "text-stone-900" : "text-stone-400"}>
+                {activityId ? pickedActivity?.name ?? "Selected" : "Select Activity"}
+              </span>
+              <span className="text-stone-400">▾</span>
             </button>
-          ))}
+          </label>
+          {pickedActivity && (
+            <p className="text-[11px] text-stone-500">
+              {pickedActivity.path.slice(0, -1).join(" / ")}
+            </p>
+          )}
         </div>
-        {selected && (
-          <p className="text-xs text-stone-600">Selected: {selected.name}</p>
-        )}
       </div>
 
       <div className="space-y-2">
@@ -1340,6 +1441,144 @@ export default function InspectionForm({
             >
               {pending ? "Saving…" : "Reschedule"}
             </button>
+          </div>
+        </BottomSheet>
+      )}
+
+      {/* Villa picker — first step of the Colab-parity cascade. Sorted
+          numerically so Villa 01, 02, 03… line up. Tapping a villa
+          closes this sheet and clears any picked Sub Location + Activity
+          so the cascade re-narrows from scratch. */}
+      {villaPickerOpen && (
+        <BottomSheet onClose={() => setVillaPickerOpen(false)} title="Select Location">
+          <div className="max-h-72 overflow-y-auto space-y-2">
+            {villas.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => {
+                  setPickedVillaId(v.id);
+                  // If the previously picked activity is not in this villa,
+                  // clear it so the cascade stays coherent.
+                  if (activityId) {
+                    const a = activities?.find((x) => x.id === activityId);
+                    if (a && a.villaId !== v.id) {
+                      setActivityId("");
+                      setPickedSectionId("");
+                    }
+                  }
+                  setVillaPickerOpen(false);
+                }}
+                className={`w-full flex items-center justify-between rounded-md border px-3 py-2.5 text-sm ${
+                  pickedVillaId === v.id
+                    ? "border-ferrous-500 bg-ferrous-50 text-ferrous-900"
+                    : "border-stone-200 bg-white text-stone-900 hover:bg-stone-50"
+                }`}
+              >
+                <span className="font-medium">{villaLabel(v)}</span>
+                <span className="text-stone-400">›</span>
+              </button>
+            ))}
+            {villas.length === 0 && (
+              <p className="text-xs text-stone-500 italic">No villas in scope.</p>
+            )}
+          </div>
+        </BottomSheet>
+      )}
+
+      {/* Sub Location picker — sections that have leaves under the
+          picked villa. Empty sections are hidden. */}
+      {sectionPickerOpen && pickedVillaId && (
+        <BottomSheet
+          onClose={() => setSectionPickerOpen(false)}
+          title="Select Sub Location"
+        >
+          <div className="mb-2 text-xs font-medium text-stone-500">
+            {villaLabel(pickedVilla)}
+          </div>
+          <div className="max-h-72 overflow-y-auto space-y-2">
+            {sections
+              .filter((s) => (activities ?? []).some((a) => a.villaId === pickedVillaId && a.sectionId === s.id))
+              .map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => {
+                    setPickedSectionId(s.id);
+                    if (activityId) {
+                      const a = activities?.find((x) => x.id === activityId);
+                      if (a && a.sectionId !== s.id) setActivityId("");
+                    }
+                    setSectionPickerOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between rounded-md border px-3 py-2.5 text-sm ${
+                    pickedSectionId === s.id
+                      ? "border-ferrous-500 bg-ferrous-50 text-ferrous-900"
+                      : "border-stone-200 bg-white text-stone-900 hover:bg-stone-50"
+                  }`}
+                >
+                  <span className="font-medium">{s.name}</span>
+                  <span className="text-stone-400">›</span>
+                </button>
+              ))}
+            {sections.filter((s) => (activities ?? []).some((a) => a.villaId === pickedVillaId && a.sectionId === s.id)).length === 0 && (
+              <p className="text-xs text-stone-500 italic">
+                No sections with activities on this villa.
+              </p>
+            )}
+          </div>
+        </BottomSheet>
+      )}
+
+      {/* Activity picker — filtered leaves matching villa + section
+          (falls back to search-only if either is blank). Keeps the
+          existing search-list UX inside the sheet. */}
+      {activityPickerOpen && (
+        <BottomSheet onClose={() => setActivityPickerOpen(false)} title="Select Activity">
+          <div className="space-y-2">
+            <input
+              type="search"
+              value={activitySearch}
+              onChange={(e) => setActivitySearch(e.target.value)}
+              placeholder="Search activity…"
+              className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+              autoFocus
+            />
+            <div className="max-h-72 overflow-y-auto divide-y divide-stone-100 rounded-md border border-stone-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setActivityId("");
+                  setActivityPickerOpen(false);
+                }}
+                className={`w-full text-left px-3 py-2 ${activityId === "" ? "bg-amber-50" : ""}`}
+              >
+                <div className="text-xs text-stone-500">No specific activity</div>
+              </button>
+              {filtered.map((a) => (
+                <button
+                  type="button"
+                  key={a.id}
+                  onClick={() => {
+                    setActivityId(a.id);
+                    setActivityPickerOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 ${
+                    activityId === a.id ? "bg-amber-50" : ""
+                  }`}
+                >
+                  <div className="text-sm font-medium text-stone-900">{a.name}</div>
+                  <div className="text-[10px] text-stone-500">
+                    {a.path.slice(0, -1).join(" / ")}
+                  </div>
+                </button>
+              ))}
+              {filtered.length === 0 && (
+                <p className="px-3 py-4 text-xs text-stone-500 italic text-center">
+                  No matching activities.
+                </p>
+              )}
+            </div>
           </div>
         </BottomSheet>
       )}
