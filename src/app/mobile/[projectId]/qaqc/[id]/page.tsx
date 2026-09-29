@@ -149,6 +149,14 @@ export default async function MobileInspectionDetailPage({
               <span className="font-medium leading-snug">{inspection.wbsNode.name}</span>
             </div>
           )}
+          {/* Colab-parity: Trigger Type on the summary card (screen 15
+              of Thangamani zip). Manual for filler-initiated WIRs;
+              Auto reserved for scheduled or hook-spawned WIRs. */}
+          <div className="flex items-center gap-2 text-stone-700">
+            <span className="w-4 h-4 shrink-0" />
+            <span className="text-stone-500 text-xs uppercase tracking-wider mr-1">Trigger Type</span>
+            <span className="font-medium">{inspection.triggerType ?? "Manual"}</span>
+          </div>
           {inspection.reviewedBy && inspection.reviewedAt && (
             <div className="flex items-center gap-2 text-stone-700 pt-2 border-t border-stone-100 mt-2">
               <CheckCircle2 className="w-4 h-4 text-stone-400 shrink-0" />
@@ -318,6 +326,60 @@ export default async function MobileInspectionDetailPage({
             </div>
           </section>
         )}
+
+        {/* Colab-parity "Approvers" section at the bottom of the WIR
+            detail. Matches Girish screen 23 layout: dark ink header,
+            per-level subheader with status pill, then a card per
+            approver with name/role + status + optional remark +
+            timestamp. Single-approver on White Lotus so we render one
+            row per level.
+            - PENDING (WIR is IN_REVIEW): show the assigned reviewers
+              as awaiting.
+            - APPROVED (PASSED): show the actual reviewer as approved.
+            - REJECTED: show as rejected, with the rejectionReason as
+              the remark. */}
+        <section className="rounded-xl overflow-hidden border border-stone-200 bg-white">
+          <div className="bg-ink text-white px-3 py-2 text-xs font-semibold uppercase tracking-wider">
+            Approvers
+          </div>
+          <div className="px-3 py-3 space-y-3">
+            <div className="flex items-center justify-center gap-3 text-xs">
+              <div className="h-px flex-1 bg-stone-200" />
+              <span className="font-semibold text-ink">Level 1 (Level 1)</span>
+              <ApproverLevelPill status={inspection.status} />
+              <div className="h-px flex-1 bg-stone-200" />
+            </div>
+            {inspection.status === "IN_REVIEW" ? (
+              assignedReviewers.length === 0 ? (
+                <div className="text-center text-xs text-stone-500 italic">
+                  No specific reviewer picked — the WIR is broadcast to the
+                  planner + product + admin queue.
+                </div>
+              ) : (
+                assignedReviewers.map((r) => (
+                  <ApproverCard
+                    key={r.id}
+                    name={r.name ?? r.username}
+                    roleLabel={roleLabel(r.role)}
+                    statusLabel="Pending"
+                    statusTone="pending"
+                    remark={null}
+                    timestamp={null}
+                  />
+                ))
+              )
+            ) : (
+              <ApproverCard
+                name={inspection.reviewedBy?.name ?? "—"}
+                roleLabel={null}
+                statusLabel={inspection.status === "PASSED" ? "Approved" : "Rejected"}
+                statusTone={inspection.status === "PASSED" ? "approved" : "rejected"}
+                remark={inspection.rejectionReason ?? null}
+                timestamp={inspection.reviewedAt ? fmtDateTime(inspection.reviewedAt) : null}
+              />
+            )}
+          </div>
+        </section>
       </div>
 
       {/* Sticky bottom bar — three variants depending on status.
@@ -402,6 +464,103 @@ function StatusPill({ status }: { status: string }) {
 
 function fmtDate(d: Date): string {
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function fmtDateTime(d: Date): string {
+  // Colab-parity — Approvers section shows "29 Sep 2026, 06:28 PM"
+  const date = fmtDate(d);
+  const time = new Date(d).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${date}, ${time}`;
+}
+
+function roleLabel(role: string): string {
+  // Small helper for the Approvers section — human labels for the
+  // reviewer's role field. Falls back to the raw role string.
+  const map: Record<string, string> = {
+    PLANNER: "Planner",
+    PRODUCT_TEAM: "Product Team",
+    ADMIN: "Admin",
+    SITE_MANAGER: "Site Manager",
+    SITE_ENGINEER: "Site Engineer",
+  };
+  return map[role] ?? role;
+}
+
+function ApproverLevelPill({ status }: { status: string }) {
+  if (status === "PASSED")
+    return (
+      <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+        Approved
+      </span>
+    );
+  if (status === "REJECTED")
+    return (
+      <span className="inline-flex items-center rounded-full bg-red-50 text-red-700 ring-1 ring-red-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+        Rejected
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center rounded-full bg-amber-50 text-amber-800 ring-1 ring-amber-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+      Pending
+    </span>
+  );
+}
+
+function ApproverCard({
+  name,
+  roleLabel,
+  statusLabel,
+  statusTone,
+  remark,
+  timestamp,
+}: {
+  name: string;
+  roleLabel: string | null;
+  statusLabel: string;
+  statusTone: "approved" | "rejected" | "pending";
+  remark: string | null;
+  timestamp: string | null;
+}) {
+  const pill =
+    statusTone === "approved"
+      ? "bg-emerald-100 text-emerald-800 ring-emerald-200"
+      : statusTone === "rejected"
+        ? "bg-red-100 text-red-800 ring-red-200"
+        : "bg-amber-100 text-amber-800 ring-amber-200";
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink leading-snug">{name}</p>
+          {roleLabel && (
+            <p className="text-[11px] text-stone-500 mt-0.5">{roleLabel}</p>
+          )}
+          <p className="text-[10px] text-stone-400 mt-1 uppercase tracking-wider">
+            Approver
+          </p>
+        </div>
+        <span
+          className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[11px] font-semibold ${pill}`}
+        >
+          {statusLabel}
+        </span>
+      </div>
+      {remark && (
+        <p className="text-sm text-ink mt-2 whitespace-pre-wrap">
+          <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider block mb-0.5">
+            Remark
+          </span>
+          {remark}
+        </p>
+      )}
+      {timestamp && (
+        <p className="text-[11px] text-stone-500 mt-2">{timestamp}</p>
+      )}
+    </div>
+  );
 }
 
 /**
