@@ -10,6 +10,7 @@ import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { isValidReasonCode } from "@/lib/hindranceReasons";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { checkPrecheck } from "@/lib/progressGates";
+import { generateProgressDisplayId } from "@/lib/progress";
 
 const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
@@ -236,6 +237,9 @@ export async function POST(req: Request) {
         wbsNodeId,
         date: entryDate,
         type: finalType,
+        // Colab-parity displayId (PROG-XXXXXXXX). Generated even for
+        // drafts so the id is stable when the engineer publishes.
+        displayId: generateProgressDisplayId(),
         achievedQuantity: isFinite(achieved) ? achieved : 0,
         cumulativeQuantity: isFinite(cumulative) ? cumulative : 0,
         contractorId: contractorId ?? null,

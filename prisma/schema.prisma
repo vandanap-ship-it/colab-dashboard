@@ -373,6 +373,14 @@ model ProgressEntry {
   date      DateTime
   type      String   @default("LABOUR_SUPPLY")
 
+  // Colab-parity human-readable id shown on Site Progress activity
+  // cards (Madhavan zip 2026-09-30 · "ID : PROG435527" chip). 8-char
+  // uppercase-alphanumeric using an unambiguous alphabet (no I/O/0/1
+  // like the permit displayId). Populated at create time; nullable so
+  // legacy PUBLISHED rows keep round-tripping until a one-shot
+  // backfill runs.
+  displayId String?
+
   achievedQuantity   Float @default(0)
   cumulativeQuantity Float @default(0)
 
@@ -410,6 +418,7 @@ model ProgressEntry {
 
   @@index([projectId, date])
   @@index([wbsNodeId])
+  @@index([displayId])
 }
 
 model ProgressLabour {

@@ -9,6 +9,7 @@ import { isValidReasonCode } from "@/lib/hindranceReasons";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { maybeSendMilestoneCompletionEmail } from "@/lib/progressPublish";
+import { generateProgressDisplayId } from "@/lib/progress";
 
 /**
  * POST /api/progress/[id]/publish
@@ -64,6 +65,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/progress/[id]/p
       projectId: true,
       wbsNodeId: true,
       createdById: true,
+      displayId: true,
     },
   });
   if (!draft) return NextResponse.json({ error: "Draft not found" }, { status: 404 });
@@ -130,6 +132,9 @@ export async function POST(req: Request, ctx: RouteContext<"/api/progress/[id]/p
       data: {
         date: entryDate,
         type: finalType,
+        // Backfill Colab-parity displayId when a legacy draft (created
+        // before the migration) publishes without one.
+        displayId: draft.displayId ?? generateProgressDisplayId(),
         achievedQuantity: isFinite(achieved) ? achieved : 0,
         cumulativeQuantity: isFinite(cumulative) ? cumulative : 0,
         contractorId: body.contractorId ?? null,
