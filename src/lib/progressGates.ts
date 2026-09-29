@@ -23,6 +23,28 @@
  * The gate is advisory on the *creation* of the WBS row itself — the
  * engineer will always be *able* to fill in a hindrance or a manpower
  * entry against a gated activity. It only blocks *progress logging*.
+ *
+ * ---------------------------------------------------------------------
+ * DESIGN DECISION 2026-09-30 (Shraddha, product side):
+ *
+ * Colab's /cm/checklistNewConf admin config for Amanvana was audited
+ * — every one of ~50 checklists has Trigger=Manual with no Activity
+ * Head or Activity linkage. That means Colab does NOT currently
+ * hard-block progress based on any checklist for White Lotus's own
+ * projects.
+ *
+ * Shraddha chose to KEEP Siddhi stricter than Colab here: the gate is
+ * an intentional improvement — a paved road that prevents the site
+ * from logging progress on the wrong activity when a required
+ * upstream inspection hasn't cleared yet.
+ *
+ * When extending the registry, prefer over-coverage on activity-name
+ * synonyms (the regex already does this) over adding new pairs.
+ * Adding a new pair should be paired with a note in
+ * `memory/colab_qaqc_gate_investigation.md` recording WHY the pair
+ * was added, so a future reviewer can trace the intent even if the
+ * checklist library changes shape.
+ * ---------------------------------------------------------------------
  */
 
 import { prisma } from "@/lib/prisma";
