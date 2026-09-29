@@ -790,10 +790,19 @@ model PermitApprover {
  * workers the requester lists under Step 2's "Labour" section. Colab
  * uses free-text name / role / count fields (Abhishek zip, screen 10)
  * so the site team can enter mixed crews without a WBS lookup.
+ *
+ * `kind` discriminates two Colab-parity sections that share the same
+ * row shape:
+ *   - "LABOUR" (default) — Step 2's Labour section for any permit type.
+ *   - "ATTENDANCE" — Night Work permit's "Details of Personnel in
+ *     Attendance" section: named supervisors / safety officers who are
+ *     physically on site during night hours. `count` is typically 1
+ *     for these; the `role` column carries their designation.
  */
 model PermitLabourEntry {
   id           String   @id @default(cuid())
   workPermitId String
+  kind         String   @default("LABOUR")
   // Colab shows the crew leader's name and a role label ("Welder",
   // "Rigger", "Fitter") plus a headcount. Every field is optional so a
   // permit can capture just what the requester knows.

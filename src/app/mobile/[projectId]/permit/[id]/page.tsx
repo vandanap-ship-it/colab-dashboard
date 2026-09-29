@@ -284,28 +284,56 @@ export default async function MobilePermitDetailPage({
         </section>
 
         {/* Labour Entries — Colab shows this even for General Work when
-            the requester listed workers on Step 2. */}
-        {permit.labourEntries.length > 0 && (
-          <section className="rounded-xl border border-stone-200 bg-white p-3">
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-2">
-              <HardHat className="w-3 h-3" />
-              Labour · {permit.labourEntries.length}
-            </div>
-            <ul className="divide-y divide-stone-100">
-              {permit.labourEntries.map((l) => (
-                <li key={l.id} className="py-1.5 flex items-center gap-2 text-sm">
-                  <span className="font-medium text-ink flex-1 truncate">
-                    {l.workerName ?? "—"}
-                  </span>
-                  <span className="text-stone-500 text-xs truncate">{l.role ?? ""}</span>
-                  <span className="tabular-nums text-stone-700 font-semibold text-xs">
-                    {l.count != null ? `× ${l.count}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+            the requester listed workers on Step 2. Split by `kind` so
+            LABOUR renders as the general list and ATTENDANCE renders as
+            the Night-Work "Details of Personnel in Attendance" section. */}
+        {(() => {
+          const labourRows = permit.labourEntries.filter((l) => l.kind !== "ATTENDANCE");
+          const attendanceRows = permit.labourEntries.filter((l) => l.kind === "ATTENDANCE");
+          return (
+            <>
+              {labourRows.length > 0 && (
+                <section className="rounded-xl border border-stone-200 bg-white p-3">
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-2">
+                    <HardHat className="w-3 h-3" />
+                    Labour · {labourRows.length}
+                  </div>
+                  <ul className="divide-y divide-stone-100">
+                    {labourRows.map((l) => (
+                      <li key={l.id} className="py-1.5 flex items-center gap-2 text-sm">
+                        <span className="font-medium text-ink flex-1 truncate">
+                          {l.workerName ?? "—"}
+                        </span>
+                        <span className="text-stone-500 text-xs truncate">{l.role ?? ""}</span>
+                        <span className="tabular-nums text-stone-700 font-semibold text-xs">
+                          {l.count != null ? `× ${l.count}` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {attendanceRows.length > 0 && (
+                <section className="rounded-xl border border-stone-200 bg-white p-3">
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-2">
+                    <Users className="w-3 h-3" />
+                    Personnel in Attendance · {attendanceRows.length}
+                  </div>
+                  <ul className="divide-y divide-stone-100">
+                    {attendanceRows.map((l) => (
+                      <li key={l.id} className="py-1.5 flex items-center gap-2 text-sm">
+                        <span className="font-medium text-ink flex-1 truncate">
+                          {l.workerName ?? "—"}
+                        </span>
+                        <span className="text-stone-500 text-xs truncate">{l.role ?? ""}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </>
+          );
+        })()}
 
         {/* Checklist responses — the Step-3 answers, rendered read-only.
             Passed = green ✓, Failed = red ✗, unanswered = grey dash. */}

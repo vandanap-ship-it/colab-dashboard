@@ -119,6 +119,13 @@ export default function WorkPermitForm({
   // Colab-parity Step 2 additions.
   type LabourEntry = { workerName: string; role: string; count: string };
   const [labourEntries, setLabourEntries] = useState<LabourEntry[]>([]);
+  // Colab-parity: Night Work permit has a dedicated "Details of
+  // Personnel in Attendance" section (Abhishek zip). Same row shape as
+  // labour but the semantic is named supervisors / safety officers on
+  // site during night hours. Kept as a separate state slice so the two
+  // lists render as two distinct cards; the API `kind` field splits
+  // them on write.
+  const [personnelEntries, setPersonnelEntries] = useState<LabourEntry[]>([]);
   const [coRequesterIds, setCoRequesterIds] = useState<Set<string>>(new Set());
   const [activityHead, setActivityHead] = useState<string>("");
   // Per-approver capabilities picked in Step 2 (Colab shows two chips
@@ -218,11 +225,29 @@ export default function WorkPermitForm({
     //   can persist capabilities.
     const cleanLabour = labourEntries
       .map((r) => ({
+        kind: "LABOUR" as const,
         workerName: r.workerName.trim() || undefined,
         role: r.role.trim() || undefined,
         count: r.count.trim() ? Number(r.count) : undefined,
       }))
       .filter((r) => r.workerName || r.role || (typeof r.count === "number" && Number.isFinite(r.count)));
+
+    const cleanAttendance = personnelEntries
+      .map((r) => ({
+        kind: "ATTENDANCE" as const,
+        workerName: r.workerName.trim() || undefined,
+        role: r.role.trim() || undefined,
+        count: r.count.trim() ? Number(r.count) : 1,
+      }))
+      .filter((r) => r.workerName || r.role);
+
+    // Colab groups both under the same labourEntries[] payload — the API
+    // splits them by `kind` on write. Only include ATTENDANCE rows when
+    // the permit is Night Work (the section is hidden otherwise).
+    const combinedLabour =
+      type === "NIGHT_WORK"
+        ? [...cleanLabour, ...cleanAttendance]
+        : cleanLabour;
 
     const approverIdsArr = Array.from(selectedApprovers);
     const approversWithCaps = approverIdsArr.map((userId) => ({
@@ -245,7 +270,7 @@ export default function WorkPermitForm({
       contractorId: contractorId || undefined,
       approverIds: approverIdsArr,
       approvers: approversWithCaps,
-      labourEntries: cleanLabour.length > 0 ? cleanLabour : undefined,
+      labourEntries: combinedLabour.length > 0 ? combinedLabour : undefined,
       coRequesterIds: coRequesterIds.size > 0 ? Array.from(coRequesterIds) : undefined,
       activityHead: activityHead.trim() || undefined,
       photoUrls,
@@ -742,6 +767,69 @@ export default function WorkPermitForm({
             className="w-full rounded-lg border border-ink text-ink text-sm font-semibold py-2 hover:bg-sandstone-50"
           >
             + Add Labour Entry
+          </button>
+        </div>
+      </div>
+
+      {/* Step 2: Colab-parity "Details of Personnel in Attendance"
+          (Night Work permit only, Abhishek zip). Same row shape as
+          Labour but the semantic is named supervisors / safety officers
+          on site during night hours — the placeholder text calls this
+          out. Hidden when type != NIGHT_WORK; state is preserved when
+          the user switches type mid-form so an accidental type toggle
+          doesn't nuke the list. */}
+      <div className={step === 2 && type === "NIGHT_WORK" ? "" : "hidden"}>
+        <FieldLabel hint="Named supervisors / safety officers on site" optional>
+          Details of Personnel in Attendance
+        </FieldLabel>
+        <div className="space-y-2">
+          {personnelEntries.map((row, idx) => (
+            <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+              <input
+                className={inputCls}
+                value={row.workerName}
+                onChange={(e) => {
+                  const next = personnelEntries.slice();
+                  next[idx] = { ...next[idx], workerName: e.target.value };
+                  setPersonnelEntries(next);
+                }}
+                placeholder="Name"
+                maxLength={120}
+              />
+              <input
+                className={inputCls}
+                value={row.role}
+                onChange={(e) => {
+                  const next = personnelEntries.slice();
+                  next[idx] = { ...next[idx], role: e.target.value };
+                  setPersonnelEntries(next);
+                }}
+                placeholder="Designation (Site Supervisor…)"
+                maxLength={80}
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setPersonnelEntries(personnelEntries.filter((_, i) => i !== idx))
+                }
+                aria-label="Remove personnel row"
+                className="text-stone-400 hover:text-stone-600 text-xl leading-none px-1"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() =>
+              setPersonnelEntries([
+                ...personnelEntries,
+                { workerName: "", role: "", count: "1" },
+              ])
+            }
+            className="w-full rounded-lg border border-ink text-ink text-sm font-semibold py-2 hover:bg-sandstone-50"
+          >
+            + Add Person in Attendance
           </button>
         </div>
       </div>

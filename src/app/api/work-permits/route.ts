@@ -54,7 +54,12 @@ const ApproverInputSchema = z.object({
 // Colab-parity: Step-2 "Labour" multi-row (Abhishek zip, screen 10).
 // Every field is optional so a requester can enter just a headcount
 // or just a crew leader — Colab does the same.
+// `kind` splits the same row shape between the generic Labour section
+// (LABOUR) and Night Work's "Details of Personnel in Attendance"
+// (ATTENDANCE). Defaults to LABOUR for backward compatibility with the
+// existing form payload.
 const LabourEntryInputSchema = z.object({
+  kind: z.enum(["LABOUR", "ATTENDANCE"]).default("LABOUR"),
   workerName: z.string().max(120).optional().nullable(),
   role: z.string().max(60).optional().nullable(),
   count: z.number().int().min(0).max(9999).optional().nullable(),
@@ -291,6 +296,7 @@ export async function POST(req: Request) {
             body.labourEntries && body.labourEntries.length > 0
               ? {
                   create: body.labourEntries.map((l, i) => ({
+                    kind: l.kind ?? "LABOUR",
                     workerName: l.workerName?.trim() || null,
                     role: l.role?.trim() || null,
                     count: l.count ?? null,
