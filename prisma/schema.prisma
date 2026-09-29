@@ -60,6 +60,7 @@ model User {
   approvedWorkPermits      WorkPermit[]            @relation("WorkPermitApprover")
   closedWorkPermits        WorkPermit[]            @relation("WorkPermitCloser")
   suspendedWorkPermits     WorkPermit[]            @relation("WorkPermitSuspender")
+  permitApprovals          PermitApprover[]        @relation("PermitApproverUser")
   pushSubscriptions        PushSubscription[]
   notifications            Notification[]
 }
@@ -691,25 +692,112 @@ model WorkPermit {
   suspendedAt        DateTime?
   suspendedReason    String?
 
+  // Colab-parity fields (Sep 2026 batch 6 · from Girish + Abhishek zips).
+  //   displayId          - the human-readable PER-XXXXXXXX shown on cards
+  //                        and headers. Populated at create time; unique
+  //                        per project. Never regenerate — printed or
+  //                        chatted references are stable.
+  //   coRequesterIds     - additional permit holders picked in Step 2.
+  //                        Stored as postgres text[] (User ids) so the
+  //                        picker can multi-select without a child table.
+  //   activityHead       - Colab's Activity Head dropdown pick (e.g.
+  //                        "Reinforcement"). Free-text; the picker
+  //                        currently uses whatever labels the site team
+  //                        seeds. Kept alongside wbsNodeId so activities
+  //                        that don't map to a WBS leaf still render.
+  //   suspensionResolvedAt / By - set when a suspended permit resumes
+  //                        (SUSPENDED → APPROVED) or is finalised.
+  displayId              String?
+  coRequesterIds         String[]  @default([])
+  activityHead           String?
+  suspensionResolvedAt   DateTime?
+  suspensionResolvedById String?
+
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
   idempotencyKey String?   @unique // de-dupes offline-queue replays
 
-  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  contractor Contractor?       @relation(fields: [contractorId], references: [id])
-  wbsNode    WBSNode?          @relation(fields: [wbsNodeId], references: [id])
-  requester  User              @relation("WorkPermitRequester", fields: [requesterId], references: [id])
-  approver   User?             @relation("WorkPermitApprover", fields: [approvedById], references: [id])
-  closer     User?             @relation("WorkPermitCloser", fields: [closedById], references: [id])
-  suspender  User?             @relation("WorkPermitSuspender", fields: [suspendedById], references: [id])
+  project    Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contractor Contractor?          @relation(fields: [contractorId], references: [id])
+  wbsNode    WBSNode?             @relation(fields: [wbsNodeId], references: [id])
+  requester  User                 @relation("WorkPermitRequester", fields: [requesterId], references: [id])
+  approver   User?                @relation("WorkPermitApprover", fields: [approvedById], references: [id])
+  closer     User?                @relation("WorkPermitCloser", fields: [closedById], references: [id])
+  suspender  User?                @relation("WorkPermitSuspender", fields: [suspendedById], references: [id])
   photos     WorkPermitPhoto[]
+  approvers  PermitApprover[]
+  labourEntries PermitLabourEntry[]
 
   @@index([projectId])
   @@index([requesterId])
   @@index([approvedById])
   @@index([status])
   @@index([workDate])
+  @@index([displayId])
+}
+
+/**
+ * Colab-parity: per-level approver row on a WorkPermit. Colab (Abhishek
+ * zip, screens 10 + 24) shows a "Approval Levels" section with one
+ * subheader per level ("Level 1 — Level 1"), and each approver row
+ * carries capability pills: **Can Close** (green) and **Can Suspend**
+ * (amber). The state machine allows any approver with `canClose=true`
+ * to close an APPROVED permit, and any with `canSuspend=true` to
+ * suspend it.
+ *
+ * White Lotus starts with one level and one approver per permit
+ * (Girish for HSE), but the table supports multi-level for the flows
+ * that Abhishek + Girish confirmed exist elsewhere in Colab.
+ */
+model PermitApprover {
+  id           String   @id @default(cuid())
+  workPermitId String
+  userId       String
+  // levelIndex is 1-based (matches Colab's "Level 1 (Level 1)" labels).
+  levelIndex   Int      @default(1)
+  // Optional friendly name for the level (Colab always shows a name,
+  // even when it's the same as the index). Defaults to `Level {idx}`
+  // at write time.
+  levelName    String?
+  canClose     Boolean  @default(true)
+  canSuspend   Boolean  @default(false)
+  isDefault    Boolean  @default(false) // Colab shows "Default" under a
+                                        // preselected approver name.
+  orderIndex   Int      @default(0)      // display order within a level
+
+  createdAt DateTime @default(now())
+
+  workPermit WorkPermit @relation(fields: [workPermitId], references: [id], onDelete: Cascade)
+  user       User       @relation("PermitApproverUser", fields: [userId], references: [id])
+
+  @@unique([workPermitId, userId, levelIndex])
+  @@index([workPermitId])
+  @@index([userId])
+}
+
+/**
+ * Colab-parity: labour entry on a WorkPermit — one row per group of
+ * workers the requester lists under Step 2's "Labour" section. Colab
+ * uses free-text name / role / count fields (Abhishek zip, screen 10)
+ * so the site team can enter mixed crews without a WBS lookup.
+ */
+model PermitLabourEntry {
+  id           String   @id @default(cuid())
+  workPermitId String
+  // Colab shows the crew leader's name and a role label ("Welder",
+  // "Rigger", "Fitter") plus a headcount. Every field is optional so a
+  // permit can capture just what the requester knows.
+  workerName   String?
+  role         String?
+  count        Int?
+  orderIndex   Int      @default(0)
+
+  createdAt DateTime @default(now())
+
+  workPermit WorkPermit @relation(fields: [workPermitId], references: [id], onDelete: Cascade)
+
+  @@index([workPermitId])
 }
 
 model WorkPermitPhoto {
