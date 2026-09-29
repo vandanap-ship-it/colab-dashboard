@@ -408,6 +408,11 @@ export async function importMspCsv(
           const existingVM = await tx.villaMilestone.findUnique({
             where: { villaId_sectionId: { villaId: villa.id, sectionId } },
           });
+          // Update path is schedule-side ONLY. Actuals + pctComplete are
+          // set on CREATE (fresh row, initial state from MPP) but never
+          // overwritten on UPDATE — those fields are owned by the Colab
+          // sync + site team's ProgressEntry writes. A re-import must
+          // never clobber that.
           const vm = await tx.villaMilestone.upsert({
             where: { villaId_sectionId: { villaId: villa.id, sectionId } },
             create: {
@@ -421,9 +426,6 @@ export async function importMspCsv(
             update: {
               baselineStart: s.row.baselineStart,
               baselineFinish: s.row.baselineFinish,
-              actualStart: s.row.actualStart,
-              actualFinish: s.row.actualFinish,
-              pctComplete: s.row.percentComplete,
             },
           });
           if (existingVM) stats.villaMilestones.updated++; else stats.villaMilestones.created++;
@@ -433,7 +435,15 @@ export async function importMspCsv(
             const existingWbs = await tx.wBSNode.findUnique({
               where: { projectId_taskCode: { projectId: project.id, taskCode: t.outlineNumber } },
             });
-            const payload = {
+            // Same split as villaMilestone above — update path is
+            // schedule-side only. actualStart / actualFinish /
+            // percentComplete / progressEntered are set on CREATE from
+            // the MPP's initial state, but never overwritten on UPDATE
+            // (those are progress-side fields owned by Colab sync and
+            // the site team's ProgressEntry writes). Otherwise a
+            // second MPP import a week after go-live would wipe every
+            // actual date the site team logged.
+            const createPayload = {
               projectId: project.id,
               taskCode: t.outlineNumber,
               name: t.name,
@@ -451,10 +461,22 @@ export async function importMspCsv(
               isSubMilestone: t.isSubMilestone,
               progressEntered: t.actualStart != null || t.percentComplete > 0,
             };
+            const updatePayload = {
+              name: t.name,
+              level: t.level,
+              orderIndex: taskOrder,
+              baselineStart: t.baselineStart,
+              baselineFinish: t.baselineFinish,
+              predecessorsRaw: t.predecessors || null,
+              villaId: villa.id,
+              sectionId,
+              villaMilestoneId: vm.id,
+              isSubMilestone: t.isSubMilestone,
+            };
             await tx.wBSNode.upsert({
               where: { projectId_taskCode: { projectId: project.id, taskCode: t.outlineNumber } },
-              create: payload,
-              update: payload,
+              create: createPayload,
+              update: updatePayload,
             });
             if (existingWbs) stats.wbsNodes.updated++; else stats.wbsNodes.created++;
             taskOrder++;
