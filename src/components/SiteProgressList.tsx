@@ -441,9 +441,12 @@ function VillaCard({
                   <div className="min-w-0 flex-1">
                     <div className="text-sm text-stone-900 truncate">{m.name}</div>
                   </div>
-                  <div className="text-xs tabular-nums text-stone-500 shrink-0">
-                    {m.pctComplete}%
-                  </div>
+                  {/* Colab-parity circular %-gauge on each activity row
+                      (Madhavan zip · Site Progress activity list). Same
+                      colour ramp the villa PctBadge uses so a milestone
+                      at 60% reads the same green-vs-amber way a villa
+                      at 60% does — one visual language throughout. */}
+                  <MilestoneGauge percent={m.pctComplete} />
                 </Link>
               </li>
             );
@@ -467,6 +470,32 @@ function MilestonePill({ status }: { status: StatusKey }) {
       <span className={`w-2 h-2 rounded-full ${c.dot}`} aria-hidden />
       <span className="sr-only">{c.label}</span>
     </span>
+  );
+}
+
+/**
+ * Compact circular %-gauge for a milestone / activity row (Colab-parity,
+ * Madhavan zip screen 3). Smaller than the villa PctBadge so it fits in
+ * the accordion row without dominating the layout, but uses the same
+ * colour ramp so both surfaces read as one visual language.
+ */
+function MilestoneGauge({ percent }: { percent: number }) {
+  const p = Math.max(0, Math.min(100, Math.round(percent)));
+  const ring =
+    p === 0
+      ? "border-stone-200 text-stone-400"
+      : p >= 100
+        ? "border-emerald-500 text-emerald-700"
+        : p >= 50
+          ? "border-amber-500 text-amber-700"
+          : "border-amber-300 text-amber-700";
+  return (
+    <div
+      className={`shrink-0 h-8 w-8 rounded-full border-2 flex items-center justify-center text-[10px] font-bold tabular-nums ${ring}`}
+      aria-label={`${p} percent complete`}
+    >
+      {p}%
+    </div>
   );
 }
 
