@@ -102,7 +102,12 @@ export default async function MobileProjectLayout({
           first tap → accidental Home nav, second tap → real target. */}
       <main
         className="flex-1 overflow-y-auto"
-        style={{ paddingBottom: "calc(72px + env(safe-area-inset-bottom))" }}
+        // 72px bottom-nav + 56px FAB (bottom-14) + 16px gap so no
+        // content sits directly under the QuickAddFab. Previously the
+        // padding only cleared the nav bar, and full-width content at
+        // the end of the scroll (e.g. ActivityPicker's "Pick by
+        // location →" pill) rendered directly under the FAB.
+        style={{ paddingBottom: "calc(128px + env(safe-area-inset-bottom))" }}
       >
         {/* Push-notification opt-in — hides itself when permission is
             already granted or denied, or when previously dismissed. */}
