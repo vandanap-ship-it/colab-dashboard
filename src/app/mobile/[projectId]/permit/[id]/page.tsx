@@ -1,5 +1,16 @@
 import { notFound, redirect } from "next/navigation";
-import { User as UserIcon, Camera, Calendar, MapPin, Clock, Flame } from "lucide-react";
+import {
+  User as UserIcon,
+  Camera,
+  Calendar,
+  MapPin,
+  Clock,
+  Flame,
+  Users,
+  HardHat,
+  ClipboardList,
+  ShieldCheck,
+} from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
@@ -14,11 +25,45 @@ import MobilePermitActions from "@/components/mobile/MobilePermitActions";
 
 export const dynamic = "force-dynamic";
 
+// Colab-parity shape for a single stored checklist response. Kept as
+// `unknown` in Prisma (JSON), narrowed here at read time.
+type StoredChecklistResponse = {
+  q: string;
+  passed: boolean | null;
+  remark?: string;
+  photoUrl?: string;
+};
+
+function narrowChecklist(v: unknown): StoredChecklistResponse[] {
+  if (!Array.isArray(v)) return [];
+  const out: StoredChecklistResponse[] = [];
+  for (const row of v) {
+    if (row && typeof row === "object" && typeof (row as Record<string, unknown>).q === "string") {
+      const r = row as Record<string, unknown>;
+      out.push({
+        q: r.q as string,
+        passed: typeof r.passed === "boolean" ? (r.passed as boolean) : null,
+        remark: typeof r.remark === "string" ? (r.remark as string) : undefined,
+        photoUrl: typeof r.photoUrl === "string" ? (r.photoUrl as string) : undefined,
+      });
+    }
+  }
+  return out;
+}
+
 /**
- * Mobile Work Permit detail. Renders the permit's whole shape (type, title,
- * dates and time window, requester, location, description, photos), then a
- * sticky action bar that adapts to the viewer's role. All PATCH gates live
- * in /api/work-permits/[id]; this component just steers UX.
+ * Mobile Work Permit detail. Colab-parity layout:
+ *   Header hero        · status pill + type + displayId
+ *   Description
+ *   When and where     · Work date, hours, location, activity
+ *   People             · Requester, contractor, co-requesters, activityHead
+ *   Labour             · workers/roles/counts multi-row
+ *   Checklist          · per-checkpoint answers with remarks + photos
+ *   Approvers          · per-level list with capability chips, decision
+ *                        state, timestamps
+ *   Rejection reason   · if REJECTED
+ *   Photos
+ *   Sticky action bar  · adapts to viewer's role + permit state
  */
 export default async function MobilePermitDetailPage({
   params,
@@ -43,6 +88,11 @@ export default async function MobilePermitDetailPage({
       contractor: { select: { id: true, name: true } },
       wbsNode: { select: { id: true, name: true } },
       photos: { select: { id: true, url: true } },
+      approvers: {
+        orderBy: [{ levelIndex: "asc" }, { orderIndex: "asc" }],
+        include: { user: { select: { id: true, name: true, username: true } } },
+      },
+      labourEntries: { orderBy: { orderIndex: "asc" } },
     },
   });
   if (!permit) notFound();
@@ -54,6 +104,31 @@ export default async function MobilePermitDetailPage({
     (iAmApprover && (permit.status === "PENDING" || permit.status === "APPROVED")) ||
     (iAmRequester && permit.status === "APPROVED");
 
+  const displayId =
+    permit.displayId ?? `PER-${permit.id.slice(-6).toUpperCase()}`;
+
+  // Resolve co-requester User rows in one query; falls back to just the id
+  // as a chip when a user was later deactivated.
+  const coRequesters =
+    permit.coRequesterIds && permit.coRequesterIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: permit.coRequesterIds } },
+          select: { id: true, name: true, username: true },
+        })
+      : [];
+
+  const checklistRows = narrowChecklist(permit.checklistResponses);
+
+  // Group approvers by level so the section reads as Colab does — "Level
+  // 1 (Level 1)", then a row per approver at that level.
+  const approversByLevel = new Map<number, typeof permit.approvers>();
+  for (const a of permit.approvers) {
+    const arr = approversByLevel.get(a.levelIndex) ?? [];
+    arr.push(a);
+    approversByLevel.set(a.levelIndex, arr);
+  }
+  const sortedLevels = Array.from(approversByLevel.keys()).sort((x, y) => x - y);
+
   return (
     <div className="flex-1 flex flex-col bg-ivory min-h-0">
       <div
@@ -62,13 +137,12 @@ export default async function MobilePermitDetailPage({
       >
         <div className="flex items-center gap-2 flex-wrap text-[11px] font-semibold uppercase tracking-[0.14em]">
           <StatusPill status={permit.status} />
-          {/* Aging chip beside the status pill on PENDING permits. Same
-              1d/2d cliff the list uses, so both surfaces agree on the
-              tier. Silent on APPROVED/REJECTED/CLOSED where the queue-
-              position signal is done. */}
           {permit.status === "PENDING" && <DetailPermitAgingChip createdAt={permit.createdAt} />}
           <span className="rounded-full bg-sandstone-100 text-ink-2 px-2 py-0.5 font-semibold text-[9.5px]">
             {WORK_PERMIT_TYPE_LABELS[permit.type as WorkPermitType] ?? permit.type}
+          </span>
+          <span className="rounded-full bg-white/60 border border-stone-200 text-stone-600 px-2 py-0.5 font-semibold text-[9.5px] tabular-nums">
+            {displayId}
           </span>
         </div>
         <h1 className="font-serif text-[20px] leading-snug text-ink tracking-tight mt-2">
@@ -104,6 +178,15 @@ export default async function MobilePermitDetailPage({
               <span className="font-medium leading-snug">{permit.location}</span>
             </div>
           )}
+          {permit.activityHead && (
+            <div className="flex items-start gap-2 text-stone-700">
+              <span className="w-4 h-4 shrink-0" />
+              <span className="text-stone-500 text-xs uppercase tracking-wider mr-1 shrink-0 pt-0.5">
+                Activity head
+              </span>
+              <span className="font-medium leading-snug">{permit.activityHead}</span>
+            </div>
+          )}
           {permit.wbsNode && (
             <div className="flex items-start gap-2 text-stone-700">
               <span className="w-4 h-4 shrink-0" />
@@ -127,6 +210,24 @@ export default async function MobilePermitDetailPage({
               <span className="font-medium">{permit.contractor.name}</span>
             </div>
           )}
+          {coRequesters.length > 0 && (
+            <div className="flex items-start gap-2 text-stone-700">
+              <Users className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" />
+              <span className="text-stone-500 text-xs uppercase tracking-wider mr-1 shrink-0 pt-0.5">
+                Co-requesters
+              </span>
+              <span className="font-medium leading-snug flex flex-wrap gap-1">
+                {coRequesters.map((u) => (
+                  <span
+                    key={u.id}
+                    className="inline-flex items-center rounded-full bg-sandstone-50 border border-sandstone-100 text-[11px] px-2 py-0.5"
+                  >
+                    {u.name}
+                  </span>
+                ))}
+              </span>
+            </div>
+          )}
           {permit.approver && permit.approvedAt && (
             <div className="flex items-center gap-2 text-emerald-800 pt-2 border-t border-stone-100 mt-2">
               <UserIcon className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -145,7 +246,132 @@ export default async function MobilePermitDetailPage({
           )}
         </section>
 
-        {/* Rejection reason — only for REJECTED permits with a reason */}
+        {/* Labour Entries — Colab shows this even for General Work when
+            the requester listed workers on Step 2. */}
+        {permit.labourEntries.length > 0 && (
+          <section className="rounded-xl border border-stone-200 bg-white p-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-2">
+              <HardHat className="w-3 h-3" />
+              Labour · {permit.labourEntries.length}
+            </div>
+            <ul className="divide-y divide-stone-100">
+              {permit.labourEntries.map((l) => (
+                <li key={l.id} className="py-1.5 flex items-center gap-2 text-sm">
+                  <span className="font-medium text-ink flex-1 truncate">
+                    {l.workerName ?? "—"}
+                  </span>
+                  <span className="text-stone-500 text-xs truncate">{l.role ?? ""}</span>
+                  <span className="tabular-nums text-stone-700 font-semibold text-xs">
+                    {l.count != null ? `× ${l.count}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Checklist responses — the Step-3 answers, rendered read-only.
+            Passed = green ✓, Failed = red ✗, unanswered = grey dash. */}
+        {checklistRows.length > 0 && (
+          <section className="rounded-xl border border-stone-200 bg-white p-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-2">
+              <ClipboardList className="w-3 h-3" />
+              Checklist · {checklistRows.length}
+            </div>
+            <ol className="space-y-2">
+              {checklistRows.map((row, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-sm border-b border-stone-100 pb-2 last:border-b-0 last:pb-0"
+                >
+                  <ChecklistMark passed={row.passed} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-ink leading-snug">
+                      <span className="text-stone-500 mr-1">{i + 1}.</span>
+                      {row.q}
+                    </p>
+                    {row.remark && (
+                      <p className="text-xs text-stone-600 mt-1 bg-sandstone-50 rounded px-2 py-1 whitespace-pre-wrap">
+                        {row.remark}
+                      </p>
+                    )}
+                    {row.photoUrl && (
+                      <a
+                        href={row.photoUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="inline-block mt-1 w-16 h-16 rounded overflow-hidden bg-stone-100 border border-stone-200"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={row.photoUrl}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      </a>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        {/* Approvers — per-level breakdown, Colab-parity Screen 24. Shows
+            the level pill, then a row per approver with capability chips
+            (Can Close, Can Suspend) and the decision state. */}
+        {sortedLevels.length > 0 && (
+          <section className="rounded-xl border border-stone-200 bg-white p-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-2">
+              <ShieldCheck className="w-3 h-3" />
+              Approvers · {permit.approvers.length}
+            </div>
+            <div className="space-y-3">
+              {sortedLevels.map((lvl) => {
+                const rows = approversByLevel.get(lvl) ?? [];
+                const levelName = rows[0]?.levelName ?? `Level ${lvl}`;
+                return (
+                  <div key={lvl}>
+                    <div className="inline-flex items-center rounded-full bg-ink text-cream text-[10px] font-semibold px-2 py-0.5 uppercase tracking-wider">
+                      Level {lvl}{levelName && levelName !== `Level ${lvl}` ? ` · ${levelName}` : ""}
+                    </div>
+                    <ul className="mt-2 space-y-2">
+                      {rows.map((a) => {
+                        const isDecided =
+                          permit.approver?.id === a.user.id ||
+                          permit.closer?.id === a.user.id;
+                        return (
+                          <li
+                            key={a.id}
+                            className="flex items-start gap-2 text-sm border-l-2 border-sandstone-200 pl-2"
+                          >
+                            <UserIcon className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-ink leading-snug">{a.user.name}</p>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {a.canClose && <CapChip color="emerald" label="Can Close" />}
+                                {a.canSuspend && <CapChip color="amber" label="Can Suspend" />}
+                                {a.isDefault && <CapChip color="stone" label="Default" />}
+                              </div>
+                              {isDecided && (
+                                <p className="text-[10px] uppercase tracking-wider mt-1 text-emerald-700 font-semibold">
+                                  ✓ Acted
+                                </p>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Rejection reason */}
         {permit.status === "REJECTED" && permit.rejectionReason && (
           <section className="rounded-xl border border-red-200 bg-red-50 p-3">
             <div className="text-[10px] font-semibold text-red-800 uppercase tracking-wider mb-1">
@@ -199,6 +425,7 @@ function StatusPill({ status }: { status: string }) {
   const map: Record<string, { bg: string; fg: string; label: string }> = {
     PENDING: { bg: "bg-amber-50 ring-amber-200", fg: "text-amber-800", label: "Awaiting approval" },
     APPROVED: { bg: "bg-emerald-50 ring-emerald-200", fg: "text-emerald-800", label: "Approved" },
+    SUSPENDED: { bg: "bg-orange-50 ring-orange-200", fg: "text-orange-800", label: "Suspended" },
     REJECTED: { bg: "bg-red-50 ring-red-200", fg: "text-red-800", label: "Rejected" },
     CLOSED: { bg: "bg-stone-100 ring-stone-200", fg: "text-stone-700", label: "Closed" },
   };
@@ -206,6 +433,49 @@ function StatusPill({ status }: { status: string }) {
   return (
     <span className={`inline-flex items-center rounded-full ring-1 px-2 py-0.5 text-[10px] font-semibold shrink-0 ${cfg.bg} ${cfg.fg}`}>
       {cfg.label}
+    </span>
+  );
+}
+
+function ChecklistMark({ passed }: { passed: boolean | null }) {
+  if (passed === true) {
+    return (
+      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold shrink-0">
+        ✓
+      </span>
+    );
+  }
+  if (passed === false) {
+    return (
+      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-100 text-red-700 text-xs font-bold shrink-0">
+        ✕
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-stone-100 text-stone-400 text-xs font-bold shrink-0">
+      —
+    </span>
+  );
+}
+
+function CapChip({
+  color,
+  label,
+}: {
+  color: "emerald" | "amber" | "stone";
+  label: string;
+}) {
+  const map: Record<typeof color, string> = {
+    emerald: "bg-emerald-100 text-emerald-800",
+    amber: "bg-amber-100 text-amber-800",
+    stone: "bg-stone-100 text-stone-700",
+  };
+  return (
+    <span
+      className={`inline-flex items-center rounded-full text-[10px] font-semibold px-1.5 py-0.5 ${map[color]}`}
+    >
+      {label}
     </span>
   );
 }
