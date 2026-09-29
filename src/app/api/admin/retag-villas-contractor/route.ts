@@ -27,7 +27,11 @@ export const maxDuration = 300;
  *   {
  *     projectId: string,
  *     villaNumbers: number[],          // primary numbers, one entry per pair-row
- *     fromContractorName: string,      // e.g. "Abraham Thomas"
+ *     fromContractorName?: string,     // e.g. "Abraham Thomas". Omit to run
+ *                                      // in bulk-tag mode: sets contractorId
+ *                                      // on every WBSNode / ProgressEntry
+ *                                      // under these villas regardless of
+ *                                      // current value (including null).
  *     toContractorName: string,        // e.g. "Elegant Construction"
  *     confirm: true,
  *   }
@@ -35,7 +39,7 @@ export const maxDuration = 300;
 const BodySchema = z.object({
   projectId: z.string().min(1),
   villaNumbers: z.array(z.number().int().min(1).max(9999)).min(1).max(500),
-  fromContractorName: z.string().min(1).max(200),
+  fromContractorName: z.string().min(1).max(200).optional(),
   toContractorName: z.string().min(1).max(200),
   confirm: z.literal(true),
 });
@@ -61,19 +65,25 @@ export async function POST(req: Request) {
   // Case-insensitive lookups scoped to the project — Contractor is
   // unique on (projectId, name) so a project-scoped filter matches the
   // policy the Colab importer uses.
-  const fromContractor = await prisma.contractor.findFirst({
-    where: {
-      projectId: project.id,
-      name: { equals: body.fromContractorName, mode: "insensitive" },
-    },
-  });
-  if (!fromContractor) {
+  //
+  // fromContractorName omitted → bulk-tag mode: skip the lookup and
+  // don't filter on current contractorId (every row for the villas
+  // gets updated, including untagged ones).
+  const fromContractor = body.fromContractorName
+    ? await prisma.contractor.findFirst({
+        where: {
+          projectId: project.id,
+          name: { equals: body.fromContractorName, mode: "insensitive" },
+        },
+      })
+    : null;
+  if (body.fromContractorName && !fromContractor) {
     return NextResponse.json(
       { error: `fromContractor "${body.fromContractorName}" not found on project` },
       { status: 404 },
     );
   }
-  if (fromContractor.name.toLowerCase() === body.toContractorName.toLowerCase()) {
+  if (fromContractor && fromContractor.name.toLowerCase() === body.toContractorName.toLowerCase()) {
     return NextResponse.json(
       { error: `fromContractor and toContractor are the same ("${fromContractor.name}")` },
       { status: 400 },
@@ -115,35 +125,24 @@ export async function POST(req: Request) {
   }
 
   // Count what we're about to touch, so the caller can eyeball the
-  // scope before trusting the write went where they expected.
-  const wbsToUpdate = await prisma.wBSNode.count({
-    where: { villaId: { in: villaIds }, contractorId: fromContractor.id },
-  });
-  const progressToUpdate = await prisma.progressEntry.count({
-    where: {
-      wbsNode: { villaId: { in: villaIds } },
-      contractorId: fromContractor.id,
-      deletedAt: null,
-    },
-  });
+  // scope before trusting the write went where they expected. The
+  // where clause matches the update: filter by `contractorId` when a
+  // from-contractor is set, otherwise every row under the villas.
+  const wbsWhere = fromContractor
+    ? { villaId: { in: villaIds }, contractorId: fromContractor.id }
+    : { villaId: { in: villaIds } };
+  const progressWhere = fromContractor
+    ? { wbsNode: { villaId: { in: villaIds } }, contractorId: fromContractor.id, deletedAt: null }
+    : { wbsNode: { villaId: { in: villaIds } }, deletedAt: null };
+  const wbsToUpdate = await prisma.wBSNode.count({ where: wbsWhere });
+  const progressToUpdate = await prisma.progressEntry.count({ where: progressWhere });
 
-  // The writes: WBSNode rows keyed by villaId+current contractor, then
-  // ProgressEntry rows the same way through the relation. Wrapping in
-  // one transaction so a mid-run failure never leaves the two tables
-  // out of sync.
+  // The writes: WBSNode rows first, then ProgressEntry rows through
+  // the relation. Wrapping in one transaction so a mid-run failure
+  // never leaves the two tables out of sync.
   const [wbsRes, progressRes] = await prisma.$transaction([
-    prisma.wBSNode.updateMany({
-      where: { villaId: { in: villaIds }, contractorId: fromContractor.id },
-      data: { contractorId: toContractor.id },
-    }),
-    prisma.progressEntry.updateMany({
-      where: {
-        wbsNode: { villaId: { in: villaIds } },
-        contractorId: fromContractor.id,
-        deletedAt: null,
-      },
-      data: { contractorId: toContractor.id },
-    }),
+    prisma.wBSNode.updateMany({ where: wbsWhere, data: { contractorId: toContractor.id } }),
+    prisma.progressEntry.updateMany({ where: progressWhere, data: { contractorId: toContractor.id } }),
   ]);
 
   await recordAudit({
@@ -152,10 +151,10 @@ export async function POST(req: Request) {
     action: "UPDATE",
     entityType: "Project",
     entityId: project.id,
-    summary: `Re-tag contractor: ${fromContractor.name} → ${toContractor.name} on ${villaIds.length} villas · ${wbsRes.count} WBS + ${progressRes.count} ProgressEntry rows updated`,
+    summary: `${fromContractor ? "Re-tag" : "Bulk-tag"} contractor: ${fromContractor?.name ?? "(any)"} → ${toContractor.name} on ${villaIds.length} villas · ${wbsRes.count} WBS + ${progressRes.count} ProgressEntry rows updated`,
     changes: {
       villaNumbers: body.villaNumbers,
-      from: fromContractor.name,
+      from: fromContractor?.name ?? null,
       to: toContractor.name,
       wbsUpdated: wbsRes.count,
       progressEntriesUpdated: progressRes.count,
@@ -165,7 +164,7 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    from: { id: fromContractor.id, name: fromContractor.name },
+    from: fromContractor ? { id: fromContractor.id, name: fromContractor.name } : null,
     to: { id: toContractor.id, name: toContractor.name, created: createdToContractor },
     villasResolved: villas.length,
     villasMissing: missing,
