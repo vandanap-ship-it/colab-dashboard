@@ -28,13 +28,18 @@ interface PickedActivity {
 
 const LABOUR_CATEGORIES = ["Skilled", "Unskilled", "Mason", "Helper", "Supervisor"];
 
-// The API still expects a type literal (Colab-legacy field on the
-// ProgressEntry schema), but White Lotus doesn't distinguish billing
-// models per row — every entry is treated as Labour Supply. Kept as a
-// const so a future re-split, if it ever comes back, has one place to
-// widen the type from and the payload stays honest to the schema.
-// Shraddha, Sep 22: "you can remove the Type tab".
-const PROGRESS_TYPE = "LABOUR_SUPPLY" as const;
+// Colab-parity progress category. Confirmed by Shraddha 2026-09-30:
+// "labor supply PRW and miscellaneous ones capture the similar;
+// everything is same only" — the three tabs share the same fields, so
+// this is a tag on the entry rather than a shape switch. Kept in sync
+// with Colab's Madhavan-side screens: New Progress shows three tabs,
+// Edit Progress shows only Labour Supply / PRW (Misc. hidden on edit).
+type ProgressCategory = "LABOUR_SUPPLY" | "PRW" | "MISC";
+const PROGRESS_CATEGORY_LABELS: Record<ProgressCategory, string> = {
+  LABOUR_SUPPLY: "Labour Supply",
+  PRW: "PRW",
+  MISC: "Misc.",
+};
 
 export default function NewProgressForm({
   projectId,
@@ -55,6 +60,10 @@ export default function NewProgressForm({
 
   const [selected, setSelected] = useState<PickedActivity | null>(null);
   const activityId = selected?.id ?? "";
+  // Colab-parity tab selection (Madhavan zip · New Progress top of form).
+  // Default matches Colab's own default (PRW). On resume of a DRAFT the
+  // API returns the stored value below (see loader effect).
+  const [progressCategory, setProgressCategory] = useState<ProgressCategory>("PRW");
   // Contractor is derived from the picked activity — the schedule already
   // knows which contractor owns which block/villa via WBS.contractorId, so
   // asking the engineer to re-pick it was redundant.
@@ -142,6 +151,7 @@ export default function NewProgressForm({
         interface DraftFromApi {
           id: string;
           date: string;
+          type?: string;
           cumulativeQuantity: number;
           achievedQuantity: number;
           notes: string | null;
@@ -180,6 +190,12 @@ export default function NewProgressForm({
           path: { blockCode: "", villaLabel: "", sectionName: "" },
         });
         setDate(draft.date.slice(0, 10));
+        // Restore the draft's stored category tab; falls back to PRW to
+        // match Colab's default when a legacy DRAFT was saved before the
+        // 3-tab picker existed.
+        if (draft.type === "LABOUR_SUPPLY" || draft.type === "PRW" || draft.type === "MISC") {
+          setProgressCategory(draft.type);
+        }
         setAchieved(draft.achievedQuantity);
         // Slider value: derive from cumulative + total, else assume the
         // stored cumulative IS the slider value (activities without a
@@ -358,7 +374,7 @@ export default function NewProgressForm({
       idempotencyKey: crypto.randomUUID(),
       wbsNodeId: activityId,
       date,
-      type: PROGRESS_TYPE,
+      type: progressCategory,
       achievedQuantity: achieved,
       cumulativeQuantity: cumulative,
       contractorId: contractorId || null,
@@ -594,6 +610,37 @@ export default function NewProgressForm({
         ]}
         />
       )}
+
+      {/* Colab-parity category tabs (Madhavan zip 2026-09-30 · top of
+          New Progress form). All three tabs share the same field shape
+          per Shraddha — the picker just tags the entry. On resume of a
+          DRAFT, Misc. is hidden (Colab's Edit view only shows Labour
+          Supply / PRW). */}
+      <section>
+        <div className="flex gap-2 rounded-full bg-sandstone-50 border border-sandstone-100 p-1">
+          {(
+            [
+              "LABOUR_SUPPLY",
+              "PRW",
+              ...(isResume ? [] : (["MISC"] as const)),
+            ] as ProgressCategory[]
+          ).map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setProgressCategory(c)}
+              aria-pressed={progressCategory === c}
+              className={`flex-1 rounded-full px-3 py-2 text-[13px] font-semibold ${
+                progressCategory === c
+                  ? "bg-ferrous-500 text-white"
+                  : "text-ink-2"
+              }`}
+            >
+              {PROGRESS_CATEGORY_LABELS[c]}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* Step 1 · Activity */}
       <section>
