@@ -164,6 +164,15 @@ export default function WorkPermitList({
 }) {
   const [tab, setTab] = useState<TabKey>("active");
   const [permits, setPermits] = useState<WorkPermit[] | null>(null);
+  // Colab-parity Advanced Filters (Abhishek zip · permit list · filter
+  // sheet). Contractor + date range this pass; 3-level location cascade
+  // is a follow-up when the permit picker component lands. Filters run
+  // client-side alongside the tab bucket — the project's permit volume
+  // stays small.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterContractorId, setFilterContractorId] = useState<string>("");
+  const [filterDateFrom, setFilterDateFrom] = useState<string>("");
+  const [filterDateTo, setFilterDateTo] = useState<string>("");
 
   const load = useCallback(async () => {
     const url = new URL(`/api/work-permits`, window.location.origin);
@@ -201,22 +210,128 @@ export default function WorkPermitList({
     return zero;
   }, [permits]);
 
-  const rows = useMemo(() => (permits ?? []).filter((p) => bucket(p) === tab), [permits, tab]);
+  // Contractor list derived from the loaded permits so the picker only
+  // shows contractors that actually own a permit on this project.
+  const contractorOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const p of permits ?? []) {
+      if (p.contractor) seen.set(p.contractor.id, p.contractor.name);
+    }
+    return Array.from(seen.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [permits]);
+
+  const rows = useMemo(() => {
+    const from = filterDateFrom ? startOfLocalDay(filterDateFrom) : -Infinity;
+    const to = filterDateTo ? startOfLocalDay(filterDateTo) : Infinity;
+    return (permits ?? []).filter((p) => {
+      if (bucket(p) !== tab) return false;
+      if (filterContractorId && p.contractor?.id !== filterContractorId) return false;
+      const w = startOfLocalDay(p.workDate);
+      if (w < from || w > to) return false;
+      return true;
+    });
+  }, [permits, tab, filterContractorId, filterDateFrom, filterDateTo]);
+
+  const activeFilterCount =
+    (filterContractorId ? 1 : 0) + (filterDateFrom ? 1 : 0) + (filterDateTo ? 1 : 0);
+  function clearFilters() {
+    setFilterContractorId("");
+    setFilterDateFrom("");
+    setFilterDateTo("");
+  }
 
   return (
     <div className="space-y-3">
       {/* Horizontal scrollable tabs — 5 buckets, Colab-parity labels. */}
-      <div className="-mx-1 flex gap-1.5 overflow-x-auto no-scrollbar px-1 pb-1">
-        {TAB_ORDER.map((t) => (
-          <TabPill
-            key={t.key}
-            active={tab === t.key}
-            label={t.label}
-            count={counts[t.key]}
-            onClick={() => setTab(t.key)}
-          />
-        ))}
+      <div className="flex items-center gap-2">
+        <div className="-mx-1 flex-1 flex gap-1.5 overflow-x-auto no-scrollbar px-1 pb-1">
+          {TAB_ORDER.map((t) => (
+            <TabPill
+              key={t.key}
+              active={tab === t.key}
+              label={t.label}
+              count={counts[t.key]}
+              onClick={() => setTab(t.key)}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((v) => !v)}
+          aria-expanded={filtersOpen}
+          className={`shrink-0 rounded-full text-[12px] font-semibold px-3 py-1.5 flex items-center gap-1 ${
+            activeFilterCount > 0
+              ? "bg-ferrous-500 text-white"
+              : "bg-white border border-stone-200 text-stone-700"
+          }`}
+        >
+          Filter
+          {activeFilterCount > 0 && (
+            <span className="rounded-full bg-white text-ferrous-600 text-[10px] px-1.5 min-w-[16px] h-[14px] inline-flex items-center justify-center">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
       </div>
+
+      {filtersOpen && (
+        <div className="rounded-xl border border-stone-200 bg-white p-3 space-y-3">
+          <div>
+            <label className="block text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
+              Contractor
+            </label>
+            <select
+              value={filterContractorId}
+              onChange={(e) => setFilterContractorId(e.target.value)}
+              className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">All contractors</option>
+              {contractorOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
+                From
+              </label>
+              <input
+                type="date"
+                value={filterDateFrom}
+                max={filterDateTo || undefined}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+                className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
+                To
+              </label>
+              <input
+                type="date"
+                value={filterDateTo}
+                min={filterDateFrom || undefined}
+                onChange={(e) => setFilterDateTo(e.target.value)}
+                className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="w-full text-[12px] font-semibold text-ferrous-600 py-1.5 hover:text-ferrous-700"
+            >
+              Clear all filters
+            </button>
+          )}
+        </div>
+      )}
 
       {permits === null ? (
         <p className="text-sm text-stone-500">Loading…</p>
