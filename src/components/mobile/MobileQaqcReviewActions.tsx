@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, X, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 /**
  * Bottom-sticky Pass / Reject bar on the mobile inspection detail page.
@@ -35,11 +35,14 @@ export default function MobileQaqcReviewActions({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [approveRemark, setApproveRemark] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  async function patch(status: "PASSED" | "REJECTED", rejectionReason?: string) {
+  async function patch(status: "PASSED" | "REJECTED", remarkText?: string) {
     setError(null);
+    const rejectionReason = status === "REJECTED" ? remarkText : undefined;
     const res = await fetch(`/api/inspections/${inspectionId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -93,46 +96,83 @@ export default function MobileQaqcReviewActions({
           {error}
         </div>
       )}
+      {/* Colab-parity primary actions: dark "Reject" (secondary) and amber
+          "Approve & Close" (primary). Matches Colab's Approval Checklist
+          bottom bar exactly — same wording, same colour weight, same
+          two-button layout. */}
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={() => setRejectOpen(true)}
           disabled={isPending}
-          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-stone-800 text-sm font-semibold py-3 disabled:opacity-60"
+          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-ink text-white text-sm font-semibold py-3 disabled:opacity-60"
         >
-          <X className="w-4 h-4" />
           Reject
         </button>
         <button
           type="button"
-          onClick={() => patch("PASSED")}
+          onClick={() => setApproveOpen(true)}
           disabled={isPending}
-          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-stone-900 text-white text-sm font-semibold py-3 disabled:opacity-60"
+          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-ferrous-500 text-white text-sm font-semibold py-3 disabled:opacity-60"
         >
-          {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-          Pass
+          {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          Approve &amp; Close
         </button>
       </div>
 
-      {/* Reject-reason sheet — inline so it slides into place rather than as a
-          modal. Reason is required so the filler knows what to fix. */}
+      {/* Approve & Close sheet — Colab-parity: title matches the action,
+          optional remark, Cancel + Ok. Matches screenshot 19. */}
+      {approveOpen && (
+        <div className="rounded-xl border border-stone-200 bg-white p-3 space-y-2">
+          <p className="font-serif text-lg font-semibold text-ink">Approve &amp; Close</p>
+          <label className="block text-sm font-semibold text-stone-700">Remark</label>
+          <textarea
+            value={approveRemark}
+            onChange={(e) => setApproveRemark(e.target.value)}
+            placeholder="Enter Remark"
+            className="w-full min-h-20 resize-y rounded-lg border-2 border-dashed border-amber-300 bg-white p-2 text-sm"
+            maxLength={1000}
+          />
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => { setApproveOpen(false); setApproveRemark(""); setError(null); }}
+              className="rounded-xl bg-ink text-white text-sm font-semibold py-2"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => patch("PASSED")}
+              disabled={isPending}
+              className="rounded-xl bg-ferrous-500 text-white text-sm font-semibold py-2 disabled:opacity-60"
+            >
+              {isPending ? "Saving…" : "Ok"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Reject-reason sheet — Colab-parity: title "Reject", placeholder
+          "Enter Reject Remark", Cancel (dark) + Ok (amber) actions. */}
       {rejectOpen && (
         <div className="rounded-xl border border-stone-200 bg-white p-3 space-y-2">
-          <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wide">
-            Why reject?
+          <p className="font-serif text-lg font-semibold text-ink">Reject</p>
+          <label className="block text-sm font-semibold text-stone-700">
+            Remark
           </label>
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="What needs to be fixed before we can pass this?"
-            className="w-full min-h-20 resize-y rounded-lg border border-stone-300 bg-white p-2 text-sm"
+            placeholder="Enter Reject Remark"
+            className="w-full min-h-20 resize-y rounded-lg border-2 border-dashed border-amber-300 bg-white p-2 text-sm"
             maxLength={1000}
           />
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 pt-1">
             <button
               type="button"
               onClick={() => { setRejectOpen(false); setReason(""); setError(null); }}
-              className="rounded-xl border border-stone-300 bg-white text-stone-700 text-sm font-semibold py-2"
+              className="rounded-xl bg-ink text-white text-sm font-semibold py-2"
             >
               Cancel
             </button>
@@ -140,9 +180,9 @@ export default function MobileQaqcReviewActions({
               type="button"
               onClick={() => patch("REJECTED", reason.trim() || undefined)}
               disabled={isPending || reason.trim().length < 3}
-              className="rounded-xl bg-red-600 text-white text-sm font-semibold py-2 disabled:opacity-60"
+              className="rounded-xl bg-ferrous-500 text-white text-sm font-semibold py-2 disabled:opacity-60"
             >
-              {isPending ? "Saving…" : "Reject inspection"}
+              {isPending ? "Saving…" : "Ok"}
             </button>
           </div>
         </div>

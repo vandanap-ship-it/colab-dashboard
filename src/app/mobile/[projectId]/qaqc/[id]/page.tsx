@@ -105,9 +105,17 @@ export default async function MobileInspectionDetailPage({
         className="px-5 pt-5 pb-4 border-b border-sandstone-100"
         style={{ background: "linear-gradient(180deg, var(--color-sandstone-50) 0%, var(--color-ivory) 100%)" }}
       >
+        {/* Colab-parity title on the reviewer side: "Approval Checklist"
+            while the WIR is pending review (matches Colab screenshot 15,
+            where Thangamani's opened WIR is titled "Approval Checklist"
+            with the template name in a summary card below). Reviewed
+            WIRs (PASSED/REJECTED) show the template title as before. */}
         <h1 className="font-serif text-[22px] leading-snug text-ink tracking-tight">
-          {inspection.title}
+          {inspection.status === "IN_REVIEW" ? "Approval Checklist" : inspection.title}
         </h1>
+        {inspection.status === "IN_REVIEW" && (
+          <p className="mt-1 text-sm font-semibold text-ink-2">{inspection.title}</p>
+        )}
 
         <div className="mt-2 flex items-center gap-2 flex-wrap text-[12px] text-ink-3">
           <StatusPill status={inspection.status} />
@@ -182,19 +190,20 @@ export default async function MobileInspectionDetailPage({
           </section>
         )}
 
-        {/* Submit remark · the note the filler left for the reviewer at
-            Send For Review time (Colab step 7). Always shown if present
-            — a reviewer opens the WIR to know what the filler flagged,
-            and the remark is the shortest path to that context. */}
+        {/* Final Remark · the note the filler left at Send For Review
+            time. Colab labels this section "Final Remark" on the
+            Approval Checklist screen — matching the label so the
+            reviewer's muscle memory carries over. */}
         {inspection.submitRemark && (
-          <section className="rounded-xl border border-stone-200 bg-white p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <MessageSquare className="w-4 h-4 text-stone-400" />
-              <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">
-                Filler’s remark
+          <section className="rounded-xl overflow-hidden border border-stone-200 bg-white">
+            <div className="bg-ink text-white px-3 py-2 text-xs font-semibold uppercase tracking-wider">
+              Final Remark
+            </div>
+            <div className="p-3">
+              <div className="rounded-md border-2 border-dashed border-amber-300 bg-white px-3 py-2 text-sm text-ink whitespace-pre-wrap">
+                {inspection.submitRemark}
               </div>
             </div>
-            <p className="text-sm text-stone-900 leading-snug">{inspection.submitRemark}</p>
           </section>
         )}
 
