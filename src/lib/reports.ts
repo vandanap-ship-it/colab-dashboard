@@ -778,38 +778,38 @@ async function getMasterReportUncached(
 
   // Overall progress %.
   //
-  // Preferred path (Colab-parity): aggregate straight from ColabActivity
-  // rows using Colab's own Physical_Progress (weight), Planned_Progress_%
-  // and Total_Progress_% columns:
-  //   overallPlanned  = SUM(physicalProgress × plannedPct) / SUM(physicalProgress)
-  //   overallAchieved = SUM(physicalProgress × totalPct)   / SUM(physicalProgress)
-  // This is what Colab's own dashboards use, so the report numbers now
-  // reconcile with Colab exports without any client-side math.
+  // Preferred path (Colab-parity): simple mean of Planned_Progress_% and
+  // Total_Progress_% across every ColabActivity row. That's the same
+  // formula the Zone Health section uses per contractor, and it's what
+  // Shraddha's raw-CSV audit produced — treating every activity equally
+  // regardless of duration matches how the site team reads the numbers
+  // in their Excel pivots.
+  //
+  // (Placeholder rows — the "Villa 47-50 dated 26 Jan 2026, 100%" pattern
+  // — are already excluded because the Colab importer's pre-loop DELETE
+  // purges them from ColabActivity.)
   //
   // Fallback (fresh MPP-only project, no Colab data): the historic
-  // WBSNode-weighted path, computing planned% from baseline dates.
+  // leaf-weighted math so we still show a number pre-Colab-import.
   const overallColab = await prisma.$queryRawUnsafe<
-    Array<{ planned_num: number | null; achieved_num: number | null; weight_sum: number | null }>
+    Array<{ planned_avg: number | null; achieved_avg: number | null; n: bigint }>
   >(
     `SELECT
-       SUM("physicalProgress" * COALESCE("plannedPct", 0)) AS planned_num,
-       SUM("physicalProgress" * COALESCE("totalPct",   0)) AS achieved_num,
-       SUM("physicalProgress")                              AS weight_sum
+       AVG(COALESCE("plannedPct", 0)) AS planned_avg,
+       AVG(COALESCE("totalPct",   0)) AS achieved_avg,
+       COUNT(*)                        AS n
      FROM "ColabActivity"
-     WHERE "projectId" = $1
-       AND "physicalProgress" > 0`,
+     WHERE "projectId" = $1`,
     projectId,
   );
   const cAgg = overallColab[0];
-  const totalWeight = Number(cAgg?.weight_sum ?? 0);
+  const rowCount = Number(cAgg?.n ?? 0);
   let overallPlanned: number;
   let overallAchieved: number;
-  if (totalWeight > 0) {
-    overallPlanned  = Number(cAgg?.planned_num ?? 0) / totalWeight;
-    overallAchieved = Number(cAgg?.achieved_num ?? 0) / totalWeight;
+  if (rowCount > 0) {
+    overallPlanned  = Number(cAgg?.planned_avg ?? 0);
+    overallAchieved = Number(cAgg?.achieved_avg ?? 0);
   } else {
-    // No ColabActivity rows yet — fall back to the leaf-based weighted
-    // math so freshly-imported MPP-only projects still show a number.
     const fallback = weightedOverallProgress(leaves, today);
     overallPlanned  = fallback.planned;
     overallAchieved = fallback.achieved;
