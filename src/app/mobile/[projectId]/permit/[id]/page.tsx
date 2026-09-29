@@ -100,9 +100,18 @@ export default async function MobilePermitDetailPage({
   const iAmRequester = permit.requesterId === session.user.id;
   const approverIds = parseApproverIds(permit.approverIds);
   const iAmApprover = approverIds.includes(session.user.id);
+  // Colab-parity: Suspend is only shown to approvers whose PermitApprover
+  // row carries canSuspend=true. Falls back to false when the row is
+  // missing (legacy permit raised before the child-table migration).
+  const iCanSuspend = permit.approvers.some(
+    (a) => a.user.id === session.user.id && a.canSuspend,
+  );
   const showBar =
-    (iAmApprover && (permit.status === "PENDING" || permit.status === "APPROVED")) ||
-    (iAmRequester && permit.status === "APPROVED");
+    (iAmApprover &&
+      (permit.status === "PENDING" ||
+        permit.status === "APPROVED" ||
+        permit.status === "SUSPENDED")) ||
+    (iAmRequester && (permit.status === "APPROVED" || permit.status === "SUSPENDED"));
 
   const displayId =
     permit.displayId ?? `PER-${permit.id.slice(-6).toUpperCase()}`;
@@ -371,6 +380,28 @@ export default async function MobilePermitDetailPage({
           </section>
         )}
 
+        {/* Suspension banner — shown whenever the permit is currently
+            paused OR has a paused-and-resumed history the reviewer
+            should see. */}
+        {(permit.status === "SUSPENDED" || permit.suspendedAt) && (
+          <section className="rounded-xl border border-orange-200 bg-orange-50 p-3">
+            <div className="text-[10px] font-semibold text-orange-800 uppercase tracking-wider mb-1">
+              {permit.status === "SUSPENDED" ? "Currently suspended" : "Was suspended"}
+            </div>
+            {permit.suspendedReason && (
+              <p className="text-sm text-orange-900 leading-snug">{permit.suspendedReason}</p>
+            )}
+            {permit.suspendedAt && (
+              <p className="text-[11px] text-orange-800 mt-1">
+                Paused {fmtDate(permit.suspendedAt)}
+                {permit.suspensionResolvedAt && (
+                  <> · resumed {fmtDate(permit.suspensionResolvedAt)}</>
+                )}
+              </p>
+            )}
+          </section>
+        )}
+
         {/* Rejection reason */}
         {permit.status === "REJECTED" && permit.rejectionReason && (
           <section className="rounded-xl border border-red-200 bg-red-50 p-3">
@@ -414,6 +445,7 @@ export default async function MobilePermitDetailPage({
             projectId={projectId}
             iAmApprover={iAmApprover}
             iAmRequester={iAmRequester}
+            iCanSuspend={iCanSuspend}
           />
         </div>
       )}

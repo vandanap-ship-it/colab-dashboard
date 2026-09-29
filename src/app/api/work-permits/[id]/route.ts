@@ -32,8 +32,14 @@ const PatchWorkPermitSchema = z.object({
   // Only status changes are supported on this endpoint. Editing an existing
   // permit's content (times, location, etc.) isn't a real workflow — you
   // reject and re-raise instead. Keeps the API surface small.
-  status: z.enum(["APPROVED", "REJECTED", "CLOSED"]),
+  // Colab-parity: SUSPENDED is a first-class status. Setting it here means
+  // "pause an APPROVED permit"; setting APPROVED on a SUSPENDED permit
+  // means "resume it".
+  status: z.enum(["APPROVED", "REJECTED", "CLOSED", "SUSPENDED"]),
   rejectionReason: z.string().max(1000).optional(),
+  // Optional free-text explanation shown alongside the SUSPENDED status
+  // pill (Colab labels this "Suspend Remark").
+  suspensionReason: z.string().max(1000).optional(),
   expectedUpdatedAt: z.string().optional(),
 });
 
@@ -80,7 +86,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
     const parsed = await parseBody(req, PatchWorkPermitSchema);
     if (!parsed.ok) return parsed.response;
-    const { status: newStatus, rejectionReason, expectedUpdatedAt } = parsed.data;
+    const { status: newStatus, rejectionReason, suspensionReason, expectedUpdatedAt } = parsed.data;
 
     const conflict = checkConflict(expectedUpdatedAt, existing.updatedAt, {
       id: existing.id, status: existing.status, title: existing.title,
@@ -117,6 +123,31 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         return forbidden("Only the approver or the requester can close this permit.");
       }
     }
+    if (kind === "suspend") {
+      // Colab-parity: only an approver whose PermitApprover row has
+      // canSuspend=true can pause an APPROVED permit. Admin bypasses.
+      if (!admin) {
+        const suspender = await prisma.permitApprover.findFirst({
+          where: { workPermitId: id, userId: session.user.id, canSuspend: true },
+          select: { id: true },
+        });
+        if (!suspender) {
+          return forbidden("Only an approver with Can Suspend can suspend this permit.");
+        }
+      }
+    }
+    if (kind === "resume") {
+      // Any approver on the permit (or the original suspender, or admin)
+      // can resume a SUSPENDED permit — matches Colab where the resume
+      // action is a routine "back to work" toggle any approver can flip.
+      if (
+        !admin &&
+        !isApprover(existing.approverIds, session.user.id) &&
+        session.user.id !== existing.suspendedById
+      ) {
+        return forbidden("Only an approver can resume this permit.");
+      }
+    }
 
     // Belt-and-suspenders: reject requires a reason. UI should enforce this,
     // but do not trust the client.
@@ -144,6 +175,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     } else if (kind === "close") {
       data.closedById = session.user.id;
       data.closedAt = now;
+    } else if (kind === "suspend") {
+      data.suspendedById = session.user.id;
+      data.suspendedAt = now;
+      data.suspendedReason = suspensionReason?.trim() || null;
+    } else if (kind === "resume") {
+      data.suspensionResolvedAt = now;
+      data.suspensionResolvedById = session.user.id;
     }
 
     const updated = await prisma.workPermit.update({
