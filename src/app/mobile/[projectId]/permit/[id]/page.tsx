@@ -160,50 +160,69 @@ export default async function MobilePermitDetailPage({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
-        {permit.description && (
-          <section className="rounded-xl border border-stone-200 bg-white p-4">
-            <p className="text-[14px] text-ink leading-relaxed whitespace-pre-wrap">
-              {permit.description}
-            </p>
-          </section>
-        )}
+        {/* Colab-parity "WORK DETAILS" accordion (Abhishek zip · permit
+            detail collapsible group). Wraps date/time/location/activity
+            AND the description in one expandable card so the reviewer
+            can jump straight to the checklist without scrolling past a
+            long description. Open by default; native <details> — no
+            client JS. */}
+        <details
+          className="group rounded-xl border border-stone-200 bg-white overflow-hidden"
+          open
+        >
+          <summary className="cursor-pointer select-none px-3 py-2.5 text-[10px] font-semibold text-stone-500 uppercase tracking-widest flex items-center justify-between hover:bg-sandstone-50/60">
+            <span>Work details</span>
+            <span className="text-stone-300 text-xs group-open:rotate-180 transition-transform">▾</span>
+          </summary>
 
-        {/* When and where */}
-        <section className="rounded-xl border border-stone-200 bg-white p-3 space-y-2 text-sm">
-          <div className="flex items-center gap-2 text-stone-700">
-            <Calendar className="w-4 h-4 text-stone-400 shrink-0" />
-            <span className="text-stone-500 text-xs uppercase tracking-wider mr-1">Work date</span>
-            <span className="font-medium">{fmtDate(permit.workDate)}</span>
+          <div className="px-3 pb-3 space-y-2 text-sm border-t border-stone-100 pt-3">
+            <div className="flex items-center gap-2 text-stone-700">
+              <Calendar className="w-4 h-4 text-stone-400 shrink-0" />
+              <span className="text-stone-500 text-xs uppercase tracking-wider mr-1">Work date</span>
+              <span className="font-medium">{fmtDate(permit.workDate)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-stone-700">
+              <Clock className="w-4 h-4 text-stone-400 shrink-0" />
+              <span className="text-stone-500 text-xs uppercase tracking-wider mr-1">Hours</span>
+              <span className="font-medium">{permit.startTime} – {permit.endTime}</span>
+            </div>
+            {permit.location && (
+              <div className="flex items-start gap-2 text-stone-700">
+                <MapPin className="w-4 h-4 text-stone-400 shrink-0" />
+                <span className="text-stone-500 text-xs uppercase tracking-wider mr-1 shrink-0 pt-0.5">
+                  Exact location
+                </span>
+                <span className="font-medium leading-snug">{permit.location}</span>
+              </div>
+            )}
+            {permit.activityHead && (
+              <div className="flex items-start gap-2 text-stone-700">
+                <span className="w-4 h-4 shrink-0" />
+                <span className="text-stone-500 text-xs uppercase tracking-wider mr-1 shrink-0 pt-0.5">
+                  Activity head
+                </span>
+                <span className="font-medium leading-snug">{permit.activityHead}</span>
+              </div>
+            )}
+            {permit.wbsNode && (
+              <div className="flex items-start gap-2 text-stone-700">
+                <span className="w-4 h-4 shrink-0" />
+                <span className="text-stone-500 text-xs uppercase tracking-wider mr-1 shrink-0 pt-0.5">Activity</span>
+                <span className="font-medium leading-snug">{permit.wbsNode.name}</span>
+              </div>
+            )}
+            {permit.description && (
+              <div className="pt-2 border-t border-stone-100 mt-2">
+                <p className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
+                  Work description
+                </p>
+                <p className="text-[13px] text-ink leading-relaxed whitespace-pre-wrap">
+                  {permit.description}
+                </p>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2 text-stone-700">
-            <Clock className="w-4 h-4 text-stone-400 shrink-0" />
-            <span className="text-stone-500 text-xs uppercase tracking-wider mr-1">Hours</span>
-            <span className="font-medium">{permit.startTime} – {permit.endTime}</span>
-          </div>
-          {permit.location && (
-            <div className="flex items-start gap-2 text-stone-700">
-              <MapPin className="w-4 h-4 text-stone-400 shrink-0" />
-              <span className="text-stone-500 text-xs uppercase tracking-wider mr-1 shrink-0 pt-0.5">Location</span>
-              <span className="font-medium leading-snug">{permit.location}</span>
-            </div>
-          )}
-          {permit.activityHead && (
-            <div className="flex items-start gap-2 text-stone-700">
-              <span className="w-4 h-4 shrink-0" />
-              <span className="text-stone-500 text-xs uppercase tracking-wider mr-1 shrink-0 pt-0.5">
-                Activity head
-              </span>
-              <span className="font-medium leading-snug">{permit.activityHead}</span>
-            </div>
-          )}
-          {permit.wbsNode && (
-            <div className="flex items-start gap-2 text-stone-700">
-              <span className="w-4 h-4 shrink-0" />
-              <span className="text-stone-500 text-xs uppercase tracking-wider mr-1 shrink-0 pt-0.5">Activity</span>
-              <span className="font-medium leading-snug">{permit.wbsNode.name}</span>
-            </div>
-          )}
-        </section>
+        </details>
 
         {/* People */}
         <section className="rounded-xl border border-stone-200 bg-white p-3 space-y-2 text-sm">
