@@ -432,20 +432,31 @@ export async function importMspCsv(
 
           let taskOrder = 0;
           for (const t of s.tasks) {
+            // Prefix the taskCode with the villa number so activities
+            // from two different contractor MPPs never collide on the
+            // WBSNode's projectId_taskCode unique key. Bare outline
+            // numbers ("1.1.1.1.7") from A&T's Villa 25 and Elegant's
+            // Villa 51 look identical to the DB — the second import
+            // silently overwrote the first, moving A&T activities onto
+            // Elegant villas. Villa-prefixed codes ("V25-1.1.1.1.7"
+            // vs "V51-1.1.1.1.7") make the outline unique per villa
+            // and match the legacy "V03-*" convention Siddhi already
+            // uses for historic data.
+            const scopedTaskCode = `V${v.meta.number}-${t.outlineNumber}`;
             const existingWbs = await tx.wBSNode.findUnique({
-              where: { projectId_taskCode: { projectId: project.id, taskCode: t.outlineNumber } },
+              where: { projectId_taskCode: { projectId: project.id, taskCode: scopedTaskCode } },
             });
-            // Same split as villaMilestone above — update path is
-            // schedule-side only. actualStart / actualFinish /
-            // percentComplete / progressEntered are set on CREATE from
-            // the MPP's initial state, but never overwritten on UPDATE
-            // (those are progress-side fields owned by Colab sync and
-            // the site team's ProgressEntry writes). Otherwise a
-            // second MPP import a week after go-live would wipe every
-            // actual date the site team logged.
+            // Update path is schedule-side ONLY. actualStart /
+            // actualFinish / percentComplete / progressEntered are set
+            // on CREATE from the MPP's initial state, but never
+            // overwritten on UPDATE (those are progress-side fields
+            // owned by Colab sync and the site team's ProgressEntry
+            // writes). Otherwise a second MPP import a week after
+            // go-live would wipe every actual date the site team
+            // logged.
             const createPayload = {
               projectId: project.id,
-              taskCode: t.outlineNumber,
+              taskCode: scopedTaskCode,
               name: t.name,
               level: t.level,
               orderIndex: taskOrder,
@@ -474,7 +485,7 @@ export async function importMspCsv(
               isSubMilestone: t.isSubMilestone,
             };
             await tx.wBSNode.upsert({
-              where: { projectId_taskCode: { projectId: project.id, taskCode: t.outlineNumber } },
+              where: { projectId_taskCode: { projectId: project.id, taskCode: scopedTaskCode } },
               create: createPayload,
               update: updatePayload,
             });
