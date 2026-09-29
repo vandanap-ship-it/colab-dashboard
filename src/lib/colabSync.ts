@@ -77,6 +77,7 @@ export interface ColabSyncStats {
   matchedRows: number;          // matched at least to villa+section
   matchedActivityRows: number;  // matched all the way to a specific WBSNode
   unmatchedRows: number;
+  placeholderRowsDropped: number; // fake schedule rows we intentionally skipped
   unmatchedSamples: Array<{
     line: number;
     villa: string;
@@ -145,6 +146,40 @@ function toFloat(s: string | undefined | null): number | null {
   return isNaN(n) ? null : n;
 }
 
+/** Detect a placeholder row Colab sometimes ships in bulk — an
+ *  activity slot with no real schedule and no logs. Every distinctive
+ *  field is a "not-a-real-plan" marker in isolation; requiring all of
+ *  them together avoids false positives on genuine not-yet-started
+ *  activities.
+ *
+ *  Amanvana signal set (from the 29-Sep export, Villas 47-50):
+ *    - Planned_Start == Planned_End, both non-blank    (zero-duration)
+ *    - Actual_Start / Actual_End_Date / Progress_Date all blank
+ *    - Achieved_Qty == 0 and Cumulative__achieved_Qty == 0
+ *    - Milestone / Milestone_type both blank (not a real ★ marker)
+ *
+ *  Genuine future activities carry Planned_End > Planned_Start;
+ *  real milestones carry the Milestone column. A zero-duration row
+ *  with none of those is a stub, not a plan. */
+function isColabPlaceholderRow(r: ColabRow): boolean {
+  const ps = (r.Planned_Start_Date ?? "").trim();
+  const pe = (r.Planned_End_Date ?? "").trim();
+  if (!ps || !pe || ps !== pe) return false;
+  const anyActual = (
+    (r.Actual_Start ?? "").trim() ||
+    (r.Actual_End_Date ?? "").trim() ||
+    (r.Progress_Date ?? "").trim()
+  );
+  if (anyActual) return false;
+  const achieved = toFloat(r.Achieved_Qty) ?? 0;
+  const cumulative = toFloat(r.Cumulative__achieved_Qty) ?? 0;
+  if (achieved !== 0 || cumulative !== 0) return false;
+  const milestone = (r.Milestone ?? "").trim();
+  const milestoneType = (r.Milestone_type ?? "").trim();
+  if (milestone || milestoneType) return false;
+  return true;
+}
+
 /** Normalize a Colab row's activity descriptor to a fuzzy-match string. */
 function colabActivityDescriptor(r: ColabRow): string {
   const parts = [
@@ -196,6 +231,7 @@ export async function importColabProgress(
     matchedRows: 0,
     matchedActivityRows: 0,
     unmatchedRows: 0,
+    placeholderRowsDropped: 0,
     unmatchedSamples: [],
     villasNotFound: [],
     sectionsUnmatched: [],
@@ -215,6 +251,26 @@ export async function importColabProgress(
   });
   const rows = parsed.data;
   stats.totalRows = rows.length;
+
+  // Purge any placeholder ColabActivity rows that got imported before
+  // this filter was in place. Structured columns tell us it's a
+  // placeholder without needing to inspect rawColabRow: zero-duration
+  // planned window, no actuals, no progress date. The new-row filter
+  // (isColabPlaceholderRow) catches them going forward; this catches
+  // the ones already sitting in the table.
+  if (!options.dryRun) {
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM "ColabActivity"
+       WHERE "projectId" = $1
+         AND "plannedStart" IS NOT NULL
+         AND "plannedEnd" IS NOT NULL
+         AND "plannedStart" = "plannedEnd"
+         AND "actualStart" IS NULL
+         AND "actualEnd" IS NULL
+         AND "progressDate" IS NULL`,
+      projectId,
+    );
+  }
 
   // Pre-load every lookup table upfront so the per-row hot loop never hits
   // the DB. The previous villaMilestone.findUnique per row (7,525 round-trips
@@ -394,6 +450,21 @@ export async function importColabProgress(
 
     // Filter by project if projectName was supplied (e.g. "AMANVANA").
     if (options.projectName && r.Project_Name?.trim() !== options.projectName) continue;
+
+    // Placeholder-row detector: Colab exports sometimes ship whole
+    // villas' worth of stub rows where every activity carries the
+    // same past Planned_Start = Planned_End, marks itself 100%
+    // planned, and has no actuals / no progress log / no photo.
+    // Amanvana's Villas 47-50 had 700 such rows in the 29-Sep export
+    // — all "planned 26 Jan 2026, 100%", never touched. Left alone
+    // they inflate the project's overall planned % (they count as
+    // "planned 100%" against the plan denominator) and pollute the
+    // ColabActivity table with rows that carry no real signal. Drop
+    // them at import.
+    if (isColabPlaceholderRow(r)) {
+      stats.placeholderRowsDropped++;
+      continue;
+    }
 
     // ----- 1. Villa
     const villaNum = parseVillaNumber(r.Location_Name ?? "");
