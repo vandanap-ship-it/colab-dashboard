@@ -208,6 +208,29 @@ export async function POST(req: Request) {
   const achieved = achievedQuantity ?? 0;
   const cumulative = cumulativeQuantity ?? 0;
 
+  // Colab-parity monotonic constraint (Madhavan zip · Edit Progress
+  // slider min-locks to the current cumulative). Progress can only
+  // increase — a new PUBLISHED entry's cumulative must be >= the max
+  // cumulative of prior PUBLISHED entries on the same activity.
+  // Drafts skip the check for the same reason they skip the precheck
+  // gate: the engineer's stashed unfinished attempt shouldn't be
+  // policed until they hit Publish.
+  if (!isDraft) {
+    const maxPrior = await prisma.progressEntry.aggregate({
+      where: { wbsNodeId, status: "PUBLISHED", deletedAt: null },
+      _max: { cumulativeQuantity: true },
+    });
+    const priorMax = maxPrior._max.cumulativeQuantity ?? 0;
+    if (cumulative < priorMax) {
+      return NextResponse.json(
+        {
+          error: `Progress can't go backwards. Latest logged is ${priorMax.toFixed(1)} — new entry must be ≥ that. To correct an over-count, ask an admin to void the wrong row.`,
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   const labourClean = (labour ?? [])
     .map((l) => ({ category: (l.category ?? "").trim(), count: Math.floor(l.count ?? 0) }))
     .filter((l) => l.category.length > 0 && l.count > 0);

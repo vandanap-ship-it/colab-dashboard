@@ -107,6 +107,28 @@ export async function POST(req: Request, ctx: RouteContext<"/api/progress/[id]/p
   const entryDate = body.date ? new Date(body.date) : new Date();
   const achieved = body.achievedQuantity ?? 0;
   const cumulative = body.cumulativeQuantity ?? 0;
+
+  // Colab-parity monotonic constraint — same rule as fresh POST. Prior
+  // rows here exclude this draft row itself; publishing a draft with a
+  // value below the highest prior PUBLISHED cumulative is refused.
+  const maxPrior = await prisma.progressEntry.aggregate({
+    where: {
+      wbsNodeId: draft.wbsNodeId,
+      status: "PUBLISHED",
+      deletedAt: null,
+      id: { not: id },
+    },
+    _max: { cumulativeQuantity: true },
+  });
+  const priorMax = maxPrior._max.cumulativeQuantity ?? 0;
+  if (cumulative < priorMax) {
+    return NextResponse.json(
+      {
+        error: `Progress can't go backwards. Latest logged is ${priorMax.toFixed(1)} — this draft must be ≥ that before you can publish. To correct an over-count, ask an admin to void the wrong row.`,
+      },
+      { status: 409 },
+    );
+  }
   const labourClean = (body.labour ?? [])
     .map((l) => ({ category: (l.category ?? "").trim(), count: Math.floor(l.count ?? 0) }))
     .filter((l) => l.category.length > 0 && l.count > 0);
