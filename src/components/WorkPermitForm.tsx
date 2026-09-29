@@ -6,7 +6,7 @@ import PhotoPicker from "./PhotoPicker";
 import SaveSuccessCard from "./SaveSuccessCard";
 import HowThisWorks from "./HowThisWorks";
 import { useToast } from "./Toast";
-import { ScreenHeading, FieldLabel, PrimaryAction } from "./mobile/ui";
+import { FieldLabel } from "./mobile/ui";
 import {
   WORK_PERMIT_TYPES,
   WORK_PERMIT_TYPE_HINTS,
@@ -91,6 +91,31 @@ export default function WorkPermitForm({
   const [photos, setPhotos] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Colab-parity 4-step wizard state. Step numbers match the header
+  // pattern "Step N of 4 — [name]". State stays flat across steps so
+  // Back doesn't lose entered data.
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+
+  // Colab-parity Step 2 additions.
+  type LabourEntry = { workerName: string; role: string; count: string };
+  const [labourEntries, setLabourEntries] = useState<LabourEntry[]>([]);
+  const [coRequesterIds, setCoRequesterIds] = useState<Set<string>>(new Set());
+  const [activityHead, setActivityHead] = useState<string>("");
+  // Per-approver capabilities picked in Step 2 (Colab shows two chips
+  // per approver row: Can Close green + Can Suspend amber).
+  type ApproverCap = { canClose: boolean; canSuspend: boolean };
+  const [approverCaps, setApproverCaps] = useState<Record<string, ApproverCap>>({});
+  function setCap(userId: string, patch: Partial<ApproverCap>) {
+    setApproverCaps((prev) => ({
+      ...prev,
+      [userId]: {
+        canClose: prev[userId]?.canClose ?? true,
+        canSuspend: prev[userId]?.canSuspend ?? false,
+        ...patch,
+      },
+    }));
+  }
   // After save: in-place success card (Add another / Back to home) so
   // engineers raising back-to-back permits don't get bounced home each time.
   const [saved, setSaved] = useState<null | { queued: boolean; title: string }>(null);
@@ -160,6 +185,30 @@ export default function WorkPermitForm({
       })
       .filter((x): x is { q: string; passed: boolean | null; remark: string | undefined } => x !== null);
 
+    // Colab-parity Step 2 additions on the payload:
+    // - labourEntries (multi-add, free-text worker/role/count)
+    // - coRequesterIds (multi-user picker)
+    // - activityHead (Colab's Activity Head dropdown pick)
+    // - approvers[] with per-user capabilities (canClose/canSuspend).
+    //   The existing approverIds[] payload key stays for the current
+    //   API contract; approvers[] rides alongside so the new endpoint
+    //   can persist capabilities.
+    const cleanLabour = labourEntries
+      .map((r) => ({
+        workerName: r.workerName.trim() || undefined,
+        role: r.role.trim() || undefined,
+        count: r.count.trim() ? Number(r.count) : undefined,
+      }))
+      .filter((r) => r.workerName || r.role || (typeof r.count === "number" && Number.isFinite(r.count)));
+
+    const approverIdsArr = Array.from(selectedApprovers);
+    const approversWithCaps = approverIdsArr.map((userId) => ({
+      userId,
+      levelIndex: 1,
+      canClose: approverCaps[userId]?.canClose ?? true,
+      canSuspend: approverCaps[userId]?.canSuspend ?? false,
+    }));
+
     const payload = {
       idempotencyKey: crypto.randomUUID(),
       projectId,
@@ -171,7 +220,11 @@ export default function WorkPermitForm({
       endTime,
       location: location.trim() || undefined,
       contractorId: contractorId || undefined,
-      approverIds: Array.from(selectedApprovers),
+      approverIds: approverIdsArr,
+      approvers: approversWithCaps,
+      labourEntries: cleanLabour.length > 0 ? cleanLabour : undefined,
+      coRequesterIds: coRequesterIds.size > 0 ? Array.from(coRequesterIds) : undefined,
+      activityHead: activityHead.trim() || undefined,
       photoUrls,
       checklistResponses: checklistResponses.length > 0 ? checklistResponses : undefined,
     };
@@ -278,31 +331,88 @@ export default function WorkPermitForm({
   const inputCls =
     "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px] focus:outline-none focus:border-ink";
 
-  return (
-    <form onSubmit={handleSubmit} className="px-5 py-5 space-y-5">
-      {/* Project name lives in the layout header — don't repeat it here. */}
-      <ScreenHeading
-        title="Raise a work permit"
-        lede="Needs approval before work starts."
-      />
+  const stepNames = ["Basic Info", "People", "Checklist", "Review"] as const;
 
-      <HowThisWorks
-        title="How to request a work permit"
-        storageKey="siddhi.htw.permit"
-        steps={[
-          "Pick the permit type — Hot Work (welding, grinding), Night Work, Deshuttering, or General.",
-          "Give it a short title so approvers can tell what it's for at a glance (e.g. \"Rebar welding on V12 slab\").",
-          "Write a short description of what's actually going to happen on site.",
-          "Pick the work date, plus start and end times.",
-          "Say where on site — the location or villa.",
-          "Pick who should approve it. Safety officer for Hot Work / Night Work; planner for General / Deshuttering.",
-          "Add photos of prep or site conditions if they help the approver decide.",
-          "Tap Submit. The approver gets a push and can approve or reject from their phone.",
-        ]}
-      />
+  // Colab-parity step-1 gate: Permit Date + Valid From-To are required
+  // before Continue enables. Step-2 gate: contractor + ≥1 approver.
+  // Step 3 (checklist) is always available. Step 4 (Review) doesn't
+  // block on anything, since it's the summary + submit stop.
+  const canAdvance =
+    step === 1
+      ? title.trim().length >= 3 && workDate.length > 0 && startTime < endTime
+      : step === 2
+        ? selectedApprovers.size > 0
+        : true;
+
+  function goBack() {
+    if (step === 1) {
+      // Same as X close — bounce home. Handled by the layout's back
+      // button in practice; here we just no-op.
+      return;
+    }
+    setStep((s) => Math.max(1, (s as number) - 1) as 1 | 2 | 3 | 4);
+    setError(null);
+  }
+  function goNext() {
+    if (step === 4) return;
+    setStep((s) => Math.min(4, (s as number) + 1) as 1 | 2 | 3 | 4);
+    setError(null);
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="pb-32">
+      {/* Colab-parity wizard chrome: X close top-left, uppercase permit
+          type title, "Step N of 4 — [step name]" subtitle, and a
+          4-segment progress bar. Matches Abhishek zip screens 7/10/14/32. */}
+      <div className="px-5 pt-5 pb-3 bg-ivory border-b border-sandstone-100">
+        <div className="flex items-start gap-3">
+          <a
+            href={`/mobile/${projectId}`}
+            aria-label="Close permit wizard"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-ink hover:bg-sandstone-100 shrink-0"
+          >
+            <span className="text-xl">×</span>
+          </a>
+          <div className="flex-1 text-center">
+            <h1 className="font-serif text-[20px] leading-tight text-ink tracking-tight uppercase">
+              {WORK_PERMIT_TYPE_LABELS[type]} Permit
+            </h1>
+            <p className="text-[12px] text-ink-3 mt-0.5">
+              Step {step} of 4 — {stepNames[step - 1]}
+            </p>
+          </div>
+          <span className="w-9 shrink-0" aria-hidden />
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-1">
+          {[1, 2, 3, 4].map((n) => (
+            <div
+              key={n}
+              className={`h-1 rounded-full ${
+                n <= step ? "bg-ink" : "bg-sandstone-200"
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="px-5 py-5 space-y-5">
+      {step === 1 && (
+        <HowThisWorks
+          title="How to request a work permit"
+          storageKey="siddhi.htw.permit"
+          steps={[
+            "Pick the permit type — Hot Work, Night Work, De-shuttering, General, or Work At Height.",
+            "Give it a short title so approvers can tell what it's for at a glance (e.g. \"Rebar welding on V12 slab\").",
+            "Set the permit date, plus valid-from and valid-to times.",
+            "Step 2: pick the contractor, add labour entries, and pick approver(s) with their Can Close / Can Suspend capabilities.",
+            "Step 3: work your way through the safety checklist. Each row = Yes/No + optional remark + optional photo.",
+            "Step 4: review everything and submit. Approver(s) get a push and can approve, reject, or suspend from their phone.",
+          ]}
+        />
+      )}
 
       {/* Type — segmented picker so all four fit on-screen without scrolling */}
-      <div>
+      <div className={step === 1 ? "" : "hidden"}>
         <FieldLabel>What kind of work?</FieldLabel>
         <div className="grid grid-cols-2 gap-2">
           {WORK_PERMIT_TYPES.map((t) => (
@@ -329,7 +439,7 @@ export default function WorkPermitForm({
         </div>
       </div>
 
-      <label className="block">
+      <label className={`block ${step === 1 ? "" : "hidden"}`}>
         <FieldLabel>Short title</FieldLabel>
         <input
           className={inputCls}
@@ -340,7 +450,7 @@ export default function WorkPermitForm({
         />
       </label>
 
-      <label className="block">
+      <label className={`block ${step === 1 ? "" : "hidden"}`}>
         <FieldLabel optional>Description</FieldLabel>
         <textarea
           className={`${inputCls} min-h-[80px]`}
@@ -357,7 +467,7 @@ export default function WorkPermitForm({
           question set. Each row = question · Yes/No toggle · optional
           remark. Answers ride the payload as checklistResponses. */}
       {activeChecklist.length > 0 && (
-        <div className="rounded-lg border border-stone-200 bg-white overflow-hidden">
+        <div className={`rounded-lg border border-stone-200 bg-white overflow-hidden ${step === 3 ? "" : "hidden"}`}>
           <div className="bg-ink text-white px-3 py-2 text-xs font-semibold uppercase tracking-wider">
             Checkpoints — {WORK_PERMIT_TYPE_LABELS[type]}
           </div>
@@ -419,19 +529,17 @@ export default function WorkPermitForm({
         </div>
       )}
 
-      {/* Photos moved up from bottom of form — a permit request photo is
-          often the fastest way to give the approver context (drawing
-          markup, site condition, blocked area). */}
-      <div>
+      {/* Photos — step 3 (Checklist / evidence step). */}
+      <div className={step === 3 ? "" : "hidden"}>
         <FieldLabel hint="A photo tells the approver the story faster than words." optional>
           Photos (up to 6)
         </FieldLabel>
         <PhotoPicker photos={photos} setPhotos={setPhotos} max={6} />
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className={`grid grid-cols-3 gap-2 ${step === 1 ? "" : "hidden"}`}>
         <label className="block">
-          <FieldLabel>Date</FieldLabel>
+          <FieldLabel>Permit Date</FieldLabel>
           <input
             type="date"
             className={inputCls}
@@ -440,7 +548,7 @@ export default function WorkPermitForm({
           />
         </label>
         <label className="block">
-          <FieldLabel>Start</FieldLabel>
+          <FieldLabel>Valid From</FieldLabel>
           <input
             type="time"
             className={inputCls}
@@ -449,7 +557,7 @@ export default function WorkPermitForm({
           />
         </label>
         <label className="block">
-          <FieldLabel>End</FieldLabel>
+          <FieldLabel>Valid To</FieldLabel>
           <input
             type="time"
             className={inputCls}
@@ -459,7 +567,7 @@ export default function WorkPermitForm({
         </label>
       </div>
 
-      <label className="block">
+      <label className={`block ${step === 1 ? "" : "hidden"}`}>
         <FieldLabel optional>Location</FieldLabel>
         <input
           className={inputCls}
@@ -470,14 +578,30 @@ export default function WorkPermitForm({
         />
       </label>
 
-      <label className="block">
-        <FieldLabel optional>Contractor</FieldLabel>
+      {/* Step 1: Activity Head (Colab's Step-1 dropdown). Free-text
+          for now — a picker with the seeded activity heads is Phase 2
+          work marked in phase2_exclusions_log if it applies. */}
+      <label className={`block ${step === 1 ? "" : "hidden"}`}>
+        <FieldLabel optional>Activity Head</FieldLabel>
+        <input
+          className={inputCls}
+          value={activityHead}
+          onChange={(e) => setActivityHead(e.target.value)}
+          placeholder="e.g. Reinforcement · Shuttering · Surface Finishing"
+          maxLength={120}
+        />
+      </label>
+
+      {/* Step 2: Contractor. Colab requires it — enforced client-side
+          in canAdvance. */}
+      <label className={`block ${step === 2 ? "" : "hidden"}`}>
+        <FieldLabel>Contractor <span className="text-red-500">*</span></FieldLabel>
         <select
           className={inputCls}
           value={contractorId}
           onChange={(e) => setContractorId(e.target.value)}
         >
-          <option value="">— none —</option>
+          <option value="">Choose Contractor</option>
           {contractors.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name} ({c.category})
@@ -486,9 +610,118 @@ export default function WorkPermitForm({
         </select>
       </label>
 
-      <div>
-        <FieldLabel hint="Pick at least one. Any of them can approve — first approver wins.">
-          Who should approve?
+      {/* Step 2: Labour Entries (Colab's "+ Add Labour Entry"). */}
+      <div className={step === 2 ? "" : "hidden"}>
+        <FieldLabel hint="Workers involved in this permit" optional>
+          Labour
+        </FieldLabel>
+        <div className="space-y-2">
+          {labourEntries.map((row, idx) => (
+            <div key={idx} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-center">
+              <input
+                className={inputCls}
+                value={row.workerName}
+                onChange={(e) => {
+                  const next = labourEntries.slice();
+                  next[idx] = { ...next[idx], workerName: e.target.value };
+                  setLabourEntries(next);
+                }}
+                placeholder="Worker name"
+                maxLength={120}
+              />
+              <input
+                className={inputCls}
+                value={row.role}
+                onChange={(e) => {
+                  const next = labourEntries.slice();
+                  next[idx] = { ...next[idx], role: e.target.value };
+                  setLabourEntries(next);
+                }}
+                placeholder="Role (Welder, Rigger…)"
+                maxLength={80}
+              />
+              <input
+                className={`${inputCls} w-16`}
+                value={row.count}
+                onChange={(e) => {
+                  const next = labourEntries.slice();
+                  next[idx] = { ...next[idx], count: e.target.value.replace(/[^0-9]/g, "") };
+                  setLabourEntries(next);
+                }}
+                placeholder="#"
+                maxLength={4}
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setLabourEntries(labourEntries.filter((_, i) => i !== idx))
+                }
+                aria-label="Remove labour row"
+                className="text-stone-400 hover:text-stone-600 text-xl leading-none px-1"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() =>
+              setLabourEntries([
+                ...labourEntries,
+                { workerName: "", role: "", count: "" },
+              ])
+            }
+            className="w-full rounded-lg border border-ink text-ink text-sm font-semibold py-2 hover:bg-sandstone-50"
+          >
+            + Add Labour Entry
+          </button>
+        </div>
+      </div>
+
+      {/* Step 2: Co-Requesters — additional permit holders. */}
+      <div className={step === 2 ? "" : "hidden"}>
+        <FieldLabel hint="Additional permit holders" optional>
+          Co-Requesters
+        </FieldLabel>
+        <div className="space-y-1.5 max-h-40 overflow-y-auto rounded-lg border border-sandstone-100 bg-cream p-2">
+          {approverOptions.map((u) => {
+            const checked = coRequesterIds.has(u.id);
+            return (
+              <label
+                key={u.id}
+                className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 cursor-pointer ${checked ? "bg-sandstone-100" : "hover:bg-sandstone-50"}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() =>
+                    setCoRequesterIds((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(u.id)) next.delete(u.id);
+                      else next.add(u.id);
+                      return next;
+                    })
+                  }
+                  className="w-4 h-4 accent-ferrous-500"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[14px] text-ink">{u.name}</div>
+                  <div className="text-[11px] text-ink-3">@{u.username}</div>
+                </div>
+              </label>
+            );
+          })}
+          {approverOptions.length === 0 && (
+            <p className="text-[12px] text-ink-3 px-2 py-1.5">
+              No candidates.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className={step === 2 ? "" : "hidden"}>
+        <FieldLabel hint="At least one approver across all levels is required">
+          Approval Levels — Level 1
         </FieldLabel>
         <div className="space-y-1.5 max-h-64 overflow-y-auto rounded-lg border border-sandstone-100 bg-cream p-2">
           {approverOptions.length === 0 ? (
@@ -517,6 +750,47 @@ export default function WorkPermitForm({
                       @{u.username} · {u.role}
                     </div>
                   </div>
+                  {/* Colab-parity capability chips per approver.
+                      Default Can Close = ON; Can Suspend = OFF. */}
+                  {checked && (
+                    <div
+                      className="flex items-center gap-1.5 shrink-0"
+                      onClick={(e) => e.preventDefault()}
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCap(u.id, {
+                            canClose: !(approverCaps[u.id]?.canClose ?? true),
+                          });
+                        }}
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${
+                          (approverCaps[u.id]?.canClose ?? true)
+                            ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                            : "bg-stone-100 text-stone-400 ring-stone-200"
+                        }`}
+                      >
+                        🔒 Can Close
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCap(u.id, {
+                            canSuspend: !(approverCaps[u.id]?.canSuspend ?? false),
+                          });
+                        }}
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${
+                          (approverCaps[u.id]?.canSuspend ?? false)
+                            ? "bg-amber-50 text-amber-800 ring-amber-200"
+                            : "bg-stone-100 text-stone-400 ring-stone-200"
+                        }`}
+                      >
+                        ⏸ Can Suspend
+                      </button>
+                    </div>
+                  )}
                 </label>
               );
             })
@@ -524,21 +798,137 @@ export default function WorkPermitForm({
         </div>
       </div>
 
+      {/* Step 4 — Review Permit card. Everything the requester
+          entered rendered as a read-only summary, plus an "Approver
+          Capabilities" card showing per-level rows with Can Close / Can
+          Suspend chips. Matches Abhishek zip screen 32 exactly. */}
+      {step === 4 && (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-stone-200 bg-white p-4 space-y-2">
+            <p className="text-[13px] font-semibold text-ink mb-1">Review Permit</p>
+            <ReviewRow label="Permit Type" value={WORK_PERMIT_TYPE_LABELS[type].toUpperCase()} />
+            <ReviewRow label="Date" value={workDate ? new Date(workDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"} />
+            <ReviewRow label="Valid From – To" value={`${startTime} – ${endTime}`} />
+            <ReviewRow label="Description" value={(description.trim() || WORK_PERMIT_TYPE_LABELS[type]).toUpperCase()} />
+            <ReviewRow
+              label="Contractor"
+              value={contractors.find((c) => c.id === contractorId)?.name ?? "—"}
+            />
+            <ReviewRow
+              label="Approval Levels"
+              value={`${selectedApprovers.size > 0 ? 1 : 0} level · ${selectedApprovers.size} approver${selectedApprovers.size === 1 ? "" : "s"}`}
+            />
+            <ReviewRow
+              label="Labour entries"
+              value={labourEntries.length === 0 ? "None" : String(labourEntries.length)}
+            />
+            <ReviewRow label="Activity Head" value={activityHead || "—"} />
+            <ReviewRow label="Location" value={location || "—"} />
+            <ReviewRow label="Images" value={photos.length === 0 ? "None" : String(photos.length)} />
+          </div>
+
+          <div className="rounded-lg border border-stone-200 bg-white p-4 space-y-2">
+            <p className="text-[13px] font-semibold text-ink">Approver Capabilities</p>
+            <p className="text-[12px] text-ink-3 font-semibold">Level 1 — Level 1</p>
+            {Array.from(selectedApprovers).map((uid) => {
+              const u = approverOptions.find((a) => a.id === uid);
+              if (!u) return null;
+              const cap = approverCaps[uid] ?? { canClose: true, canSuspend: false };
+              return (
+                <div key={uid} className="flex items-center justify-between gap-3">
+                  <div className="text-[13px] text-ink truncate">{u.name}</div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${
+                        cap.canClose
+                          ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                          : "bg-stone-100 text-stone-400 ring-stone-200"
+                      }`}
+                    >
+                      🔒 Can Close
+                    </span>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${
+                        cap.canSuspend
+                          ? "bg-amber-50 text-amber-800 ring-amber-200"
+                          : "bg-stone-100 text-stone-400 ring-stone-200"
+                      }`}
+                    >
+                      ⏸ Can Suspend
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+            {selectedApprovers.size === 0 && (
+              <p className="text-[12px] text-red-600">
+                No approver picked — go back to Step 2 and pick at least one.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {error && (
         <p className="text-[13px] text-ferrous-700 bg-ferrous-50 border border-ferrous-100 rounded-md px-3 py-2">
           {error}
         </p>
       )}
+      </div>
 
-      <PrimaryAction disabled={pending}>
-        {pending ? "Submitting…" : "Raise permit"}
-      </PrimaryAction>
-
-      {!isFullAccess && (
-        <p className="text-[12px] text-ink-3 text-center">
-          You&apos;ll get notified when an approver acts on this permit.
-        </p>
-      )}
+      {/* Colab-parity wizard footer — sticky bar at the bottom with
+          Back on the left and Continue / Submit on the right. */}
+      <div
+        className="fixed bottom-0 inset-x-0 max-w-md mx-auto bg-ivory border-t border-sandstone-100 px-4 py-3"
+        style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+      >
+        <div className="grid grid-cols-[auto_1fr] gap-2">
+          <button
+            type="button"
+            onClick={goBack}
+            disabled={step === 1}
+            className="inline-flex items-center gap-1 rounded-xl border border-stone-300 bg-white text-ink text-sm font-semibold px-4 py-2 disabled:opacity-40"
+          >
+            ← Back
+          </button>
+          {step < 4 ? (
+            <button
+              type="button"
+              onClick={goNext}
+              disabled={!canAdvance}
+              className="inline-flex items-center justify-center gap-1 rounded-xl bg-ink text-white text-sm font-semibold py-2 disabled:opacity-40"
+            >
+              → Continue
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={pending || selectedApprovers.size === 0}
+              className="inline-flex items-center justify-center gap-1 rounded-xl bg-ferrous-500 text-white text-sm font-semibold py-2 disabled:opacity-40"
+            >
+              {pending ? "Submitting…" : "✓ Submit Permit"}
+            </button>
+          )}
+        </div>
+        {!isFullAccess && step === 4 && (
+          <p className="text-[11px] text-ink-3 text-center mt-2">
+            You&apos;ll get notified when an approver acts on this permit.
+          </p>
+        )}
+      </div>
     </form>
+  );
+}
+
+/**
+ * Read-only key/value row for the Step 4 Review card. Two columns —
+ * label on the left in muted stone, value on the right in bold ink.
+ */
+function ReviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[110px_1fr] gap-3 text-[13px]">
+      <div className="text-stone-500">{label}</div>
+      <div className="font-semibold text-ink">{value}</div>
+    </div>
   );
 }
