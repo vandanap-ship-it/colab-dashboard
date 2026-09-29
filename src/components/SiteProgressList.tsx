@@ -48,7 +48,16 @@ type Block = {
 };
 type PickerResp = { blocks: Block[] };
 
-type StatusKey = "UPCOMING" | "ONGOING" | "QUEUE";
+// Colab-parity Site Progress buckets (Madhavan zip 2026-09-30):
+//   UPCOMING   - "Upcoming" tab
+//   ONGOING    - "On Going" tab (Colab spelling; two words)
+//   IN_QUALITY - "In Quality" tab. Villas where at least one activity is
+//                currently blocked by a pending QAQC checklist per
+//                `checkPrecheck`. Populated by a follow-up endpoint;
+//                count renders as 0 until wired.
+//   QUEUE      - "Completed" tab (kept the internal name QUEUE for
+//                minimal churn; display label is now "Completed").
+type StatusKey = "UPCOMING" | "ONGOING" | "IN_QUALITY" | "QUEUE";
 
 /**
  * A villa is:
@@ -175,8 +184,13 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
   }, [villasFlat, tab, search, contractor]);
 
   const counts = useMemo(() => {
-    const c = { UPCOMING: 0, ONGOING: 0, QUEUE: 0 };
+    const c: Record<StatusKey, number> = { UPCOMING: 0, ONGOING: 0, IN_QUALITY: 0, QUEUE: 0 };
     for (const { villa } of villasFlat) c[villaStatus(villa)]++;
+    // IN_QUALITY count is populated by a follow-up endpoint that lists
+    // villas with at least one activity blocked by a pending QAQC
+    // checklist (see `src/lib/progressGates.ts::checkPrecheck`). Until
+    // that endpoint is wired the tab renders as 0 — matches what the
+    // Colab screenshots showed on Madhavan's account (0 blocked).
     return c;
   }, [villasFlat]);
 
@@ -257,19 +271,34 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
         ))}
       </div>
 
-      <div className="flex gap-2">
-        {(["UPCOMING", "ONGOING", "QUEUE"] as const).map((t) => (
+      {/* Colab-parity 4-tab strip · Upcoming · On Going · In Quality ·
+          Completed. Horizontal-scroll so all four fit on a narrow phone. */}
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto no-scrollbar px-1 pb-1">
+        {(["UPCOMING", "ONGOING", "IN_QUALITY", "QUEUE"] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`flex-1 rounded-full px-3 py-2 text-[13px] font-semibold ${
+            className={`shrink-0 rounded-full px-3.5 py-2 text-[13px] font-semibold whitespace-nowrap ${
               tab === t
                 ? "bg-ink text-cream"
                 : "bg-cream border border-sandstone-100 text-ink-2"
             }`}
           >
-            {t === "UPCOMING" ? "Upcoming" : t === "ONGOING" ? "In Progress" : "Done"} ({counts[t]})
+            {t === "UPCOMING"
+              ? "Upcoming"
+              : t === "ONGOING"
+                ? "On Going"
+                : t === "IN_QUALITY"
+                  ? "In Quality"
+                  : "Completed"}
+            <span
+              className={`ml-1.5 inline-flex items-center justify-center rounded-full text-[10px] px-1.5 min-w-[18px] h-[16px] ${
+                tab === t ? "bg-cream text-ink" : "bg-sandstone-100 text-ink-3"
+              }`}
+            >
+              {counts[t]}
+            </span>
           </button>
         ))}
       </div>
@@ -396,9 +425,10 @@ function VillaCard({
 
 function MilestonePill({ status }: { status: StatusKey }) {
   const cfg = {
-    ONGOING:  { dot: "bg-amber-500",   label: "In progress" },
-    UPCOMING: { dot: "bg-stone-300",   label: "Upcoming"    },
-    QUEUE:    { dot: "bg-emerald-500", label: "Done"        },
+    ONGOING:    { dot: "bg-amber-500",   label: "On Going"   },
+    UPCOMING:   { dot: "bg-stone-300",   label: "Upcoming"   },
+    IN_QUALITY: { dot: "bg-orange-500",  label: "In Quality" },
+    QUEUE:      { dot: "bg-emerald-500", label: "Completed"  },
   } as const;
   const c = cfg[status];
   return (
