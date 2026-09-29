@@ -130,6 +130,23 @@ export default function ReportForm({
       }
     }
 
+    // Coerce number-kind fields to real numbers before the payload goes
+    // out. Zod schemas on the server side of the APIs we post to reject
+    // "123" when they expect 123.
+    const coercedExtras: Record<string, string | number> = {};
+    for (const [k, v] of Object.entries(extras)) {
+      const f = extraFields.find((x) => x.key === k);
+      if (f?.kind === "number" && typeof v === "string" && v.trim() !== "") {
+        const n = Number(v);
+        if (Number.isFinite(n)) coercedExtras[k] = n;
+        // Not-a-number stays as-is; the strip pass below will drop empty
+        // strings, and a bad numeric string surfaces as a server 400.
+        else coercedExtras[k] = v;
+      } else {
+        coercedExtras[k] = v;
+      }
+    }
+
     const payload: Record<string, unknown> = {
       // One stable key per submission, reused for the direct POST and any
       // offline-queue replay, so a lost response doesn't create a duplicate.
@@ -138,11 +155,11 @@ export default function ReportForm({
       wbsNodeId: activityId || undefined,
       description: description.trim(),
       photoUrls,
-      ...extras,
+      ...coercedExtras,
     };
     // Strip empty extras
-    for (const k of Object.keys(extras)) {
-      if (extras[k] === "" || extras[k] === undefined) delete payload[k];
+    for (const k of Object.keys(coercedExtras)) {
+      if (coercedExtras[k] === "" || coercedExtras[k] === undefined) delete payload[k];
     }
 
     // Network-first; on offline / 5xx, queue locally and let it sync later.

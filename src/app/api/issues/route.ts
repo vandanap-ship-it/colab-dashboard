@@ -9,16 +9,30 @@ import { parseBody } from "@/lib/parseBody";
 import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
 import { sendPushToUser } from "@/lib/push";
 
-const SEVERITIES = new Set(["LOW", "MEDIUM", "HIGH"]);
+// Colab-parity severity vocab: Minor / Major / Critical (was LOW / MEDIUM
+// / HIGH pre-Sep 2026). The `Legacy…` values are accepted from
+// pre-parity mobile builds still in the wild so an offline queue that
+// syncs late doesn't 400 — they are re-mapped to the new vocab
+// server-side.
+const SEVERITIES = new Set(["Minor", "Major", "Critical"]);
+const CATEGORIES = new Set(["Quality", "Safety", "Workmanship"]);
 
 const PostIssueSchema = z.object({
   projectId: z.string().min(1),
   wbsNodeId: z.string().min(1).nullable().optional(),
   description: z.string().min(3, "Description too short").max(2000),
-  severity: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
+  severity: z
+    .enum(["Minor", "Major", "Critical", "LOW", "MEDIUM", "HIGH"])
+    .optional(),
   category: z.string().max(60).optional(),
   photoUrls: z.array(z.string().url()).max(6).optional(),
   assignedToId: z.string().min(1).optional(),
+  // Colab-parity fields (Sep 2026 batch 3).
+  parallelAssigneeIds: z.array(z.string().min(1)).max(20).optional(),
+  dueDate: z.string().optional(),        // ISO date string
+  debitToId: z.string().min(1).nullable().optional(),
+  debitAmount: z.number().min(0).nullable().optional(),
+  inspectionId: z.string().min(1).nullable().optional(),
   idempotencyKey: z.string().max(120).optional(),
 });
 const STATUSES = new Set(["OPEN", "RESOLVED", "IN_REINSPECTION"]);
@@ -75,12 +89,45 @@ export async function POST(req: Request) {
   const parsed = await parseBody(req, PostIssueSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
-  const { projectId, wbsNodeId, description, severity, category, photoUrls, assignedToId } = body;
+  const {
+    projectId,
+    wbsNodeId,
+    description,
+    severity,
+    category,
+    photoUrls,
+    assignedToId,
+    parallelAssigneeIds,
+    dueDate,
+    debitToId,
+    debitAmount,
+    inspectionId,
+  } = body;
   const desc = description.trim();
-  const sev = severity ?? null;
+  // Re-map legacy LOW/MEDIUM/HIGH to Colab's Minor/Major/Critical so the
+  // DB never carries the old vocab after this migration lands.
+  const legacyMap: Record<string, string> = { LOW: "Minor", MEDIUM: "Major", HIGH: "Critical" };
+  const sev = severity ? (legacyMap[severity] ?? severity) : null;
+  if (sev && !SEVERITIES.has(sev)) {
+    return NextResponse.json({ error: `Unknown severity: ${sev}` }, { status: 400 });
+  }
   const cat = (category ?? "").trim();
+  if (cat && !CATEGORIES.has(cat)) {
+    return NextResponse.json({ error: `Unknown category: ${cat}` }, { status: 400 });
+  }
   const photos = (photoUrls ?? []).slice(0, 6);
-  void SEVERITIES; // superseded by zod enum
+  // Parse dueDate — accepts "2026-09-30" or full ISO; falls back to null.
+  const dueDateParsed = dueDate
+    ? (() => {
+        const d = new Date(dueDate);
+        return isNaN(d.getTime()) ? null : d;
+      })()
+    : null;
+  // De-dupe + strip creator from parallel assignees so an author isn't
+  // silently notified as their own parallel.
+  const cleanParallelIds = Array.isArray(parallelAssigneeIds)
+    ? [...new Set(parallelAssigneeIds.filter((id) => typeof id === "string" && id.length > 0 && id !== session.user.id))].slice(0, 20)
+    : [];
 
   // If an assignee is set, verify they exist + are active before creating —
   // matches the PATCH guard so create + assign-on-create stay symmetric.
@@ -152,6 +199,12 @@ export async function POST(req: Request) {
           module: moduleTag,
           createdById: session.user.id,
           assignedToId: resolvedAssigneeId,
+          // Colab-parity fields.
+          parallelAssigneeIds: cleanParallelIds,
+          dueDate: dueDateParsed,
+          debitToId: debitToId || null,
+          debitAmount: typeof debitAmount === "number" ? debitAmount : null,
+          inspectionId: inspectionId || null,
           idempotencyKey,
           photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
         },

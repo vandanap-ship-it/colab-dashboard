@@ -291,6 +291,7 @@ model Contractor {
   workPermits     WorkPermit[]
   users           User[]
   inspections     Inspection[]
+  issuesDebited   Issue[]             @relation("IssueDebitContractor")
   hindrancesResponsibleFor Hindrance[] @relation("HindranceResponsibleContractor")
 
   @@unique([projectId, name])
@@ -520,12 +521,37 @@ model Issue {
   projectId   String
   wbsNodeId   String?
   description String
-  severity    String?
+
+  // Category — Colab's Observations form: Quality / Safety / Workmanship.
+  // Kept as String (not enum) so future categories don't require a
+  // migration; the mobile form pins the picker to those 3 values.
   category    String?
+  // Severity — Colab's radio: Minor / Major / Critical. Was Low/High
+  // pre-Sep 2026 (Shraddha's memory), migration below re-maps in-place.
+  severity    String?
   status      String  @default("OPEN")
 
   createdById  String
   assignedToId String?
+  // Parallel Assignees — Colab tags a primary Assigned To plus a
+  // multi-select of additional stakeholders who should be aware. Stored
+  // as a Postgres text[] of user ids (same shape as Inspection's
+  // assignedReviewerIds).
+  parallelAssigneeIds String[] @default([])
+
+  // Colab-parity fields (Sep 2026 batch 3 · from Thangamani screenshot walk):
+  //   dueDate        - when the issue is due to be resolved by. Colab's
+  //                    Observations form asks for it; defaults to today
+  //                    on the client.
+  //   debitToId      - which contractor gets financially debited for
+  //                    the issue (nullable — not all issues carry cost).
+  //   debitAmount    - the amount to debit, in INR. Nullable.
+  //   inspectionId   - back-link to the WIR this issue was raised from
+  //                    (nullable — issues can be raised standalone too).
+  dueDate      DateTime?
+  debitToId    String?
+  debitAmount  Float?
+  inspectionId String?
   module       String? // QAQC | SAFETY | null (general). Scopes visibility for contractor users.
 
   createdAt      DateTime  @default(now())
@@ -537,10 +563,14 @@ model Issue {
   wbsNode    WBSNode?     @relation(fields: [wbsNodeId], references: [id])
   createdBy  User         @relation("IssueCreator", fields: [createdById], references: [id])
   assignedTo User?        @relation("IssueAssignee", fields: [assignedToId], references: [id])
+  debitTo    Contractor?  @relation("IssueDebitContractor", fields: [debitToId], references: [id])
+  inspection Inspection?  @relation(fields: [inspectionId], references: [id])
   photos     IssuePhoto[]
 
   @@index([projectId])
   @@index([assignedToId])
+  @@index([debitToId])
+  @@index([inspectionId])
 }
 
 model IssuePhoto {
@@ -729,6 +759,7 @@ model Inspection {
   contractor Contractor?       @relation(fields: [contractorId], references: [id])
   items      InspectionItem[]
   photos     InspectionPhoto[]
+  issues     Issue[]
 
   @@index([projectId])
   @@index([wbsNodeId])

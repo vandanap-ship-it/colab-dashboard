@@ -19,40 +19,68 @@ export default async function NewIssuePage({
   return (
     <ReportForm
       projectId={projectId}
-      title="New Snag"
+      title="Observations"
       endpoint="/api/issues"
       successPath={`/mobile/${projectId}`}
-      primaryButtonLabel="Report snag"
+      primaryButtonLabel="Save"
       scope="issue"
       howThisWorks={{
-        title: "How to raise a snag",
+        title: "How to raise an observation",
         storageKey: "siddhi.htw.snag",
         steps: [
-          "Pick the activity the snag belongs to (search by block, villa, or activity name).",
-          "Describe the defect — what's wrong, where exactly on the villa, and a measurement if it matters.",
+          "Pick a category — Quality, Safety, or Workmanship — so the right reviewers see it.",
+          "Pick the activity the observation belongs to (search by block, villa, or activity name).",
+          "Describe what you saw — the defect, where exactly on the villa, a measurement if it helps.",
           "Add 1 or 2 photos of the actual defect. The assignee needs to see it.",
-          "Pick severity — Low, Medium, or High — so it gets prioritized right.",
-          "Fill in the defect category (e.g. \"Not in plumb\") so the reports can group similar issues.",
-          "Tap Report snag. The contractor gets pinged and can respond.",
+          "Set the severity — Minor, Major, or Critical.",
+          "Optional: pick a contractor to debit + the amount if there's cost recovery.",
+          "Set a due date so the assignee knows when it's expected to close.",
+          "Tap Save. The contractor gets pinged and can respond.",
         ],
       }}
       extraFields={[
+        // Colab-parity: Category radio (Quality / Safety / Workmanship).
+        {
+          kind: "select",
+          key: "category",
+          label: "Category",
+          options: [
+            { value: "Quality", label: "Quality" },
+            { value: "Safety", label: "Safety" },
+            { value: "Workmanship", label: "Workmanship" },
+          ],
+          default: "Quality",
+        },
+        // Colab-parity: Severity vocab Minor / Major / Critical.
         {
           kind: "select",
           key: "severity",
           label: "Severity",
           options: [
-            { value: "LOW", label: "Low" },
-            { value: "MEDIUM", label: "Medium" },
-            { value: "HIGH", label: "High" },
+            { value: "Minor", label: "Minor" },
+            { value: "Major", label: "Major" },
+            { value: "Critical", label: "Critical" },
           ],
-          default: "MEDIUM",
+          default: "Minor",
         },
+        // Colab-parity: Debit Amount (₹). Debit-to contractor picker is a
+        // dynamic option list — deferred to a follow-up because ReportForm
+        // doesn't yet accept fetched select options. Setting only the
+        // amount is still useful for downstream reporting; the contractor
+        // can be filled in when the issue is triaged.
         {
-          kind: "text",
-          key: "category",
-          label: "Defect category",
-          placeholder: "e.g. Not in plumb",
+          kind: "number",
+          key: "debitAmount",
+          label: "Debit Amount (₹)",
+          min: 0,
+          placeholder: "Enter amount",
+        },
+        // Colab-parity: Due Date, defaults to today.
+        {
+          kind: "date",
+          key: "dueDate",
+          label: "Due Date",
+          defaultToday: true,
         },
       ]}
     />
