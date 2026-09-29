@@ -929,7 +929,13 @@ async function getMasterReportUncached(
     actualStart: earliestActual,
     projectedEnd: latestProjected,
     plannedDurationDays: diffDays(projectEnd, projectStart),
-    projectedDurationDays: diffDays(latestProjected, projectStart),
+    // Colab's Project Dashboard defines Projected Duration as
+    // (latest projected end) − (earliest actual start on the ground),
+    // not (latest projected end) − (planned start). That's what site
+    // teams read as "how long will this actually take from when we
+    // started digging". Amanvana today: 20 Mar 2029 − 14 Apr 2026 =
+    // 1066 days, matching Colab.
+    projectedDurationDays: diffDays(latestProjected, earliestActual ?? projectStart),
     totalDelayDays,
     reraDelayDays,
     hindrancesOpen,
