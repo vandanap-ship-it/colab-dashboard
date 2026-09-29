@@ -74,11 +74,9 @@ export default function MasterReportCsvButton({
     rows.push(["Planned end", escapeCsv(fmt(o.plannedEnd))].join(","));
     rows.push(["Actual start", escapeCsv(fmt(o.actualStart))].join(","));
     rows.push(["Projected end", escapeCsv(fmt(o.projectedEnd))].join(","));
-    rows.push(["RERA end", escapeCsv(fmt(o.reraEndDate))].join(","));
     rows.push(["Planned duration (days)", escapeCsv(o.plannedDurationDays)].join(","));
     rows.push(["Projected duration (days)", escapeCsv(o.projectedDurationDays)].join(","));
     rows.push(["Total delay (days)", escapeCsv(o.totalDelayDays)].join(","));
-    rows.push(["RERA delay (days)", escapeCsv(o.reraDelayDays)].join(","));
     rows.push(["Open hindrances", escapeCsv(o.hindrancesOpen)].join(","));
     blank();
 

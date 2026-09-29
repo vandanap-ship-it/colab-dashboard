@@ -51,7 +51,7 @@ export async function getSmartInsights(projectId: string, today: Date = new Date
   const [project, villas, progressEntries, hindrances, tradePlans, manpower, inspections, blocks] = await Promise.all([
     prisma.project.findUnique({
       where: { id: projectId },
-      select: { reraEndDate: true, projectedEndDate: true, endDate: true },
+      select: { projectedEndDate: true, endDate: true },
     }),
     prisma.villa.findMany({
       where: { projectId, inScope: true },
@@ -211,30 +211,30 @@ export async function getSmartInsights(projectId: string, today: Date = new Date
     }
   }
 
-  // ------- Rule 4: Villas projected to breach RERA -------
-  if (project?.reraEndDate) {
-    const rera = project.reraEndDate;
-    const breaching: Array<{ villaNumber: number; breachDays: number }> = [];
+  // ------- Rule 4: Villas projected to slip past planned handover -------
+  if (project?.endDate) {
+    const planned = project.endDate;
+    const slipping: Array<{ villaNumber: number; slipDays: number }> = [];
     for (const v of villas) {
       const lastMilestone = v.milestones[v.milestones.length - 1];
       const finalFinish = lastMilestone?.projectedFinish ?? lastMilestone?.baselineFinish;
-      if (finalFinish && finalFinish > rera) {
-        breaching.push({
+      if (finalFinish && finalFinish > planned) {
+        slipping.push({
           villaNumber: v.number,
-          breachDays: daysBetween(rera, finalFinish),
+          slipDays: daysBetween(planned, finalFinish),
         });
       }
     }
-    breaching.sort((a, b) => b.breachDays - a.breachDays);
-    if (breaching.length > 0) {
-      const worst = breaching[0];
+    slipping.sort((a, b) => b.slipDays - a.slipDays);
+    if (slipping.length > 0) {
+      const worst = slipping[0];
       insights.push({
-        id: "rera-breach",
-        severity: worst.breachDays >= 60 ? "critical" : "warning",
-        title: `${breaching.length} villa${breaching.length === 1 ? "" : "s"} projected to breach RERA`,
-        detail: `Worst offender: Villa ${worst.villaNumber} at ${worst.breachDays} days beyond RERA. Acceleration or replan needed.`,
-        metric: { label: "villas breaching", value: String(breaching.length) },
-        affectedVillas: breaching.map((b) => b.villaNumber),
+        id: "handover-slip",
+        severity: worst.slipDays >= 60 ? "critical" : "warning",
+        title: `${slipping.length} villa${slipping.length === 1 ? "" : "s"} projected to slip past planned handover`,
+        detail: `Worst offender: Villa ${worst.villaNumber} at ${worst.slipDays} days beyond plan. Acceleration or replan needed.`,
+        metric: { label: "villas slipping", value: String(slipping.length) },
+        affectedVillas: slipping.map((b) => b.villaNumber),
       });
     }
   }

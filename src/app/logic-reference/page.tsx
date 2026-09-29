@@ -82,14 +82,14 @@ export default async function LogicReferencePage() {
         <Section id="probability" title="Probability of Timely Completion (Green / Orange / Red)">
           <Formula>
             <ul>
-              <li><strong>High (green)</strong> when projected handover ≤ RERA end date</li>
-              <li><strong>Medium (orange)</strong> when projected handover is 1–15 days past RERA</li>
-              <li><strong>Low (red)</strong> when projected handover is more than 15 days past RERA</li>
+              <li><strong>High (green)</strong> when projected handover is on or ahead of the planned end date</li>
+              <li><strong>Medium (orange)</strong> when projected handover is 1–30 days past planned</li>
+              <li><strong>Low (red)</strong> when projected handover is more than 30 days past planned</li>
             </ul>
           </Formula>
           <p>
-            RERA is the regulator&apos;s committed date. The 15-day cushion accounts
-            for typical monsoon and final-fit-out variance in villa projects.
+            The 30-day cushion accounts for typical monsoon and final-fit-out
+            variance in villa projects.
           </p>
         </Section>
 
@@ -185,7 +185,7 @@ export default async function LogicReferencePage() {
               <li>1. <strong>stalled-block</strong>: ≥ 3 villas in a block without a progress entry for &gt; 7 days. Critical at ≥ 5.</li>
               <li>2. <strong>top-delay-reason</strong>: single reason code driving the most days across ≥ 3 hindrances. Critical if aggregate ≥ 30 days.</li>
               <li>3. <strong>day-of-week-shortfall</strong>: a weekday where actual manpower fell below plan on ≥ 75% of ≥ 3 recent samples.</li>
-              <li>4. <strong>rera-breach</strong>: any villa whose final projected finish exceeds the project&apos;s RERA end date. Critical if breach ≥ 60 days.</li>
+              <li>4. <strong>handover-slip</strong>: any villa whose final projected finish exceeds the project&apos;s planned end date. Critical if slip ≥ 60 days.</li>
               <li>5. <strong>low-coverage</strong>: ≥ 3 of the last 7 days where progress-entry-updated villas &lt; 25% of active villas. Critical at ≥ 5.</li>
               <li>6. <strong>milestone-lag</strong>: consecutive sections where the earlier is ≥ 50% complete but the next is ≥ 40 pp behind — flags stage-transition bottlenecks.</li>
               <li>7. <strong>stuck-inspections</strong>: ≥ 3 inspections in review for &gt; 3 days. Critical at ≥ 10.</li>

@@ -9,36 +9,24 @@ export default function ScheduleSummary({
   startDate,
   endDate,
   projectedEndDate,
-  reraEndDate,
   totalDelayDays,
   hindranceCount,
 }: {
   startDate: Date | null;
   endDate: Date | null;
   projectedEndDate: Date | null;
-  reraEndDate: Date | null;
   totalDelayDays: number;
   hindranceCount: number;
 }) {
   const plannedDuration = startDate && endDate ? diffDays(endDate, startDate) : null;
   const projectedDuration =
     startDate && projectedEndDate ? diffDays(projectedEndDate, startDate) : plannedDuration;
-  // RERA Delay: positive = late vs the RERA-committed date. Only computed when
-  // both dates are present; falls back to "—" so we don't fake a green "0 Days"
-  // for a project that hasn't set its RERA date. Previously hardcoded to "0 Days".
-  const reraDelayDays: number | null =
-    reraEndDate && projectedEndDate ? diffDays(projectedEndDate, reraEndDate) : null;
 
   return (
     <div className="grid grid-cols-2 gap-4 text-sm">
       <div className="space-y-2">
         <Row label="Project Start Date" value={fmt(startDate)} />
         <Row label="Project End Date" value={fmt(endDate)} />
-        {/* RERA rows only render when the project actually tracks a RERA
-            date. On Amanvana Phase 1 (and other projects that skip RERA
-            entry) showing "RERA End Date: —" and "RERA Delay: —" just
-            adds two empty rows to the card — hide instead. */}
-        {reraEndDate && <Row label="RERA End Date" value={fmt(reraEndDate)} />}
         <Row
           label="Planned Duration"
           value={plannedDuration != null ? `${plannedDuration} Days` : "—"}
@@ -58,13 +46,6 @@ export default function ScheduleSummary({
           value={`${totalDelayDays} Days`}
           color={totalDelayDays > 0 ? "text-red-600" : "text-emerald-600"}
         />
-        {reraDelayDays != null && (
-          <Stat
-            label="RERA Delay"
-            value={`${reraDelayDays} Days`}
-            color={reraDelayDays > 0 ? "text-red-600" : "text-emerald-600"}
-          />
-        )}
         <Stat
           label="Hindrances"
           value={`${hindranceCount} open`}

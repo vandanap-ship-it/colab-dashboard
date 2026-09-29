@@ -39,8 +39,8 @@ export default function InsightsView({ projectId, insights }: InsightsViewProps)
               <Lightbulb size={40} strokeWidth={1.5} />
               <p className={styles.emptyText}>
                 No rules triggered right now. This tab surfaces things like stalled
-                villas, top delay reasons, day-of-week manpower gaps, RERA-breach
-                risks, and stuck inspections. Cards will appear when patterns
+                villas, top delay reasons, day-of-week manpower gaps, handover
+                slip risks, and stuck inspections. Cards will appear when patterns
                 cross their thresholds.
               </p>
             </div>

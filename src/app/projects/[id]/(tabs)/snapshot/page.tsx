@@ -29,7 +29,6 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
       id: true,
       startDate: true,
       endDate: true,
-      reraEndDate: true,
       actualStartDate: true,
       projectedEndDate: true,
     },
@@ -91,7 +90,6 @@ export default async function SnapshotPage({ params }: { params: Promise<{ id: s
           <ScheduleSummary
             startDate={project.startDate}
             endDate={project.endDate}
-            reraEndDate={project.reraEndDate}
             projectedEndDate={projectedEnd}
             totalDelayDays={stats.totalDelayDays}
             hindranceCount={stats.hindranceCount}

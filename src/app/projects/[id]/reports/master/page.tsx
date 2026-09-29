@@ -38,9 +38,9 @@ function delayTone(days: number): "danger" | "ok" | "success" {
 }
 
 /**
- * Duration in ms → "Nd Nh Nmin" — matches Colab Project Dashboard's RERA
- * Delay display (e.g. "7d 7h 11min"). Skips zero units so a 3-hour
- * hindrance renders "3h" not "0d 3h 0min".
+ * Duration in ms → "Nd Nh Nmin" — used for the Blocked Time metric on
+ * the Master Report (total elapsed time across active hindrances).
+ * Skips zero units so a 3-hour hindrance renders "3h" not "0d 3h 0min".
  */
 function formatDurationDHM(ms: number): string {
   if (ms <= 0) return "0 min";
@@ -278,7 +278,6 @@ export default async function MasterReportPage({
             <dl className="mt-2 space-y-1.5 text-xs">
               <KV label="Project Start" value={fmt(data.overall.plannedStart)} />
               <KV label="Project End" value={fmt(data.overall.plannedEnd)} />
-              <KV label="RERA End Date" value={fmt(data.overall.reraEndDate)} />
               <KV
                 label="Planned Duration"
                 value={
@@ -321,7 +320,7 @@ export default async function MasterReportPage({
                 tone={delayTone(data.overall.locationDelayDays)}
               />
               <Metric
-                label="RERA Delay"
+                label="Blocked Time"
                 value={
                   data.overall.hindranceDurationMs > 0
                     ? formatDurationDHM(data.overall.hindranceDurationMs)
@@ -355,7 +354,6 @@ export default async function MasterReportPage({
                   <Th>Finish Date</Th>
                   <Th>Duration</Th>
                   <Th>Total Delay</Th>
-                  <Th>RERA</Th>
                   <Th>Completion</Th>
                 </tr>
               </thead>
@@ -666,7 +664,7 @@ function ZoneRow({
     <>
       {/* Zone header row */}
       <tr className="border-t border-stone-200 bg-amber-50/40">
-        <td colSpan={7} className="py-1.5 px-3 text-xs font-semibold text-stone-900">
+        <td colSpan={6} className="py-1.5 px-3 text-xs font-semibold text-stone-900">
           {phase.name}
         </td>
       </tr>
@@ -702,7 +700,6 @@ function ZoneRow({
             {formatDelay(phase.totalDelayDays)}
           </span>
         </td>
-        <td className="py-2 px-3 text-right text-stone-700">0 Days</td>
         <td className="py-2 px-3 text-right">
           <ProbabilityBadge delayDays={phase.totalDelayDays} size="xs" />
         </td>
@@ -731,7 +728,6 @@ function ZoneRow({
         <td className="py-2 px-3 text-right text-stone-400 text-[11px]">
           {phase.hindrancesCount} Hindrance{phase.hindrancesCount === 1 ? "" : "s"}
         </td>
-        <td className="py-2 px-3" />
         <td className="py-2 px-3" />
       </tr>
     </>

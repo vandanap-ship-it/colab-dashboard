@@ -221,12 +221,6 @@ export default function ExecutiveOverview({
                   <span className={styles.ssLb}>Duration</span>
                   <span className={styles.ssVl}>{plannedDays} d</span>
                 </div>
-                {h.reraEndDate && (
-                  <div className={styles.ssRow}>
-                    <span className={styles.ssLb}>RERA delay</span>
-                    <span className={styles.ssVl}>{h.reraDelayDays} d</span>
-                  </div>
-                )}
               </div>
               <div className={styles.ssCol}>
                 <div className={`${styles.ssColHd} ${styles.projected}`}>Projected</div>
