@@ -62,11 +62,11 @@ export default function WorkPermitForm({
   // Colab-parity per-checkpoint responses. Keyed by permit type so
   // switching types (e.g. General → Hot Work) doesn't leak answers
   // between templates — the fresh type starts every row unanswered.
-  type ChecklistAnswer = { passed: boolean | null; remark: string };
+  type ChecklistAnswer = { passed: boolean | null; remark: string; photoUrl: string };
   const [checklistState, setChecklistState] = useState<Record<WorkPermitType, ChecklistAnswer[]>>(() => {
     const seed: Record<string, ChecklistAnswer[]> = {};
     for (const t of WORK_PERMIT_TYPES) {
-      seed[t] = WORK_PERMIT_CHECKPOINTS[t].map(() => ({ passed: null, remark: "" }));
+      seed[t] = WORK_PERMIT_CHECKPOINTS[t].map(() => ({ passed: null, remark: "", photoUrl: "" }));
     }
     return seed as Record<WorkPermitType, ChecklistAnswer[]>;
   });
@@ -79,6 +79,25 @@ export default function WorkPermitForm({
       next[type] = arr;
       return next;
     });
+  }
+  // Per-checkpoint photo upload state — Colab-parity, camera icon inline
+  // with each row. Uploads to /api/upload immediately (same endpoint the
+  // top-level PhotoPicker uses) so the URL rides in the payload.
+  const [uploadingCheckpointIdx, setUploadingCheckpointIdx] = useState<number | null>(null);
+  async function uploadCheckpointPhoto(idx: number, file: File) {
+    setUploadingCheckpointIdx(idx);
+    try {
+      const fd = new FormData();
+      fd.set("scope", `permit-checkpoint-${projectId}`);
+      fd.append("file", file);
+      const up = await fetch("/api/upload", { method: "POST", body: fd });
+      if (!up.ok) return;
+      const { urls } = (await up.json()) as { urls: string[] };
+      const url = urls[0];
+      if (url) setChecklistAnswer(idx, { photoUrl: url });
+    } finally {
+      setUploadingCheckpointIdx(null);
+    }
   }
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -176,14 +195,18 @@ export default function WorkPermitForm({
     const checklistResponses = WORK_PERMIT_CHECKPOINTS[type]
       .map((q, i) => {
         const a = activeChecklist[i];
-        if (a.passed === null && !a.remark.trim()) return null;
+        if (a.passed === null && !a.remark.trim() && !a.photoUrl) return null;
         return {
           q,
           passed: a.passed,
           remark: a.remark.trim() || undefined,
+          photoUrl: a.photoUrl || undefined,
         };
       })
-      .filter((x): x is { q: string; passed: boolean | null; remark: string | undefined } => x !== null);
+      .filter(
+        (x): x is { q: string; passed: boolean | null; remark: string | undefined; photoUrl: string | undefined } =>
+          x !== null,
+      );
 
     // Colab-parity Step 2 additions on the payload:
     // - labourEntries (multi-add, free-text worker/role/count)
@@ -522,6 +545,51 @@ export default function WorkPermitForm({
                     rows={2}
                     className="w-full rounded-md border-2 border-dashed border-amber-300 bg-white px-2 py-1.5 text-sm resize-none"
                   />
+                  {/* Colab-parity per-checkpoint photo attach — camera
+                      icon inline with the remark, thumb + × when set. */}
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1 rounded-md border border-stone-300 bg-white text-[11px] font-semibold text-stone-700 px-2 py-1 cursor-pointer hover:bg-sandstone-50">
+                      {uploadingCheckpointIdx === idx ? "Uploading…" : "📷 Attach photo"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        disabled={uploadingCheckpointIdx === idx}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) uploadCheckpointPhoto(idx, f);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                    {answer.photoUrl && (
+                      <div className="flex items-center gap-1">
+                        <a
+                          href={answer.photoUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="inline-block w-10 h-10 rounded overflow-hidden border border-stone-200 bg-stone-50"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={answer.photoUrl}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => setChecklistAnswer(idx, { photoUrl: "" })}
+                          aria-label="Remove photo"
+                          className="text-stone-400 hover:text-stone-600 text-xs"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </li>
               );
             })}
