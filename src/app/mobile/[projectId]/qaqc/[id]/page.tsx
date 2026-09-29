@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
-import { CalendarClock, CheckCircle2, FileEdit, MessageSquare, X, Clock, User as UserIcon, Users as UsersIcon, Camera } from "lucide-react";
+import { CalendarClock, CheckCircle2, FileEdit, MessageSquare, X, Clock, User as UserIcon, Users as UsersIcon, Camera, AlertTriangle } from "lucide-react";
+import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, canAccessScopedRow, MODULES } from "@/lib/modules";
@@ -245,30 +246,70 @@ export default async function MobileInspectionDetailPage({
           ) : (
             <ul>
               {inspection.items.map((item) => (
-                <li key={item.id} className="border-b border-stone-100 last:border-b-0 px-3 py-2.5 flex items-start gap-3">
-                  <ItemMark passed={item.passed} notApplicable={item.notApplicable} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm text-stone-900 leading-snug">{item.label}</div>
-                    {item.notes && (
-                      <div className="text-[11px] text-stone-500 mt-0.5 italic">
-                        “{item.notes}”
-                      </div>
+                <li key={item.id} className="border-b border-stone-100 last:border-b-0 px-3 py-2.5 space-y-2">
+                  <div className="flex items-start gap-3">
+                    <ItemMark passed={item.passed} notApplicable={item.notApplicable} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm text-stone-900 leading-snug">{item.label}</div>
+                      {item.notes && (
+                        <div className="text-[11px] text-stone-500 mt-0.5 italic">
+                          “{item.notes}”
+                        </div>
+                      )}
+                    </div>
+                    {/* Per-item photo (Colab step 6). The filler captured a
+                        single close-up of the checkpoint; the reviewer sees
+                        it inline, tap opens the full image in a new tab. */}
+                    {item.photoUrl && (
+                      <a
+                        href={item.photoUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="w-12 h-12 flex-none rounded-lg overflow-hidden border border-stone-200 bg-stone-50 block"
+                        aria-label="Open checkpoint photo"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={item.photoUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      </a>
                     )}
                   </div>
-                  {/* Per-item photo (Colab step 6). The filler captured a
-                      single close-up of the checkpoint; the reviewer sees
-                      it inline, tap opens the full image in a new tab. */}
-                  {item.photoUrl && (
-                    <a
-                      href={item.photoUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="w-12 h-12 flex-none rounded-lg overflow-hidden border border-stone-200 bg-stone-50 block"
-                      aria-label="Open checkpoint photo"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={item.photoUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
-                    </a>
+
+                  {/* Colab-parity "Approver 1" row · appears while the WIR
+                      is IN_REVIEW so the reviewer can flag a specific item.
+                      ⚠️ links to the Issue form with the WIR + activity
+                      pre-filled so the raised issue tracks back to this
+                      exact checkpoint. Chat + camera icons are shown for
+                      visual parity — per-item reviewer notes / photos land
+                      in the follow-up wave. */}
+                  {inspection.status === "IN_REVIEW" && (
+                    <div className="flex items-center justify-between text-[11px] text-stone-500 pl-7">
+                      <span className="font-semibold text-ink">Approver 1</span>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          disabled
+                          aria-label="Add reviewer comment (coming soon)"
+                          className="text-stone-300"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled
+                          aria-label="Attach reviewer photo (coming soon)"
+                          className="text-stone-300"
+                        >
+                          <Camera className="w-4 h-4" />
+                        </button>
+                        <Link
+                          href={`/mobile/${projectId}/issue/new?inspectionId=${inspection.id}${inspection.wbsNode ? `&wbsNodeId=${inspection.wbsNode.id}` : ""}`}
+                          aria-label="Flag this checkpoint as an issue"
+                          className="text-amber-600 hover:text-amber-700"
+                        >
+                          <AlertTriangle className="w-4 h-4" />
+                        </Link>
+                      </div>
+                    </div>
                   )}
                 </li>
               ))}
