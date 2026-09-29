@@ -978,6 +978,12 @@ export default function WorkPermitForm({
               label="Labour entries"
               value={labourEntries.length === 0 ? "None" : String(labourEntries.length)}
             />
+            {type === "NIGHT_WORK" && (
+              <ReviewRow
+                label="Personnel in Attendance"
+                value={personnelEntries.length === 0 ? "None" : String(personnelEntries.length)}
+              />
+            )}
             <ReviewRow label="Activity Head" value={activityHead || "—"} />
             <ReviewRow label="Location" value={location || "—"} />
             <ReviewRow label="Images" value={photos.length === 0 ? "None" : String(photos.length)} />
