@@ -221,11 +221,15 @@ jobs:
           }
           sys.stdout.write(json.dumps(payload))
           PYSCRIPT
-          BODY=$(python3 /tmp/build-backup-email.py)
+          # Write the payload to disk — the base64 attachment pushes the
+          # JSON well past Linux ARG_MAX (~128 KB), so `--data "$BODY"`
+          # would fail with "Argument list too long". `--data @file` reads
+          # from disk instead.
+          python3 /tmp/build-backup-email.py > /tmp/resend-body.json
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.resend.com/emails" \
             -H "authorization: Bearer $RESEND_API_KEY" \
             -H "content-type: application/json" \
-            --data "$BODY")
+            --data @/tmp/resend-body.json)
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           if [ "$HTTP_CODE" -ge 400 ]; then
             echo "::warning::Email dispatch failed with HTTP $HTTP_CODE (backup itself succeeded)."
