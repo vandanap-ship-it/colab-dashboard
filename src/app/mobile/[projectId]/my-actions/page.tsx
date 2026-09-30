@@ -4,6 +4,7 @@ import { Bug, MessageSquare, ShieldCheck, ClipboardList, Inbox } from "lucide-re
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
+import { canAccessScopedRow } from "@/lib/modules";
 import {
   concernAgeFor,
   issueAgeFor,
@@ -165,7 +166,15 @@ export default async function MobileMyActionsPage({
       : Promise.resolve([]),
   ]);
 
-  const total = snags.length + concerns.length + permits.length + wirsToReview.length;
+  // Scope-filter WIRs to the reviewer's modules. A QAQC-only reviewer
+  // (Thangamani) should never see SAFETY inspections in their action
+  // list — the detail page's canAccessScopedRow guard would 403 them
+  // on tap anyway. Matches the same filter now on /api/my-actions.
+  const scopedWirsToReview = wirsToReview.filter((r) =>
+    canAccessScopedRow(session.user.modules, r.module),
+  );
+
+  const total = snags.length + concerns.length + permits.length + scopedWirsToReview.length;
 
   return (
     <div className="flex-1 flex flex-col bg-ivory min-h-0">
@@ -268,9 +277,9 @@ export default async function MobileMyActionsPage({
               </ActionSection>
             )}
 
-            {wirsToReview.length > 0 && (
-              <ActionSection eyebrow="Checklist" count={wirsToReview.length} icon={ClipboardList}>
-                {wirsToReview.map((i) => (
+            {scopedWirsToReview.length > 0 && (
+              <ActionSection eyebrow="Checklist" count={scopedWirsToReview.length} icon={ClipboardList}>
+                {scopedWirsToReview.map((i) => (
                   <ActionRow
                     key={i.id}
                     href={`/mobile/${projectId}/qaqc/${i.id}?tab=pending${i.module ? `&module=${i.module}` : ""}`}
