@@ -99,6 +99,46 @@ export const PROGRESS_GATES: readonly GateRule[] = [
     prerequisiteMatch: /\bplaster(ing)?\b/i,
     requirement: "Plastering checklist",
   },
+  {
+    // Reason: Colab's checklist library carries a dedicated "Post -
+    // Checklist for Hacking" that HSE fills before plastering starts —
+    // an unhacked concrete surface makes plaster peel. Adds the pair
+    // Siddhi-side per the "expand freely" clause in the gate design
+    // decision (2026-09-30, Shraddha).
+    code: "hacking-before-plastering",
+    activityMatch: /\bplaster(ing)?\b/i,
+    prerequisiteMatch: /\bhack(ing)?\b/i,
+    requirement: "Hacking checklist",
+  },
+  {
+    // Reason: masonry walls are the substrate for plaster. The paper
+    // sequence is Masonry → Plaster; Colab's checklist library carries
+    // "Post - Checklist for Stone Masonry" + "Post - Checklist for
+    // Block Masonry" that HSE signs off before Plastering begins.
+    code: "masonry-before-plastering",
+    activityMatch: /\bplaster(ing)?\b/i,
+    prerequisiteMatch: /\b((stone|block)\s+)?masonry\b/i,
+    requirement: "Masonry checklist",
+  },
+  {
+    // Reason: anti-termite treatment must be applied and inspected
+    // before PCC is poured over the treated soil — otherwise the
+    // treatment is trapped ineffectively under concrete. Colab carries
+    // "Pre - Checklist for Anti-Termite" as its own row.
+    code: "antitermite-before-pcc",
+    activityMatch: /\bpcc\b|\bplain\s+cement\s+concrete\b/i,
+    prerequisiteMatch: /\b(anti(-|\s)?termite)\b/i,
+    requirement: "Anti-Termite checklist",
+  },
+  {
+    // Reason: metal mesh fixing (chicken mesh at RCC-masonry joints)
+    // must be inspected before plastering closes it over. Colab has
+    // "Post - Checklist for Metal Mesh Fixing" in the library.
+    code: "mesh-fixing-before-plastering",
+    activityMatch: /\bplaster(ing)?\b/i,
+    prerequisiteMatch: /\b((metal|chicken)\s+)?mesh(\s+fix(ing)?)?\b/i,
+    requirement: "Metal Mesh Fixing checklist",
+  },
 ] as const;
 
 /**
