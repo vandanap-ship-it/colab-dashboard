@@ -238,6 +238,20 @@ export async function POST(req: Request) {
   // stale id — a Pending permit assigned to a deleted user would never
   // resolve.
   const approverUserIds = Array.from(new Set(approverRows.map((r) => r.userId)));
+
+  // Colab-parity: the requester cannot be their own approver. The
+  // mobile form filters the current user out of approver candidates,
+  // but a direct API call could sneak them in — which would combine
+  // badly with the checkPrecheck bypass a self-approver could pull
+  // off. Reject the create up front instead of leaving it for the
+  // PATCH guard to catch later.
+  if (approverUserIds.includes(session.user.id)) {
+    return NextResponse.json(
+      { error: "You can't add yourself as an approver on your own permit." },
+      { status: 400 },
+    );
+  }
+
   const approvers = await prisma.user.findMany({
     where: { id: { in: approverUserIds }, active: true },
     select: { id: true },
