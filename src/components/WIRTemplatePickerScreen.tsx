@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronDown, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 /**
  * Colab-parity template picker — the first screen a filler sees after
@@ -123,17 +123,11 @@ export default function WIRTemplatePickerScreen({
 
   return (
     <div className="mx-auto max-w-md p-4 pb-6 space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Link
-          href={`/mobile/${projectId}`}
-          aria-label="Back"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-ink hover:bg-stone-100"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="text-2xl font-bold text-ink">Add Checklist</h1>
-      </div>
+      {/* Title — the outer mobile layout already carries a back arrow in
+          its header strip, so the picker screen doesn't stack a second
+          one below it. Shraddha 2026-09-30: "two back arrows" was the
+          top-of-list complaint on this view. */}
+      <h1 className="text-2xl font-bold text-ink">Add Checklist</h1>
 
       {/* Tabs */}
       <div className="border-b border-stone-200">
@@ -235,11 +229,17 @@ export default function WIRTemplatePickerScreen({
                   </p>
                 ) : null}
               </div>
-              <div className="space-y-3 px-4 py-4">
-                <p className="text-center text-sm font-semibold text-ink">
+              {/* Body — reduced from py-4 to py-3, Description label
+                  left-aligned + smaller, and the border-around-the-body
+                  toned from a shouty 2px amber dashed rule to a 1px
+                  sandstone-100 dashed rule so the card reads calmer.
+                  The description block content itself is unchanged
+                  (name + item count), matching the Colab card shape. */}
+              <div className="space-y-2 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                   Description
                 </p>
-                <div className="rounded-md border-2 border-dashed border-amber-300 bg-white px-3 py-3 text-sm text-stone-600">
+                <div className="rounded-md border border-dashed border-sandstone-200 bg-white px-3 py-2 text-sm text-stone-600">
                   {t.name}
                   {t.items.length > 0 && (
                     <span className="text-stone-400">
