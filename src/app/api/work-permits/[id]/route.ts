@@ -105,7 +105,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (kind === "approve" || kind === "reject") {
       // Only listed approvers can approve or reject a pending permit.
       // Requesters cannot approve their own permits — that's the whole
-      // reason approval exists.
+      // reason approval exists (the mobile form filters the requester
+      // out of approver candidates, but a direct API call could bypass
+      // that filter, so enforce it here too).
+      if (!admin && session.user.id === existing.requesterId) {
+        return forbidden("You can't approve or reject your own permit.");
+      }
       if (!admin && !isApprover(existing.approverIds, session.user.id)) {
         return forbidden("Only a listed approver can approve or reject this permit.");
       }
