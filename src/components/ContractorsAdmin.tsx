@@ -45,6 +45,7 @@ export default function ContractorsAdmin() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (pending) return; // guard against a fast double-tap on Add
     setPending(true);
     setError(null);
     const res = await fetch("/api/admin/contractors", {

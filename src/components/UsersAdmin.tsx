@@ -135,6 +135,7 @@ export default function UsersAdmin() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (pending) return; // guard against a fast double-tap on Create
     setPending(true);
     setError(null);
     const modulesArr = Array.from(newModules);

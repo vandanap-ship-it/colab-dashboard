@@ -14,6 +14,7 @@ export function EditNameCard({ initialName }: { initialName: string }) {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (pending) return; // guard against a fast double-tap on Save
     setPending(true);
     setMsg(null);
     const fd = new FormData(e.currentTarget);
@@ -117,6 +118,7 @@ export function ChangePasswordCard() {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (pending) return; // guard against a fast double-tap on Save
     setPending(true);
     setMsg(null);
     const form = e.currentTarget;
