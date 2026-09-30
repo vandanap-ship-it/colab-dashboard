@@ -103,6 +103,11 @@ export default function ReportForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Shared submit for Concern / Snag / other Report-shape mobile forms
+    // — a double-Enter would fire two POSTs with fresh idempotencyKeys
+    // (generated inside the payload below), duplicating rows on the
+    // server. Top-of-function guard closes the batched-state window.
+    if (pending) return;
     if (description.trim().length < 3) {
       setError("Add a longer description");
       return;
