@@ -11,6 +11,7 @@ export default function ImportSchedule({ projectId, projectName }: { projectId: 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (pending) return; // guard against a fast double-tap on Import
     if (!file) return;
     setPending(true);
     setError(null);

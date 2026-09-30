@@ -97,6 +97,7 @@ export default function ManpowerConsole({
 
   async function savePlan(contractorId: string, trade: string, plannedCount: number) {
     const key = `${contractorId}::${trade}`;
+    if (pendingKey === key) return; // guard against a fast double-tap on Save
     setPendingKey(key);
     try {
       const res = await fetch(`/api/projects/${projectId}/trade-plans`, {

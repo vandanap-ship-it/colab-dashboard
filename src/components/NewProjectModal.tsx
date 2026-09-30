@@ -80,6 +80,7 @@ export default function NewProjectModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (pending) return; // guard against a fast double-tap on Save
     setPending(true);
     setError(null);
 
