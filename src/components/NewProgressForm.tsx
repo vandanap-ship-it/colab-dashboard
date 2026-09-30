@@ -826,10 +826,20 @@ export default function NewProgressForm({
                 min={
                   // Colab-parity: slider min-locks to current cumulative
                   // so progress can only increase. Falls back to 0 when
-                  // the activity is fresh (no prior rows).
-                  totalQty > 0
-                    ? Math.floor((priorMaxCumulative / totalQty) * 100)
-                    : Math.floor(priorMaxCumulative)
+                  // the activity is fresh (no prior rows). Clamped to
+                  // [0, 100] so bad data (e.g. an admin who bumped
+                  // totalQty below the already-logged cumulative) can't
+                  // produce an out-of-range attribute that browsers
+                  // handle inconsistently.
+                  Math.max(
+                    0,
+                    Math.min(
+                      100,
+                      totalQty > 0
+                        ? Math.floor((priorMaxCumulative / totalQty) * 100)
+                        : Math.floor(priorMaxCumulative),
+                    ),
+                  )
                 }
                 max={100}
                 step={1}
