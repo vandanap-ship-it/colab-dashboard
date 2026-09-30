@@ -151,29 +151,34 @@ export default function WorkPermitList({
   const [filterContractorId, setFilterContractorId] = useState<string>("");
   const [filterDateFrom, setFilterDateFrom] = useState<string>("");
   const [filterDateTo, setFilterDateTo] = useState<string>("");
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const load = useCallback(async () => {
     const url = new URL(`/api/work-permits`, window.location.origin);
     url.searchParams.set("projectId", projectId);
+    setLoadError(false);
     // Fetch every non-deleted permit and bucket client-side. The counts
     // strip depends on all buckets being visible at once, and the site
     // team volume is small enough that filter-in-JS is fine.
     try {
       const res = await fetch(url.toString(), { cache: "no-store" });
       if (!res.ok) {
+        setLoadError(true);
         setPermits([]);
         return;
       }
       const data = await res.json();
       setPermits(data.workPermits ?? []);
     } catch {
+      setLoadError(true);
       setPermits([]);
     }
   }, [projectId]);
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, reloadKey]);
 
   const counts = useMemo<Record<TabKey, number>>(() => {
     const zero: Record<TabKey, number> = {
@@ -324,6 +329,17 @@ export default function WorkPermitList({
 
       {permits === null ? (
         <p className="text-sm text-stone-500">Loading…</p>
+      ) : loadError ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-center">
+          <p className="text-sm text-red-800">Couldn&apos;t load permits.</p>
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="mt-2 text-sm font-semibold text-red-700 underline"
+          >
+            Retry
+          </button>
+        </div>
       ) : rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-stone-300 bg-white/60 p-8 text-center">
           <p className="text-sm text-stone-500">
