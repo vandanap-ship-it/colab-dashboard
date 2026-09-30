@@ -20,6 +20,7 @@ function fmt(d: Date | null | undefined): string {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone: "Asia/Kolkata",
   });
 }
 
@@ -658,6 +659,7 @@ function ZoneRow({
       day: "2-digit",
       month: "short",
       year: "numeric",
+      timeZone: "Asia/Kolkata",
     });
   }
   return (

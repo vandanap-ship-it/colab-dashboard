@@ -10,7 +10,11 @@ function clip(text: string, max = 80) {
 }
 
 function fmt(d: Date) {
-  return new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+  return new Date(d).toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    timeZone: "Asia/Kolkata",
+  });
 }
 
 export default async function MyActionsTabPage({

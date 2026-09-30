@@ -11,7 +11,11 @@ import {
 import ReportShell, { ReportSection } from "@/components/ReportShell";
 
 function fmtShort(d: Date): string {
-  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+  return d.toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    timeZone: "Asia/Kolkata",
+  });
 }
 
 export default async function ObservationsReportPage({

@@ -18,7 +18,12 @@ function inr(n: number): string {
 
 function fmt(d: Date | null): string {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(d).toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
 }
 
 export default async function BillDetailPage({
