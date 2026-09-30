@@ -17,8 +17,15 @@ export async function POST(req: Request) {
   }
   const parsed = await parseBody(req, Body);
   if (!parsed.ok) return parsed.response;
+  // Ownership check: only delete a row that belongs to THIS user.
+  // Prior code deleted by endpoint alone, so any signed-in user who
+  // learned another user's endpoint could silence their push
+  // notifications. deleteMany with a compound where is a no-op on
+  // rows the caller doesn't own, preserving the idempotent shape.
   await prisma.pushSubscription
-    .delete({ where: { endpoint: parsed.data.endpoint } })
-    .catch(() => {}); // idempotent — deleting a non-existent row is fine
+    .deleteMany({
+      where: { endpoint: parsed.data.endpoint, userId: session.user.id },
+    })
+    .catch(() => {});
   return NextResponse.json({ ok: true });
 }
