@@ -7,6 +7,7 @@ import { canAccessModule, primaryModuleFor, isScopedUser, MODULES } from "@/lib/
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { parseBody } from "@/lib/parseBody";
 import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
+import { sanitizeUploadUrls } from "@/lib/upload";
 import { sendPushToUser } from "@/lib/push";
 
 // Colab-parity severity vocab: Minor / Major / Critical (was LOW / MEDIUM
@@ -137,7 +138,7 @@ export async function POST(req: Request) {
   if (cat && !CATEGORIES.has(cat)) {
     return NextResponse.json({ error: `Unknown category: ${cat}` }, { status: 400 });
   }
-  const photos = (photoUrls ?? []).slice(0, 6);
+  const photos = sanitizeUploadUrls(photoUrls).slice(0, 6);
   // Parse dueDate — accepts "2026-09-30" or full ISO; falls back to null.
   const dueDateParsed = dueDate
     ? (() => {

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, primaryModuleFor, isScopedUser, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
+import { isOwnUploadUrl, sanitizeUploadUrls } from "@/lib/upload";
 import { parseBody } from "@/lib/parseBody";
 import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
 import { sendPushToUser } from "@/lib/push";
@@ -186,8 +187,15 @@ export async function POST(req: Request) {
       notes: i.notes?.trim() || null,
       // Per-row photo (Colab step 6): a single URL, already uploaded by
       // the client. Blank string is normalized to null so downstream
-      // readers can rely on a truthy check.
-      photoUrl: (i.photoUrl?.trim?.() || null) as string | null,
+      // readers can rely on a truthy check. isOwnUploadUrl filters out
+      // any hostile external URL a direct API caller might slip in
+      // (silently dropped rather than 400 — the checklist row itself
+      // matters more than a single photo).
+      photoUrl: (() => {
+        const raw = i.photoUrl?.trim?.() || null;
+        if (!raw) return null;
+        return isOwnUploadUrl(raw) ? raw : null;
+      })(),
       orderIndex: idx,
     });
   }
@@ -219,7 +227,9 @@ export async function POST(req: Request) {
   const wbsErr = await assertWbsNodeInProject(wbsNodeId, projectId);
   if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
 
-  const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 8) : [];
+  const photos = sanitizeUploadUrls(
+    Array.isArray(photoUrls) ? photoUrls.filter((u): u is string => typeof u === "string" && u.length > 0) : undefined,
+  ).slice(0, 8);
   const moduleTag = primaryModuleFor(session.user.modules);
 
   // De-dupe assigned reviewers and drop the filler themselves — a WIR

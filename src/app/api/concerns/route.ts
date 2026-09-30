@@ -7,6 +7,7 @@ import { canAccessModule, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { parseBody } from "@/lib/parseBody";
 import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
+import { sanitizeUploadUrls } from "@/lib/upload";
 
 const PostConcernSchema = z.object({
   projectId: z.string().min(1),
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
   const body = parsed.data;
   const { projectId, wbsNodeId, description, photoUrls } = body;
   const desc = description.trim();
-  const photos = (photoUrls ?? []).slice(0, 6);
+  const photos = sanitizeUploadUrls(photoUrls).slice(0, 6);
   const idempotencyKey = readIdempotencyKey(body);
   const concernInclude = {
     raisedBy: { select: { id: true, name: true } },

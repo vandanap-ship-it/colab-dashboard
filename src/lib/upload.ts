@@ -60,3 +60,16 @@ export function isOwnUploadUrl(url: string): boolean {
     return false;
   }
 }
+
+/**
+ * Filter a batch of client-supplied URLs down to those that came from our
+ * own uploader. Hostile URLs are silently dropped (rather than 400'ing the
+ * whole submission) — the entry itself is more important than any single
+ * photo, and any legitimate URL from the mobile / desktop uploaders
+ * survives. Mirror to `photoUrls`, `attachmentUrls`, or any other batch
+ * of `z.string().url()` values at the API boundary.
+ */
+export function sanitizeUploadUrls(urls: readonly string[] | undefined): string[] {
+  if (!urls) return [];
+  return urls.filter((u) => isOwnUploadUrl(u));
+}

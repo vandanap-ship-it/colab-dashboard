@@ -6,6 +6,7 @@ import { canAccessModule, canAccessScopedRow, MODULES } from "@/lib/modules";
 import { canReview, isAdmin } from "@/lib/roles";
 import { recordAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/parseBody";
+import { isOwnUploadUrl } from "@/lib/upload";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -80,7 +81,13 @@ export async function PATCH(
   // the field. Non-null strings overwrite.
   const data: { reviewerNote?: string | null; reviewerPhotoUrl?: string | null } = {};
   if (body.reviewerNote !== undefined) data.reviewerNote = body.reviewerNote?.trim() || null;
-  if (body.reviewerPhotoUrl !== undefined) data.reviewerPhotoUrl = body.reviewerPhotoUrl || null;
+  if (body.reviewerPhotoUrl !== undefined) {
+    // Provenance guard: only our own uploader's URLs land as reviewer
+    // annotations. An external URL is normalized to null so a hostile
+    // reviewer can't pin a phishing/tracking image to the WIR.
+    const raw = body.reviewerPhotoUrl;
+    data.reviewerPhotoUrl = raw && isOwnUploadUrl(raw) ? raw : null;
+  }
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }

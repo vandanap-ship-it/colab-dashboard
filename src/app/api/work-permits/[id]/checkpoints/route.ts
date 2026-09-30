@@ -9,6 +9,7 @@ import { badRequest, forbidden, notFound, unauthorized, handleApiError } from "@
 import { isAdmin } from "@/lib/roles";
 import { isApprover } from "@/lib/workPermit";
 import { narrowCheckpoints, applyReviewerReply } from "@/lib/permitChecklist";
+import { isOwnUploadUrl } from "@/lib/upload";
 
 /**
  * Colab-parity permit reviewer · per-checkpoint Add Reply endpoint.
@@ -41,7 +42,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const { id } = await ctx.params;
     const parsed = await parseBody(req, PatchCheckpointSchema);
     if (!parsed.ok) return parsed.response;
-    const { index, reviewerNote, reviewerPhotoUrl } = parsed.data;
+    const { index, reviewerNote } = parsed.data;
+    // Provenance guard on the reviewer photo — same reasoning as the WIR
+    // item reviewer: an external URL is treated as "no photo".
+    const reviewerPhotoUrl =
+      parsed.data.reviewerPhotoUrl && isOwnUploadUrl(parsed.data.reviewerPhotoUrl)
+        ? parsed.data.reviewerPhotoUrl
+        : parsed.data.reviewerPhotoUrl === null
+          ? null
+          : undefined;
 
     const permit = await prisma.workPermit.findFirst({
       where: { id, deletedAt: null },

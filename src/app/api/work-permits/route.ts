@@ -8,6 +8,7 @@ import { canAccessModule, MODULES } from "@/lib/modules";
 import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
+import { sanitizeUploadUrls } from "@/lib/upload";
 import { assignmentEmail, sendEmail } from "@/lib/email";
 import { sendPushToUser } from "@/lib/push";
 import {
@@ -283,7 +284,7 @@ export async function POST(req: Request) {
   }
 
   // idempotencyKey was already read + short-circuit-checked above.
-  const photos = (body.photoUrls ?? []).slice(0, 6);
+  const photos = sanitizeUploadUrls(body.photoUrls).slice(0, 6);
   const displayId = generatePermitDisplayId();
 
   const { record: workPermit, duplicate } = await createIdempotent(

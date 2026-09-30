@@ -6,6 +6,7 @@ import { canAccessModule, MODULES } from "@/lib/modules";
 import { isAdmin } from "@/lib/roles";
 import { recordAudit } from "@/lib/audit";
 import { PERMIT_STATUSES } from "@/lib/permit";
+import { isOwnUploadUrl } from "@/lib/upload";
 import {
   badRequest,
   forbidden,
@@ -87,7 +88,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/permits/[id]">
       changes.push(`reminder: ${existing.renewalReminderDays}d → ${patch.renewalReminderDays}d`);
     }
     if (patch.notes !== undefined) data.notes = patch.notes?.trim() || null;
-    if (patch.documentUrl !== undefined) data.documentUrl = patch.documentUrl?.trim() || null;
+    if (patch.documentUrl !== undefined) {
+      const trimmed = patch.documentUrl?.trim() || null;
+      data.documentUrl = trimmed && isOwnUploadUrl(trimmed) ? trimmed : null;
+    }
     if (patch.responsibleUserId !== undefined && patch.responsibleUserId !== existing.responsibleUserId) {
       data.responsibleUserId = patch.responsibleUserId || null;
       changes.push(`reassigned`);

@@ -8,6 +8,7 @@ import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { isValidReasonCode } from "@/lib/hindranceReasons";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
+import { sanitizeUploadUrls } from "@/lib/upload";
 
 const PostHindranceSchema = z.object({
   projectId: z.string().min(1),
@@ -93,7 +94,7 @@ export async function POST(req: Request) {
       : null;
   const impact =
     daysImpact != null ? Math.floor(daysImpact) : impactFromWindow;
-  const photos = (photoUrls ?? []).slice(0, 6);
+  const photos = sanitizeUploadUrls(photoUrls).slice(0, 6);
   // Silently drop unknown reason codes (client-only enum guard) rather than
   // rejecting — the record is more important than the tag.
   const reason = isValidReasonCode(reasonCode) ? reasonCode : null;

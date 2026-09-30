@@ -11,6 +11,7 @@ import {
   type PermitStatus,
 } from "@/lib/permit";
 import { parseBody } from "@/lib/parseBody";
+import { isOwnUploadUrl } from "@/lib/upload";
 
 const PostPermitSchema = z.object({
   projectId: z.string().min(1),
@@ -92,7 +93,11 @@ export async function POST(req: Request) {
       issuedDate: new Date(raw.issuedDate!),
       expiryDate: raw.expiryDate ? new Date(raw.expiryDate) : null,
       notes: raw.notes?.trim() || null,
-      documentUrl: raw.documentUrl?.trim() || null,
+      documentUrl: (() => {
+        const trimmed = raw.documentUrl?.trim() || null;
+        if (!trimmed) return null;
+        return isOwnUploadUrl(trimmed) ? trimmed : null;
+      })(),
       responsibleUserId: raw.responsibleUserId || null,
       renewalReminderDays: raw.renewalReminderDays ?? 30,
       // Start as ACTIVE; the GET route computes the effective status via the

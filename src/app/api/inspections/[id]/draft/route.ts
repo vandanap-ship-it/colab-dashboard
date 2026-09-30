@@ -50,6 +50,7 @@ import { checkConflict } from "@/lib/optimisticLock";
 import { sendPushToUser } from "@/lib/push";
 import { ROLES } from "@/lib/roles";
 import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
+import { isOwnUploadUrl, sanitizeUploadUrls } from "@/lib/upload";
 
 const PutDraftSchema = z.object({
   wbsNodeId: z.string().min(1).nullable().optional(),
@@ -161,7 +162,11 @@ export async function PUT(req: Request, ctx: RouteContext<"/api/inspections/[id]
         passed: isNA ? null : (typeof i.passed === "boolean" ? i.passed : null),
         notApplicable: isNA,
         notes: i.notes?.trim() || null,
-        photoUrl: (i.photoUrl?.trim?.() || null) as string | null,
+        photoUrl: (() => {
+          const raw = i.photoUrl?.trim?.() || null;
+          if (!raw) return null;
+          return isOwnUploadUrl(raw) ? raw : null;
+        })(),
         orderIndex: idx,
       });
     }
@@ -173,9 +178,11 @@ export async function PUT(req: Request, ctx: RouteContext<"/api/inspections/[id]
       ? [...new Set(body.assignedReviewerIds.filter((v) => typeof v === "string" && v.length > 0 && v !== session.user.id))].slice(0, 20)
       : [];
     const cleanSubmitRemark = body.submitRemark?.trim() || null;
-    const appendedPhotos = Array.isArray(body.photoUrls)
-      ? body.photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 8)
-      : [];
+    const appendedPhotos = sanitizeUploadUrls(
+      Array.isArray(body.photoUrls)
+        ? body.photoUrls.filter((u): u is string => typeof u === "string" && u.length > 0)
+        : undefined,
+    ).slice(0, 8);
 
     // Two writes as one transaction: swap out every item row, update
     // the header + optionally flip status. Nothing sees a half-applied
