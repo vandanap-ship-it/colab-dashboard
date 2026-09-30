@@ -87,6 +87,11 @@ export default function WorkPermitForm({
   // top-level PhotoPicker uses) so the URL rides in the payload.
   const [uploadingCheckpointIdx, setUploadingCheckpointIdx] = useState<number | null>(null);
   async function uploadCheckpointPhoto(idx: number, file: File) {
+    // Guard against a rapid double-tap on the same checkpoint's camera
+    // — React state batching means the icon's disabled state lags one
+    // render, so two files could enter this handler back-to-back,
+    // racing two uploads and leaking one orphan blob per race.
+    if (uploadingCheckpointIdx !== null) return;
     setUploadingCheckpointIdx(idx);
     try {
       const fd = new FormData();
