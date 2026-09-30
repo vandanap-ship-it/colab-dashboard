@@ -190,6 +190,7 @@ CREATE TABLE "ProgressEntry" (
     "wbsNodeId" TEXT NOT NULL,
     "date" TIMESTAMP(3) NOT NULL,
     "type" TEXT NOT NULL DEFAULT 'LABOUR_SUPPLY',
+    "displayId" TEXT,
     "achievedQuantity" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "cumulativeQuantity" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "contractorId" TEXT,
@@ -293,11 +294,16 @@ CREATE TABLE "Issue" (
     "projectId" TEXT NOT NULL,
     "wbsNodeId" TEXT,
     "description" TEXT NOT NULL,
-    "severity" TEXT,
     "category" TEXT,
+    "severity" TEXT,
     "status" TEXT NOT NULL DEFAULT 'OPEN',
     "createdById" TEXT NOT NULL,
     "assignedToId" TEXT,
+    "parallelAssigneeIds" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "dueDate" TIMESTAMP(3),
+    "debitToId" TEXT,
+    "debitAmount" DOUBLE PRECISION,
+    "inspectionId" TEXT,
     "module" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -347,6 +353,7 @@ CREATE TABLE "WorkPermit" (
     "title" TEXT NOT NULL,
     "description" TEXT,
     "workDate" TIMESTAMP(3) NOT NULL,
+    "endDate" TIMESTAMP(3),
     "startTime" TEXT NOT NULL,
     "endTime" TEXT NOT NULL,
     "location" TEXT,
@@ -362,12 +369,51 @@ CREATE TABLE "WorkPermit" (
     "rejectedById" TEXT,
     "rejectedAt" TIMESTAMP(3),
     "rejectionReason" TEXT,
+    "checklistResponses" JSONB,
+    "suspendedById" TEXT,
+    "suspendedAt" TIMESTAMP(3),
+    "suspendedReason" TEXT,
+    "displayId" TEXT,
+    "coRequesterIds" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "activityHead" TEXT,
+    "suspensionResolvedAt" TIMESTAMP(3),
+    "suspensionResolvedById" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "deletedAt" TIMESTAMP(3),
     "idempotencyKey" TEXT,
 
     CONSTRAINT "WorkPermit_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "PermitApprover" (
+    "id" TEXT NOT NULL,
+    "workPermitId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "levelIndex" INTEGER NOT NULL DEFAULT 1,
+    "levelName" TEXT,
+    "canClose" BOOLEAN NOT NULL DEFAULT true,
+    "canSuspend" BOOLEAN NOT NULL DEFAULT false,
+    "isDefault" BOOLEAN NOT NULL DEFAULT false,
+    "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "PermitApprover_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "PermitLabourEntry" (
+    "id" TEXT NOT NULL,
+    "workPermitId" TEXT NOT NULL,
+    "kind" TEXT NOT NULL DEFAULT 'LABOUR',
+    "workerName" TEXT,
+    "role" TEXT,
+    "count" INTEGER,
+    "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "PermitLabourEntry_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -400,6 +446,12 @@ CREATE TABLE "Inspection" (
     "assignedReviewerIds" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "rescheduledFor" TIMESTAMP(3),
     "rescheduledNote" TEXT,
+    "contractorId" TEXT,
+    "exactLocation" TEXT,
+    "totalQuantityPct" DOUBLE PRECISION,
+    "executedQuantityPct" DOUBLE PRECISION,
+    "triggerType" TEXT DEFAULT 'Manual',
+    "reviewerNote" TEXT,
 
     CONSTRAINT "Inspection_pkey" PRIMARY KEY ("id")
 );
@@ -414,6 +466,8 @@ CREATE TABLE "InspectionItem" (
     "notes" TEXT,
     "photoUrl" TEXT,
     "orderIndex" INTEGER NOT NULL DEFAULT 0,
+    "reviewerNote" TEXT,
+    "reviewerPhotoUrl" TEXT,
 
     CONSTRAINT "InspectionItem_pkey" PRIMARY KEY ("id")
 );
@@ -604,8 +658,10 @@ CREATE TABLE "ColabActivity" (
     "progressDate" TIMESTAMP(3),
     "physicalProgress" DOUBLE PRECISION NOT NULL,
     "totalPct" DOUBLE PRECISION,
+    "plannedPct" DOUBLE PRECISION,
     "reasonCode" TEXT,
     "reasonNote" TEXT,
+    "rawColabRow" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -697,6 +753,9 @@ CREATE INDEX "ProgressEntry_projectId_date_idx" ON "ProgressEntry"("projectId", 
 CREATE INDEX "ProgressEntry_wbsNodeId_idx" ON "ProgressEntry"("wbsNodeId");
 
 -- CreateIndex
+CREATE INDEX "ProgressEntry_displayId_idx" ON "ProgressEntry"("displayId");
+
+-- CreateIndex
 CREATE INDEX "ProgressLabour_progressEntryId_idx" ON "ProgressLabour"("progressEntryId");
 
 -- CreateIndex
@@ -736,6 +795,12 @@ CREATE INDEX "Issue_projectId_idx" ON "Issue"("projectId");
 CREATE INDEX "Issue_assignedToId_idx" ON "Issue"("assignedToId");
 
 -- CreateIndex
+CREATE INDEX "Issue_debitToId_idx" ON "Issue"("debitToId");
+
+-- CreateIndex
+CREATE INDEX "Issue_inspectionId_idx" ON "Issue"("inspectionId");
+
+-- CreateIndex
 CREATE INDEX "IssuePhoto_issueId_idx" ON "IssuePhoto"("issueId");
 
 -- CreateIndex
@@ -769,6 +834,21 @@ CREATE INDEX "WorkPermit_status_idx" ON "WorkPermit"("status");
 CREATE INDEX "WorkPermit_workDate_idx" ON "WorkPermit"("workDate");
 
 -- CreateIndex
+CREATE INDEX "WorkPermit_displayId_idx" ON "WorkPermit"("displayId");
+
+-- CreateIndex
+CREATE INDEX "PermitApprover_workPermitId_idx" ON "PermitApprover"("workPermitId");
+
+-- CreateIndex
+CREATE INDEX "PermitApprover_userId_idx" ON "PermitApprover"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PermitApprover_workPermitId_userId_levelIndex_key" ON "PermitApprover"("workPermitId", "userId", "levelIndex");
+
+-- CreateIndex
+CREATE INDEX "PermitLabourEntry_workPermitId_idx" ON "PermitLabourEntry"("workPermitId");
+
+-- CreateIndex
 CREATE INDEX "WorkPermitPhoto_workPermitId_idx" ON "WorkPermitPhoto"("workPermitId");
 
 -- CreateIndex
@@ -779,6 +859,9 @@ CREATE INDEX "Inspection_projectId_idx" ON "Inspection"("projectId");
 
 -- CreateIndex
 CREATE INDEX "Inspection_wbsNodeId_idx" ON "Inspection"("wbsNodeId");
+
+-- CreateIndex
+CREATE INDEX "Inspection_contractorId_idx" ON "Inspection"("contractorId");
 
 -- CreateIndex
 CREATE INDEX "InspectionItem_inspectionId_idx" ON "InspectionItem"("inspectionId");
@@ -964,6 +1047,12 @@ ALTER TABLE "Issue" ADD CONSTRAINT "Issue_createdById_fkey" FOREIGN KEY ("create
 ALTER TABLE "Issue" ADD CONSTRAINT "Issue_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "Issue" ADD CONSTRAINT "Issue_debitToId_fkey" FOREIGN KEY ("debitToId") REFERENCES "Contractor"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Issue" ADD CONSTRAINT "Issue_inspectionId_fkey" FOREIGN KEY ("inspectionId") REFERENCES "Inspection"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "IssuePhoto" ADD CONSTRAINT "IssuePhoto_issueId_fkey" FOREIGN KEY ("issueId") REFERENCES "Issue"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -991,6 +1080,18 @@ ALTER TABLE "WorkPermit" ADD CONSTRAINT "WorkPermit_approvedById_fkey" FOREIGN K
 ALTER TABLE "WorkPermit" ADD CONSTRAINT "WorkPermit_closedById_fkey" FOREIGN KEY ("closedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "WorkPermit" ADD CONSTRAINT "WorkPermit_suspendedById_fkey" FOREIGN KEY ("suspendedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PermitApprover" ADD CONSTRAINT "PermitApprover_workPermitId_fkey" FOREIGN KEY ("workPermitId") REFERENCES "WorkPermit"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PermitApprover" ADD CONSTRAINT "PermitApprover_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PermitLabourEntry" ADD CONSTRAINT "PermitLabourEntry_workPermitId_fkey" FOREIGN KEY ("workPermitId") REFERENCES "WorkPermit"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "WorkPermitPhoto" ADD CONSTRAINT "WorkPermitPhoto_workPermitId_fkey" FOREIGN KEY ("workPermitId") REFERENCES "WorkPermit"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -1004,6 +1105,9 @@ ALTER TABLE "Inspection" ADD CONSTRAINT "Inspection_filledById_fkey" FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE "Inspection" ADD CONSTRAINT "Inspection_reviewedById_fkey" FOREIGN KEY ("reviewedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Inspection" ADD CONSTRAINT "Inspection_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "InspectionItem" ADD CONSTRAINT "InspectionItem_inspectionId_fkey" FOREIGN KEY ("inspectionId") REFERENCES "Inspection"("id") ON DELETE CASCADE ON UPDATE CASCADE;
