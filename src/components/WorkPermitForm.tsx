@@ -140,22 +140,12 @@ export default function WorkPermitForm({
   // lists render as two distinct cards; the API `kind` field splits
   // them on write.
   const [personnelEntries, setPersonnelEntries] = useState<LabourEntry[]>([]);
-  const [coRequesterIds, setCoRequesterIds] = useState<Set<string>>(new Set());
   const [activityHead, setActivityHead] = useState<string>("");
-  // Per-approver capabilities picked in Step 2 (Colab shows two chips
-  // per approver row: Can Close green + Can Suspend amber).
-  type ApproverCap = { canClose: boolean; canSuspend: boolean };
-  const [approverCaps, setApproverCaps] = useState<Record<string, ApproverCap>>({});
-  function setCap(userId: string, patch: Partial<ApproverCap>) {
-    setApproverCaps((prev) => ({
-      ...prev,
-      [userId]: {
-        canClose: prev[userId]?.canClose ?? true,
-        canSuspend: prev[userId]?.canSuspend ?? false,
-        ...patch,
-      },
-    }));
-  }
+  // Approver capabilities used to be picked per-row (Can Close / Can
+  // Suspend chips). Shraddha 2026-09-30: the requester shouldn't be
+  // choosing what an approver can do — Girish (head of safety) has
+  // everything by default. The chips are gone from Step 2; every
+  // selected approver is sent with both capabilities on.
   // After save: in-place success card (Add another / Back to home) so
   // engineers raising back-to-back permits don't get bounced home each time.
   const [saved, setSaved] = useState<null | { queued: boolean; title: string }>(null);
@@ -243,9 +233,9 @@ export default function WorkPermitForm({
 
     // Colab-parity Step 2 additions on the payload:
     // - labourEntries (multi-add, free-text worker/role/count)
-    // - coRequesterIds (multi-user picker)
     // - activityHead (Colab's Activity Head dropdown pick)
-    // - approvers[] with per-user capabilities (canClose/canSuspend).
+    // - approvers[] — every picked approver gets both capabilities
+    //   (canClose + canSuspend); the requester no longer chooses.
     //   The existing approverIds[] payload key stays for the current
     //   API contract; approvers[] rides alongside so the new endpoint
     //   can persist capabilities.
@@ -276,11 +266,15 @@ export default function WorkPermitForm({
         : cleanLabour;
 
     const approverIdsArr = Array.from(selectedApprovers);
+    // Every selected approver gets both capabilities. Shraddha 2026-09-30:
+    // capabilities are not the requester's call — Girish (head of safety)
+    // has close + suspend by default, and any future approver picked by
+    // an admin inherits the same.
     const approversWithCaps = approverIdsArr.map((userId) => ({
       userId,
       levelIndex: 1,
-      canClose: approverCaps[userId]?.canClose ?? true,
-      canSuspend: approverCaps[userId]?.canSuspend ?? false,
+      canClose: true,
+      canSuspend: true,
     }));
 
     const payload = {
@@ -302,7 +296,6 @@ export default function WorkPermitForm({
       approverIds: approverIdsArr,
       approvers: approversWithCaps,
       labourEntries: combinedLabour.length > 0 ? combinedLabour : undefined,
-      coRequesterIds: coRequesterIds.size > 0 ? Array.from(coRequesterIds) : undefined,
       activityHead: activityHead.trim() || undefined,
       photoUrls,
       checklistResponses: checklistResponses.length > 0 ? checklistResponses : undefined,
@@ -369,14 +362,12 @@ export default function WorkPermitForm({
     setSelectedApprovers(new Set());
     setPhotos([]);
     // Step 2 collections must reset too on a hard "Add another" —
-    // otherwise labour entries, co-requesters, personnel, activity head,
-    // approver capabilities, and per-checkpoint answers from the just-
-    // saved permit would silently carry into the next one.
+    // otherwise labour entries, personnel, activity head, and
+    // per-checkpoint answers from the just-saved permit would silently
+    // carry into the next one.
     setLabourEntries([]);
     setPersonnelEntries([]);
-    setCoRequesterIds(new Set());
     setActivityHead("");
-    setApproverCaps({});
     // Reset every checklist template back to unanswered so the next
     // permit doesn't inherit Yes/No answers from the saved one.
     setChecklistState((prev) => {
@@ -425,9 +416,9 @@ export default function WorkPermitForm({
     setStep(1);
     setError(null);
     setSaved(null);
-    // type, location, contractorId, selectedApprovers, coRequesterIds,
-    // activityHead, approverCaps stay set — the supervisor keeps the
-    // approval routing across the run.
+    // type, location, contractorId, selectedApprovers, activityHead
+    // stay set — the supervisor keeps the approval routing across
+    // the run.
   }
 
   if (saved) {
@@ -515,7 +506,6 @@ export default function WorkPermitForm({
                 selectedApprovers.size > 0 ||
                 labourEntries.some((l) => l.workerName || l.role || l.count) ||
                 personnelEntries.some((l) => l.workerName || l.role) ||
-                coRequesterIds.size > 0 ||
                 activityHead.length > 0 ||
                 photos.length > 0 ||
                 activeChecklist.some((a) => a.passed !== null || a.remark.trim() || a.photoUrl);
@@ -560,7 +550,7 @@ export default function WorkPermitForm({
             "Pick the permit type — Hot Work, Night Work, De-shuttering, General, or Work At Height.",
             "Give it a short title so approvers can tell what it's for at a glance (e.g. \"Rebar welding on V12 slab\").",
             "Set the permit date, plus valid-from and valid-to times.",
-            "Step 2: pick the contractor, add labour entries, and pick approver(s) with their Can Close / Can Suspend capabilities.",
+            "Step 2: pick the contractor, add labour entries, and pick the approver.",
             "Step 3: work your way through the safety checklist. Each row = Yes/No + optional remark + optional photo.",
             "Step 4: review everything and submit. Approver(s) get a push and can approve, reject, or suspend from their phone.",
           ]}
@@ -1001,46 +991,11 @@ export default function WorkPermitForm({
         </div>
       </div>
 
-      {/* Step 2: Co-Requesters — additional permit holders. */}
-      <div className={step === 2 ? "" : "hidden"}>
-        <FieldLabel hint="Additional permit holders" optional>
-          Co-Requesters
-        </FieldLabel>
-        <div className="space-y-1.5 max-h-40 overflow-y-auto rounded-lg border border-sandstone-100 bg-cream p-2">
-          {approverOptions.map((u) => {
-            const checked = coRequesterIds.has(u.id);
-            return (
-              <label
-                key={u.id}
-                className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 cursor-pointer ${checked ? "bg-sandstone-100" : "hover:bg-sandstone-50"}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() =>
-                    setCoRequesterIds((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(u.id)) next.delete(u.id);
-                      else next.add(u.id);
-                      return next;
-                    })
-                  }
-                  className="w-4 h-4 accent-ferrous-500"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[14px] text-ink">{u.name}</div>
-                  <div className="text-[11px] text-ink-3">@{u.username}</div>
-                </div>
-              </label>
-            );
-          })}
-          {approverOptions.length === 0 && (
-            <p className="text-[12px] text-ink-3 px-2 py-1.5">
-              No candidates.
-            </p>
-          )}
-        </div>
-      </div>
+      {/* Co-Requesters used to sit here as an "Additional permit holders"
+          multi-picker. Removed 2026-09-30: Shraddha asked for a lighter
+          Step 2 — the requester is whoever raised the permit; no second
+          holder is picked. If we need multi-holder support later we
+          bring the block back. */}
 
       <div className={step === 2 ? "" : "hidden"}>
         <FieldLabel hint="At least one approver across all levels is required">
@@ -1073,47 +1028,11 @@ export default function WorkPermitForm({
                       @{u.username} · {u.role}
                     </div>
                   </div>
-                  {/* Colab-parity capability chips per approver.
-                      Default Can Close = ON; Can Suspend = OFF. */}
-                  {checked && (
-                    <div
-                      className="flex items-center gap-1.5 shrink-0"
-                      onClick={(e) => e.preventDefault()}
-                    >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCap(u.id, {
-                            canClose: !(approverCaps[u.id]?.canClose ?? true),
-                          });
-                        }}
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${
-                          (approverCaps[u.id]?.canClose ?? true)
-                            ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                            : "bg-stone-100 text-stone-400 ring-stone-200"
-                        }`}
-                      >
-                        🔒 Can Close
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCap(u.id, {
-                            canSuspend: !(approverCaps[u.id]?.canSuspend ?? false),
-                          });
-                        }}
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${
-                          (approverCaps[u.id]?.canSuspend ?? false)
-                            ? "bg-amber-50 text-amber-800 ring-amber-200"
-                            : "bg-stone-100 text-stone-400 ring-stone-200"
-                        }`}
-                      >
-                        ⏸ Can Suspend
-                      </button>
-                    </div>
-                  )}
+                  {/* Can Close / Can Suspend chips used to sit here as
+                      per-approver toggles. Removed 2026-09-30: the
+                      requester shouldn't be deciding what an approver
+                      can do. The picked approver is granted both
+                      capabilities server-side. */}
                 </label>
               );
             })
@@ -1188,35 +1107,13 @@ export default function WorkPermitForm({
           </div>
 
           <div className="rounded-lg border border-stone-200 bg-white p-4 space-y-2">
-            <p className="text-[13px] font-semibold text-ink">Approver Capabilities</p>
-            <p className="text-[12px] text-ink-3 font-semibold">Level 1 — Level 1</p>
+            <p className="text-[13px] font-semibold text-ink">Approvers</p>
             {Array.from(selectedApprovers).map((uid) => {
               const u = approverOptions.find((a) => a.id === uid);
               if (!u) return null;
-              const cap = approverCaps[uid] ?? { canClose: true, canSuspend: false };
               return (
-                <div key={uid} className="flex items-center justify-between gap-3">
-                  <div className="text-[13px] text-ink truncate">{u.name}</div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${
-                        cap.canClose
-                          ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                          : "bg-stone-100 text-stone-400 ring-stone-200"
-                      }`}
-                    >
-                      🔒 Can Close
-                    </span>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${
-                        cap.canSuspend
-                          ? "bg-amber-50 text-amber-800 ring-amber-200"
-                          : "bg-stone-100 text-stone-400 ring-stone-200"
-                      }`}
-                    >
-                      ⏸ Can Suspend
-                    </span>
-                  </div>
+                <div key={uid} className="text-[13px] text-ink">
+                  {u.name}
                 </div>
               );
             })}

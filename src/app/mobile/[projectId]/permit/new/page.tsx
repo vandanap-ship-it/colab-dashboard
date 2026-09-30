@@ -37,10 +37,16 @@ export default async function NewWorkPermitPage({
   // the picker until this widening). The server-side approve/reject
   // gate accepts the same flag so a scoped-but-authorised approver
   // can actually complete the action too.
+  //
+  // The migration 20260930170000_deactivate_permit_test_user
+  // deactivates the leftover `test` user. The explicit NOT filter here
+  // is belt-and-braces: even if the row gets flipped back to active,
+  // it stays out of the requester's picker.
   const users = await prisma.user.findMany({
     where: {
       active: true,
       canApproveWorkPermits: true,
+      NOT: { username: "test" },
     },
     select: { id: true, name: true, username: true, role: true },
     orderBy: { name: "asc" },
