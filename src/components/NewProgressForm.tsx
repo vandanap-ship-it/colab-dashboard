@@ -817,6 +817,18 @@ export default function NewProgressForm({
                 <span>Not started</span>
                 <span>Complete</span>
               </div>
+              {/* Colab-parity monotonic floor hint · shown only when a
+                  prior PUBLISHED entry has already logged progress on
+                  this activity, so the slider can't drag below that.
+                  Silent on fresh activities to avoid noise. */}
+              {priorMaxCumulative > 0 && (
+                <p className="text-[11px] text-ink-3 mt-2 leading-snug">
+                  Last logged {totalQty > 0
+                    ? `${priorMaxCumulative.toFixed(1)} / ${totalQty} ${selected.unit ?? "units"} (${Math.floor((priorMaxCumulative / totalQty) * 100)}%)`
+                    : `${priorMaxCumulative.toFixed(0)}%`} — you can only add more from here.
+                  To correct an over-count, ask an admin to void the wrong row.
+                </p>
+              )}
             </div>
           </section>
 
