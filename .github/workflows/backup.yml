@@ -179,26 +179,59 @@ jobs:
             echo "::notice::RESEND_API_KEY not set — skipping email digest. Backup is at ${BLOB_URL}"
             exit 0
           fi
-          RECIPIENTS=${BACKUP_EMAIL_RECIPIENTS:-"vandana.p@whitelotusgroup.in,shraddha.b@whitelotusgroup.in"}
-          # Convert comma-separated recipients to JSON array
-          TO_JSON=$(echo "$RECIPIENTS" | python3 -c "import json,sys; print(json.dumps([e.strip() for e in sys.stdin.read().split(',')]))")
-          # Send the SIGNED downloadUrl (BLOB_DOWNLOAD_URL) — the raw
-          # BLOB_URL 403s on a private Blob store without an auth token,
-          # which is what Shraddha + Vandana saw before this fix.
+          export RECIPIENTS=${BACKUP_EMAIL_RECIPIENTS:-"vandana.p@whitelotusgroup.in,shraddha.b@whitelotusgroup.in"}
+          export RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          # The .sql.gz is attached inline (typical size ~2 MB, well under
+          # Resend's 40 MB per-email limit). No download click needed. The
+          # earlier version linked to the private-Blob URL, which 403s
+          # without the workspace token — the whole reason Shraddha +
+          # Vandana couldn't open the backup.
+          #
+          # Building the JSON body via a standalone Python script (written
+          # to /tmp) avoids heredoc + YAML indentation hell. The script
+          # reads env vars set above and prints the JSON payload for curl.
+          cat > /tmp/build-backup-email.py <<'PYSCRIPT'
+          import base64
+          import json
+          import os
+          import pathlib
+          import sys
+
+          recipients = [e.strip() for e in os.environ["RECIPIENTS"].split(",") if e.strip()]
+          fname = os.environ["BACKUP_FILE"]
+          size = os.environ["BACKUP_SIZE"]
+          run_url = os.environ["RUN_URL"]
+
+          html = (
+              "<p>Nightly backup complete &mdash; the <b>.sql.gz is attached</b> to this email.</p>"
+              f"<p><b>File:</b> {fname}<br><b>Size:</b> {size}</p>"
+              "<p>The file is a plain gzipped pg_dump; unzip and restore into any Postgres 18 instance with <code>psql</code>.</p>"
+              f"<p>Older backups: sign in to the <a href=\"{run_url}\">GitHub Actions run</a> "
+              "(Vandana + Shraddha both have repo access) and download from the Artifacts section, "
+              "or use the Vercel dashboard's Blob store.</p>"
+          )
+
+          data = base64.b64encode(pathlib.Path(fname).read_bytes()).decode("ascii")
+          payload = {
+              "from": "Siddhi Backups <backups@whitelotusgroup.in>",
+              "to": recipients,
+              "subject": f"Siddhi backup ready — {fname} ({size})",
+              "html": html,
+              "attachments": [{"filename": fname, "content": data}],
+          }
+          sys.stdout.write(json.dumps(payload))
+          PYSCRIPT
+          BODY=$(python3 /tmp/build-backup-email.py)
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.resend.com/emails" \
             -H "authorization: Bearer $RESEND_API_KEY" \
             -H "content-type: application/json" \
-            -d "{
-              \"from\": \"Siddhi Backups <backups@whitelotusgroup.in>\",
-              \"to\": ${TO_JSON},
-              \"subject\": \"Siddhi backup ready — ${BACKUP_FILE} (${BACKUP_SIZE})\",
-              \"html\": \"<p>Nightly backup complete.</p><p><b>File:</b> ${BACKUP_FILE}<br><b>Size:</b> ${BACKUP_SIZE}<br><b>Download:</b> <a href=\\\"${BLOB_DOWNLOAD_URL}\\\">${BLOB_DOWNLOAD_URL}</a></p><p>The download link is signed — clicking it downloads the .sql.gz directly, no login needed. The file itself stays in the private Blob store; older backups can be listed with the Vercel dashboard or via the @vercel/blob SDK.</p>\"
-            }")
+            --data "$BODY")
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           if [ "$HTTP_CODE" -ge 400 ]; then
             echo "::warning::Email dispatch failed with HTTP $HTTP_CODE (backup itself succeeded)."
+            echo "Body head: $(echo "$RESPONSE" | head -3)"
           else
-            echo "Email digest sent to ${RECIPIENTS}"
+            echo "Email sent to ${RECIPIENTS} with attachment (${BACKUP_SIZE})"
           fi
 
       - name: Notify by email on FAILURE (Resend)
