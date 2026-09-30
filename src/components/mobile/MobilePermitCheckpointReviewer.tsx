@@ -30,6 +30,7 @@ export default function MobilePermitCheckpointReviewer({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [saving, setSaving] = useState(false);
   const [note, setNote] = useState(initialNote ?? "");
   const [photoUrl, setPhotoUrl] = useState(initialPhotoUrl ?? "");
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
@@ -37,6 +38,8 @@ export default function MobilePermitCheckpointReviewer({
   const [error, setError] = useState<string | null>(null);
 
   async function saveNote() {
+    if (saving) return; // guard against double-click racing the fetch
+    setSaving(true);
     setError(null);
     const trimmed = note.trim();
     try {
@@ -54,6 +57,8 @@ export default function MobilePermitCheckpointReviewer({
       startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -151,10 +156,10 @@ export default function MobilePermitCheckpointReviewer({
             <button
               type="button"
               onClick={saveNote}
-              disabled={isPending}
+              disabled={isPending || saving}
               className="text-xs font-semibold rounded-md bg-ferrous-500 text-white px-3 py-1 disabled:opacity-60"
             >
-              Save
+              {saving ? "Saving…" : "Save"}
             </button>
           </div>
         </div>
