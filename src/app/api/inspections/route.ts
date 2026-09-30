@@ -316,11 +316,24 @@ export async function POST(req: Request) {
       reviewerIds = eligible.map((u) => u.id);
       assigned = true;
     } else {
+      // Fallback broadcast when no reviewer picked. Shraddha 2026-09-30:
+      // "approvers for safety is only Girish R and for QAQC is only
+      // Thangamani" — so scope by the WIR's module tag AND role=PLANNER
+      // instead of the earlier PLANNER + PRODUCT_TEAM + ADMIN sweep
+      // (which pinged Shraddha, Vandana, Praveer, Vaishali, Girish Kumar
+      // etc. on every WIR). QAQC WIRs land on Thangamani (PLANNER +
+      // modules ["QAQC"]); SAFETY WIRs land on Girish R (PLANNER +
+      // modules ["SAFETY"]).
+      //
+      // Prisma stores `modules` as a JSON string like `["QAQC"]`;
+      // `contains` matches on the substring — same pattern used for
+      // approverIds on work-permits.
       const reviewers = await prisma.user.findMany({
         where: {
           active: true,
-          role: { in: [ROLES.PLANNER, ROLES.PRODUCT_TEAM, ROLES.ADMIN] },
+          role: ROLES.PLANNER,
           id: { not: session.user.id },
+          ...(moduleTag ? { modules: { contains: `"${moduleTag}"` } } : {}),
         },
         select: { id: true },
       });

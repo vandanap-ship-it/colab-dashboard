@@ -143,11 +143,13 @@ export async function POST(req: Request, ctx: RouteContext<"/api/inspections/[id
         if (rid !== session.user.id) toNotify.add(rid);
       }
     } else {
+      // Scope by module — see inspections/route.ts fallback comment.
       const reviewers = await prisma.user.findMany({
         where: {
           active: true,
-          role: { in: [ROLES.PLANNER, ROLES.PRODUCT_TEAM, ROLES.ADMIN] },
+          role: ROLES.PLANNER,
           id: { not: session.user.id },
+          ...(before.module ? { modules: { contains: `"${before.module}"` } } : {}),
         },
         select: { id: true },
       });

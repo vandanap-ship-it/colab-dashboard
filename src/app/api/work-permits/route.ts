@@ -446,32 +446,11 @@ export async function POST(req: Request) {
       ),
     );
 
-    // Also FYI-ping the planner queue (Shraddha 2026-09-30: Harish, DPM
-    // Projects, needs the permit to appear in his alerts even when he
-    // isn't the picked approver — same as Colab's project-lead
-    // broadcast). Skips the requester and anyone who is already in the
-    // approver list to avoid a double buzz. Tag is a distinct FYI tag
-    // so it doesn't replace the approver's own permit notification.
-    const planners = await prisma.user.findMany({
-      where: {
-        active: true,
-        role: "PLANNER",
-        id: {
-          notIn: [session.user.id, ...approverUserIds],
-        },
-      },
-      select: { id: true },
-    });
-    await Promise.allSettled(
-      planners.map((p) =>
-        sendPushToUser(p.id, {
-          title: `Permit raised · ${workPermit.title.slice(0, 40)}`,
-          body: `${typeLabel} by ${requesterName}. For your visibility.`,
-          url: `/mobile/${body.projectId}/permit/${workPermit.id}`,
-          tag: `permit-fyi-${workPermit.id}`,
-        }),
-      ),
-    );
+    // Planner-queue FYI removed 2026-09-30. Earlier ask was "also to
+    // Harish"; latest rule tightened to "approvers for safety is only
+    // Girish R". So only the picked approvers get the permit push;
+    // Harish (and any other PLANNER) sees the permit only when he's
+    // named as an approver.
   }
 
   return NextResponse.json({ workPermit }, { status: duplicate ? 200 : 201 });

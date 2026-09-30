@@ -254,10 +254,13 @@ export async function PUT(req: Request, ctx: RouteContext<"/api/inspections/[id]
             select: { id: true },
           })).map((u) => u.id)
         : (await prisma.user.findMany({
+            // Fallback broadcast — scope by module (Shraddha rule: safety
+            // → Girish only, QAQC → Thangamani only). See inspections/route.ts.
             where: {
               active: true,
-              role: { in: [ROLES.PLANNER, ROLES.PRODUCT_TEAM, ROLES.ADMIN] },
+              role: ROLES.PLANNER,
               id: { not: session.user.id },
+              ...(moduleTag ? { modules: { contains: `"${moduleTag}"` } } : {}),
             },
             select: { id: true },
           })).map((u) => u.id);

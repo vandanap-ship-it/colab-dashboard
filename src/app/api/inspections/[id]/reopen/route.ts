@@ -126,11 +126,14 @@ export async function POST(req: Request, ctx: RouteContext<"/api/inspections/[id
         if (rid !== session.user.id) toNotify.add(rid);
       }
     } else {
+      // Scope by the WIR's module — same rule as inspections/route.ts
+      // fallback (Shraddha: safety → Girish only, QAQC → Thangamani only).
       const reviewers = await prisma.user.findMany({
         where: {
           active: true,
-          role: { in: [ROLES.PLANNER, ROLES.PRODUCT_TEAM, ROLES.ADMIN] },
+          role: ROLES.PLANNER,
           id: { not: session.user.id },
+          ...(before.module ? { modules: { contains: `"${before.module}"` } } : {}),
         },
         select: { id: true },
       });

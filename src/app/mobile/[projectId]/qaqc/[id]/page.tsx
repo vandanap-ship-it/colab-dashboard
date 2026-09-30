@@ -65,23 +65,25 @@ export default async function MobileInspectionDetailPage({
     : [];
 
   // Fallback queue for the Approvers section when no specific reviewer
-  // was picked. Shraddha 2026-09-30: showing "PENDING" with no name (and
-  // a "broadcasted to planner + product + admin queue" note) made the
-  // Approvers card read as if nobody was on the WIR, when in fact
-  // Thangamani (PLANNER + QAQC) was actively reviewing it. So when
-  // nothing is assigned, resolve the actual eligible queue and show
-  // those users as pending. Same query the raise-side notification uses
-  // (roles route.ts:319-322) so what the reviewer sees matches who was
-  // actually pinged. Skipped when we already have assigned reviewers,
-  // and when the WIR is already resolved (APPROVED / REJECTED — the
-  // section then renders the actual reviewer, not the queue).
+  // was picked. Shraddha 2026-09-30 rule: "approvers for safety is only
+  // Girish R and for QAQC is only Thangamani" — so scope the fallback
+  // by role=PLANNER + modules includes the WIR's module tag, matching
+  // what the raise-side notification query does. QAQC WIRs → Thangamani
+  // only; SAFETY WIRs → Girish R only. Prior code showed the whole
+  // PLANNER + PRODUCT_TEAM + ADMIN set (Shraddha, Vandana, Praveer,
+  // Vaishali, Harish, Girish Kumar, …) which was noise. Skipped when
+  // we already have assigned reviewers, and when the WIR is resolved
+  // (APPROVED / REJECTED — the section renders the actual reviewer).
   const fallbackReviewers =
     inspection.status === "IN_REVIEW" && assignedReviewers.length === 0
       ? await prisma.user.findMany({
           where: {
             active: true,
-            role: { in: ["PLANNER", "PRODUCT_TEAM", "ADMIN"] },
+            role: "PLANNER",
             id: { not: inspection.filledById ?? undefined },
+            ...(inspection.module
+              ? { modules: { contains: `"${inspection.module}"` } }
+              : {}),
           },
           select: { id: true, name: true, username: true, role: true },
           orderBy: { name: "asc" },
