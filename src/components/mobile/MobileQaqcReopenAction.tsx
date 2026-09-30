@@ -24,9 +24,12 @@ export default function MobileQaqcReopenAction({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function reopen() {
+    if (saving) return;
+    setSaving(true);
     setError(null);
     let res: Response;
     try {
@@ -37,17 +40,20 @@ export default function MobileQaqcReopenAction({
       });
     } catch {
       setError("Network error — please try again.");
+      setSaving(false);
       return;
     }
     if (res.status === 409) {
       const data = await res.json().catch(() => null);
       setError(data?.error ?? "Someone updated this WIR while you were reading. Refreshing.");
       startTransition(() => router.refresh());
+      setSaving(false);
       return;
     }
     if (!res.ok) {
       const data = await res.json().catch(() => null);
       setError(data?.error ?? "Failed to reopen.");
+      setSaving(false);
       return;
     }
     startTransition(() => router.refresh());
@@ -58,7 +64,7 @@ export default function MobileQaqcReopenAction({
       <button
         type="button"
         onClick={reopen}
-        disabled={isPending}
+        disabled={isPending || saving}
         className="inline-flex items-center gap-1.5 rounded-full bg-ink text-cream text-[12px] font-semibold px-3 py-2 disabled:opacity-60"
       >
         {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarClock className="w-3.5 h-3.5" />}
