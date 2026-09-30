@@ -256,6 +256,11 @@ export default function NewProgressForm({
           return;
         }
         const data = await res.json();
+        // Re-check cancelled after the await — if the engineer switched
+        // activities during the response body parse, the second effect's
+        // setGate would land into stale state and we'd flash the wrong
+        // gate for one paint.
+        if (cancelled) return;
         if (data.ok) {
           setGate({ ok: true });
         } else {
