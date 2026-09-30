@@ -89,6 +89,28 @@ export async function POST(req: Request) {
   const parsed = await parseBody(req, PostIssueSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
+
+  // Idempotency short-circuit · if this replay has already been
+  // committed, skip validation and return the existing row. Between
+  // the original write and the retry, the assignee could be
+  // deactivated / the wbsNode soft-deleted / the debit contractor
+  // moved — all would 400 the retry even though the row already
+  // exists.
+  const idempotencyKeyEarly = readIdempotencyKey(body);
+  if (idempotencyKeyEarly) {
+    const existing = await prisma.issue.findUnique({
+      where: { idempotencyKey: idempotencyKeyEarly },
+      include: {
+        createdBy: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, name: true } },
+        wbsNode: { select: { id: true, name: true, taskCode: true } },
+        photos: true,
+      },
+    });
+    if (existing) {
+      return NextResponse.json({ issue: existing }, { status: 200 });
+    }
+  }
   const {
     projectId,
     wbsNodeId,

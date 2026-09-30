@@ -70,16 +70,28 @@ export async function POST(req: Request) {
   const desc = description.trim();
   const photos = (photoUrls ?? []).slice(0, 6);
   const idempotencyKey = readIdempotencyKey(body);
-
-  // Cross-project FK guard on the activity tag.
-  const wbsErr = await assertWbsNodeInProject(wbsNodeId, projectId);
-  if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
   const concernInclude = {
     raisedBy: { select: { id: true, name: true } },
     assignedTo: { select: { id: true, name: true } },
     wbsNode: { select: { id: true, name: true, taskCode: true } },
     photos: true,
   } as const;
+
+  // Idempotency short-circuit · replay should skip the WBS guard when
+  // the row already exists (same fix as e9e5c16).
+  if (idempotencyKey) {
+    const existing = await prisma.concern.findUnique({
+      where: { idempotencyKey },
+      include: concernInclude,
+    });
+    if (existing) {
+      return NextResponse.json({ concern: existing }, { status: 200 });
+    }
+  }
+
+  // Cross-project FK guard on the activity tag.
+  const wbsErr = await assertWbsNodeInProject(wbsNodeId, projectId);
+  if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
 
   const { record: concern, duplicate } = await createIdempotent(
     idempotencyKey,
