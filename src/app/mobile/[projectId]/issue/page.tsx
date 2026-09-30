@@ -10,6 +10,7 @@ import {
   MODULES,
 } from "@/lib/modules";
 import { issueAgeFor } from "@/lib/queueAge";
+import IssueVillaFilter from "@/components/mobile/IssueVillaFilter";
 
 export const dynamic = "force-dynamic";
 
@@ -43,14 +44,19 @@ export default async function MobileIssuesListPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; villa?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
   const { projectId } = await params;
-  const { tab: tabParam } = await searchParams;
+  const { tab: tabParam, villa: villaParam } = await searchParams;
   const tab = normaliseTab(tabParam);
+  // Villa filter — Shraddha 2026-09-30 wanted Thangamani to see just
+  // Villa 03's observations for a walk. Empty string / omitted =
+  // "All villas" (default). Bad IDs pass through and result in an
+  // empty list (safer than 400).
+  const villaFilter = (villaParam ?? "").trim();
 
   // Same gate as the API — snags belong to QAQC or SAFETY. Contractor users
   // without either module have no legitimate reason to see this list.
@@ -77,7 +83,17 @@ export default async function MobileIssuesListPage({
     projectId,
     deletedAt: null,
     ...(scopedModule ? { module: scopedModule } : {}),
+    ...(villaFilter ? { villaId: villaFilter } : {}),
   } as const;
+
+  // Villa dropdown options — only render the picker when the project
+  // has villas (Amanvana has 93). Cheap query; the list page already
+  // pays a couple of Postgres round-trips.
+  const villas = await prisma.villa.findMany({
+    where: { projectId },
+    select: { id: true, number: true, label: true },
+    orderBy: { number: "asc" },
+  });
 
   const [issues, statusCounts] = await Promise.all([
     prisma.issue.findMany({
@@ -131,11 +147,20 @@ export default async function MobileIssuesListPage({
 
       <nav className="sticky top-12 z-10 bg-ivory/95 backdrop-blur-md border-b border-stone-200 px-4">
         <div className="flex items-center gap-1 -mb-px overflow-x-auto">
-          <TabLink projectId={projectId} tab="open" current={tab} label="Open" count={countByStatus.get("OPEN") ?? 0} icon={AlertTriangle} />
-          <TabLink projectId={projectId} tab="reinspection" current={tab} label="Reinspection" count={countByStatus.get("IN_REINSPECTION") ?? 0} icon={Clock} />
-          <TabLink projectId={projectId} tab="resolved" current={tab} label="Resolved" count={countByStatus.get("RESOLVED") ?? 0} icon={CheckCircle2} />
+          <TabLink projectId={projectId} tab="open" current={tab} villaFilter={villaFilter} label="Open" count={countByStatus.get("OPEN") ?? 0} icon={AlertTriangle} />
+          <TabLink projectId={projectId} tab="reinspection" current={tab} villaFilter={villaFilter} label="Reinspection" count={countByStatus.get("IN_REINSPECTION") ?? 0} icon={Clock} />
+          <TabLink projectId={projectId} tab="resolved" current={tab} villaFilter={villaFilter} label="Resolved" count={countByStatus.get("RESOLVED") ?? 0} icon={CheckCircle2} />
         </div>
       </nav>
+
+      {villas.length > 0 && (
+        <IssueVillaFilter
+          projectId={projectId}
+          tab={tab}
+          villas={villas}
+          picked={villaFilter}
+        />
+      )}
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3">
         {issues.length === 0 ? (
@@ -206,6 +231,7 @@ function TabLink({
   projectId,
   tab,
   current,
+  villaFilter,
   label,
   count,
   icon: Icon,
@@ -213,14 +239,16 @@ function TabLink({
   projectId: string;
   tab: Tab;
   current: Tab;
+  villaFilter: string;
   label: string;
   count?: number;
   icon: typeof AlertTriangle;
 }) {
   const active = tab === current;
+  const qs = villaFilter ? `?tab=${tab}&villa=${encodeURIComponent(villaFilter)}` : `?tab=${tab}`;
   return (
     <Link
-      href={`/mobile/${projectId}/issue?tab=${tab}`}
+      href={`/mobile/${projectId}/issue${qs}`}
       className={
         "inline-flex items-center gap-1.5 py-2 px-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors " +
         (active
