@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Search as SearchIcon,
   Layers,
@@ -37,36 +37,42 @@ export default function MobileSearchClient({ projectId }: { projectId: string })
     return () => clearTimeout(t);
   }, [q]);
 
-  const runSearch = useCallback(
-    async (query: string) => {
-      if (query.length < 2) {
-        setResult(null);
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
+  // Effect-scoped fetch — a fresh keystroke tears down the previous
+  // request via AbortController so a slow first request's response
+  // can't clobber the newer query's result. Debounce alone doesn't
+  // help here: two rapid searches can both be in-flight, and the
+  // one that resolves last wins regardless of which query was newer.
+  useEffect(() => {
+    if (debounced.length < 2) {
+      setResult(null);
+      setLoading(false);
       setError(null);
+      return;
+    }
+    const ac = new AbortController();
+    setLoading(true);
+    setError(null);
+    (async () => {
       try {
         const res = await fetch(
-          `/api/mobile-search?projectId=${encodeURIComponent(projectId)}&q=${encodeURIComponent(query)}`,
-          { cache: "no-store" },
+          `/api/mobile-search?projectId=${encodeURIComponent(projectId)}&q=${encodeURIComponent(debounced)}`,
+          { cache: "no-store", signal: ac.signal },
         );
         if (!res.ok) throw new Error(`status ${res.status}`);
         const data = (await res.json()) as MobileSearchResult;
-        setResult(data);
+        if (!ac.signal.aborted) setResult(data);
       } catch (e) {
+        if (ac.signal.aborted) return; // superseded — silent drop
         setError(e instanceof Error ? e.message : "Search failed");
         setResult(null);
       } finally {
-        setLoading(false);
+        if (!ac.signal.aborted) setLoading(false);
       }
-    },
-    [projectId],
-  );
-
-  useEffect(() => {
-    void runSearch(debounced);
-  }, [debounced, runSearch]);
+    })();
+    return () => {
+      ac.abort();
+    };
+  }, [debounced, projectId]);
 
   return (
     <div className="flex-1 flex flex-col bg-ivory min-h-0">
