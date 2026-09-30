@@ -12,6 +12,7 @@ import {
   MessageSquare,
   ClipboardList,
   ShieldCheck,
+  Bug,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { QuickAddKey } from "@/lib/quickActions";
@@ -212,6 +213,13 @@ const ACTION_ITEMS: readonly {
     hint: "Work Inspection Request — pass this activity",
     icon: ClipboardList,
     hrefFor: (p) => `/mobile/${p}/inspection/new`,
+  },
+  {
+    key: "raise-snag",
+    label: "Raise an observation",
+    hint: "Defect · quality · safety — tagged to a villa",
+    icon: Bug,
+    hrefFor: (p) => `/mobile/${p}/issue/new`,
   },
   {
     key: "raise-permit",

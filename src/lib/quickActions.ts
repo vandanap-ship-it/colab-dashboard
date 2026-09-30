@@ -21,6 +21,7 @@ export type QuickAddKey =
   | "add-hindrance"
   | "add-concern"
   | "raise-wir"
+  | "raise-snag"
   | "raise-permit";
 
 export function quickActionsFor(modulesField: string | null | undefined): QuickAddKey[] {
@@ -38,6 +39,16 @@ export function quickActionsFor(modulesField: string | null | undefined): QuickA
   }
   if (canAccessModule(modulesField, MODULES.SAFETY)) {
     out.push("raise-permit");
+  }
+  // Observation (Colab: snag) — either QA/QC or Safety scope can raise
+  // one. Shraddha 2026-09-30: Thangamani needed a one-tap way to file
+  // an issue from anywhere in the mobile app, not just from the home
+  // tile grid, so the FAB now carries it too.
+  if (
+    canAccessModule(modulesField, MODULES.QAQC) ||
+    canAccessModule(modulesField, MODULES.SAFETY)
+  ) {
+    out.push("raise-snag");
   }
   if (canAccessModule(modulesField, MODULES.HINDRANCE)) out.push("add-hindrance");
   if (canAccessModule(modulesField, MODULES.CONCERN)) out.push("add-concern");

@@ -136,16 +136,31 @@ describe("mobile home tile visibility", () => {
 describe("QuickAdd FAB action visibility", () => {
   it("internal / full-access user sees every quick action", () => {
     expect(quickActionsFor(serialize(null)).sort()).toEqual(
-      ["log-progress", "log-manpower", "raise-wir", "raise-permit", "add-hindrance", "add-concern"].sort(),
+      [
+        "log-progress",
+        "log-manpower",
+        "raise-wir",
+        "raise-snag",
+        "raise-permit",
+        "add-hindrance",
+        "add-concern",
+      ].sort(),
     );
   });
 
-  it("QAQC-scoped contractor sees only Raise WIR — quality persona's whole raise-flow", () => {
-    expect(quickActionsFor(serialize([MODULES.QAQC]))).toEqual(["raise-wir"]);
+  it("QAQC-scoped contractor sees Raise WIR + Raise observation — quality persona's raise-flow", () => {
+    // raise-snag added 2026-09-30 so Thangamani has a one-tap observation
+    // path from any screen; snag scope is QAQC-or-SAFETY, matching the
+    // Issue POST module gate.
+    expect(quickActionsFor(serialize([MODULES.QAQC])).sort()).toEqual(
+      ["raise-wir", "raise-snag"].sort(),
+    );
   });
 
-  it("SAFETY-scoped contractor sees only Raise permit — safety persona's whole raise-flow", () => {
-    expect(quickActionsFor(serialize([MODULES.SAFETY]))).toEqual(["raise-permit"]);
+  it("SAFETY-scoped contractor sees Raise permit + Raise observation — safety persona's raise-flow", () => {
+    expect(quickActionsFor(serialize([MODULES.SAFETY])).sort()).toEqual(
+      ["raise-permit", "raise-snag"].sort(),
+    );
   });
 
   it("PROGRESS-scoped contractor sees Log Progress + Log Manpower (no WIR / hindrance / concern)", () => {
