@@ -73,6 +73,10 @@ const PostWorkPermitSchema = z.object({
   title: z.string().min(3).max(200),
   description: z.string().max(2000).optional(),
   workDate: zDateString,
+  // Colab-parity Valid From / Valid To date range. Optional so older
+  // clients that only send workDate keep working — the server defaults
+  // endDate to workDate (same-day permit) when unset.
+  endDate: zDateString.optional(),
   startTime: z.string().refine(isValidHhMm, "startTime must be HH:MM 24-hour"),
   endTime: z.string().refine(isValidHhMm, "endTime must be HH:MM 24-hour"),
   location: z.string().max(200).optional(),
@@ -188,6 +192,22 @@ export async function POST(req: Request) {
   const wbsErr = await assertWbsNodeInProject(body.wbsNodeId, body.projectId);
   if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
 
+  // Colab-parity Valid From / Valid To: end date must be on or after
+  // start date. Same-day is fine (endDate === workDate) — that's the
+  // default the server fills in for legacy single-day submissions. The
+  // client-side form enforces the same rule, this is belt-and-braces so
+  // a hand-crafted POST can't file an inverted window.
+  if (body.endDate) {
+    const start = new Date(body.workDate);
+    const end = new Date(body.endDate);
+    if (end.getTime() < start.getTime()) {
+      return NextResponse.json(
+        { error: "Valid To date can't be earlier than Valid From date." },
+        { status: 400 },
+      );
+    }
+  }
+
   if (body.contractorId) {
     const c = await prisma.contractor.findFirst({
       where: { id: body.contractorId, projectId: body.projectId },
@@ -302,6 +322,10 @@ export async function POST(req: Request) {
           title: body.title.trim(),
           description: body.description?.trim() || null,
           workDate: new Date(body.workDate),
+          // endDate defaults to workDate (same-day permit) when the client
+          // doesn't send it — mirrors the schema's nullable behaviour so
+          // older builds keep writing single-day rows correctly.
+          endDate: body.endDate ? new Date(body.endDate) : new Date(body.workDate),
           startTime: body.startTime,
           endTime: body.endTime,
           location: body.location?.trim() || null,

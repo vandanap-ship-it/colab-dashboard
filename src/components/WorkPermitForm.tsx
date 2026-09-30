@@ -109,6 +109,13 @@ export default function WorkPermitForm({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [workDate, setWorkDate] = useState(istDayString());
+  // Colab-parity Valid From / Valid To — endDate defaults to the same
+  // day as workDate so a fresh permit reads as "single day" out of the
+  // box. When the user bumps workDate forward, we auto-track endDate if
+  // it's still on the old workDate — but stop tracking as soon as the
+  // user picks their own endDate explicitly (a manual pick wins).
+  const [endDate, setEndDate] = useState(() => istDayString());
+  const [endDateTouched, setEndDateTouched] = useState(false);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("18:00");
   const [location, setLocation] = useState("");
@@ -174,7 +181,16 @@ export default function WorkPermitForm({
       setError("Pick at least one approver.");
       return;
     }
-    if (!isValidPermitTimeWindow(type, startTime, endTime)) {
+    if (endDate && endDate < workDate) {
+      setError("Valid To date can't be earlier than Valid From date.");
+      return;
+    }
+    // Time-window check only bites for SAME-DAY permits. When the
+    // permit spans multiple days (workDate < endDate), any start/end
+    // time combination is valid because the real end (endDate + endTime)
+    // is always after the real start (workDate + startTime).
+    const singleDay = !endDate || endDate === workDate;
+    if (singleDay && !isValidPermitTimeWindow(type, startTime, endTime)) {
       setError(
         type === "NIGHT_WORK"
           ? "Start and end time can't be the same."
@@ -274,6 +290,11 @@ export default function WorkPermitForm({
       title: title.trim(),
       description: description.trim() || undefined,
       workDate,
+      // Only send endDate when it's a real multi-day permit — for
+      // same-day the server defaults to workDate anyway, so we keep
+      // the payload smaller and legacy clients that never carried
+      // endDate stay identical on the wire.
+      endDate: endDate && endDate !== workDate ? endDate : undefined,
       startTime,
       endTime,
       location: location.trim() || undefined,
@@ -339,6 +360,8 @@ export default function WorkPermitForm({
     setTitle("");
     setDescription("");
     setWorkDate(istDayString());
+    setEndDate(istDayString());
+    setEndDateTouched(false);
     setStartTime("09:00");
     setEndTime("18:00");
     setLocation("");
@@ -380,6 +403,8 @@ export default function WorkPermitForm({
     setTitle("");
     setDescription("");
     setWorkDate(istDayString());
+    setEndDate(istDayString());
+    setEndDateTouched(false);
     setStartTime("09:00");
     setEndTime("18:00");
     setPhotos([]);
@@ -435,10 +460,20 @@ export default function WorkPermitForm({
   // Night Work permits deliberately cross midnight — "22:00 → 02:00" is
   // a normal slab-pour shift. isValidPermitTimeWindow relaxes the check
   // for that type; every other permit stays same-day.
-  const timeOkForStep1 = isValidPermitTimeWindow(type, startTime, endTime);
+  //
+  // For a multi-day permit (endDate > workDate) any time combination is
+  // valid because the real end (endDate + endTime) always follows the
+  // real start (workDate + startTime). Only same-day permits need the
+  // strict time-window check.
+  const singleDayPermit = !endDate || endDate === workDate;
+  const timeOkForStep1 = singleDayPermit
+    ? isValidPermitTimeWindow(type, startTime, endTime)
+    : true;
+  const dateOkForStep1 =
+    workDate.length > 0 && (!endDate || endDate >= workDate);
   const canAdvance =
     step === 1
-      ? title.trim().length >= 3 && workDate.length > 0 && timeOkForStep1
+      ? title.trim().length >= 3 && dateOkForStep1 && timeOkForStep1
       : step === 2
         ? contractorId.length > 0 && selectedApprovers.size > 0
         : true;
@@ -706,34 +741,69 @@ export default function WorkPermitForm({
         <PhotoPicker photos={photos} setPhotos={setPhotos} max={6} />
       </div>
 
-      <div className={`grid grid-cols-3 gap-2 ${step === 1 ? "" : "hidden"}`}>
-        <label className="block">
-          <FieldLabel>Permit Date</FieldLabel>
-          <input
-            type="date"
-            className={inputCls}
-            value={workDate}
-            onChange={(e) => setWorkDate(e.target.value)}
-          />
-        </label>
-        <label className="block">
-          <FieldLabel>Valid From</FieldLabel>
-          <input
-            type="time"
-            className={inputCls}
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-          />
-        </label>
-        <label className="block">
-          <FieldLabel>Valid To</FieldLabel>
-          <input
-            type="time"
-            className={inputCls}
-            value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
-          />
-        </label>
+      {/* Colab-parity Valid From / Valid To pair — dates on the top row,
+          times on the bottom. A permit can now span multiple days
+          (Abhishek 2026-09-30: "the permit date can be from today to
+          tomorrow"). endDate defaults to workDate for the common
+          single-day case; the user can bump it forward independently. */}
+      <div className={`space-y-2 ${step === 1 ? "" : "hidden"}`}>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <FieldLabel>Valid From</FieldLabel>
+            <input
+              type="date"
+              className={inputCls}
+              value={workDate}
+              onChange={(e) => {
+                const next = e.target.value;
+                // Auto-track endDate while the user hasn't touched it —
+                // moving Valid From forward drags Valid To with it so a
+                // single-day permit stays single-day without a second
+                // click. Once the user picks endDate manually, we stop.
+                if (!endDateTouched) setEndDate(next);
+                else if (endDate && next && next > endDate) {
+                  // But if the new start is AFTER the user's manual end,
+                  // pull end forward too — an inverted window is a bug.
+                  setEndDate(next);
+                }
+                setWorkDate(next);
+              }}
+            />
+          </label>
+          <label className="block">
+            <FieldLabel>Valid To</FieldLabel>
+            <input
+              type="date"
+              className={inputCls}
+              value={endDate}
+              min={workDate || undefined}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setEndDateTouched(true);
+              }}
+            />
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <FieldLabel>Start time</FieldLabel>
+            <input
+              type="time"
+              className={inputCls}
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+            />
+          </label>
+          <label className="block">
+            <FieldLabel>End time</FieldLabel>
+            <input
+              type="time"
+              className={inputCls}
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+            />
+          </label>
+        </div>
       </div>
 
       <label className={`block ${step === 1 ? "" : "hidden"}`}>
@@ -1060,8 +1130,22 @@ export default function WorkPermitForm({
           <div className="rounded-lg border border-stone-200 bg-white p-4 space-y-2">
             <p className="text-[13px] font-semibold text-ink mb-1">Review Permit</p>
             <ReviewRow label="Permit Type" value={WORK_PERMIT_TYPE_LABELS[type].toUpperCase()} />
-            <ReviewRow label="Date" value={workDate ? new Date(workDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"} />
-            <ReviewRow label="Valid From – To" value={`${startTime} – ${endTime}`} />
+            <ReviewRow
+              label="Dates"
+              value={(() => {
+                if (!workDate) return "—";
+                const fmt = (v: string) =>
+                  new Date(v).toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  });
+                const start = fmt(workDate);
+                if (!endDate || endDate === workDate) return start;
+                return `${start} – ${fmt(endDate)}`;
+              })()}
+            />
+            <ReviewRow label="Times" value={`${startTime} – ${endTime}`} />
             <ReviewRow label="Description" value={(description.trim() || WORK_PERMIT_TYPE_LABELS[type]).toUpperCase()} />
             <ReviewRow
               label="Contractor"
@@ -1153,10 +1237,14 @@ export default function WorkPermitForm({
       </div>
 
       {/* Colab-parity wizard footer — sticky bar at the bottom with
-          Back on the left and Continue / Submit on the right. */}
+          Back on the left and Continue / Submit on the right.
+          Positioned ABOVE the mobile layout's tab bar (56 px tall + iOS
+          safe-area) so it doesn't get painted under the persistent bottom
+          nav. z-30 keeps it above ordinary scrolling content but below
+          modals + bottom sheets, which use z-40 / z-50. */}
       <div
-        className="fixed bottom-0 inset-x-0 max-w-md mx-auto bg-ivory border-t border-sandstone-100 px-4 py-3"
-        style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+        className="fixed inset-x-0 max-w-md mx-auto bg-ivory border-t border-sandstone-100 px-4 py-3 z-30"
+        style={{ bottom: "calc(56px + env(safe-area-inset-bottom))" }}
       >
         {/* Hint text above the buttons explaining what's missing when
             Continue is disabled. Silent when the form is complete for
@@ -1166,11 +1254,15 @@ export default function WorkPermitForm({
             {step === 1
               ? title.trim().length < 3
                 ? "Add a title (at least 3 characters) to continue."
-                : !timeOkForStep1
-                  ? type === "NIGHT_WORK"
-                    ? "Start and end time can't be the same."
-                    : "End time must be after start time."
-                  : "Work date is required."
+                : !dateOkForStep1
+                  ? workDate.length === 0
+                    ? "Valid From date is required."
+                    : "Valid To date can't be earlier than Valid From date."
+                  : !timeOkForStep1
+                    ? type === "NIGHT_WORK"
+                      ? "Start and end time can't be the same."
+                      : "End time must be after start time."
+                    : "Valid From date is required."
               : step === 2
                 ? contractorId.length === 0
                   ? "Pick a contractor before continuing."

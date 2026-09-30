@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import {
   Plus,
   X,
@@ -72,6 +73,24 @@ export default function QuickAddFab({
     href: a.hrefFor(projectId),
   }));
   if (items.length === 0) return null;
+
+  // Hide on wizard / form pages. Rendering "+" over a form that already
+  // has its own primary Continue / Submit button is confusing (Abhishek
+  // 2026-09-30: the FAB was covering the Permit form's Continue footer)
+  // and there's no "quick add" a filler needs while they're already
+  // filling something. Match any create / edit route across mobile.
+  const pathname = usePathname() ?? "";
+  const HIDE_FAB_PATTERNS = [
+    "/permit/new",
+    "/inspection/new",
+    "/inspection/edit/",
+    "/progress/new",
+    "/hindrance/new",
+    "/concern/new",
+    "/issue/new",
+    "/manpower/new",
+  ];
+  if (HIDE_FAB_PATTERNS.some((p) => pathname.includes(p))) return null;
 
   return (
     <>

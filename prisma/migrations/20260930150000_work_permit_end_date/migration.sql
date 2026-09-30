@@ -1,0 +1,1 @@
+ALTER TABLE "WorkPermit" ADD COLUMN "endDate" TIMESTAMP(3);

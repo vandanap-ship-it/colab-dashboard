@@ -155,8 +155,17 @@ export default async function MobilePermitDetailPage({
           <div className="px-3 pb-3 space-y-2 text-sm border-t border-stone-100 pt-3">
             <div className="flex items-center gap-2 text-stone-700">
               <Calendar className="w-4 h-4 text-stone-400 shrink-0" />
-              <span className="text-stone-500 text-xs uppercase tracking-wider mr-1">Work date</span>
-              <span className="font-medium">{fmtDate(permit.workDate)}</span>
+              <span className="text-stone-500 text-xs uppercase tracking-wider mr-1">
+                {permit.endDate && permit.endDate.getTime() !== permit.workDate.getTime()
+                  ? "Valid from – to"
+                  : "Work date"}
+              </span>
+              <span className="font-medium">
+                {fmtDate(permit.workDate)}
+                {permit.endDate && permit.endDate.getTime() !== permit.workDate.getTime()
+                  ? ` – ${fmtDate(permit.endDate)}`
+                  : ""}
+              </span>
             </div>
             <div className="flex items-center gap-2 text-stone-700">
               <Clock className="w-4 h-4 text-stone-400 shrink-0" />

@@ -659,9 +659,13 @@ model WorkPermit {
   type         String
   title        String // one-line summary shown in lists
   description  String? // free-form details about the work being permitted
-  // The day the work is authorized for. Time-of-day fields are separate so
-  // the same permit can span an evening-into-night without spanning dates.
+  // The day the work is authorized for. workDate is the START date;
+  // endDate is nullable so historical single-day permits (2026-Sep and
+  // earlier) still read cleanly — a null endDate means "same day as
+  // workDate". Times are separate so a permit can span evening-into-
+  // night without spanning dates (endDate == workDate + endTime late).
   workDate     DateTime
+  endDate      DateTime?
   startTime    String // "HH:MM" 24-hour, e.g. "09:00"
   endTime      String // "HH:MM" 24-hour, e.g. "18:00"
   // Free-text location — Colab's export shows values like "Villa 14 / Gr Floor"
