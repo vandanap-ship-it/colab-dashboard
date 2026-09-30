@@ -160,12 +160,31 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       return badRequest("Rejection reason is required.");
     }
 
-    // Only internal (full-access) staff can act on this — external scoped
-    // users are barred from being approvers even if their module happens
-    // to include PERMIT. Prevents "vendor approves their own work permit"
-    // failure mode.
-    if (!hasFullAccess(session.user.modules) && (kind === "approve" || kind === "reject")) {
-      return forbidden("Only internal staff can approve or reject work permits.");
+    // Only authorised staff can approve / reject a permit. Two paths:
+    //   1. Internal full-access staff (`hasFullAccess` == modules === null).
+    //   2. Any user whose canApproveWorkPermits flag was explicitly
+    //      toggled ON in admin — this covers WL site managers like
+    //      Girish R who are scoped to SAFETY but are the intended
+    //      approvers for the module (Shraddha 2026-09-30). The
+    //      picker on the raise form filters to this same flag, so the
+    //      two ends stay in sync.
+    // Vendor-approves-their-own-permit is still prevented because
+    // (a) the requester is already excluded from approverIds by both
+    // create + patch guards, and (b) an admin has to explicitly flip
+    // this toggle in Admin > Users — a scoped contractor doesn't
+    // become an approver by accident.
+    if (kind === "approve" || kind === "reject") {
+      if (!admin && !hasFullAccess(session.user.modules)) {
+        const me = await prisma.user.findUnique({
+          where: { id: session.user.id },
+          select: { canApproveWorkPermits: true },
+        });
+        if (!me?.canApproveWorkPermits) {
+          return forbidden(
+            "You aren't authorised to approve or reject work permits. Ask an admin to enable Approve Permits on your account.",
+          );
+        }
+      }
     }
 
     const now = new Date();

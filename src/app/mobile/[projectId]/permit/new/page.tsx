@@ -29,17 +29,17 @@ export default async function NewWorkPermitPage({
   });
   if (!project) notFound();
 
-  // Approvers = active internal-staff users tagged with
-  // canApproveWorkPermits=true. Was "every internal user" (`modules: null`)
-  // pre-Sep 17 — Shraddha asked for the picker to only show the site
-  // manager(s) actually authorised to approve. Admin > Users toggles the
-  // flag; the API's approve/reject gate still guards the server-side
-  // decision independently, so this is a UX narrowing rather than a
-  // security boundary.
+  // Approvers = active users with canApproveWorkPermits=true. The flag
+  // is the admin's explicit statement of "this user is authorised" and
+  // supersedes the older `modules: null` filter (which incorrectly
+  // excluded WL staff who happen to be scoped — e.g. Girish R,
+  // SITE_MANAGER, SAFETY-scoped, marked canApprove but hidden from
+  // the picker until this widening). The server-side approve/reject
+  // gate accepts the same flag so a scoped-but-authorised approver
+  // can actually complete the action too.
   const users = await prisma.user.findMany({
     where: {
       active: true,
-      modules: null,
       canApproveWorkPermits: true,
     },
     select: { id: true, name: true, username: true, role: true },
