@@ -31,13 +31,17 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 describe("PROGRESS_GATES registry", () => {
-  it("has the five industry-standard defaults", () => {
+  it("carries the industry-standard sequences White Lotus enforces", () => {
     expect(PROGRESS_GATES.map((g) => g.code)).toEqual([
       "rebar-before-concreting",
       "shuttering-before-rebar",
       "waterproofing-before-flooring",
       "mep-rough-in-before-plastering",
       "plastering-before-painting",
+      "hacking-before-plastering",
+      "masonry-before-plastering",
+      "antitermite-before-pcc",
+      "mesh-fixing-before-plastering",
     ]);
   });
   it("gives every gate a human-readable requirement string", () => {
@@ -93,10 +97,28 @@ describe("gatesForActivity", () => {
     }
   });
 
-  it("returns empty for activities with no matching gate", () => {
-    for (const name of ["Excavation", "PCC", "Anti-termite treatment", "Marking / Setting Out"]) {
+  it("returns empty for activities that no gate targets as the blocked step", () => {
+    // These are activities that never appear on the LEFT side of a
+    // gate pair. PCC is now on the left (of antitermite-before-pcc), so
+    // it's removed from this list.
+    for (const name of ["Excavation", "Marking / Setting Out", "Site cleaning"]) {
       expect(gatesForActivity(name)).toEqual([]);
     }
+  });
+
+  it("matches PCC → anti-termite prerequisite (new pair, 2026-09-30)", () => {
+    for (const name of ["PCC", "PCC pour", "Plain Cement Concrete"]) {
+      const gates = gatesForActivity(name);
+      expect(gates.some((g) => g.code === "antitermite-before-pcc")).toBe(true);
+    }
+  });
+
+  it("matches Plastering → hacking, masonry, mesh-fixing prerequisites (new pairs, 2026-09-30)", () => {
+    const gates = gatesForActivity("Plastering");
+    const codes = gates.map((g) => g.code);
+    expect(codes).toContain("hacking-before-plastering");
+    expect(codes).toContain("masonry-before-plastering");
+    expect(codes).toContain("mesh-fixing-before-plastering");
   });
 
   it("returns multiple gates when an activity is both a step and a prerequisite", () => {
