@@ -529,7 +529,10 @@ export default async function MobilePermitDetailPage({
       </div>
 
       {showBar && (
-        <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3">
+        <div
+          className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3"
+          style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+        >
           <MobilePermitActions
             permitId={permit.id}
             currentStatus={permit.status as WorkPermitStatus}
