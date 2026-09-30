@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { isScopedUser } from "@/lib/modules";
 import { prisma } from "@/lib/prisma";
 import { getPortfolioStats } from "@/lib/projectStats";
+import { istDayStart } from "@/lib/istDay";
 
 export type ProjectSummary = {
   id: string;
@@ -135,9 +136,12 @@ export async function GET() {
 
   const projectIds = projects.map((p) => p.id);
 
-  // Today at UTC midnight — the canonical "today" for the manpower rollup.
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  // Today at IST-anchored UTC midnight — Amanvana's site team is in
+  // India, so "today" for their manpower / trade-plan rollup starts at
+  // 00:00 IST (18:30 UTC previous day). Naive UTC boundaries would show
+  // yesterday's rollup to anyone opening the landing page between 00:00
+  // and 05:30 IST.
+  const today = istDayStart();
 
   const [stats, concernCounts, issueCounts, permitCounts, manpowerToday, plansToday] = await Promise.all([
     getPortfolioStats(projectIds),

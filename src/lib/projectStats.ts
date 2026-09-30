@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { plannedPercentFor } from "@/lib/schedule";
+import { istDayStart } from "@/lib/istDay";
 
 export type ProjectStats = {
   totalActivities: number;
@@ -128,7 +129,7 @@ export function computeProjectStats(
  * 3 DB round-trips. For listing multiple projects use getPortfolioStats
  * instead — it batches everything into 3 queries total regardless of N.
  */
-export async function getProjectStats(projectId: string, today = new Date()): Promise<ProjectStats> {
+export async function getProjectStats(projectId: string, today = istDayStart()): Promise<ProjectStats> {
   const [nodes, project, hindranceCount, colabPlanned, colabActual] = await Promise.all([
     prisma.wBSNode.findMany({
       where: { projectId },
@@ -183,7 +184,7 @@ export async function getProjectStats(projectId: string, today = new Date()): Pr
  */
 export async function getPortfolioStats(
   projectIds: string[],
-  today = new Date(),
+  today = istDayStart(),
 ): Promise<Record<string, ProjectStats>> {
   if (projectIds.length === 0) return {};
 
