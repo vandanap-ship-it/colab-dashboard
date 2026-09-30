@@ -197,8 +197,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       entityType: "WorkPermit",
       entityId: id,
       summary:
-        `${existing.type} "${existing.title.slice(0, 60)}" → ${newStatus}` +
-        (kind === "reject" && rejectionReason ? ` (${rejectionReason.slice(0, 80)})` : ""),
+        `${existing.type}${existing.displayId ? ` ${existing.displayId}` : ""} "${existing.title.slice(0, 60)}" → ${newStatus}` +
+        (kind === "reject" && rejectionReason ? ` (${rejectionReason.slice(0, 80)})` : "") +
+        (kind === "suspend" && suspensionReason ? ` (${suspensionReason.slice(0, 80)})` : ""),
     });
 
     // Notify the requester on approve / reject. Skip close — that's a
@@ -264,7 +265,15 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     const { id } = await ctx.params;
     const existing = await prisma.workPermit.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true, projectId: true, type: true, title: true, requesterId: true, status: true },
+      select: {
+        id: true,
+        projectId: true,
+        type: true,
+        title: true,
+        requesterId: true,
+        status: true,
+        displayId: true,
+      },
     });
     if (!existing) return notFound();
     if (existing.requesterId !== session.user.id && !isAdmin(session.user.role)) return forbidden();
@@ -281,7 +290,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
       action: "DELETE",
       entityType: "WorkPermit",
       entityId: id,
-      summary: `Work permit trashed: ${existing.type} · ${existing.title.slice(0, 60)}`,
+      summary: `Work permit trashed${existing.displayId ? ` ${existing.displayId}` : ""}: ${existing.type} · ${existing.title.slice(0, 60)}`,
     });
     return NextResponse.json({ ok: true });
   } catch (e) {

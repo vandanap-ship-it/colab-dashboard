@@ -316,7 +316,7 @@ export async function POST(req: Request) {
       action: "CREATE",
       entityType: "WorkPermit",
       entityId: workPermit.id,
-      summary: `Work permit raised: ${workPermit.type} · ${workPermit.title}`,
+      summary: `Work permit raised${workPermit.displayId ? ` ${workPermit.displayId}` : ""}: ${workPermit.type} · ${workPermit.title}`,
     });
 
     // Approver notification emails. Fire-and-forget after DB commit — silent

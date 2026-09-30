@@ -202,7 +202,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/progress/[id]/p
     action: "CREATE",
     entityType: "ProgressEntry",
     entityId: entry.id,
-    summary: `Progress published from draft (${achieved} achieved, cumulative ${cumulative})`,
+    summary: `Progress published${entry.displayId ? ` ${entry.displayId}` : ""} from draft (${achieved} achieved, cumulative ${cumulative})`,
   });
 
   // Milestone-completion email fires outside the transaction so a slow

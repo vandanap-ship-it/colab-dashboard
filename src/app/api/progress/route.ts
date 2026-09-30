@@ -336,7 +336,7 @@ export async function POST(req: Request) {
       action: "CREATE",
       entityType: "ProgressEntry",
       entityId: entry.id,
-      summary: `Progress logged for activity (${achieved} achieved, cumulative ${cumulative})`,
+      summary: `Progress logged${entry.displayId ? ` ${entry.displayId}` : ""} for activity (${achieved} achieved, cumulative ${cumulative})`,
     });
   }
 
