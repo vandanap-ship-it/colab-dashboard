@@ -5,6 +5,7 @@ import {
   isValidHhMm,
   parseApproverIds,
   serializeApproverIds,
+  generatePermitDisplayId,
 } from "@/lib/workPermit";
 
 describe("allowedWorkPermitTransition", () => {
@@ -50,6 +51,60 @@ describe("allowedWorkPermitTransition", () => {
     // requester could self-close their own pending permit and bypass the
     // whole approval workflow.
     expect(allowedWorkPermitTransition("PENDING", "CLOSED")).toBeNull();
+  });
+
+  // Colab-parity SUSPENDED workflow (added 2026-09-30, commit c6db4d3).
+  // Suspend pauses an approved permit; Resume re-approves; a suspended
+  // permit can also close or reject terminally.
+  it("APPROVED → SUSPENDED = suspend", () => {
+    expect(allowedWorkPermitTransition("APPROVED", "SUSPENDED")).toBe("suspend");
+  });
+
+  it("SUSPENDED → APPROVED = resume", () => {
+    expect(allowedWorkPermitTransition("SUSPENDED", "APPROVED")).toBe("resume");
+  });
+
+  it("SUSPENDED → CLOSED = close (retire a paused permit at end of shift)", () => {
+    expect(allowedWorkPermitTransition("SUSPENDED", "CLOSED")).toBe("close");
+  });
+
+  it("SUSPENDED → REJECTED = reject (permit can't be safely resumed)", () => {
+    expect(allowedWorkPermitTransition("SUSPENDED", "REJECTED")).toBe("reject");
+  });
+
+  it("blocks PENDING → SUSPENDED (nothing to pause yet)", () => {
+    expect(allowedWorkPermitTransition("PENDING", "SUSPENDED")).toBeNull();
+  });
+
+  it("blocks CLOSED → SUSPENDED and REJECTED → SUSPENDED (terminal states)", () => {
+    expect(allowedWorkPermitTransition("CLOSED", "SUSPENDED")).toBeNull();
+    expect(allowedWorkPermitTransition("REJECTED", "SUSPENDED")).toBeNull();
+  });
+});
+
+describe("generatePermitDisplayId", () => {
+  it("returns a PER-XXXXXXXX format id", () => {
+    const id = generatePermitDisplayId();
+    expect(id).toMatch(/^PER-[A-Z0-9]{8}$/);
+  });
+
+  it("uses an unambiguous alphabet (no I, O, 0, 1 in the suffix)", () => {
+    // Sample the generator 500 times — with 500 samples of 8 chars each
+    // we'd hit the forbidden set within a few iterations if it were
+    // present. Guards against a future well-meaning change to the
+    // alphabet accidentally re-introducing look-alike characters.
+    for (let i = 0; i < 500; i++) {
+      const suffix = generatePermitDisplayId().slice(4);
+      expect(suffix).not.toMatch(/[IO01]/);
+    }
+  });
+
+  it("yields high entropy over many draws (no obvious collision cluster)", () => {
+    // 500 draws from a 32-char alphabet at 8 chars = 32^8 space. Any
+    // collision here means the generator is broken.
+    const set = new Set<string>();
+    for (let i = 0; i < 500; i++) set.add(generatePermitDisplayId());
+    expect(set.size).toBe(500);
   });
 });
 
