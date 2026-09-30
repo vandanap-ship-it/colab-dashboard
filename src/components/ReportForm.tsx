@@ -8,7 +8,8 @@ import PhotoPicker from "./PhotoPicker";
 import HowThisWorks from "./HowThisWorks";
 import { istDayString } from "@/lib/istDay";
 
-type Activity = { id: string; name: string; taskCode: string; path: string[] };
+type Activity = { id: string; name: string; taskCode: string; path: string[]; villaId?: string | null };
+type Villa = { id: string; number: number; label: string | null };
 
 type ExtraField =
   | { kind: "select"; key: string; label: string; options: { value: string; label: string }[]; default: string }
@@ -44,6 +45,15 @@ export default function ReportForm({
   const [activities, setActivities] = useState<Activity[] | null>(null);
   const [activityId, setActivityId] = useState("");
   const [activitySearch, setActivitySearch] = useState("");
+  // Explicit Villa filter above the activity search. Shraddha 2026-09-30
+  // on Thangamani's observation form: he wanted to tag which villa the
+  // issue was on without having to guess the villa name inside a
+  // free-text activity search. Empty string = All villas (the previous
+  // behaviour). Picking a villa narrows the activity list AND is sent
+  // to the API as `villaId` so downstream reports can group by villa
+  // even when no specific activity was picked.
+  const [villas, setVillas] = useState<Villa[]>([]);
+  const [villaId, setVillaId] = useState("");
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [extras, setExtras] = useState<Record<string, string | number>>(() => {
@@ -92,14 +102,36 @@ export default function ReportForm({
     };
   }, [projectId]);
 
+  // Villa list feeds the top-of-picker Villa dropdown. Silent failure
+  // (empty list) is fine — the dropdown just doesn't render extra
+  // options and the form still saves at project level.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/projects/${projectId}/villas`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { villas: [] }))
+      .then((d) => {
+        if (!cancelled) setVillas(Array.isArray(d.villas) ? d.villas : []);
+      })
+      .catch(() => {
+        if (!cancelled) setVillas([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
   const filtered = useMemo(() => {
     if (!activities) return [];
     const q = activitySearch.trim().toLowerCase();
-    if (!q) return activities.slice(0, 50);
-    return activities
-      .filter((a) => a.name.toLowerCase().includes(q) || a.path.join(" / ").toLowerCase().includes(q))
-      .slice(0, 50);
-  }, [activities, activitySearch]);
+    let list = activities;
+    if (villaId) list = list.filter((a) => a.villaId === villaId);
+    if (q) {
+      list = list.filter(
+        (a) => a.name.toLowerCase().includes(q) || a.path.join(" / ").toLowerCase().includes(q),
+      );
+    }
+    return list.slice(0, 50);
+  }, [activities, activitySearch, villaId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -159,6 +191,12 @@ export default function ReportForm({
       idempotencyKey: crypto.randomUUID(),
       projectId,
       wbsNodeId: activityId || undefined,
+      // Villa tag rides on the payload separately so a project-level
+      // observation (no specific activity picked) can still be filtered
+      // by villa downstream. Server-side schemas that don't yet accept
+      // villaId simply ignore it (added additive to the Issue POST
+      // in a follow-up when Shraddha wants reports grouped by villa).
+      villaId: villaId || undefined,
       description: description.trim(),
       photoUrls,
       ...coercedExtras,
@@ -428,6 +466,31 @@ export default function ReportForm({
       )}
 
       <div className="space-y-2">
+        {villas.length > 0 && (
+          <label className="block">
+            <span className="text-sm font-medium text-stone-700">Villa</span>
+            <select
+              value={villaId}
+              onChange={(e) => {
+                setVillaId(e.target.value);
+                // If the picked activity belongs to a different villa,
+                // clear it so the picker doesn't show a hidden selection.
+                if (e.target.value && activityId) {
+                  const a = activities?.find((x) => x.id === activityId);
+                  if (a && a.villaId !== e.target.value) setActivityId("");
+                }
+              }}
+              className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">All villas</option>
+              {villas.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label || `Villa ${String(v.number).padStart(2, "0")}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="block">
           <span className="text-sm font-medium text-stone-700">
             Activity <span className="text-stone-400">(optional)</span>
