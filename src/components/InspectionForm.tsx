@@ -18,7 +18,19 @@ type Activity = {
   path: string[];
   villaId: string | null;
   sectionId: string | null;
+  // Colab-parity Activity Head — the fourth cascade level between Sub
+  // Location and Activity. Populated from WBSNode.category on import;
+  // rows with null/blank category fall into a synthetic "General" bucket
+  // when the picker groups by head (see `activityHeadFor` below).
+  category: string | null;
 };
+
+// Canonical Activity Head label for an activity. Blank category → "General"
+// bucket, so every row is groupable without hiding uncategorised activities.
+function activityHeadFor(a: Pick<Activity, "category">): string {
+  const raw = (a.category ?? "").trim();
+  return raw.length > 0 ? raw : "General";
+}
 type Villa = { id: string; number: number; label: string | null };
 type Section = { id: string; code: string; name: string };
 
@@ -227,14 +239,22 @@ export default function InspectionForm({
     editDraft?.executedQuantityPct == null ? "" : String(editDraft.executedQuantityPct),
   );
 
-  // Colab-parity location cascade: Villa → Sub Location → Activity.
-  // Each level opens its own bottom sheet, matching the native app.
+  // Colab-parity location cascade · 4 levels:
+  //   Villa → Sub Location → Activity Head → Activity.
+  //
+  // Each level opens its own bottom sheet. Head is derived from
+  // WBSNode.category (blank → "General" bucket), so no schema change
+  // was needed. The fifth Colab level (Sub-Sub Location) is deferred —
+  // Amanvana's WBS doesn't hold that data and the Colab spec confirms
+  // the slot renders as "—" for our project (see phase2 exclusions).
   const [villas, setVillas] = useState<Villa[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [pickedVillaId, setPickedVillaId] = useState<string>("");
   const [pickedSectionId, setPickedSectionId] = useState<string>("");
+  const [pickedActivityHead, setPickedActivityHead] = useState<string>("");
   const [villaPickerOpen, setVillaPickerOpen] = useState(false);
   const [sectionPickerOpen, setSectionPickerOpen] = useState(false);
+  const [headPickerOpen, setHeadPickerOpen] = useState(false);
   const [activityPickerOpen, setActivityPickerOpen] = useState(false);
   // Reschedule popup — Colab's third button. Opens a date picker + note.
   const [reschedPopupOpen, setReschedPopupOpen] = useState(false);
@@ -359,14 +379,17 @@ export default function InspectionForm({
 
   // If an activity is preselected (from Log Progress deep-link or a
   // resume-edit draft), auto-fill the cascade so the pickers show the
-  // right breadcrumb from the start.
+  // right breadcrumb from the start. Activity Head is derived — never
+  // guess it from a stale user selection, always compute from the
+  // chosen activity's category so the breadcrumb reads the real head.
   useEffect(() => {
     if (!activities || !activityId) return;
     const a = activities.find((x) => x.id === activityId);
     if (!a) return;
     if (a.villaId && !pickedVillaId) setPickedVillaId(a.villaId);
     if (a.sectionId && !pickedSectionId) setPickedSectionId(a.sectionId);
-  }, [activities, activityId, pickedVillaId, pickedSectionId]);
+    if (!pickedActivityHead) setPickedActivityHead(activityHeadFor(a));
+  }, [activities, activityId, pickedVillaId, pickedSectionId, pickedActivityHead]);
 
   // Load the reviewer pool once. Client-side filters to the roles that
   // can actually review inspections; the server ultimately re-checks so
@@ -406,14 +429,18 @@ export default function InspectionForm({
     if (!activities) return [];
     const q = activitySearch.trim().toLowerCase();
     let list = activities;
-    // Colab-parity: the cascade narrows by Villa, then Sub Location.
-    // Both are optional — leaving them blank falls back to search-only
-    // behaviour so the pre-cascade flow still works.
+    // Colab-parity: the cascade narrows by Villa, Sub Location, then
+    // Activity Head. All three are optional — leaving them blank falls
+    // back to search-only behaviour so pre-cascade / deep-link flows
+    // (?wbsNodeId=…) still work.
     if (pickedVillaId) {
       list = list.filter((a) => a.villaId === pickedVillaId);
     }
     if (pickedSectionId) {
       list = list.filter((a) => a.sectionId === pickedSectionId);
+    }
+    if (pickedActivityHead) {
+      list = list.filter((a) => activityHeadFor(a) === pickedActivityHead);
     }
     if (q) {
       list = list.filter(
@@ -421,7 +448,30 @@ export default function InspectionForm({
       );
     }
     return list.slice(0, 200);
-  }, [activities, activitySearch, pickedVillaId, pickedSectionId]);
+  }, [activities, activitySearch, pickedVillaId, pickedSectionId, pickedActivityHead]);
+
+  // Unique Activity Heads under the currently picked Villa + Sub Location.
+  // Sorted alphabetically with "General" pinned to the top so the fallback
+  // bucket is always where the site engineer looks first when nothing is
+  // categorised yet on his villa.
+  const availableHeads = useMemo(() => {
+    if (!activities) return [] as { name: string; count: number }[];
+    let list = activities;
+    if (pickedVillaId) list = list.filter((a) => a.villaId === pickedVillaId);
+    if (pickedSectionId) list = list.filter((a) => a.sectionId === pickedSectionId);
+    const counts = new Map<string, number>();
+    for (const a of list) {
+      const h = activityHeadFor(a);
+      counts.set(h, (counts.get(h) ?? 0) + 1);
+    }
+    const rows = Array.from(counts, ([name, count]) => ({ name, count }));
+    rows.sort((a, b) => {
+      if (a.name === "General" && b.name !== "General") return -1;
+      if (b.name === "General" && a.name !== "General") return 1;
+      return a.name.localeCompare(b.name);
+    });
+    return rows;
+  }, [activities, pickedVillaId, pickedSectionId]);
 
   const villaLabel = (v: Villa | undefined) =>
     !v ? "" : v.label && v.label.trim() ? v.label : `Villa ${String(v.number).padStart(2, "0")}`;
@@ -1049,11 +1099,13 @@ export default function InspectionForm({
         </div>
       </div>
 
-      {/* Colab-parity location cascade · Villa → Sub Location → Activity.
-          Each step is a tap-to-open bottom sheet. Selecting Villa opens
-          Sub Location; selecting Sub Location opens Activity. Skipping a
-          level (leaving Villa blank) falls back to a flat activity
-          search so callers that pre-select via ?wbsNodeId still work. */}
+      {/* Colab-parity location cascade · 4 levels:
+             Villa → Sub Location → Activity Head → Activity.
+          Each step is a tap-to-open bottom sheet, and each downstream
+          level is disabled until its upstream is picked, matching the
+          native Colab flow. Leaving any level blank still allows the
+          activity picker to fall back to search-only, so ?wbsNodeId=…
+          deep-links and pre-cascade drafts continue to work. */}
       <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-3">
         <div className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wider">
           Location
@@ -1082,6 +1134,27 @@ export default function InspectionForm({
         >
           <span className={pickedSectionId ? "text-stone-900" : "text-stone-400"}>
             {pickedSectionId ? pickedSection?.name : "Select Sub Location"}
+          </span>
+          <span>▾</span>
+        </button>
+
+        {/* Activity Head · Colab-parity 4th cascade level. Enabled once
+            Sub Location is picked. Backed by WBSNode.category with a
+            "General" bucket for rows that haven't been categorised — so
+            every activity is reachable via the cascade even before the
+            WBS gets fully tagged. */}
+        <button
+          type="button"
+          onClick={() => pickedSectionId && setHeadPickerOpen(true)}
+          disabled={!pickedSectionId}
+          className={`w-full flex items-center justify-between rounded-md border px-3 py-2 text-sm text-left ${
+            pickedSectionId
+              ? "border-stone-300 bg-white"
+              : "border-stone-200 bg-stone-50 text-stone-300"
+          }`}
+        >
+          <span className={pickedActivityHead ? "text-stone-900" : "text-stone-400"}>
+            {pickedActivityHead ? pickedActivityHead : "Select Activity Head"}
           </span>
           <span>▾</span>
         </button>
@@ -1463,12 +1536,15 @@ export default function InspectionForm({
                 onClick={() => {
                   setPickedVillaId(v.id);
                   // If the previously picked activity is not in this villa,
-                  // clear it so the cascade stays coherent.
+                  // clear it so the cascade stays coherent. Downstream
+                  // levels (Sub Location, Activity Head) belong to the
+                  // stale villa's context, so they clear together.
                   if (activityId) {
                     const a = activities?.find((x) => x.id === activityId);
                     if (a && a.villaId !== v.id) {
                       setActivityId("");
                       setPickedSectionId("");
+                      setPickedActivityHead("");
                     }
                   }
                   setVillaPickerOpen(false);
@@ -1509,10 +1585,13 @@ export default function InspectionForm({
                   type="button"
                   onClick={() => {
                     setPickedSectionId(s.id);
+                    // Section changed → any downstream head/activity from
+                    // the previous section is now off-topic. Clear both.
                     if (activityId) {
                       const a = activities?.find((x) => x.id === activityId);
                       if (a && a.sectionId !== s.id) setActivityId("");
                     }
+                    setPickedActivityHead("");
                     setSectionPickerOpen(false);
                   }}
                   className={`w-full flex items-center justify-between rounded-md border px-3 py-2.5 text-sm ${
@@ -1534,9 +1613,58 @@ export default function InspectionForm({
         </BottomSheet>
       )}
 
-      {/* Activity picker — filtered leaves matching villa + section
-          (falls back to search-only if either is blank). Keeps the
-          existing search-list UX inside the sheet. */}
+      {/* Activity Head picker — the 4th Colab-parity cascade level.
+          Shows every unique head under the picked Villa + Sub Location,
+          each row carrying a count so the filler sees how many
+          activities the head narrows to. "General" is pinned to the
+          top for the uncategorised bucket. */}
+      {headPickerOpen && pickedSectionId && (
+        <BottomSheet
+          onClose={() => setHeadPickerOpen(false)}
+          title="Select Activity Head"
+        >
+          <div className="mb-2 text-xs font-medium text-stone-500">
+            {villaLabel(pickedVilla)} · {pickedSection?.name}
+          </div>
+          <div className="max-h-72 overflow-y-auto space-y-2">
+            {availableHeads.map((h) => (
+              <button
+                key={h.name}
+                type="button"
+                onClick={() => {
+                  setPickedActivityHead(h.name);
+                  // If the currently picked activity doesn't belong to
+                  // this head, clear it so the summary line stays honest.
+                  if (activityId) {
+                    const a = activities?.find((x) => x.id === activityId);
+                    if (a && activityHeadFor(a) !== h.name) setActivityId("");
+                  }
+                  setHeadPickerOpen(false);
+                }}
+                className={`w-full flex items-center justify-between rounded-md border px-3 py-2.5 text-sm ${
+                  pickedActivityHead === h.name
+                    ? "border-ferrous-500 bg-ferrous-50 text-ferrous-900"
+                    : "border-stone-200 bg-white text-stone-900 hover:bg-stone-50"
+                }`}
+              >
+                <span className="font-medium">{h.name}</span>
+                <span className="text-[11px] text-stone-500 tabular-nums">
+                  {h.count} activit{h.count === 1 ? "y" : "ies"}
+                </span>
+              </button>
+            ))}
+            {availableHeads.length === 0 && (
+              <p className="text-xs text-stone-500 italic">
+                No activity heads for this Sub Location.
+              </p>
+            )}
+          </div>
+        </BottomSheet>
+      )}
+
+      {/* Activity picker — filtered leaves matching villa + section +
+          head (falls back to search-only when any level is blank). Keeps
+          the existing search-list UX inside the sheet. */}
       {activityPickerOpen && (
         <BottomSheet onClose={() => setActivityPickerOpen(false)} title="Select Activity">
           <div className="space-y-2">
