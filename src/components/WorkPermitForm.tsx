@@ -389,7 +389,7 @@ export default function WorkPermitForm({
     step === 1
       ? title.trim().length >= 3 && workDate.length > 0 && startTime < endTime
       : step === 2
-        ? selectedApprovers.size > 0
+        ? contractorId.length > 0 && selectedApprovers.size > 0
         : true;
 
   function goBack() {
@@ -1044,6 +1044,24 @@ export default function WorkPermitForm({
         className="fixed bottom-0 inset-x-0 max-w-md mx-auto bg-ivory border-t border-sandstone-100 px-4 py-3"
         style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       >
+        {/* Hint text above the buttons explaining what's missing when
+            Continue is disabled. Silent when the form is complete for
+            the current step. */}
+        {!canAdvance && step < 4 && (
+          <p className="text-[11px] text-ferrous-600 mb-2 leading-snug">
+            {step === 1
+              ? title.trim().length < 3
+                ? "Add a title (at least 3 characters) to continue."
+                : startTime >= endTime
+                  ? "End time must be after start time."
+                  : "Work date is required."
+              : step === 2
+                ? contractorId.length === 0
+                  ? "Pick a contractor before continuing."
+                  : "Add at least one approver before continuing."
+                : ""}
+          </p>
+        )}
         <div className="grid grid-cols-[auto_1fr] gap-2">
           <button
             type="button"
