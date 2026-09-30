@@ -383,6 +383,10 @@ export default function NewProgressForm({
         return;
       }
     }
+    // Guard against a second Save tap while the first request is in
+    // flight. `pending` also disables the Save buttons, but a fast
+    // double-tap can still land before the state update propagates.
+    if (pending) return;
     setPending(true);
     setError(null);
     const isDraft = mode === "draft";
