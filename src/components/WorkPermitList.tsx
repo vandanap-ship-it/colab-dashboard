@@ -13,6 +13,7 @@ import {
   bucketPermit,
   sortDirectionForTab,
   startOfLocalDay,
+  PERMIT_TAB_ORDER as TAB_ORDER,
   type PermitTabKey as TabKey,
 } from "@/lib/permitBuckets";
 
@@ -63,14 +64,6 @@ type WorkPermit = {
     user: { id: string; name: string; username: string };
   }>;
 };
-
-const TAB_ORDER: { key: TabKey; label: string }[] = [
-  { key: "active", label: "Active" },
-  { key: "future", label: "Future" },
-  { key: "closed", label: "Closed" },
-  { key: "suspended", label: "Suspended" },
-  { key: "rejected", label: "Rejected" },
-];
 
 const bucket = (p: WorkPermit): TabKey => bucketPermit(p);
 

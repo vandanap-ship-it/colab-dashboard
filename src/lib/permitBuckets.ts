@@ -56,3 +56,16 @@ export function bucketPermit(
 export function sortDirectionForTab(tab: PermitTabKey): 1 | -1 {
   return tab === "future" ? 1 : -1;
 }
+
+/**
+ * Ordered tab strip config for the permit list. Matches Colab's Abhishek
+ * zip screens 3-9. Kept alongside the bucket function so a new tab
+ * lands in both places at once (or not at all).
+ */
+export const PERMIT_TAB_ORDER: readonly { key: PermitTabKey; label: string }[] = [
+  { key: "active", label: "Active" },
+  { key: "future", label: "Future" },
+  { key: "closed", label: "Closed" },
+  { key: "suspended", label: "Suspended" },
+  { key: "rejected", label: "Rejected" },
+] as const;

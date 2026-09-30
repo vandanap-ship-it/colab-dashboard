@@ -3,6 +3,7 @@ import {
   bucketPermit,
   sortDirectionForTab,
   startOfLocalDay,
+  PERMIT_TAB_ORDER,
 } from "@/lib/permitBuckets";
 
 /**
@@ -91,5 +92,27 @@ describe("sortDirectionForTab", () => {
     expect(sortDirectionForTab("closed")).toBe(-1);
     expect(sortDirectionForTab("suspended")).toBe(-1);
     expect(sortDirectionForTab("rejected")).toBe(-1);
+  });
+});
+
+describe("PERMIT_TAB_ORDER", () => {
+  it("carries all five Colab-parity tabs in the fixed order", () => {
+    expect(PERMIT_TAB_ORDER.map((t) => t.key)).toEqual([
+      "active",
+      "future",
+      "closed",
+      "suspended",
+      "rejected",
+    ]);
+  });
+
+  it("labels match Colab's exact spelling (case + words)", () => {
+    expect(PERMIT_TAB_ORDER.map((t) => t.label)).toEqual([
+      "Active",
+      "Future",
+      "Closed",
+      "Suspended",
+      "Rejected",
+    ]);
   });
 });
