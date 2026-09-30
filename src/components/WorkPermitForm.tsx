@@ -157,6 +157,7 @@ export default function WorkPermitForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (pending) return; // guard against a fast double-tap on Submit Permit
     setError(null);
     if (title.trim().length < 3) {
       setError("Give the permit a short title (3+ characters).");
