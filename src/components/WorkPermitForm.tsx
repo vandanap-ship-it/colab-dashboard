@@ -1021,14 +1021,31 @@ export default function WorkPermitForm({
               label="Approval Levels"
               value={`${selectedApprovers.size > 0 ? 1 : 0} level · ${selectedApprovers.size} approver${selectedApprovers.size === 1 ? "" : "s"}`}
             />
+            {/* Show the count that will ACTUALLY submit — empty rows
+                (no name / role / count) are filtered on the payload
+                clean step and shouldn't show up in the review. */}
             <ReviewRow
               label="Labour entries"
-              value={labourEntries.length === 0 ? "None" : String(labourEntries.length)}
+              value={
+                (() => {
+                  const n = labourEntries.filter(
+                    (r) => r.workerName.trim() || r.role.trim() || r.count.trim(),
+                  ).length;
+                  return n === 0 ? "None" : String(n);
+                })()
+              }
             />
             {type === "NIGHT_WORK" && (
               <ReviewRow
                 label="Personnel in Attendance"
-                value={personnelEntries.length === 0 ? "None" : String(personnelEntries.length)}
+                value={
+                  (() => {
+                    const n = personnelEntries.filter(
+                      (r) => r.workerName.trim() || r.role.trim(),
+                    ).length;
+                    return n === 0 ? "None" : String(n);
+                  })()
+                }
               />
             )}
             <ReviewRow label="Activity Head" value={activityHead || "—"} />
