@@ -70,16 +70,38 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       return badRequest("Checklist replies are only editable while the permit is pending or suspended.");
     }
 
-    const rows = narrowCheckpoints(permit.checklistResponses);
-    const nextRows = applyReviewerReply(rows, index, { reviewerNote, reviewerPhotoUrl });
-    if (nextRows === null) {
-      return badRequest(`Checkpoint index out of range (permit has ${rows.length} rows).`);
+    // Concurrent-write safety: two reviewers editing DIFFERENT indices
+    // simultaneously would each read the same array and one would clobber
+    // the other's write. Wrap the read + merge + write in a transaction
+    // that re-reads the latest checklistResponses inside the tx before
+    // computing the merge, so the write always applies on top of the
+    // freshest server state.
+    let mergedForResponse: ReturnType<typeof applyReviewerReply> = null;
+    try {
+      await prisma.$transaction(async (tx) => {
+        const fresh = await tx.workPermit.findUnique({
+          where: { id },
+          select: { checklistResponses: true },
+        });
+        const freshRows = narrowCheckpoints(fresh?.checklistResponses);
+        const nextRows = applyReviewerReply(freshRows, index, { reviewerNote, reviewerPhotoUrl });
+        if (nextRows === null) {
+          throw new RangeError(`OUT_OF_RANGE:${freshRows.length}`);
+        }
+        await tx.workPermit.update({
+          where: { id },
+          data: { checklistResponses: nextRows },
+        });
+        mergedForResponse = nextRows;
+      });
+    } catch (e) {
+      if (e instanceof RangeError && e.message.startsWith("OUT_OF_RANGE:")) {
+        const size = e.message.split(":")[1] ?? "0";
+        return badRequest(`Checkpoint index out of range (permit has ${size} rows).`);
+      }
+      throw e;
     }
-
-    await prisma.workPermit.update({
-      where: { id },
-      data: { checklistResponses: nextRows },
-    });
+    const nextRows = mergedForResponse!;
 
     await recordAudit({
       projectId: permit.projectId,
