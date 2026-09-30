@@ -36,9 +36,12 @@ export default function MobileIssueActions({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function patch(status: "OPEN" | "IN_REINSPECTION" | "RESOLVED") {
+    if (saving) return;
+    setSaving(true);
     setError(null);
     const res = await fetch(`/api/issues/${issueId}`, {
       method: "PATCH",
@@ -48,11 +51,13 @@ export default function MobileIssueActions({
     if (res.status === 409) {
       setError("Someone updated this snag while you were reading. Refreshing.");
       startTransition(() => router.refresh());
+      setSaving(false);
       return;
     }
     if (!res.ok) {
       const data = await res.json().catch(() => null);
       setError(data?.error ?? "Failed to save.");
+      setSaving(false);
       return;
     }
     // Back to the tab that matches the NEW status — Open → open list,
@@ -85,7 +90,7 @@ export default function MobileIssueActions({
         <button
           type="button"
           onClick={() => patch("RESOLVED")}
-          disabled={isPending}
+          disabled={isPending || saving}
           className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-stone-900 text-white text-sm font-semibold py-3 disabled:opacity-60"
         >
           {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
@@ -98,7 +103,7 @@ export default function MobileIssueActions({
           <button
             type="button"
             onClick={() => patch("OPEN")}
-            disabled={isPending}
+            disabled={isPending || saving}
             className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-stone-800 text-sm font-semibold py-3 disabled:opacity-60"
           >
             <RotateCcw className="w-4 h-4" />
@@ -107,7 +112,7 @@ export default function MobileIssueActions({
           <button
             type="button"
             onClick={() => patch("RESOLVED")}
-            disabled={isPending}
+            disabled={isPending || saving}
             className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-stone-900 text-white text-sm font-semibold py-3 disabled:opacity-60"
           >
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
@@ -123,7 +128,7 @@ export default function MobileIssueActions({
         <button
           type="button"
           onClick={() => patch("IN_REINSPECTION")}
-          disabled={isPending}
+          disabled={isPending || saving}
           className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-ferrous-500 text-white text-sm font-semibold py-3 disabled:opacity-60"
         >
           {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

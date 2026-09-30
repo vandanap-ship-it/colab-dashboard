@@ -28,9 +28,12 @@ export default function MobileHindranceActions({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function patch(status: HindranceStatus, backTab: "open" | "resolved") {
+    if (saving) return;
+    setSaving(true);
     setError(null);
     const res = await fetch(`/api/hindrances/${hindranceId}`, {
       method: "PATCH",
@@ -40,11 +43,13 @@ export default function MobileHindranceActions({
     if (res.status === 409) {
       setError("Someone updated this hindrance while you were reading. Refreshing.");
       startTransition(() => router.refresh());
+      setSaving(false);
       return;
     }
     if (!res.ok) {
       const data = await res.json().catch(() => null);
       setError(data?.error ?? "Failed to save.");
+      setSaving(false);
       return;
     }
     startTransition(() => {
@@ -65,7 +70,7 @@ export default function MobileHindranceActions({
         <button
           type="button"
           onClick={() => patch("RESOLVED", "resolved")}
-          disabled={isPending}
+          disabled={isPending || saving}
           className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-stone-900 text-white text-sm font-semibold py-3 disabled:opacity-60"
         >
           {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
@@ -77,7 +82,7 @@ export default function MobileHindranceActions({
         <button
           type="button"
           onClick={() => patch("OPEN", "open")}
-          disabled={isPending}
+          disabled={isPending || saving}
           className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-stone-800 text-sm font-semibold py-3 disabled:opacity-60"
         >
           <RotateCcw className="w-4 h-4" />
