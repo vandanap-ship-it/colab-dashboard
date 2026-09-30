@@ -309,7 +309,19 @@ export default async function MobilePermitDetailPage({
           <section className="rounded-xl border border-stone-200 bg-white p-3">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-2">
               <ClipboardList className="w-3 h-3" />
-              Checklist · {checklistRows.length}
+              <span>Checklist · {checklistRows.length}</span>
+              {(() => {
+                const passed = checklistRows.filter((r) => r.passed === true).length;
+                const failed = checklistRows.filter((r) => r.passed === false).length;
+                const unanswered = checklistRows.length - passed - failed;
+                return (
+                  <span className="ml-auto flex items-center gap-2 normal-case tracking-normal">
+                    <span className="text-emerald-700 tabular-nums">{passed} ✓</span>
+                    <span className="text-red-700 tabular-nums">{failed} ✕</span>
+                    {unanswered > 0 && <span className="text-stone-400 tabular-nums">{unanswered} —</span>}
+                  </span>
+                );
+              })()}
             </div>
             <ol className="space-y-2">
               {checklistRows.map((row, i) => (
