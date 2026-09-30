@@ -348,7 +348,18 @@ export default function WorkPermitList({
         <p className="text-sm text-stone-500">Loading…</p>
       ) : rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-stone-300 bg-white/60 p-8 text-center">
-          <p className="text-sm text-stone-500">No {tab} permits.</p>
+          <p className="text-sm text-stone-500">
+            No {tab} permits{activeFilterCount > 0 ? " match the current filters." : "."}
+          </p>
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="mt-2 text-[12px] font-semibold text-ferrous-600 underline"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       ) : (
         <ul className="space-y-2">
