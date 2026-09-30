@@ -1,43 +1,65 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ivory: #FBF7EE;
-  --color-sandstone-50: #F7F1E3;
-  --color-sandstone-100: #EFE6D2;
-  --color-sandstone-200: #E2D5B8;
-  --color-sandstone-300: #C9B891;
-  --color-sandstone-400: #A8946A;
+  /* Palette anchored on the White Lotus brand guidelines
+   * (Option A · 2026-09-30). Four tokens moved to brand-exact:
+   *   - Ivory        → WL Ivory (#FFFAF0)
+   *   - Sandstone    → ramp anchored on WL Sandstone (#FAE1C8)
+   *   - Ferrous      → ramp anchored on WL Ferrous (#965532)
+   *   - Brand (gold) → ramp anchored on WL Gold Foil mid (#CA9F49)
+   * Ink stays at the warm brown-black — the brand's cooler Charcoal
+   * (#161926) reads clinical on 8-hour phone work; keeping the warmer
+   * body-text ink was Shraddha's Option A trade-off.
+   *
+   * Rebuilding the ramps: 500 is the anchor for accent tokens
+   * (Ferrous, Brand); 100 is the anchor for background tokens
+   * (Sandstone). Every step around the anchor was tuned by hand to
+   * keep a monotonic HSL change so hover/active/disabled states still
+   * read as a shade of the same colour, not a different colour. */
+  --color-ivory: #FFFAF0;
+  --color-sandstone-50: #FDEFDF;
+  --color-sandstone-100: #FAE1C8;
+  --color-sandstone-200: #F1CFA5;
+  --color-sandstone-300: #DBAF74;
+  --color-sandstone-400: #B98946;
   --color-ink: #2A2722;
   --color-ink-2: #5C5448;
   --color-ink-3: #8A8170;
 
-  /* Brand */
-  --color-brand-50: #FFF8E5;
-  --color-brand-100: #FFEFC2;
-  --color-brand-200: #FFE49C;
-  --color-brand-300: #FFD96D;
-  --color-brand-400: #FBBF24;
-  --color-brand-500: #F59E0B;
-  --color-brand-600: #D97706;
-  --color-brand-700: #B45309;
+  /* Brand — anchored on WL Gold Foil mid (#CA9F49). 600 = Gold Foil
+   * dark (#A9762A); everything else is a hand-tuned darkening /
+   * lightening around the mid so pills, badges, and hovers still
+   * read as one colour family. Muted antique gold replaces the
+   * previous Tailwind-amber vibrancy — the brand-guidelines call for
+   * gold to be used as punctuation, not as a bright CTA fill. */
+  --color-brand-50: #FBF3D9;
+  --color-brand-100: #F5E4A9;
+  --color-brand-200: #EFD37D;
+  --color-brand-300: #E6BE5A;
+  --color-brand-400: #DBA83E;
+  --color-brand-500: #CA9F49;
+  --color-brand-600: #A9762A;
+  --color-brand-700: #7D5714;
 
   /* Ferrous — the warm rust accent used on Amanvana's own material palette
-   * (Kalinga stone, terracotta rail). Reserved for hero moments (a live
-   * status pill, a headline underline, a primary CTA). Not a competitor
-   * to the brand-gold; the two live at different scales in the design. */
-  --color-ferrous-50: #F7EBE2;
-  --color-ferrous-100: #F0D5C3;
-  --color-ferrous-200: #E5B398;
-  --color-ferrous-300: #D48A66;
-  --color-ferrous-400: #C56A40;
-  --color-ferrous-500: #B8542E;
-  --color-ferrous-600: #9C3E1E;
-  --color-ferrous-700: #7A2E17;
+   * (Kalinga stone, terracotta rail). Anchored on WL Ferrous (#965532).
+   * Reserved for hero moments (a live status pill, a headline underline,
+   * a primary CTA). Not a competitor to the brand-gold; the two live at
+   * different scales in the design. */
+  --color-ferrous-50: #F5E8DF;
+  --color-ferrous-100: #EBD1BE;
+  --color-ferrous-200: #DAB29B;
+  --color-ferrous-300: #C69477;
+  --color-ferrous-400: #AF7754;
+  --color-ferrous-500: #965532;
+  --color-ferrous-600: #7E4529;
+  --color-ferrous-700: #5F331E;
 
   /* Cream — a warmer, one-shade-lifted alternative to plain white for
    * mobile cards so they read as a warm object on the sandstone ground
-   * instead of the cold Tailwind default. */
-  --color-cream: #FBF8F1;
+   * instead of the cold Tailwind default. Nudged fractionally to sit
+   * cleanly between the new Ivory and Sandstone-50. */
+  --color-cream: #FFFEF8;
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
