@@ -367,6 +367,7 @@ export default function SiteProgressList({ projectId }: { projectId: string }) {
                 projectId={projectId}
                 open={openVillaId === villa.id}
                 onToggle={() => setOpenVillaId((cur) => (cur === villa.id ? null : villa.id))}
+                isInQuality={blockedVillaIds.has(villa.id)}
               />
             </li>
           ))}
@@ -386,12 +387,14 @@ function VillaCard({
   projectId,
   open,
   onToggle,
+  isInQuality = false,
 }: {
   villa: Villa;
   blockCode: string;
   projectId: string;
   open: boolean;
   onToggle: () => void;
+  isInQuality?: boolean;
 }) {
   const pct = Math.round(villaAvgPct(villa));
   const c = villaMilestoneCounts(villa);
@@ -424,6 +427,28 @@ function VillaCard({
         />
       </button>
       {open && (
+        <>
+          {/* Colab-parity In Quality callout. When the villa is bucketed
+              as In Quality it's because at least one activity is blocked
+              by a pending QAQC checklist. Surface the "why" and a nudge
+              to raise/pass the WIR so the crew isn't left guessing. */}
+          {isInQuality && (
+            <div className="border-t border-sandstone-100 bg-orange-50 px-4 py-2.5">
+              <p className="text-[11px] font-semibold text-orange-800 uppercase tracking-wider mb-0.5">
+                Waiting on QA/QC
+              </p>
+              <p className="text-[12px] text-orange-900 leading-snug">
+                One activity on this villa is blocked until its prerequisite
+                checklist passes. Open the QA/QC list to raise or pass the WIR.
+              </p>
+              <Link
+                href={`/mobile/${projectId}/qaqc?tab=pending&module=QAQC`}
+                className="mt-1.5 inline-block text-[11px] font-semibold text-orange-700 underline"
+              >
+                Open QA/QC →
+              </Link>
+            </div>
+          )}
         <ul className="border-t border-sandstone-100 divide-y divide-sandstone-100 bg-white">
           {sortedMilestones.map((m) => {
             const status: StatusKey =
@@ -452,6 +477,7 @@ function VillaCard({
             );
           })}
         </ul>
+        </>
       )}
     </div>
   );
