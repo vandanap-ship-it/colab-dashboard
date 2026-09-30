@@ -408,7 +408,16 @@ function EmptyState({ tab }: { tab: Tab }) {
 }
 
 function fmtDate(d: Date): string {
-  return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  // IST-anchored so a WIR filled at 03:00 IST Sep 30 (21:30 UTC Sep 29)
+  // renders as "30 Sep" on the mobile page, not "29 Sep". Vercel's
+  // server runs in UTC, so an unpinned toLocaleDateString would render
+  // the previous day for anything logged between 00:00 and 05:30 IST.
+  return new Date(d).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
 }
 
 /**

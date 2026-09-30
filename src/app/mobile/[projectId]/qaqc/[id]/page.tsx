@@ -463,15 +463,23 @@ function StatusPill({ status }: { status: string }) {
 }
 
 function fmtDate(d: Date): string {
-  return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(d).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
 }
 
 function fmtDateTime(d: Date): string {
   // Colab-parity — Approvers section shows "29 Sep 2026, 06:28 PM"
+  // Time pinned to IST for the same reason as fmtDate: server-tz
+  // rendering on Vercel would show UTC times, off by 5.5 hours.
   const date = fmtDate(d);
   const time = new Date(d).toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Asia/Kolkata",
   });
   return `${date}, ${time}`;
 }

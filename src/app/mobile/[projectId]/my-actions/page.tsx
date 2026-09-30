@@ -393,7 +393,12 @@ function secondaryLine(...bits: (string | undefined | null)[]): string | undefin
   return parts.join(" · ");
 }
 function fmtDate(d: Date): string {
-  return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(d).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
 }
 function severityLabel(sev: string): string {
   // Colab vocab: Minor / Major / Critical. Legacy LOW/MEDIUM/HIGH values
