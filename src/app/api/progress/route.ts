@@ -10,7 +10,7 @@ import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { isValidReasonCode } from "@/lib/hindranceReasons";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { checkPrecheck } from "@/lib/progressGates";
-import { generateProgressDisplayId } from "@/lib/progress";
+import { generateProgressDisplayId, monotonicViolationMessage } from "@/lib/progress";
 
 const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
@@ -222,12 +222,7 @@ export async function POST(req: Request) {
     });
     const priorMax = maxPrior._max.cumulativeQuantity ?? 0;
     if (cumulative < priorMax) {
-      return NextResponse.json(
-        {
-          error: `Progress can't go backwards. Latest logged is ${priorMax.toFixed(1)} — new entry must be ≥ that. To correct an over-count, ask an admin to void the wrong row.`,
-        },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: monotonicViolationMessage(priorMax, "new") }, { status: 409 });
     }
   }
 

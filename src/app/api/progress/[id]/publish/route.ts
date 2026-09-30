@@ -9,7 +9,7 @@ import { isValidReasonCode } from "@/lib/hindranceReasons";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { maybeSendMilestoneCompletionEmail } from "@/lib/progressPublish";
-import { generateProgressDisplayId } from "@/lib/progress";
+import { generateProgressDisplayId, monotonicViolationMessage } from "@/lib/progress";
 
 /**
  * POST /api/progress/[id]/publish
@@ -122,12 +122,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/progress/[id]/p
   });
   const priorMax = maxPrior._max.cumulativeQuantity ?? 0;
   if (cumulative < priorMax) {
-    return NextResponse.json(
-      {
-        error: `Progress can't go backwards. Latest logged is ${priorMax.toFixed(1)} — this draft must be ≥ that before you can publish. To correct an over-count, ask an admin to void the wrong row.`,
-      },
-      { status: 409 },
-    );
+    return NextResponse.json({ error: monotonicViolationMessage(priorMax, "draft") }, { status: 409 });
   }
   const labourClean = (body.labour ?? [])
     .map((l) => ({ category: (l.category ?? "").trim(), count: Math.floor(l.count ?? 0) }))

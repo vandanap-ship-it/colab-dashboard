@@ -18,3 +18,20 @@ export function generateProgressDisplayId(): string {
   }
   return s;
 }
+
+/**
+ * Colab-parity monotonic guard message. Shraddha 2026-09-30 confirmed
+ * progress-only-goes-up as an intentional Siddhi rule (matching Colab's
+ * Edit Progress slider that min-locks to the current cumulative).
+ *
+ * `context` names where the check fired so the message reads naturally
+ * for both the fresh-POST path ("new entry must be ≥ that") and the
+ * publish-a-draft path ("this draft must be ≥ that").
+ */
+export function monotonicViolationMessage(
+  priorMax: number,
+  context: "new" | "draft",
+): string {
+  const noun = context === "new" ? "new entry" : "this draft";
+  return `Progress can't go backwards. Latest logged is ${priorMax.toFixed(1)} — ${noun} must be ≥ that. To correct an over-count, ask an admin to void the wrong row.`;
+}
