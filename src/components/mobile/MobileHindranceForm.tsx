@@ -149,6 +149,7 @@ export default function MobileHindranceForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (pending) return;
     if (requiredMissing) {
       setError("Fill in the required fields (marked *)");
       return;
