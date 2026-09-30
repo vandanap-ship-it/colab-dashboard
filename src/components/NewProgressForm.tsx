@@ -559,43 +559,6 @@ export default function NewProgressForm({
   }
 
   /**
-   * Reset the entry-specific fields but KEEP the picked activity — a site
-   * engineer logging progress typically enters the same villa/activity
-   * again a few hours later at a new %, or hops to a nearby activity on
-   * the same villa. Forcing them back through contractor → villa →
-   * milestone picker every time was pure friction; the back arrow in the
-   * header is one tap for the rare case where they need a different
-   * villa.
-   */
-  function resetForm() {
-    setDate(today);
-    setAchieved(0);
-    // Reset slider to the monotonic floor for the STILL-picked activity,
-    // not to 0 — a fresh 0 would visually clamp to `min` on the range
-    // input but pctState would stay 0, so a subsequent submit without
-    // moving the slider would 409 on the server. Bumping to the floor
-    // keeps display + state in sync.
-    if (selected) {
-      const total = selected.totalQuantity ?? 0;
-      const floorPct =
-        total > 0
-          ? Math.floor((priorMaxCumulative / total) * 100)
-          : Math.floor(priorMaxCumulative);
-      setPctState(floorPct);
-    } else {
-      setPctState(0);
-    }
-    setReasonCode("");
-    setReasonNote("");
-    setLabour([{ category: "Skilled", count: 0 }]);
-    setPhotos([]);
-    setNotes("");
-    setError(null);
-    setSaved(null);
-    setSameVillaHint(null);
-  }
-
-  /**
    * Reset everything AND drop the picked activity — but stash the villa
    * label so the ActivityPicker jumps straight to that villa's milestone
    * list. Used by the "Log another on {villa}" CTA on the save card:
@@ -617,6 +580,30 @@ export default function NewProgressForm({
     setSaved(null);
     setSelected(null);
     setSameVillaHint(villaLabel);
+  }
+
+  /**
+   * Full reset: activity AND villa cleared, so the ActivityPicker
+   * starts back at the location-first screen (block → villa → …).
+   * Shraddha 2026-09-30: the primary post-save action for a site
+   * engineer walking Amanvana is "hop to the next villa" — never
+   * "same villa again". Distinct from resetForNextOnSameVilla which
+   * pre-seeds the villa; here we intentionally clear the villa hint
+   * so the picker DOESN'T short-cut.
+   */
+  function resetForNextOnDifferentVilla() {
+    setDate(today);
+    setAchieved(0);
+    setPctState(0);
+    setReasonCode("");
+    setReasonNote("");
+    setLabour([{ category: "Skilled", count: 0 }]);
+    setPhotos([]);
+    setNotes("");
+    setError(null);
+    setSaved(null);
+    setSelected(null);
+    setSameVillaHint(null);
   }
 
   if (saved) {
@@ -641,8 +628,15 @@ export default function NewProgressForm({
                 : undefined
         }
         projectId={projectId}
-        onAddAnother={resetForm}
-        addAnotherSublabel="Same activity — bump the % or add a photo"
+        // Primary CTA: log on another villa — starts the ActivityPicker
+        // at the location-first screen (Shraddha 2026-09-30 rule: after
+        // saving, the engineer should NOT default back to the same
+        // villa; they're usually walking to the next one).
+        onAddAnother={resetForNextOnDifferentVilla}
+        addAnotherSublabel="Log progress on another villa"
+        // Secondary CTA (dark button above the "Add another" one):
+        // stays on the same villa, picks a new activity. For engineers
+        // finishing multiple activities on the same villa in one visit.
         contextAction={
           selected
             ? {
