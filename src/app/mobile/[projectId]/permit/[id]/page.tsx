@@ -416,14 +416,28 @@ export default async function MobilePermitDetailPage({
                         const isDecided =
                           permit.approver?.id === a.user.id ||
                           permit.closer?.id === a.user.id;
+                        const isYou = a.user.id === session.user.id;
                         return (
                           <li
                             key={a.id}
-                            className="flex items-start gap-2 text-sm border-l-2 border-sandstone-200 pl-2"
+                            className={`flex items-start gap-2 text-sm border-l-2 pl-2 ${
+                              isYou ? "border-ferrous-400" : "border-sandstone-200"
+                            }`}
                           >
-                            <UserIcon className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" />
+                            <UserIcon
+                              className={`w-4 h-4 shrink-0 mt-0.5 ${
+                                isYou ? "text-ferrous-500" : "text-stone-400"
+                              }`}
+                            />
                             <div className="min-w-0 flex-1">
-                              <p className="font-medium text-ink leading-snug">{a.user.name}</p>
+                              <p className="font-medium text-ink leading-snug">
+                                {a.user.name}
+                                {isYou && (
+                                  <span className="ml-1.5 inline-flex items-center rounded-full bg-ferrous-100 text-ferrous-700 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5">
+                                    You
+                                  </span>
+                                )}
+                              </p>
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {a.canClose && <CapChip color="emerald" label="Can Close" />}
                                 {a.canSuspend && <CapChip color="amber" label="Can Suspend" />}
