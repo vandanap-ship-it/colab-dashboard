@@ -65,6 +65,11 @@ export default function MobileInspectionItemReviewerControls({
   }
 
   async function uploadPhoto(file: File) {
+    // Same guard as saveNote — React state updates are batched, so
+    // the file input's `disabled={uploading}` lags one render. A rapid
+    // double-selection would race two uploads and leave reviewerPhotoUrl
+    // whichever call finished last.
+    if (uploading || saving) return;
     setError(null);
     setUploading(true);
     try {
@@ -101,7 +106,9 @@ export default function MobileInspectionItemReviewerControls({
   }
 
   async function clearPhoto() {
+    if (saving || uploading) return;
     setError(null);
+    setSaving(true);
     try {
       const res = await fetch(`/api/inspections/${inspectionId}/items/${itemId}`, {
         method: "PATCH",
@@ -117,6 +124,8 @@ export default function MobileInspectionItemReviewerControls({
       startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Clear failed");
+    } finally {
+      setSaving(false);
     }
   }
 
