@@ -106,7 +106,15 @@ jobs:
           export BLOB_PATH="backups/${MONTH}/${BACKUP_FILE}"
           export BACKUP_FILE
           npm install --silent --no-save --prefix /tmp/blob-uploader @vercel/blob
-          BLOB_URL=$(node -e "
+          # put() returns both `url` (raw storage URL — 403s on a private
+          # store without auth) and `downloadUrl` (signed URL that works
+          # for the recipient without needing our token). The email needs
+          # the SIGNED one; the raw url is what the earlier version shipped,
+          # and every recipient (including Shraddha + Vandana) saw
+          # "forbidden" when they clicked it. Keep url in BLOB_URL for the
+          # workflow summary + verify-backup logs, and ship downloadUrl in
+          # BLOB_DOWNLOAD_URL for the email body.
+          BLOB_JSON=$(node -e "
             const { put } = require('/tmp/blob-uploader/node_modules/@vercel/blob');
             const fs = require('fs');
             (async () => {
@@ -116,21 +124,25 @@ jobs:
                 // any file-level access:'public' is rejected. Older SDK
                 // versions require the option — pass 'public' for public
                 // stores, 'private' for private ones (this store).
-                const { url } = await put(process.env.BLOB_PATH, buf, {
+                const result = await put(process.env.BLOB_PATH, buf, {
                   access: 'private',
                   addRandomSuffix: false,
                   contentType: 'application/gzip',
                   token: process.env.BLOB_READ_WRITE_TOKEN,
                 });
-                console.log(url);
+                console.log(JSON.stringify({ url: result.url, downloadUrl: result.downloadUrl }));
               } catch (e) {
                 console.error(e.message);
                 process.exit(1);
               }
             })();
           ")
+          BLOB_URL=$(echo "$BLOB_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['url'])")
+          BLOB_DOWNLOAD_URL=$(echo "$BLOB_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('downloadUrl') or d['url'])")
           echo "BLOB_URL=${BLOB_URL}" >> $GITHUB_ENV
+          echo "BLOB_DOWNLOAD_URL=${BLOB_DOWNLOAD_URL}" >> $GITHUB_ENV
           echo "Uploaded to: ${BLOB_URL}"
+          echo "Recipient download URL (signed): ${BLOB_DOWNLOAD_URL}"
 
       - name: Upload workflow artifact (fallback + audit trail)
         uses: actions/upload-artifact@v4
@@ -170,6 +182,9 @@ jobs:
           RECIPIENTS=${BACKUP_EMAIL_RECIPIENTS:-"vandana.p@whitelotusgroup.in,shraddha.b@whitelotusgroup.in"}
           # Convert comma-separated recipients to JSON array
           TO_JSON=$(echo "$RECIPIENTS" | python3 -c "import json,sys; print(json.dumps([e.strip() for e in sys.stdin.read().split(',')]))")
+          # Send the SIGNED downloadUrl (BLOB_DOWNLOAD_URL) — the raw
+          # BLOB_URL 403s on a private Blob store without an auth token,
+          # which is what Shraddha + Vandana saw before this fix.
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.resend.com/emails" \
             -H "authorization: Bearer $RESEND_API_KEY" \
             -H "content-type: application/json" \
@@ -177,7 +192,7 @@ jobs:
               \"from\": \"Siddhi Backups <backups@whitelotusgroup.in>\",
               \"to\": ${TO_JSON},
               \"subject\": \"Siddhi backup ready — ${BACKUP_FILE} (${BACKUP_SIZE})\",
-              \"html\": \"<p>Nightly backup complete.</p><p><b>File:</b> ${BACKUP_FILE}<br><b>Size:</b> ${BACKUP_SIZE}<br><b>Download:</b> <a href=\\\"${BLOB_URL}\\\">${BLOB_URL}</a></p><p>Link expires when the file is deleted (retention set on the Blob store side).</p>\"
+              \"html\": \"<p>Nightly backup complete.</p><p><b>File:</b> ${BACKUP_FILE}<br><b>Size:</b> ${BACKUP_SIZE}<br><b>Download:</b> <a href=\\\"${BLOB_DOWNLOAD_URL}\\\">${BLOB_DOWNLOAD_URL}</a></p><p>The download link is signed — clicking it downloads the .sql.gz directly, no login needed. The file itself stays in the private Blob store; older backups can be listed with the Vercel dashboard or via the @vercel/blob SDK.</p>\"
             }")
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           if [ "$HTTP_CODE" -ge 400 ]; then
