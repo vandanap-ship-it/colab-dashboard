@@ -708,7 +708,28 @@ export default function WorkPermitForm({
           onChange={(e) => setActivityHead(e.target.value)}
           placeholder="e.g. Reinforcement · Shuttering · Surface Finishing"
           maxLength={120}
+          list="permit-activity-head-suggestions"
         />
+        {/* Colab-parity: free-text field with autocomplete hints for the
+            common activity heads at Amanvana. The site team can still
+            type anything else; datalist just speeds up the 80% case. */}
+        <datalist id="permit-activity-head-suggestions">
+          <option value="Reinforcement" />
+          <option value="Shuttering" />
+          <option value="Concrete Pour" />
+          <option value="Masonry" />
+          <option value="Plastering" />
+          <option value="Painting" />
+          <option value="Waterproofing" />
+          <option value="Flooring" />
+          <option value="Electrical" />
+          <option value="Plumbing" />
+          <option value="Surface Finishing" />
+          <option value="Excavation" />
+          <option value="Anti-Termite" />
+          <option value="PCC" />
+          <option value="Hacking" />
+        </datalist>
       </label>
 
       {/* Step 2: Contractor. Colab requires it — enforced client-side
