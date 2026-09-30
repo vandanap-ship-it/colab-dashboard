@@ -46,12 +46,20 @@ export default function MobileQaqcReviewActions({
     setSaving(true);
     setError(null);
     const rejectionReason = status === "REJECTED" ? remarkText : undefined;
+    // Colab-parity Approve & Close sheet carries an optional remark.
+    // The client-only bug: the remark was collected in `approveRemark`
+    // but never sent. Ship it as `reviewRemark`; the server folds it
+    // into the audit summary so the reviewer's context is preserved
+    // even before a dedicated column lands.
+    const reviewRemark =
+      status === "PASSED" ? approveRemark.trim() || undefined : undefined;
     const res = await fetch(`/api/inspections/${inspectionId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         status,
         ...(rejectionReason ? { rejectionReason } : {}),
+        ...(reviewRemark ? { reviewRemark } : {}),
         expectedUpdatedAt,
       }),
     });
@@ -69,6 +77,8 @@ export default function MobileQaqcReviewActions({
     }
     setRejectOpen(false);
     setReason("");
+    setApproveOpen(false);
+    setApproveRemark("");
     // Land on the pending list for whichever module the reviewer opened
     // this inspection from — so an EHS reviewer lands on EHS Pending, a
     // QA/QC reviewer on QA/QC Pending, no jarring "combined" fallback.

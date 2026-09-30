@@ -18,6 +18,10 @@ import { sendPushToUser } from "@/lib/push";
 const PatchInspectionSchema = z.object({
   status: z.enum(["IN_REVIEW", "PASSED", "REJECTED"]),
   rejectionReason: z.string().max(1000).optional(),
+  // Colab-parity: Approve & Close sheet carries an optional remark.
+  // Folded into the audit summary — no dedicated column yet, but the
+  // reviewer's context is preserved in the trail either way.
+  reviewRemark: z.string().max(1000).optional(),
   expectedUpdatedAt: z.string().optional(),
 });
 
@@ -32,7 +36,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
   const { id } = await ctx.params;
   const parsed = await parseBody(req, PatchInspectionSchema);
   if (!parsed.ok) return parsed.response;
-  const { status, rejectionReason, expectedUpdatedAt } = parsed.data;
+  const { status, rejectionReason, reviewRemark, expectedUpdatedAt } = parsed.data;
 
   try {
     const before = await prisma.inspection.findUnique({
@@ -63,6 +67,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
       },
     });
     {
+      const trimmedReview = reviewRemark?.trim();
       await recordAudit({
         projectId: inspection.projectId,
         userId: session.user.id,
@@ -71,7 +76,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
         entityId: inspection.id,
         summary: `Inspection "${before.title}" → ${status}${
           status === "REJECTED" && rejectionReason ? ` (${rejectionReason.slice(0, 60)})` : ""
+        }${
+          status === "PASSED" && trimmedReview ? ` — ${trimmedReview.slice(0, 60)}` : ""
         }`,
+        changes: trimmedReview ? { reviewRemark: trimmedReview.slice(0, 1000) } : undefined,
       });
     }
     // Push the engineer who filled it — they care most about the outcome.
