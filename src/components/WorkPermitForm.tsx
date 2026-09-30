@@ -14,6 +14,7 @@ import {
   WORK_PERMIT_CHECKPOINTS,
   type WorkPermitType,
 } from "@/lib/workPermit";
+import { istDayString } from "@/lib/istDay";
 
 type ApproverCandidate = {
   id: string;
@@ -101,7 +102,7 @@ export default function WorkPermitForm({
   }
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [workDate, setWorkDate] = useState(new Date().toISOString().slice(0, 10));
+  const [workDate, setWorkDate] = useState(istDayString());
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("18:00");
   const [location, setLocation] = useState("");
@@ -329,7 +330,7 @@ export default function WorkPermitForm({
     setType("GENERAL");
     setTitle("");
     setDescription("");
-    setWorkDate(new Date().toISOString().slice(0, 10));
+    setWorkDate(istDayString());
     setStartTime("09:00");
     setEndTime("18:00");
     setLocation("");
@@ -370,7 +371,7 @@ export default function WorkPermitForm({
   function resetForNextOfSameType() {
     setTitle("");
     setDescription("");
-    setWorkDate(new Date().toISOString().slice(0, 10));
+    setWorkDate(istDayString());
     setStartTime("09:00");
     setEndTime("18:00");
     setPhotos([]);

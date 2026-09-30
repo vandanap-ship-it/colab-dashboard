@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { istDayString } from "@/lib/istDay";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -244,7 +245,7 @@ export async function GET(
     lines.push(cells.map(csvCell).join(","));
   }
 
-  const filename = `${project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-master-report-raw-${new Date().toISOString().slice(0, 10)}.csv`;
+  const filename = `${project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-master-report-raw-${istDayString()}.csv`;
   return new NextResponse(lines.join("\n") + "\n", {
     headers: {
       "content-type": "text/csv; charset=utf-8",

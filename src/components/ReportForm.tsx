@@ -6,6 +6,7 @@ import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
 import HowThisWorks from "./HowThisWorks";
+import { istDayString } from "@/lib/istDay";
 
 type Activity = { id: string; name: string; taskCode: string; path: string[] };
 
@@ -49,7 +50,7 @@ export default function ReportForm({
     const init: Record<string, string | number> = {};
     for (const f of extraFields) {
       if (f.kind === "select") init[f.key] = f.default;
-      if (f.kind === "date") init[f.key] = f.defaultToday ? new Date().toISOString().slice(0, 10) : "";
+      if (f.kind === "date") init[f.key] = f.defaultToday ? istDayString() : "";
       if (f.kind === "number") init[f.key] = "";
       if (f.kind === "text") init[f.key] = f.default ?? "";
     }
@@ -240,7 +241,7 @@ export default function ReportForm({
     const reset: Record<string, string | number> = {};
     for (const f of extraFields) {
       if (f.kind === "select") reset[f.key] = f.default;
-      if (f.kind === "date") reset[f.key] = f.defaultToday ? new Date().toISOString().slice(0, 10) : "";
+      if (f.kind === "date") reset[f.key] = f.defaultToday ? istDayString() : "";
       if (f.kind === "number") reset[f.key] = "";
       if (f.kind === "text") reset[f.key] = f.default ?? "";
     }

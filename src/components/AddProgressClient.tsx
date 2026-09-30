@@ -5,6 +5,7 @@ import { CalendarDays, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import PhotoStrip from "./PhotoStrip";
 import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
+import { istDayString } from "@/lib/istDay";
 
 export type ProgressEntryRow = {
   id: string;
@@ -299,7 +300,7 @@ function ProgressEntryDialog({
 }) {
   const isEdit = entry !== null;
   const [date, setDate] = useState(
-    entry ? entry.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+    entry ? entry.date.slice(0, 10) : istDayString(),
   );
   const [activityId, setActivityId] = useState(entry?.activity.id ?? activities[0]?.id ?? "");
   const [activitySearch, setActivitySearch] = useState("");

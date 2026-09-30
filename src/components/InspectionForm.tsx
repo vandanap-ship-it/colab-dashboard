@@ -9,6 +9,7 @@ import PhotoPicker from "./PhotoPicker";
 import SaveSuccessCard from "./SaveSuccessCard";
 import HowThisWorks from "./HowThisWorks";
 import { itemState } from "@/lib/inspectionItemState";
+import { istDayString } from "@/lib/istDay";
 
 type Activity = {
   id: string;
@@ -238,11 +239,11 @@ export default function InspectionForm({
   // Reschedule popup — Colab's third button. Opens a date picker + note.
   const [reschedPopupOpen, setReschedPopupOpen] = useState(false);
   const [reschedDate, setReschedDate] = useState(() => {
-    // Default: tomorrow. A "reschedule to today" is legal but rare — usually
-    // the user is pushing this a day or two out.
+    // Default: tomorrow (IST). A "reschedule to today" is legal but rare —
+    // usually the user is pushing this a day or two out.
     const d = new Date();
     d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
+    return istDayString(d);
   });
   const [reschedNote, setReschedNote] = useState("");
   // Three finish paths: sent for review (default), rescheduled, or saved
@@ -1411,7 +1412,7 @@ export default function InspectionForm({
             <input
               type="date"
               value={reschedDate}
-              min={new Date().toISOString().slice(0, 10)}
+              min={istDayString()}
               onChange={(e) => setReschedDate(e.target.value)}
               className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
             />

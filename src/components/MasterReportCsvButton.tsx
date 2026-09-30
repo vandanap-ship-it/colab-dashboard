@@ -2,6 +2,7 @@
 
 import { Download } from "lucide-react";
 import type { MasterReportData } from "@/lib/reports";
+import { istDayString } from "@/lib/istDay";
 
 /**
  * Download the Master Report as a multi-section CSV. The MD's request: open
@@ -158,7 +159,7 @@ export default function MasterReportCsvButton({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${slug(projectName)}-master-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `${slug(projectName)}-master-report-${istDayString()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }

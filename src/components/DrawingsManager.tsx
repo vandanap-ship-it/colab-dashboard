@@ -7,6 +7,7 @@ import {
   DRAWING_DISCIPLINE_LABELS,
   type DrawingDiscipline,
 } from "@/lib/drawings";
+import { istDayString } from "@/lib/istDay";
 
 type Person = { id: string; name: string } | null;
 type Revision = {
@@ -504,7 +505,7 @@ function DrawingDetail({
 function NewRevisionForm({ drawingId, onDone }: { drawingId: string; onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [revisionLabel, setRevisionLabel] = useState("");
-  const [issuedDate, setIssuedDate] = useState(new Date().toISOString().slice(0, 10));
+  const [issuedDate, setIssuedDate] = useState(istDayString());
   const [notes, setNotes] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);

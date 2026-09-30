@@ -5,6 +5,7 @@ import { Download, Search } from "lucide-react";
 import PhotoStrip, { type Photo } from "./PhotoStrip";
 import TrashButton from "./TrashButton";
 import { useToast } from "./Toast";
+import { istDayString } from "@/lib/istDay";
 
 export type SnagRow = {
   id: string;
@@ -131,7 +132,7 @@ export default function SnagMasterTable({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `snag-master-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `snag-master-${istDayString()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
