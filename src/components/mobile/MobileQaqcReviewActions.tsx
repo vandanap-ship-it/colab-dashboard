@@ -34,6 +34,7 @@ export default function MobileQaqcReviewActions({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [saving, setSaving] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -41,6 +42,8 @@ export default function MobileQaqcReviewActions({
   const [error, setError] = useState<string | null>(null);
 
   async function patch(status: "PASSED" | "REJECTED", remarkText?: string) {
+    if (saving) return;
+    setSaving(true);
     setError(null);
     const rejectionReason = status === "REJECTED" ? remarkText : undefined;
     const res = await fetch(`/api/inspections/${inspectionId}`, {
@@ -55,11 +58,13 @@ export default function MobileQaqcReviewActions({
     if (res.status === 409) {
       setError("Someone updated this inspection while you were reading. Refreshing.");
       startTransition(() => router.refresh());
+      setSaving(false);
       return;
     }
     if (!res.ok) {
       const data = await res.json().catch(() => null);
       setError(data?.error ?? "Failed to save.");
+      setSaving(false);
       return;
     }
     setRejectOpen(false);
@@ -104,7 +109,7 @@ export default function MobileQaqcReviewActions({
         <button
           type="button"
           onClick={() => setRejectOpen(true)}
-          disabled={isPending}
+          disabled={isPending || saving}
           className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-ink text-white text-sm font-semibold py-3 disabled:opacity-60"
         >
           Reject
@@ -112,7 +117,7 @@ export default function MobileQaqcReviewActions({
         <button
           type="button"
           onClick={() => setApproveOpen(true)}
-          disabled={isPending}
+          disabled={isPending || saving}
           className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-ferrous-500 text-white text-sm font-semibold py-3 disabled:opacity-60"
         >
           {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
@@ -144,7 +149,7 @@ export default function MobileQaqcReviewActions({
             <button
               type="button"
               onClick={() => patch("PASSED")}
-              disabled={isPending}
+              disabled={isPending || saving}
               className="rounded-xl bg-ferrous-500 text-white text-sm font-semibold py-2 disabled:opacity-60"
             >
               {isPending ? "Saving…" : "Ok"}
