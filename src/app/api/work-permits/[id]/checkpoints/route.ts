@@ -76,14 +76,26 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     // that re-reads the latest checklistResponses inside the tx before
     // computing the merge, so the write always applies on top of the
     // freshest server state.
+    //
+    // We also re-read `status` inside the tx — if a peer approver approved
+    // or rejected the permit between the pre-check above and this tx,
+    // the reply should NOT sneak in after the decision. The audit trail
+    // must not show a reviewer replying to a checkpoint *after* the
+    // permit was already decided.
     let mergedForResponse: ReturnType<typeof applyReviewerReply> = null;
     try {
       await prisma.$transaction(async (tx) => {
         const fresh = await tx.workPermit.findUnique({
           where: { id },
-          select: { checklistResponses: true },
+          select: { checklistResponses: true, status: true },
         });
-        const freshRows = narrowCheckpoints(fresh?.checklistResponses);
+        if (!fresh) {
+          throw new RangeError(`GONE`);
+        }
+        if (fresh.status !== "PENDING" && fresh.status !== "SUSPENDED") {
+          throw new RangeError(`STATUS_CHANGED:${fresh.status}`);
+        }
+        const freshRows = narrowCheckpoints(fresh.checklistResponses);
         const nextRows = applyReviewerReply(freshRows, index, { reviewerNote, reviewerPhotoUrl });
         if (nextRows === null) {
           throw new RangeError(`OUT_OF_RANGE:${freshRows.length}`);
@@ -95,9 +107,20 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         mergedForResponse = nextRows;
       });
     } catch (e) {
-      if (e instanceof RangeError && e.message.startsWith("OUT_OF_RANGE:")) {
-        const size = e.message.split(":")[1] ?? "0";
-        return badRequest(`Checkpoint index out of range (permit has ${size} rows).`);
+      if (e instanceof RangeError) {
+        if (e.message.startsWith("OUT_OF_RANGE:")) {
+          const size = e.message.split(":")[1] ?? "0";
+          return badRequest(`Checkpoint index out of range (permit has ${size} rows).`);
+        }
+        if (e.message.startsWith("STATUS_CHANGED:")) {
+          const status = (e.message.split(":")[1] ?? "").toLowerCase();
+          return badRequest(
+            `This permit is now ${status} — checklist replies are only editable while it's pending or suspended. Reload the permit to see the latest state.`,
+          );
+        }
+        if (e.message === "GONE") {
+          return notFound();
+        }
       }
       throw e;
     }

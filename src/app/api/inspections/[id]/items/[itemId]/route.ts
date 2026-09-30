@@ -85,10 +85,41 @@ export async function PATCH(
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }
 
-  const updated = await prisma.inspectionItem.update({
-    where: { id: itemId },
-    data,
-  });
+  // Race guard: if a peer reviewer approved / rejected / rescheduled the WIR
+  // between the pre-check above and this write, the note must NOT sneak in
+  // after the decision. Re-read status inside a transaction and abort the
+  // write if it moved out of IN_REVIEW.
+  let updated;
+  try {
+    updated = await prisma.$transaction(async (tx) => {
+      const fresh = await tx.inspection.findUnique({
+        where: { id: inspectionId },
+        select: { status: true },
+      });
+      if (!fresh) throw new RangeError("GONE");
+      if (fresh.status !== "IN_REVIEW") {
+        throw new RangeError(`STATUS_CHANGED:${fresh.status}`);
+      }
+      return tx.inspectionItem.update({
+        where: { id: itemId },
+        data,
+      });
+    });
+  } catch (e) {
+    if (e instanceof RangeError) {
+      if (e.message === "GONE") {
+        return NextResponse.json({ error: "Item not found" }, { status: 404 });
+      }
+      if (e.message.startsWith("STATUS_CHANGED:")) {
+        const status = (e.message.split(":")[1] ?? "").toLowerCase();
+        return NextResponse.json(
+          { error: `This WIR is now ${status} — per-item feedback is only editable while it's in review. Reload the WIR to see the latest state.` },
+          { status: 400 },
+        );
+      }
+    }
+    throw e;
+  }
 
   await recordAudit({
     projectId: item.inspection.projectId,
