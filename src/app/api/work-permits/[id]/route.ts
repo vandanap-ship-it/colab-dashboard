@@ -194,11 +194,31 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       data.suspensionResolvedById = session.user.id;
     }
 
-    const updated = await prisma.workPermit.update({
-      where: { id },
+    // Conditional update: only apply the transition if the row is still
+    // in the status we validated `kind` against. Two approvers clicking
+    // Approve at the same moment (or any race that doesn't send
+    // expectedUpdatedAt from the backward-compat client path) would
+    // otherwise both see PENDING and both write APPROVED, with
+    // approvedById / approvedAt landing non-deterministically. The
+    // updateMany with a status guard makes exactly ONE win — the other
+    // gets `count === 0` and a 409, matching the optimistic-lock shape.
+    const conditionalUpdate = await prisma.workPermit.updateMany({
+      where: { id, status: currentStatus, deletedAt: null },
       data,
+    });
+    if (conditionalUpdate.count === 0) {
+      return NextResponse.json(
+        {
+          error: "This permit was just updated by someone else. Reload to see the latest state.",
+        },
+        { status: 409 },
+      );
+    }
+    const updated = await prisma.workPermit.findUnique({
+      where: { id },
       include: workPermitInclude,
     });
+    if (!updated) return notFound();
 
     await recordAudit({
       projectId: existing.projectId,
