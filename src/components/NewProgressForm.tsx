@@ -538,6 +538,13 @@ export default function NewProgressForm({
     } else {
       toast.info("Saved on this device. It will sync when you're back online.");
     }
+    // Advance the monotonic floor to reflect the just-submitted value so
+    // a subsequent "Add another" on the same activity starts from the
+    // correct minimum. Skip on queued (offline) saves — the server
+    // hasn't confirmed the write, so priorMax shouldn't budge yet.
+    if (saved && mode === "publish" && cumulative > priorMaxCumulative) {
+      setPriorMaxCumulative(cumulative);
+    }
     setSaved({ queued: !saved, mode, displayId: serverDisplayId });
     router.refresh();
   }
@@ -554,7 +561,21 @@ export default function NewProgressForm({
   function resetForm() {
     setDate(today);
     setAchieved(0);
-    setPctState(0);
+    // Reset slider to the monotonic floor for the STILL-picked activity,
+    // not to 0 — a fresh 0 would visually clamp to `min` on the range
+    // input but pctState would stay 0, so a subsequent submit without
+    // moving the slider would 409 on the server. Bumping to the floor
+    // keeps display + state in sync.
+    if (selected) {
+      const total = selected.totalQuantity ?? 0;
+      const floorPct =
+        total > 0
+          ? Math.floor((priorMaxCumulative / total) * 100)
+          : Math.floor(priorMaxCumulative);
+      setPctState(floorPct);
+    } else {
+      setPctState(0);
+    }
     setReasonCode("");
     setReasonNote("");
     setLabour([{ category: "Skilled", count: 0 }]);
