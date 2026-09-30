@@ -5,6 +5,16 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { canAccessModule, hasFullAccess, MODULES } from "@/lib/modules";
+
+// Match the raise-side gate: SAFETY-scoped WL HSE officers use the
+// permit routes too (view + PATCH by id + DELETE). See the twin
+// helper in the collection route for the full note.
+function canUsePermits(mods: string | null | undefined): boolean {
+  return (
+    canAccessModule(mods, MODULES.PERMIT) ||
+    canAccessModule(mods, MODULES.SAFETY)
+  );
+}
 import { isAdmin } from "@/lib/roles";
 import { checkConflict } from "@/lib/optimisticLock";
 import { parseBody } from "@/lib/parseBody";
@@ -61,7 +71,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   try {
     const session = await auth();
     if (!session?.user) return unauthorized();
-    if (!canAccessModule(session.user.modules, MODULES.PERMIT)) return forbidden();
+    if (!canUsePermits(session.user.modules)) return forbidden();
     const { id } = await ctx.params;
     const workPermit = await prisma.workPermit.findUnique({
       where: { id },
@@ -78,7 +88,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   try {
     const session = await auth();
     if (!session?.user) return unauthorized();
-    if (!canAccessModule(session.user.modules, MODULES.PERMIT)) return forbidden();
+    if (!canUsePermits(session.user.modules)) return forbidden();
 
     const { id } = await ctx.params;
     const existing = await prisma.workPermit.findUnique({ where: { id } });
@@ -309,7 +319,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   try {
     const session = await auth();
     if (!session?.user) return unauthorized();
-    if (!canAccessModule(session.user.modules, MODULES.PERMIT)) return forbidden();
+    if (!canUsePermits(session.user.modules)) return forbidden();
 
     const { id } = await ctx.params;
     const existing = await prisma.workPermit.findFirst({

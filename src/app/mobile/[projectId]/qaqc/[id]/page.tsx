@@ -64,6 +64,30 @@ export default async function MobileInspectionDetailPage({
       })
     : [];
 
+  // Fallback queue for the Approvers section when no specific reviewer
+  // was picked. Shraddha 2026-09-30: showing "PENDING" with no name (and
+  // a "broadcasted to planner + product + admin queue" note) made the
+  // Approvers card read as if nobody was on the WIR, when in fact
+  // Thangamani (PLANNER + QAQC) was actively reviewing it. So when
+  // nothing is assigned, resolve the actual eligible queue and show
+  // those users as pending. Same query the raise-side notification uses
+  // (roles route.ts:319-322) so what the reviewer sees matches who was
+  // actually pinged. Skipped when we already have assigned reviewers,
+  // and when the WIR is already resolved (APPROVED / REJECTED — the
+  // section then renders the actual reviewer, not the queue).
+  const fallbackReviewers =
+    inspection.status === "IN_REVIEW" && assignedReviewers.length === 0
+      ? await prisma.user.findMany({
+          where: {
+            active: true,
+            role: { in: ["PLANNER", "PRODUCT_TEAM", "ADMIN"] },
+            id: { not: inspection.filledById ?? undefined },
+          },
+          select: { id: true, name: true, username: true, role: true },
+          orderBy: { name: "asc" },
+        })
+      : [];
+
   // Module gate — a QAQC-scoped user cannot open a SAFETY inspection and vice
   // versa. Server-side belt matches the API's own belt-and-braces.
   if (!canAccessScopedRow(session.user.modules, inspection.module)) {
@@ -350,13 +374,19 @@ export default async function MobileInspectionDetailPage({
               <div className="h-px flex-1 bg-stone-200" />
             </div>
             {inspection.status === "IN_REVIEW" ? (
-              assignedReviewers.length === 0 ? (
+              // Priority 1: an explicitly-picked reviewer set from Step
+              // 2 of the WIR raise. Priority 2: the fallback broadcast
+              // queue (PLANNER / PRODUCT_TEAM / ADMIN) resolved on the
+              // server. Both render as pending rows so the reviewer
+              // looking at this WIR sees themselves on the card
+              // instead of a vague "no specific reviewer picked" note.
+              (assignedReviewers.length > 0 ? assignedReviewers : fallbackReviewers).length === 0 ? (
                 <div className="text-center text-xs text-stone-500 italic">
-                  No specific reviewer picked — the WIR is broadcast to the
-                  planner + product + admin queue.
+                  No reviewers configured for this project yet — ask an admin
+                  to grant Planner / Product / Admin to at least one user.
                 </div>
               ) : (
-                assignedReviewers.map((r) => (
+                (assignedReviewers.length > 0 ? assignedReviewers : fallbackReviewers).map((r) => (
                   <ApproverCard
                     key={r.id}
                     name={r.name ?? r.username}

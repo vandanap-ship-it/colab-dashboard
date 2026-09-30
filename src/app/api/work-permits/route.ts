@@ -114,10 +114,23 @@ const workPermitInclude = {
 
 const STATUSES = new Set(["PENDING", "APPROVED", "REJECTED", "CLOSED", "SUSPENDED"] as WorkPermitStatus[]);
 
+// A user can raise / see permits if their scope includes either PERMIT
+// (contractors like Abraham T, tagged PERMIT) or SAFETY (WL HSE officers
+// like Abhishek Mane, tagged SAFETY). The mobile form and detail pages
+// have always gated on SAFETY; the API used to gate on PERMIT-only, so
+// Abhishek could open the wizard but got a 403 on Submit. Widened
+// 2026-09-30 to match the form gate.
+function canUsePermits(mods: string | null | undefined): boolean {
+  return (
+    canAccessModule(mods, MODULES.PERMIT) ||
+    canAccessModule(mods, MODULES.SAFETY)
+  );
+}
+
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canAccessModule(session.user.modules, MODULES.PERMIT)) {
+  if (!canUsePermits(session.user.modules)) {
     return NextResponse.json({ error: "Your account doesn't have access to permits." }, { status: 403 });
   }
 
@@ -162,7 +175,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canAccessModule(session.user.modules, MODULES.PERMIT)) {
+  if (!canUsePermits(session.user.modules)) {
     return NextResponse.json({ error: "Your account doesn't have access to permits." }, { status: 403 });
   }
 

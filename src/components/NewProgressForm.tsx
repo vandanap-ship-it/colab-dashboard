@@ -697,36 +697,14 @@ export default function NewProgressForm({
         />
       )}
 
-      {/* Colab-parity category tabs (Madhavan zip 2026-09-30 · top of
-          New Progress form). All three tabs share the same field shape
-          per Shraddha — the picker just tags the entry. On resume of a
-          DRAFT, Misc. is hidden (Colab's Edit view only shows Labour
-          Supply / PRW). */}
-      <section>
-        <div className="flex gap-2 rounded-full bg-sandstone-50 border border-sandstone-100 p-1">
-          {(
-            [
-              "LABOUR_SUPPLY",
-              "PRW",
-              ...(isResume ? [] : (["MISC"] as const)),
-            ] as ProgressCategory[]
-          ).map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setProgressCategory(c)}
-              aria-pressed={progressCategory === c}
-              className={`flex-1 rounded-full px-3 py-2 text-[13px] font-semibold ${
-                progressCategory === c
-                  ? "bg-ferrous-500 text-white"
-                  : "text-ink-2"
-              }`}
-            >
-              {PROGRESS_CATEGORY_LABELS[c]}
-            </button>
-          ))}
-        </div>
-      </section>
+      {/* Labour Supply / PRW / Misc. tabs used to sit here. Shraddha
+          2026-09-30 removed them from the New Progress flow: the site
+          team files everything under one shape, and the split was
+          decorative in Siddhi (all three tabs already collected the
+          same fields). Category state defaults to PRW under the hood
+          so the API payload is unchanged and drafts / edits still
+          round-trip. If the split ever comes back the tab block is
+          the thing to restore. */}
 
       {/* Step 1 · Activity */}
       <section>
@@ -889,7 +867,7 @@ export default function NewProgressForm({
                     Tap the mic and just talk — we&apos;ll write it down.
                   </p>
                   <VoiceTextarea
-                    rows={4}
+                    rows={2}
                     value={notes}
                     onChange={setNotes}
                     placeholder="Tell us what you did today…"

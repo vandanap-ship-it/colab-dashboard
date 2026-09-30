@@ -33,11 +33,20 @@ const PatchCheckpointSchema = z.object({
 });
 
 
+// Match the raise-side / [id] route gate: SAFETY-scoped HSE officers
+// need to see and reply on permit checklists too.
+function canUsePermits(mods: string | null | undefined): boolean {
+  return (
+    canAccessModule(mods, MODULES.PERMIT) ||
+    canAccessModule(mods, MODULES.SAFETY)
+  );
+}
+
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth();
     if (!session?.user) return unauthorized();
-    if (!canAccessModule(session.user.modules, MODULES.PERMIT)) return forbidden();
+    if (!canUsePermits(session.user.modules)) return forbidden();
 
     const { id } = await ctx.params;
     const parsed = await parseBody(req, PatchCheckpointSchema);
