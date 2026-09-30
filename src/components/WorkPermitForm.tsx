@@ -414,13 +414,35 @@ export default function WorkPermitForm({
           4-segment progress bar. Matches Abhishek zip screens 7/10/14/32. */}
       <div className="px-5 pt-5 pb-3 bg-ivory border-b border-sandstone-100">
         <div className="flex items-start gap-3">
-          <a
-            href={`/mobile/${projectId}`}
+          <button
+            type="button"
             aria-label="Close permit wizard"
+            onClick={(e) => {
+              // Colab-parity: warn before discarding a partially-entered
+              // permit. `dirty` counts any field the user has meaningfully
+              // touched — a blank close from a fresh open exits silently.
+              const dirty =
+                title.trim().length > 0 ||
+                description.trim().length > 0 ||
+                location.trim().length > 0 ||
+                contractorId.length > 0 ||
+                selectedApprovers.size > 0 ||
+                labourEntries.some((l) => l.workerName || l.role || l.count) ||
+                personnelEntries.some((l) => l.workerName || l.role) ||
+                coRequesterIds.size > 0 ||
+                activityHead.length > 0 ||
+                photos.length > 0 ||
+                activeChecklist.some((a) => a.passed !== null || a.remark.trim() || a.photoUrl);
+              if (dirty && !window.confirm("Discard this permit? Your entered details won't be saved.")) {
+                e.preventDefault();
+                return;
+              }
+              window.location.href = `/mobile/${projectId}`;
+            }}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full text-ink hover:bg-sandstone-100 shrink-0"
           >
             <span className="text-xl">×</span>
-          </a>
+          </button>
           <div className="flex-1 text-center">
             <h1 className="font-serif text-[20px] leading-tight text-ink tracking-tight uppercase">
               {WORK_PERMIT_TYPE_LABELS[type]} Permit
