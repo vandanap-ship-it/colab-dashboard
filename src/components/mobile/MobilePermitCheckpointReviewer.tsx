@@ -63,6 +63,11 @@ export default function MobilePermitCheckpointReviewer({
   }
 
   async function uploadPhoto(file: File) {
+    // Top-of-function guard: React state updates are batched, so
+    // `disabled={uploading}` on the file input doesn't kick in until
+    // the next paint. A rapid double-selection would race two uploads
+    // and leave `reviewerPhotoUrl` in a coin-flip state.
+    if (uploading || saving) return;
     setError(null);
     setUploading(true);
     try {
@@ -99,7 +104,13 @@ export default function MobilePermitCheckpointReviewer({
   }
 
   async function clearPhoto() {
+    // Same guard as uploadPhoto — a double-tap of the X should not
+    // fire two DELETE PATCHes. The second would still succeed (idempotent
+    // in effect), but the audit trail would then carry two identical
+    // "Reviewer cleared photo" lines, cluttering the record.
+    if (saving || uploading) return;
     setError(null);
+    setSaving(true);
     try {
       const res = await fetch(`/api/work-permits/${permitId}/checkpoints`, {
         method: "PATCH",
@@ -115,6 +126,8 @@ export default function MobilePermitCheckpointReviewer({
       startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Clear failed");
+    } finally {
+      setSaving(false);
     }
   }
 

@@ -184,7 +184,7 @@ export default function MobileQaqcReviewActions({
             <button
               type="button"
               onClick={() => patch("REJECTED", reason.trim() || undefined)}
-              disabled={isPending || reason.trim().length < 3}
+              disabled={isPending || saving || reason.trim().length < 3}
               className="rounded-xl bg-ferrous-500 text-white text-sm font-semibold py-2 disabled:opacity-60"
             >
               {isPending ? "Saving…" : "Ok"}

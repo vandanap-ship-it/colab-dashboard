@@ -229,7 +229,7 @@ export default function MobilePermitActions({
             <button
               type="button"
               onClick={() => patch("REJECTED", { rejectionReason: reason.trim() || undefined })}
-              disabled={isPending || reason.trim().length < 3}
+              disabled={isPending || saving || reason.trim().length < 3}
               className="rounded-xl bg-red-600 text-white text-sm font-semibold py-2 disabled:opacity-60"
             >
               {isPending ? "Saving…" : "Reject permit"}
