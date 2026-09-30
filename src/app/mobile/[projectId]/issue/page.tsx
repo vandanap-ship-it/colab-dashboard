@@ -95,6 +95,7 @@ export default async function MobileIssuesListPage({
         createdBy: { select: { name: true } },
         assignedTo: { select: { name: true } },
         wbsNode: { select: { name: true } },
+        villa: { select: { number: true, label: true } },
         _count: { select: { photos: true } },
       },
     }),
@@ -154,6 +155,9 @@ export default async function MobileIssuesListPage({
                       </div>
                       <div className="text-[12px] text-ink-3 mt-1.5">
                         {i.createdBy?.name ?? "—"}
+                        {i.villa
+                          ? ` · ${i.villa.label || `Villa ${String(i.villa.number).padStart(2, "0")}`}`
+                          : ""}
                         {i.wbsNode?.name ? ` · ${i.wbsNode.name}` : ""}
                       </div>
                       <div className="text-[11px] text-ink-3 mt-0.5 flex items-center gap-2 flex-wrap">

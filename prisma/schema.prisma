@@ -216,6 +216,7 @@ model Villa {
   project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   block      Block            @relation(fields: [blockId], references: [id], onDelete: Cascade)
   milestones VillaMilestone[]
+  issues     Issue[]          @relation("IssueVilla")
 
   @@unique([projectId, number])
   @@index([projectId])
@@ -565,6 +566,14 @@ model Issue {
   inspectionId String?
   module       String? // QAQC | SAFETY | null (general). Scopes visibility for contractor users.
 
+  // Villa the observation is tagged to. Set independently of wbsNodeId
+  // so a project-level observation (no specific activity picked) can
+  // still be filtered / grouped by villa in reports. When both are
+  // set they must agree — the ReportForm clears wbsNodeId if the
+  // filler switches to a villa that doesn't contain the picked
+  // activity, so this is a soft invariant, not a DB constraint.
+  villaId      String?
+
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
@@ -572,6 +581,7 @@ model Issue {
 
   project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   wbsNode    WBSNode?     @relation(fields: [wbsNodeId], references: [id])
+  villa      Villa?       @relation("IssueVilla", fields: [villaId], references: [id])
   createdBy  User         @relation("IssueCreator", fields: [createdById], references: [id])
   assignedTo User?        @relation("IssueAssignee", fields: [assignedToId], references: [id])
   debitTo    Contractor?  @relation("IssueDebitContractor", fields: [debitToId], references: [id])
@@ -582,6 +592,7 @@ model Issue {
   @@index([assignedToId])
   @@index([debitToId])
   @@index([inspectionId])
+  @@index([villaId])
 }
 
 model IssuePhoto {

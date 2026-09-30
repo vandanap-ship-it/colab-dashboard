@@ -305,6 +305,7 @@ CREATE TABLE "Issue" (
     "debitAmount" DOUBLE PRECISION,
     "inspectionId" TEXT,
     "module" TEXT,
+    "villaId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "deletedAt" TIMESTAMP(3),
@@ -801,6 +802,9 @@ CREATE INDEX "Issue_debitToId_idx" ON "Issue"("debitToId");
 CREATE INDEX "Issue_inspectionId_idx" ON "Issue"("inspectionId");
 
 -- CreateIndex
+CREATE INDEX "Issue_villaId_idx" ON "Issue"("villaId");
+
+-- CreateIndex
 CREATE INDEX "IssuePhoto_issueId_idx" ON "IssuePhoto"("issueId");
 
 -- CreateIndex
@@ -1039,6 +1043,9 @@ ALTER TABLE "Issue" ADD CONSTRAINT "Issue_projectId_fkey" FOREIGN KEY ("projectI
 
 -- AddForeignKey
 ALTER TABLE "Issue" ADD CONSTRAINT "Issue_wbsNodeId_fkey" FOREIGN KEY ("wbsNodeId") REFERENCES "WBSNode"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Issue" ADD CONSTRAINT "Issue_villaId_fkey" FOREIGN KEY ("villaId") REFERENCES "Villa"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Issue" ADD CONSTRAINT "Issue_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -34,6 +34,10 @@ const PostIssueSchema = z.object({
   debitToId: z.string().min(1).nullable().optional(),
   debitAmount: z.number().min(0).nullable().optional(),
   inspectionId: z.string().min(1).nullable().optional(),
+  // Villa the observation is tagged to (Shraddha 2026-09-30). Independent
+  // of wbsNodeId — a project-level observation with no specific activity
+  // can still carry the villa for downstream reports.
+  villaId: z.string().min(1).nullable().optional(),
   idempotencyKey: z.string().max(120).optional(),
 });
 const STATUSES = new Set(["OPEN", "RESOLVED", "IN_REINSPECTION"]);
@@ -105,6 +109,7 @@ export async function POST(req: Request) {
         createdBy: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
         wbsNode: { select: { id: true, name: true, taskCode: true } },
+        villa: { select: { id: true, number: true, label: true } },
         photos: true,
       },
     });
@@ -125,6 +130,7 @@ export async function POST(req: Request) {
     debitToId,
     debitAmount,
     inspectionId,
+    villaId,
   } = body;
   const desc = description.trim();
   // Re-map legacy LOW/MEDIUM/HIGH to Colab's Minor/Major/Critical so the
@@ -169,6 +175,33 @@ export async function POST(req: Request) {
   const wbsErr = await assertWbsNodeInProject(wbsNodeId, projectId);
   if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
 
+  // Same cross-project guard for the villa tag — a scoped user shouldn't
+  // be able to file an observation on Project B's villa via Project A.
+  let resolvedVillaId: string | null = villaId ?? null;
+  if (resolvedVillaId) {
+    const villa = await prisma.villa.findUnique({
+      where: { id: resolvedVillaId },
+      select: { projectId: true },
+    });
+    if (!villa) {
+      return NextResponse.json({ error: "Villa not found" }, { status: 400 });
+    }
+    if (villa.projectId !== projectId) {
+      return NextResponse.json({ error: "Villa is not on this project" }, { status: 400 });
+    }
+  }
+  // Auto-fill villa from the picked activity when the filler didn't
+  // pick one explicitly — Colab implicitly tags observations to the
+  // activity's villa. Skips when villaId was already sent so an
+  // intentionally-different villa (rare, but possible) survives.
+  if (!resolvedVillaId && wbsNodeId) {
+    const node = await prisma.wBSNode.findUnique({
+      where: { id: wbsNodeId },
+      select: { villaId: true },
+    });
+    if (node?.villaId) resolvedVillaId = node.villaId;
+  }
+
   // Auto-tag the responsible contractor. Shraddha, Sep 24: "you know
   // which contractor is associated with which villa. Auto-tag them and
   // send a notification."
@@ -205,6 +238,7 @@ export async function POST(req: Request) {
     createdBy: { select: { id: true, name: true } },
     assignedTo: { select: { id: true, name: true } },
     wbsNode: { select: { id: true, name: true, taskCode: true } },
+    villa: { select: { id: true, number: true, label: true } },
     photos: true,
   } as const;
 
@@ -216,6 +250,7 @@ export async function POST(req: Request) {
         data: {
           projectId,
           wbsNodeId: wbsNodeId || null,
+          villaId: resolvedVillaId,
           description: desc,
           severity: sev,
           category: cat.length > 0 ? cat : null,
