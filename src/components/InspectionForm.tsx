@@ -1060,14 +1060,14 @@ export default function InspectionForm({
             onChange={(e) => setExactLocation(e.target.value)}
             placeholder="Enter Exact Location"
             rows={2}
-            className="mt-1 w-full rounded-md border-2 border-dashed border-amber-300 bg-white px-3 py-2 text-sm resize-none"
+            className="mt-1 w-full rounded-md border border-dashed border-sandstone-200 bg-white px-3 py-2 text-sm resize-none"
           />
         </label>
 
         <div className="grid grid-cols-2 gap-2">
           <label className="block">
             <span className="text-sm font-medium text-stone-700">Total Quantity</span>
-            <div className="mt-1 flex items-center rounded-md border-2 border-dashed border-amber-300 bg-white px-2">
+            <div className="mt-1 flex items-center rounded-md border border-dashed border-sandstone-200 bg-white px-2">
               <input
                 type="number"
                 inputMode="decimal"
@@ -1082,7 +1082,7 @@ export default function InspectionForm({
           </label>
           <label className="block">
             <span className="text-sm font-medium text-stone-700">Executed Quantity</span>
-            <div className="mt-1 flex items-center rounded-md border-2 border-dashed border-amber-300 bg-white px-2">
+            <div className="mt-1 flex items-center rounded-md border border-dashed border-sandstone-200 bg-white px-2">
               <input
                 type="number"
                 inputMode="decimal"

@@ -1,17 +1,37 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isScopedUser } from "@/lib/modules";
+import { canAccessModule, hasFullAccess, MODULES } from "@/lib/modules";
+
+// Modules whose day-to-day work is activity-linked. A user scoped to any of
+// these needs the wbs to raise a WIR, log progress, or attach a permit /
+// hindrance to a specific activity. Only pure CONCERN-scoped users are
+// excluded — concerns are free-text notes for leadership, not activity work.
+const ACTIVITY_LINKED_MODULES = [
+  MODULES.PROGRESS,
+  MODULES.QAQC,
+  MODULES.SAFETY,
+  MODULES.PERMIT,
+  MODULES.HINDRANCE,
+] as const;
 
 export async function GET(req: Request, ctx: RouteContext<"/api/projects/[id]/wbs">) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // External contractors are scoped to their module and must not see the
-  // project schedule. Return an empty list so their forms degrade gracefully
-  // (no activity picker) rather than erroring.
-  if (isScopedUser(session.user.modules)) {
-    return NextResponse.json({ nodes: [] });
+  // Full-access users always get the schedule. Scoped users get it if any
+  // of their modules is activity-linked (QAQC, Safety, Progress, Permit,
+  // Hindrance) — otherwise their forms show an empty picker and they cannot
+  // raise anything. Nagarjuna (SITE_ENGINEER, ["QAQC"]) hit this on
+  // 2026-09-30: the WIR raise page said "No sections with activities on
+  // this villa" because the earlier blanket `isScopedUser` early-return
+  // hid all 175 leaf activities from him.
+  const mods = session.user.modules;
+  if (!hasFullAccess(mods)) {
+    const anyActivityLinked = ACTIVITY_LINKED_MODULES.some((m) => canAccessModule(mods, m));
+    if (!anyActivityLinked) {
+      return NextResponse.json({ nodes: [] });
+    }
   }
 
   const { id: projectId } = await ctx.params;
