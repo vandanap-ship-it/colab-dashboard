@@ -203,7 +203,7 @@ export async function POST(req: Request) {
   // Normalize the two accepted shapes: legacy `approverIds` -> a single
   // level-1 row per user with default caps; new `approvers` used verbatim.
   // At least one must be provided.
-  const approverRows =
+  const rawApproverRows =
     body.approvers && body.approvers.length > 0
       ? body.approvers
       : (body.approverIds ?? []).map((userId, i) => ({
@@ -215,6 +215,17 @@ export async function POST(req: Request) {
           isDefault: false,
           orderIndex: i,
         }));
+
+  // Dedup by (userId, levelIndex) so a client that accidentally sent
+  // the same approver twice at the same level doesn't blow up the
+  // PermitApprover unique constraint at write time (@@unique
+  // [workPermitId, userId, levelIndex]). Keep the LAST duplicate so the
+  // latest capability choice wins.
+  const approverRowMap = new Map<string, (typeof rawApproverRows)[number]>();
+  for (const r of rawApproverRows) {
+    approverRowMap.set(`${r.userId}:${r.levelIndex ?? 1}`, r);
+  }
+  const approverRows = Array.from(approverRowMap.values());
 
   if (approverRows.length === 0) {
     return NextResponse.json(
