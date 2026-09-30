@@ -89,6 +89,15 @@ export default async function MobileQaqcPage({
   const canSeeSafety = canAccessModule(session.user.modules, MODULES.SAFETY);
   if (moduleFilter === "QAQC" && !canSeeQAQC) moduleFilter = "SAFETY";
   if (moduleFilter === "SAFETY" && !canSeeSafety) moduleFilter = "QAQC";
+  // No explicit ?module= param AND the caller is scoped to exactly one of
+  // {QAQC, SAFETY}: default to that module. Otherwise a Thangamani (scoped
+  // QAQC) who deep-links to /mobile/[id]/qaqc bare would see SAFETY WIRs
+  // in her lists and counts — bypass of the module isolation. Internal
+  // staff (both modules) keep the combined view.
+  if (moduleFilter === null) {
+    if (canSeeQAQC && !canSeeSafety) moduleFilter = "QAQC";
+    else if (canSeeSafety && !canSeeQAQC) moduleFilter = "SAFETY";
+  }
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
