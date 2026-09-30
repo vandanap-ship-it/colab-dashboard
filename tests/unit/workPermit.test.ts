@@ -3,6 +3,7 @@ import {
   allowedWorkPermitTransition,
   isApprover,
   isValidHhMm,
+  isValidPermitTimeWindow,
   parseApproverIds,
   serializeApproverIds,
   generatePermitDisplayId,
@@ -176,5 +177,37 @@ describe("isValidHhMm", () => {
     expect(isValidHhMm("nine")).toBe(false);
     expect(isValidHhMm("09.00")).toBe(false);
     expect(isValidHhMm("09:00:00")).toBe(false); // no seconds — that's a stricter format
+  });
+});
+
+describe("isValidPermitTimeWindow", () => {
+  it("accepts a same-day permit with start < end", () => {
+    expect(isValidPermitTimeWindow("GENERAL", "09:00", "18:00")).toBe(true);
+    expect(isValidPermitTimeWindow("HOT_WORK", "10:30", "16:45")).toBe(true);
+    expect(isValidPermitTimeWindow("HEIGHT", "08:00", "12:00")).toBe(true);
+    expect(isValidPermitTimeWindow("DESHUTTERING", "07:15", "17:00")).toBe(true);
+  });
+
+  it("rejects a non-Night same-day permit when start >= end", () => {
+    expect(isValidPermitTimeWindow("GENERAL", "18:00", "09:00")).toBe(false);
+    expect(isValidPermitTimeWindow("HOT_WORK", "10:00", "10:00")).toBe(false);
+    expect(isValidPermitTimeWindow("HEIGHT", "16:00", "12:00")).toBe(false);
+  });
+
+  it("accepts a NIGHT_WORK permit that crosses midnight (was the bug)", () => {
+    // The regression this exists to prevent: night shifts like 22:00 → 02:00
+    // are the whole point of the permit type, but string comparison rejects
+    // them under the same-day rule.
+    expect(isValidPermitTimeWindow("NIGHT_WORK", "22:00", "02:00")).toBe(true);
+    expect(isValidPermitTimeWindow("NIGHT_WORK", "23:00", "05:00")).toBe(true);
+    expect(isValidPermitTimeWindow("NIGHT_WORK", "20:30", "06:00")).toBe(true);
+    // A same-evening NIGHT_WORK (e.g. 18:00 → 22:00) is still valid.
+    expect(isValidPermitTimeWindow("NIGHT_WORK", "18:00", "22:00")).toBe(true);
+  });
+
+  it("rejects a NIGHT_WORK permit with identical start and end", () => {
+    // A zero-length permit isn't useful for any type.
+    expect(isValidPermitTimeWindow("NIGHT_WORK", "22:00", "22:00")).toBe(false);
+    expect(isValidPermitTimeWindow("NIGHT_WORK", "00:00", "00:00")).toBe(false);
   });
 });

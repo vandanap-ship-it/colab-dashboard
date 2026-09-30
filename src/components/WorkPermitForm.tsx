@@ -12,6 +12,7 @@ import {
   WORK_PERMIT_TYPE_HINTS,
   WORK_PERMIT_TYPE_LABELS,
   WORK_PERMIT_CHECKPOINTS,
+  isValidPermitTimeWindow,
   type WorkPermitType,
 } from "@/lib/workPermit";
 import { istDayString } from "@/lib/istDay";
@@ -168,10 +169,12 @@ export default function WorkPermitForm({
       setError("Pick at least one approver.");
       return;
     }
-    // Client-side sanity — startTime should be before endTime (or you're
-    // saying "starts at midnight tomorrow", which is a different permit).
-    if (endTime <= startTime) {
-      setError("End time must be after start time.");
+    if (!isValidPermitTimeWindow(type, startTime, endTime)) {
+      setError(
+        type === "NIGHT_WORK"
+          ? "Start and end time can't be the same."
+          : "End time must be after start time.",
+      );
       return;
     }
     setPending(true);
@@ -424,9 +427,13 @@ export default function WorkPermitForm({
   // before Continue enables. Step-2 gate: contractor + ≥1 approver.
   // Step 3 (checklist) is always available. Step 4 (Review) doesn't
   // block on anything, since it's the summary + submit stop.
+  // Night Work permits deliberately cross midnight — "22:00 → 02:00" is
+  // a normal slab-pour shift. isValidPermitTimeWindow relaxes the check
+  // for that type; every other permit stays same-day.
+  const timeOkForStep1 = isValidPermitTimeWindow(type, startTime, endTime);
   const canAdvance =
     step === 1
-      ? title.trim().length >= 3 && workDate.length > 0 && startTime < endTime
+      ? title.trim().length >= 3 && workDate.length > 0 && timeOkForStep1
       : step === 2
         ? contractorId.length > 0 && selectedApprovers.size > 0
         : true;
@@ -1154,8 +1161,10 @@ export default function WorkPermitForm({
             {step === 1
               ? title.trim().length < 3
                 ? "Add a title (at least 3 characters) to continue."
-                : startTime >= endTime
-                  ? "End time must be after start time."
+                : !timeOkForStep1
+                  ? type === "NIGHT_WORK"
+                    ? "Start and end time can't be the same."
+                    : "End time must be after start time."
                   : "Work date is required."
               : step === 2
                 ? contractorId.length === 0

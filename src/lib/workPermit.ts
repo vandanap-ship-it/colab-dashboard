@@ -244,6 +244,24 @@ export function isValidHhMm(v: string): boolean {
 }
 
 /**
+ * Client-side sanity check for a permit's Valid From – To pair.
+ *
+ * Most permit types are same-day: startTime must be strictly before endTime
+ * (as HH:MM strings; zero-padding makes lexicographic comparison correct).
+ * Night Work permits deliberately cross midnight — a 22:00 → 02:00 slab-pour
+ * shift is normal — so the check relaxes to "not equal" for that type.
+ * Called from the form's Step-1 gate + Submit guard so the two paths agree.
+ */
+export function isValidPermitTimeWindow(
+  type: WorkPermitType,
+  startTime: string,
+  endTime: string,
+): boolean {
+  if (type === "NIGHT_WORK") return startTime !== endTime;
+  return startTime < endTime;
+}
+
+/**
  * Colab-parity human-readable permit id shown on cards, headers, and
  * outbound emails: PER-XXXXXXXX with 8 uppercase alphanumerics.
  * The random suffix is unique per project (enforced by the DB), so
