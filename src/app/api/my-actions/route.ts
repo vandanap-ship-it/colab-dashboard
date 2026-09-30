@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ROLES } from "@/lib/roles";
+import { canAccessScopedRow } from "@/lib/modules";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -54,7 +55,7 @@ export async function GET(req: Request) {
   if (canReviewInspections) {
     const inspWhere: { status: string; projectId?: string } = { status: "IN_REVIEW" };
     if (projectId) inspWhere.projectId = projectId;
-    inspectionsToReview = await prisma.inspection.findMany({
+    const raw = await prisma.inspection.findMany({
       where: inspWhere,
       orderBy: { createdAt: "desc" },
       include: {
@@ -63,6 +64,15 @@ export async function GET(req: Request) {
         wbsNode: { select: { id: true, name: true } },
       },
     });
+    // Scope-filter the list to the reviewer's modules. A QAQC-only
+    // reviewer (like Thangamani) shouldn't see SAFETY inspections in
+    // their action count — the detail page's canAccessScopedRow guard
+    // would 403 them anyway, so showing the row here is just a broken
+    // link + a misleading counter. Internal staff (modules == null)
+    // still see everything.
+    inspectionsToReview = raw.filter((r) =>
+      canAccessScopedRow(session.user.modules, r.module),
+    );
   }
 
   return NextResponse.json({
