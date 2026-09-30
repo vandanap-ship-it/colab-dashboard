@@ -250,30 +250,36 @@ export async function flush(): Promise<void> {
           if (outcome === "park") {
             // Validation/permission error — won't fix itself. Park it for a day
             // so it stops spamming retries; the engineer can review/discard via
-            // the pending list.
+            // the pending list. Preserve `itemWithUrls` state — if photos were
+            // already uploaded to storage, we don't want the next retry (from
+            // the pending-list Retry button) to re-upload them.
             const text = await res.text().catch(() => `HTTP ${res.status}`);
             await update({
-              ...item,
-              attempts: item.attempts + 1,
+              ...itemWithUrls,
+              attempts: itemWithUrls.attempts + 1,
               lastError: `HTTP ${res.status}: ${text.slice(0, 200)}`,
               nextAttemptAt: now + 24 * 60 * 60 * 1000,
             });
           } else {
             // Retryable (5xx / 401 / 408 / 429) — back off and try again.
+            // Same `itemWithUrls` spread: keep the photos-uploaded state so we
+            // don't duplicate uploads on every retry.
             await update({
-              ...item,
-              attempts: item.attempts + 1,
+              ...itemWithUrls,
+              attempts: itemWithUrls.attempts + 1,
               lastError: `HTTP ${res.status}`,
-              nextAttemptAt: now + nextDelay(item.attempts + 1),
+              nextAttemptAt: now + nextDelay(itemWithUrls.attempts + 1),
             });
           }
         } catch (e) {
-          // Network error → offline. Just bump retry time.
+          // Network error → offline. Just bump retry time. Preserve
+          // `itemWithUrls` so an uploaded-photo entry doesn't re-upload
+          // on the next flush.
           await update({
-            ...item,
-            attempts: item.attempts + 1,
+            ...itemWithUrls,
+            attempts: itemWithUrls.attempts + 1,
             lastError: e instanceof Error ? e.message : "network error",
-            nextAttemptAt: now + nextDelay(item.attempts + 1),
+            nextAttemptAt: now + nextDelay(itemWithUrls.attempts + 1),
           });
         }
       }
