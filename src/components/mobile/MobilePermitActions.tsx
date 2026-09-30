@@ -44,6 +44,7 @@ export default function MobilePermitActions({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [saving, setSaving] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -54,6 +55,8 @@ export default function MobilePermitActions({
     status: "APPROVED" | "REJECTED" | "CLOSED" | "SUSPENDED",
     opts?: { rejectionReason?: string; suspensionReason?: string },
   ) {
+    if (saving) return; // guard against a fast double-tap racing the fetch
+    setSaving(true);
     setError(null);
     const res = await fetch(`/api/work-permits/${permitId}`, {
       method: "PATCH",
@@ -68,11 +71,13 @@ export default function MobilePermitActions({
     if (res.status === 409) {
       setError("Someone updated this permit while you were reading. Refreshing.");
       startTransition(() => router.refresh());
+      setSaving(false);
       return;
     }
     if (!res.ok) {
       const data = await res.json().catch(() => null);
       setError(data?.error ?? "Failed to save.");
+      setSaving(false);
       return;
     }
     setRejectOpen(false);
@@ -89,6 +94,10 @@ export default function MobilePermitActions({
         router.refresh();
       }
     });
+    // Keep `saving` locked through the navigation — the component
+    // remounts on push, so we don't need a manual clear here. On the
+    // stay-in-place path (Suspend/Resume) the refresh re-fetches server
+    // state which reflows the button visibility.
   }
 
   const canReject =
@@ -114,7 +123,7 @@ export default function MobilePermitActions({
           <button
             type="button"
             onClick={() => setRejectOpen(true)}
-            disabled={isPending}
+            disabled={isPending || saving}
             className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-stone-800 text-sm font-semibold py-3 disabled:opacity-60"
           >
             <X className="w-4 h-4" />
@@ -123,7 +132,7 @@ export default function MobilePermitActions({
           <button
             type="button"
             onClick={() => patch("APPROVED")}
-            disabled={isPending}
+            disabled={isPending || saving}
             className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-stone-900 text-white text-sm font-semibold py-3 disabled:opacity-60"
           >
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
@@ -138,7 +147,7 @@ export default function MobilePermitActions({
             <button
               type="button"
               onClick={() => patch("APPROVED")}
-              disabled={isPending}
+              disabled={isPending || saving}
               className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold py-3 disabled:opacity-60"
             >
               {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
@@ -149,7 +158,7 @@ export default function MobilePermitActions({
             <button
               type="button"
               onClick={() => setSuspendOpen(true)}
-              disabled={isPending}
+              disabled={isPending || saving}
               className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-sm font-semibold py-3 disabled:opacity-60"
             >
               <PauseCircle className="w-4 h-4" />
@@ -160,7 +169,7 @@ export default function MobilePermitActions({
             <button
               type="button"
               onClick={() => setRejectOpen(true)}
-              disabled={isPending}
+              disabled={isPending || saving}
               className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-stone-800 text-sm font-semibold py-3 disabled:opacity-60"
             >
               <X className="w-4 h-4" />
@@ -171,7 +180,7 @@ export default function MobilePermitActions({
             <button
               type="button"
               onClick={() => patch("CLOSED")}
-              disabled={isPending}
+              disabled={isPending || saving}
               className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-stone-900 text-white text-sm font-semibold py-3 disabled:opacity-60"
             >
               {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
@@ -189,7 +198,7 @@ export default function MobilePermitActions({
           <button
             type="button"
             onClick={() => setRejectOpen(true)}
-            disabled={isPending}
+            disabled={isPending || saving}
             className="text-[12px] font-semibold text-red-700 underline disabled:opacity-40"
           >
             Reject permit instead
@@ -252,7 +261,7 @@ export default function MobilePermitActions({
             <button
               type="button"
               onClick={() => patch("SUSPENDED", { suspensionReason: suspendReason.trim() || undefined })}
-              disabled={isPending}
+              disabled={isPending || saving}
               className="rounded-xl bg-amber-500 text-white text-sm font-semibold py-2 disabled:opacity-60"
             >
               {isPending ? "Saving…" : "Suspend"}
