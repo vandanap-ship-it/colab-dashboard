@@ -8,6 +8,7 @@ import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { milestoneCompletionEmail, sendEmail } from "@/lib/email";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { isValidReasonCode } from "@/lib/hindranceReasons";
+import { sanitizeUploadUrls } from "@/lib/upload";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { checkPrecheck } from "@/lib/progressGates";
 import { generateProgressDisplayId, monotonicViolationMessage } from "@/lib/progress";
@@ -240,6 +241,12 @@ export async function POST(req: Request) {
   // Drafts skip the check for the same reason they skip the precheck
   // gate: the engineer's stashed unfinished attempt shouldn't be
   // policed until they hit Publish.
+  //
+  // Pre-check outside the tx: cheap, catches the vast majority of
+  // violations before the tx cost. The tx below re-runs the check so
+  // two concurrent submits can't BOTH pass this pre-check and BOTH
+  // commit — an in-tx aggregate over PUBLISHED rows is the closest
+  // Prisma gets to SELECT ... FOR UPDATE across the constraint.
   if (!isDraft) {
     const maxPrior = await prisma.progressEntry.aggregate({
       where: { wbsNodeId, status: "PUBLISHED", deletedAt: null },
@@ -255,7 +262,11 @@ export async function POST(req: Request) {
     .map((l) => ({ category: (l.category ?? "").trim(), count: Math.floor(l.count ?? 0) }))
     .filter((l) => l.category.length > 0 && l.count > 0);
 
-  const photosClean = (photoUrls ?? []).slice(0, 6);
+  // Provenance filter: URLs must have come from our own uploader
+  // (Vercel Blob prod, /uploads local dev). A hostile external URL is
+  // silently dropped so a legitimate submit with junk mixed in still
+  // succeeds with the good rows.
+  const photosClean = sanitizeUploadUrls(photoUrls).slice(0, 6);
 
   // Silent-drop unknown reason codes rather than 400 — the entry is more
   // important than the tag.
@@ -270,10 +281,29 @@ export async function POST(req: Request) {
     createdBy: { select: { id: true, name: true } },
   } as const;
 
-  const { record: entry, duplicate } = await createIdempotent(
-    idempotencyKey,
-    () => prisma.progressEntry.findUnique({ where: { idempotencyKey: idempotencyKey! }, include: entryInclude }),
-    () => prisma.$transaction(async (tx) => {
+  let entry: Awaited<ReturnType<typeof prisma.progressEntry.findUnique>>;
+  let duplicate: boolean;
+  try {
+    const outcome = await createIdempotent(
+      idempotencyKey,
+      () => prisma.progressEntry.findUnique({ where: { idempotencyKey: idempotencyKey! }, include: entryInclude }),
+      () => prisma.$transaction(async (tx) => {
+    // Re-check the monotonic invariant inside the tx. Without this,
+    // two concurrent PUBLISHED submits could both pass the pre-check
+    // above (they'd both read the same priorMax before either wrote)
+    // and both commit — silent invariant violation. The tx-scoped
+    // aggregate + throw is Prisma's closest equivalent to
+    // "SELECT MAX(cumulativeQuantity) ... FOR UPDATE".
+    if (!isDraft) {
+      const maxPriorTx = await tx.progressEntry.aggregate({
+        where: { wbsNodeId, status: "PUBLISHED", deletedAt: null },
+        _max: { cumulativeQuantity: true },
+      });
+      const priorMaxTx = maxPriorTx._max.cumulativeQuantity ?? 0;
+      if (cumulative < priorMaxTx) {
+        throw new RangeError(`MONOTONIC:${priorMaxTx}`);
+      }
+    }
     const created = await tx.progressEntry.create({
       data: {
         projectId: node.projectId,
@@ -335,7 +365,23 @@ export async function POST(req: Request) {
 
     return created;
     }),
-  );
+    );
+    entry = outcome.record;
+    duplicate = outcome.duplicate;
+  } catch (e) {
+    // In-tx monotonic re-check refused the write because another
+    // concurrent submit landed higher first. Return the same 409 shape
+    // the pre-tx check returns so the client's error handling doesn't
+    // have to know about the race path.
+    if (e instanceof RangeError && e.message.startsWith("MONOTONIC:")) {
+      const priorMax = Number(e.message.split(":")[1] ?? "0");
+      return NextResponse.json(
+        { error: monotonicViolationMessage(priorMax, "new") },
+        { status: 409 },
+      );
+    }
+    throw e;
+  }
 
   // Fire-and-forget email side-effects outside the transaction so a slow
   // Resend call never blocks the DB commit.

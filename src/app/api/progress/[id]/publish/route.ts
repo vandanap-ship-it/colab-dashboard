@@ -9,6 +9,7 @@ import { isValidReasonCode } from "@/lib/hindranceReasons";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { maybeSendMilestoneCompletionEmail } from "@/lib/progressPublish";
+import { sanitizeUploadUrls } from "@/lib/upload";
 import { generateProgressDisplayId, monotonicViolationMessage } from "@/lib/progress";
 
 /**
@@ -127,7 +128,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/progress/[id]/p
   const labourClean = (body.labour ?? [])
     .map((l) => ({ category: (l.category ?? "").trim(), count: Math.floor(l.count ?? 0) }))
     .filter((l) => l.category.length > 0 && l.count > 0);
-  const photosClean = (body.photoUrls ?? []).slice(0, 6);
+  const photosClean = sanitizeUploadUrls(body.photoUrls).slice(0, 6);
   const reason = isValidReasonCode(body.reasonCode) ? body.reasonCode : null;
   const reasonNoteClean = typeof body.reasonNote === "string" ? body.reasonNote.trim().slice(0, 500) : "";
 
@@ -138,7 +139,28 @@ export async function POST(req: Request, ctx: RouteContext<"/api/progress/[id]/p
     createdBy: { select: { id: true, name: true } },
   } as const;
 
-  const { entry, justClosed } = await prisma.$transaction(async (tx) => {
+  let entry: Awaited<ReturnType<typeof prisma.progressEntry.update>>;
+  let justClosed: Date | undefined;
+  try {
+    const outcome = await prisma.$transaction(async (tx) => {
+    // Re-check the monotonic invariant inside the tx. Without this,
+    // two concurrent publishes could both pass the pre-check above and
+    // both commit — the invariant would be silently violated. Tx-scoped
+    // aggregate + throw is the closest Prisma gets to SELECT ... FOR
+    // UPDATE across the constraint.
+    const maxPriorTx = await tx.progressEntry.aggregate({
+      where: {
+        wbsNodeId: draft.wbsNodeId,
+        status: "PUBLISHED",
+        deletedAt: null,
+        id: { not: id },
+      },
+      _max: { cumulativeQuantity: true },
+    });
+    const priorMaxTx = maxPriorTx._max.cumulativeQuantity ?? 0;
+    if (cumulative < priorMaxTx) {
+      throw new RangeError(`MONOTONIC:${priorMaxTx}`);
+    }
     // Nuke and repave labour + photos so the resumed edits stick.
     // Simpler than diffing per-row, and the draft is tiny.
     await tx.progressLabour.deleteMany({ where: { progressEntryId: id } });
@@ -189,7 +211,19 @@ export async function POST(req: Request, ctx: RouteContext<"/api/progress/[id]/p
     }
 
     return { entry: updated, justClosed: closed };
-  });
+    });
+    entry = outcome.entry;
+    justClosed = outcome.justClosed;
+  } catch (e) {
+    if (e instanceof RangeError && e.message.startsWith("MONOTONIC:")) {
+      const priorMax = Number(e.message.split(":")[1] ?? "0");
+      return NextResponse.json(
+        { error: monotonicViolationMessage(priorMax, "draft") },
+        { status: 409 },
+      );
+    }
+    throw e;
+  }
 
   await recordAudit({
     projectId: draft.projectId,

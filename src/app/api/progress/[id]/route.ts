@@ -9,6 +9,8 @@ import { milestoneCompletionEmail, sendEmail } from "@/lib/email";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { checkConflict } from "@/lib/optimisticLock";
+import { monotonicViolationMessage } from "@/lib/progress";
+import { sanitizeUploadUrls } from "@/lib/upload";
 import {
   badRequest,
   forbidden,
@@ -163,6 +165,30 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
 
   try {
     const updated = await prisma.$transaction(async (tx) => {
+      // Colab-parity monotonic invariant on the edit path: a PUBLISHED
+      // entry's cumulativeQuantity cannot drop below the max cumulative
+      // of *other* PUBLISHED entries on the same activity, otherwise a
+      // planner editing an earlier row could silently make a later row
+      // read as "backward progress" — corrupting rollups and DLR. Drafts
+      // aren't in the invariant (they don't count toward priorMax).
+      if (
+        !isDraft &&
+        data.cumulativeQuantity !== undefined
+      ) {
+        const maxPriorTx = await tx.progressEntry.aggregate({
+          where: {
+            wbsNodeId: entry.wbsNodeId,
+            status: "PUBLISHED",
+            deletedAt: null,
+            id: { not: id },
+          },
+          _max: { cumulativeQuantity: true },
+        });
+        const priorMaxTx = maxPriorTx._max.cumulativeQuantity ?? 0;
+        if (data.cumulativeQuantity < priorMaxTx) {
+          throw new RangeError(`MONOTONIC:${priorMaxTx}`);
+        }
+      }
       const u = await tx.progressEntry.update({ where: { id }, data });
 
       // Replace labour records if provided
@@ -186,9 +212,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
       // attached, we nuke-and-repave.
       if (photoUrls !== undefined) {
         await tx.progressPhoto.deleteMany({ where: { progressEntryId: id } });
-        if (photoUrls.length > 0) {
+        const cleanPhotos = sanitizeUploadUrls(photoUrls).slice(0, 6);
+        if (cleanPhotos.length > 0) {
           await tx.progressPhoto.createMany({
-            data: photoUrls.slice(0, 6).map((url) => ({ progressEntryId: id, url })),
+            data: cleanPhotos.map((url) => ({ progressEntryId: id, url })),
           });
         }
       }
@@ -287,6 +314,14 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
 
     return NextResponse.json({ entry: updated });
   } catch (e) {
+    // Monotonic-invariant refusal from the in-tx check above.
+    if (e instanceof RangeError && e.message.startsWith("MONOTONIC:")) {
+      const priorMax = Number(e.message.split(":")[1] ?? "0");
+      return NextResponse.json(
+        { error: monotonicViolationMessage(priorMax, "new") },
+        { status: 409 },
+      );
+    }
     return handleApiError(e, "PATCH /api/progress/:id");
   }
 }
