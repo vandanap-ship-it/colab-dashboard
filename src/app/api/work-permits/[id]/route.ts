@@ -179,6 +179,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       data.suspendedById = session.user.id;
       data.suspendedAt = now;
       data.suspendedReason = suspensionReason?.trim() || null;
+      // Clear any resolved-timestamps from an earlier suspend/resume
+      // cycle so the detail-page suspension banner doesn't render a
+      // stale "resumed Y" from a prior pass alongside this NEW pause.
+      data.suspensionResolvedAt = null;
+      data.suspensionResolvedById = null;
     } else if (kind === "resume") {
       data.suspensionResolvedAt = now;
       data.suspensionResolvedById = session.user.id;
