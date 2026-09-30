@@ -23,42 +23,10 @@ import {
 } from "@/lib/workPermit";
 import MobilePermitActions from "@/components/mobile/MobilePermitActions";
 import MobilePermitCheckpointReviewer from "@/components/mobile/MobilePermitCheckpointReviewer";
+import { narrowCheckpoints } from "@/lib/permitChecklist";
 
 export const dynamic = "force-dynamic";
 
-// Colab-parity shape for a single stored checklist response. Kept as
-// `unknown` in Prisma (JSON), narrowed here at read time. `reviewerNote`
-// and `reviewerPhotoUrl` are the Colab-parity per-checkpoint "Add Reply"
-// fields written via PATCH /api/work-permits/[id]/checkpoints.
-type StoredChecklistResponse = {
-  q: string;
-  passed: boolean | null;
-  remark?: string;
-  photoUrl?: string;
-  reviewerNote?: string | null;
-  reviewerPhotoUrl?: string | null;
-};
-
-function narrowChecklist(v: unknown): StoredChecklistResponse[] {
-  if (!Array.isArray(v)) return [];
-  const out: StoredChecklistResponse[] = [];
-  for (const row of v) {
-    if (row && typeof row === "object" && typeof (row as Record<string, unknown>).q === "string") {
-      const r = row as Record<string, unknown>;
-      out.push({
-        q: r.q as string,
-        passed: typeof r.passed === "boolean" ? (r.passed as boolean) : null,
-        remark: typeof r.remark === "string" ? (r.remark as string) : undefined,
-        photoUrl: typeof r.photoUrl === "string" ? (r.photoUrl as string) : undefined,
-        reviewerNote:
-          typeof r.reviewerNote === "string" ? (r.reviewerNote as string) : null,
-        reviewerPhotoUrl:
-          typeof r.reviewerPhotoUrl === "string" ? (r.reviewerPhotoUrl as string) : null,
-      });
-    }
-  }
-  return out;
-}
 
 /**
  * Mobile Work Permit detail. Colab-parity layout:
@@ -135,7 +103,7 @@ export default async function MobilePermitDetailPage({
         })
       : [];
 
-  const checklistRows = narrowChecklist(permit.checklistResponses);
+  const checklistRows = narrowCheckpoints(permit.checklistResponses);
 
   // Group approvers by level so the section reads as Colab does — "Level
   // 1 (Level 1)", then a row per approver at that level.

@@ -8,6 +8,7 @@ import { parseBody } from "@/lib/parseBody";
 import { badRequest, forbidden, notFound, unauthorized, handleApiError } from "@/lib/apiErrors";
 import { isAdmin } from "@/lib/roles";
 import { isApprover } from "@/lib/workPermit";
+import { narrowCheckpoints, applyReviewerReply } from "@/lib/permitChecklist";
 
 /**
  * Colab-parity permit reviewer · per-checkpoint Add Reply endpoint.
@@ -30,34 +31,6 @@ const PatchCheckpointSchema = z.object({
   reviewerPhotoUrl: z.string().url().nullable().optional(),
 });
 
-type StoredCheckpoint = {
-  q: string;
-  passed: boolean | null;
-  remark?: string;
-  photoUrl?: string;
-  reviewerNote?: string | null;
-  reviewerPhotoUrl?: string | null;
-};
-
-function narrowCheckpoints(v: unknown): StoredCheckpoint[] {
-  if (!Array.isArray(v)) return [];
-  const out: StoredCheckpoint[] = [];
-  for (const row of v) {
-    if (row && typeof row === "object" && typeof (row as Record<string, unknown>).q === "string") {
-      const r = row as Record<string, unknown>;
-      out.push({
-        q: r.q as string,
-        passed: typeof r.passed === "boolean" ? (r.passed as boolean) : null,
-        remark: typeof r.remark === "string" ? (r.remark as string) : undefined,
-        photoUrl: typeof r.photoUrl === "string" ? (r.photoUrl as string) : undefined,
-        reviewerNote: typeof r.reviewerNote === "string" ? (r.reviewerNote as string) : null,
-        reviewerPhotoUrl:
-          typeof r.reviewerPhotoUrl === "string" ? (r.reviewerPhotoUrl as string) : null,
-      });
-    }
-  }
-  return out;
-}
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -97,25 +70,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
 
     const rows = narrowCheckpoints(permit.checklistResponses);
-    if (index >= rows.length) {
+    const nextRows = applyReviewerReply(rows, index, { reviewerNote, reviewerPhotoUrl });
+    if (nextRows === null) {
       return badRequest(`Checkpoint index out of range (permit has ${rows.length} rows).`);
     }
-
-    const target = rows[index];
-    const next: StoredCheckpoint = {
-      ...target,
-      // undefined = don't touch; null = clear
-      reviewerNote:
-        reviewerNote === undefined
-          ? target.reviewerNote ?? null
-          : reviewerNote?.trim() || null,
-      reviewerPhotoUrl:
-        reviewerPhotoUrl === undefined
-          ? target.reviewerPhotoUrl ?? null
-          : reviewerPhotoUrl || null,
-    };
-    const nextRows = rows.slice();
-    nextRows[index] = next;
 
     await prisma.workPermit.update({
       where: { id },
@@ -131,7 +89,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       summary: `Reviewer replied on checkpoint #${index + 1}${reviewerNote ? `: "${reviewerNote.slice(0, 60)}"` : ""}${reviewerPhotoUrl ? " (with photo)" : ""}`,
     });
 
-    return NextResponse.json({ ok: true, index, checkpoint: next });
+    return NextResponse.json({ ok: true, index, checkpoint: nextRows[index] });
   } catch (e) {
     return handleApiError(e, "work-permits/[id]/checkpoints");
   }
