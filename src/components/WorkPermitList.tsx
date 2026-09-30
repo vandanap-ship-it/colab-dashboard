@@ -9,6 +9,12 @@ import {
   type WorkPermitStatus,
   type WorkPermitType,
 } from "@/lib/workPermit";
+import {
+  bucketPermit,
+  sortDirectionForTab,
+  startOfLocalDay,
+  type PermitTabKey as TabKey,
+} from "@/lib/permitBuckets";
 
 /**
  * Colab-parity permit list (Abhishek + Girish zips, screens 3-9).
@@ -58,8 +64,6 @@ type WorkPermit = {
   }>;
 };
 
-type TabKey = "active" | "future" | "closed" | "suspended" | "rejected";
-
 const TAB_ORDER: { key: TabKey; label: string }[] = [
   { key: "active", label: "Active" },
   { key: "future", label: "Future" },
@@ -68,26 +72,7 @@ const TAB_ORDER: { key: TabKey; label: string }[] = [
   { key: "rejected", label: "Rejected" },
 ];
 
-function startOfLocalDay(iso: string): number {
-  const d = new Date(iso);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function todayStart(): number {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function bucket(p: WorkPermit): TabKey {
-  if (p.status === "CLOSED") return "closed";
-  if (p.status === "SUSPENDED") return "suspended";
-  if (p.status === "REJECTED") return "rejected";
-  const workStart = startOfLocalDay(p.workDate);
-  if (p.status === "APPROVED" && workStart > todayStart()) return "future";
-  return "active";
-}
+const bucket = (p: WorkPermit): TabKey => bucketPermit(p);
 
 // Colab shows a fixed progress ratio per status. We match their copy so
 // site team's muscle memory carries when they switch tools.
@@ -236,7 +221,7 @@ export default function WorkPermitList({
     // other tab reads most-recent first (workDate desc) — a done/paused/
     // rejected permit reviewer wants the latest at the top; a scheduler
     // scanning Future wants tomorrow before next week.
-    const direction = tab === "future" ? 1 : -1;
+    const direction = sortDirectionForTab(tab);
     return filtered.slice().sort((a, b) => {
       const diff = startOfLocalDay(a.workDate) - startOfLocalDay(b.workDate);
       if (diff !== 0) return diff * direction;
