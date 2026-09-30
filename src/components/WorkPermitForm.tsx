@@ -539,8 +539,11 @@ export default function WorkPermitForm({
           remark. Answers ride the payload as checklistResponses. */}
       {activeChecklist.length > 0 && (
         <div className={`rounded-lg border border-stone-200 bg-white overflow-hidden ${step === 3 ? "" : "hidden"}`}>
-          <div className="bg-ink text-white px-3 py-2 text-xs font-semibold uppercase tracking-wider">
-            Checkpoints — {WORK_PERMIT_TYPE_LABELS[type]}
+          <div className="bg-ink text-white px-3 py-2 text-xs font-semibold uppercase tracking-wider flex items-center justify-between gap-2">
+            <span>Checkpoints — {WORK_PERMIT_TYPE_LABELS[type]}</span>
+            <span className="text-white/70 tabular-nums normal-case tracking-normal">
+              {activeChecklist.filter((a) => a.passed !== null).length} / {activeChecklist.length} answered
+            </span>
           </div>
           <ul className="divide-y divide-stone-100">
             {WORK_PERMIT_CHECKPOINTS[type].map((question, idx) => {
