@@ -367,13 +367,33 @@ function ActionBadge({ action }: { action: string }) {
   );
 }
 
+/**
+ * Parse the audit filter's "from" / "to" YYYY-MM-DD into the UTC instant
+ * that represents the START of that IST calendar day. Users pick calendar
+ * days in IST — a "to Sep 30" query means "include everything through
+ * Sep 30 IST". Naive `T00:00:00Z` parsing shifts the window by 5.5 hours:
+ *   from Sep 25 UTC = Sep 25 05:30 IST → misses Sep 25 00:00–05:30 IST
+ *   to   Sep 30 UTC = Sep 30 05:30 IST → over-includes Oct 1 00:00–05:30 IST
+ * Anchoring to IST midnight (which is UTC-5:30 = 18:30 UTC previous day)
+ * fixes both edges.
+ */
 function parseDate(v: string | undefined): Date | null {
   if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
-  const d = new Date(v + "T00:00:00.000Z");
+  // IST midnight for the picked calendar day = UTC 18:30 of the previous day.
+  const d = new Date(v + "T00:00:00.000+05:30");
   return isNaN(d.getTime()) ? null : d;
 }
+/**
+ * Serialize an IST-anchored `from`/`to` back to YYYY-MM-DD for the URL.
+ * The Date coming in from parseDate() represents IST midnight of the
+ * picked calendar day (= 18:30 UTC of the previous day). A naive
+ * `toISOString().slice(0, 10)` would render that as the previous IST
+ * day, which round-trips into the audit filter one day off.
+ */
 function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // Shift to IST and read the day component from the shifted UTC fields.
+  const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1000);
+  return ist.toISOString().slice(0, 10);
 }
 function fmtDateTime(d: Date): string {
   return new Date(d).toLocaleString("en-GB", {
