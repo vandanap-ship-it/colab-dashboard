@@ -336,6 +336,26 @@ export default function WorkPermitForm({
     setContractorId("");
     setSelectedApprovers(new Set());
     setPhotos([]);
+    // Step 2 collections must reset too on a hard "Add another" —
+    // otherwise labour entries, co-requesters, personnel, activity head,
+    // approver capabilities, and per-checkpoint answers from the just-
+    // saved permit would silently carry into the next one.
+    setLabourEntries([]);
+    setPersonnelEntries([]);
+    setCoRequesterIds(new Set());
+    setActivityHead("");
+    setApproverCaps({});
+    // Reset every checklist template back to unanswered so the next
+    // permit doesn't inherit Yes/No answers from the saved one.
+    setChecklistState((prev) => {
+      const next: Record<string, { passed: boolean | null; remark: string; photoUrl: string }[]> = {};
+      for (const t of WORK_PERMIT_TYPES) {
+        next[t] = WORK_PERMIT_CHECKPOINTS[t].map(() => ({ passed: null, remark: "", photoUrl: "" }));
+      }
+      void prev;
+      return next as typeof prev;
+    });
+    setStep(1);
     setError(null);
     setSaved(null);
   }
@@ -354,9 +374,26 @@ export default function WorkPermitForm({
     setStartTime("09:00");
     setEndTime("18:00");
     setPhotos([]);
+    // Labour + personnel reset because those are per-shift crews, not
+    // per-run-of-permits state — a supervisor raising a Hot Work run
+    // still enters fresh worker names each permit.
+    setLabourEntries([]);
+    setPersonnelEntries([]);
+    // Reset checklist answers so the next permit gets fresh Yes/No.
+    setChecklistState((prev) => {
+      const next: Record<string, { passed: boolean | null; remark: string; photoUrl: string }[]> = {};
+      for (const t of WORK_PERMIT_TYPES) {
+        next[t] = WORK_PERMIT_CHECKPOINTS[t].map(() => ({ passed: null, remark: "", photoUrl: "" }));
+      }
+      void prev;
+      return next as typeof prev;
+    });
+    setStep(1);
     setError(null);
     setSaved(null);
-    // type, location, contractorId, selectedApprovers stay set
+    // type, location, contractorId, selectedApprovers, coRequesterIds,
+    // activityHead, approverCaps stay set — the supervisor keeps the
+    // approval routing across the run.
   }
 
   if (saved) {
