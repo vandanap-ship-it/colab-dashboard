@@ -156,6 +156,7 @@ export default function BillsManager({
   }
 
   async function changeStatus(bill: Bill, status: Bill["status"], rejectionReason?: string) {
+    if (busyId === bill.id) return; // guard against a double-tap racing the PATCH
     setBusyId(bill.id);
     setActionError(null);
     try {
@@ -183,6 +184,7 @@ export default function BillsManager({
   }
 
   async function remove(bill: Bill) {
+    if (busyId === bill.id) return; // guard against double-tap
     if (!confirm(`Move bill "${bill.title}" to trash?`)) return;
     setBusyId(bill.id);
     setActionError(null);
@@ -498,6 +500,7 @@ function BillEditor({
   }, [form.lines, form.taxPercent]);
 
   async function save() {
+    if (pending) return; // guard against a fast double-tap on Save
     if (form.title.trim().length < 3) {
       setError("Title must be at least 3 characters.");
       return;
