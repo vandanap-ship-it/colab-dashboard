@@ -168,6 +168,31 @@ export async function POST(req: Request) {
     mode,
   } = body;
   const isDraft = mode === "draft";
+
+  // Idempotency short-circuit · if the offline-queue replay carries a
+  // key we've already committed, return the existing row without
+  // re-running validation. Without this, a replay whose original write
+  // sat under a monotonic cap that has since moved (another engineer
+  // logged higher progress in between) would 409 on the retry even
+  // though the row already exists. Reading the entry directly here is
+  // cheap (unique-indexed) and skips the precheck / contractor /
+  // monotonic gates that the original POST already cleared.
+  const idempotencyKey = readIdempotencyKey(body);
+  if (idempotencyKey) {
+    const existing = await prisma.progressEntry.findUnique({
+      where: { idempotencyKey },
+      include: {
+        labour: true,
+        photos: true,
+        contractor: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, name: true } },
+      },
+    });
+    if (existing) {
+      return NextResponse.json({ entry: existing }, { status: 200 });
+    }
+  }
+
   const node = await prisma.wBSNode.findUnique({
     where: { id: wbsNodeId },
     select: { id: true, projectId: true, contractorId: true, totalQuantity: true },
@@ -237,7 +262,7 @@ export async function POST(req: Request) {
   const reason = isValidReasonCode(reasonCode) ? reasonCode : null;
   const reasonNoteClean = typeof reasonNote === "string" ? reasonNote.trim().slice(0, 500) : "";
 
-  const idempotencyKey = readIdempotencyKey(body);
+  // idempotencyKey was already read + short-circuit-checked above.
   const entryInclude = {
     labour: true,
     photos: true,

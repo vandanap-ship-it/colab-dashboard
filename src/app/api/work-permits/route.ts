@@ -165,6 +165,22 @@ export async function POST(req: Request) {
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
+  // Idempotency short-circuit · if the offline-queue replay carries a
+  // key we've already committed, return the existing row without
+  // re-running validation. A contractor deactivated between the
+  // original write and the replay, or an approver going inactive,
+  // would otherwise 400 on the retry even though the permit exists.
+  const idempotencyKey = readIdempotencyKey(body);
+  if (idempotencyKey) {
+    const existing = await prisma.workPermit.findUnique({
+      where: { idempotencyKey },
+      include: workPermitInclude,
+    });
+    if (existing) {
+      return NextResponse.json({ workPermit: existing }, { status: 200 });
+    }
+  }
+
   // Cross-project FK guard on the activity link. Contractor is separately
   // checked below because we also need to confirm it exists AND belongs to
   // this project.
@@ -241,7 +257,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const idempotencyKey = readIdempotencyKey(body);
+  // idempotencyKey was already read + short-circuit-checked above.
   const photos = (body.photoUrls ?? []).slice(0, 6);
   const displayId = generatePermitDisplayId();
 
