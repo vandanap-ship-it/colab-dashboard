@@ -344,6 +344,13 @@ function ProgressEntryDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // React batches state updates, so `disabled={pending}` on the submit
+    // button lags behind by one render. A power-user pressing Enter twice
+    // during that window would fire two POSTs — the first creates the
+    // entry, the second either duplicates it (no idempotencyKey on this
+    // desktop path) or hits the optimistic-lock 409 and confuses the
+    // user. Top-of-function guard closes the window.
+    if (pending) return;
     if (!activityId) {
       setError("Pick an activity.");
       return;
@@ -591,6 +598,10 @@ function BulkCsvDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Same double-fire guard as the single-entry form above — a rapid
+    // Enter would upload the CSV twice, and the batch import doesn't
+    // carry idempotency keys per row.
+    if (pending) return;
     if (!file) return;
     setPending(true);
     setError(null);
