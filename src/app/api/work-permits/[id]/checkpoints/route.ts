@@ -51,6 +51,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         status: true,
         approverIds: true,
         checklistResponses: true,
+        displayId: true,
       },
     });
     if (!permit) return notFound();
@@ -86,7 +87,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       action: "UPDATE",
       entityType: "WorkPermit",
       entityId: id,
-      summary: `Reviewer replied on checkpoint #${index + 1}${reviewerNote ? `: "${reviewerNote.slice(0, 60)}"` : ""}${reviewerPhotoUrl ? " (with photo)" : ""}`,
+      summary: `Reviewer replied on checkpoint #${index + 1}${permit.displayId ? ` of ${permit.displayId}` : ""}${reviewerNote ? `: "${reviewerNote.slice(0, 60)}"` : ""}${reviewerPhotoUrl ? " (with photo)" : ""}`,
     });
 
     return NextResponse.json({ ok: true, index, checkpoint: nextRows[index] });
