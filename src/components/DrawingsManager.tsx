@@ -284,6 +284,7 @@ function NewDrawingForm({
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
+    if (pending) return; // guard against a fast double-tap on Save
     if (drawingNumber.trim().length < 1) {
       setError("Drawing number required (e.g. A-104, S-201).");
       return;
@@ -511,6 +512,7 @@ function NewRevisionForm({ drawingId, onDone }: { drawingId: string; onDone: () 
   const [error, setError] = useState<string | null>(null);
 
   async function upload() {
+    if (pending) return; // guard against a fast double-tap on Upload
     if (!file) {
       setError("Pick a file (PDF or image).");
       return;
