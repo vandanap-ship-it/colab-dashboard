@@ -68,6 +68,13 @@ export default function QuickAddFab({
     return () => window.removeEventListener("keydown", handler);
   }, [open]);
 
+  // Hooks MUST be called in the same order every render — call usePathname
+  // unconditionally, THEN branch on the result. Calling it below an early
+  // `return null` (as an earlier version of this file did) fails the
+  // rules-of-hooks check at build time and throws at runtime when the
+  // layout re-renders and hits a different code path.
+  const pathname = usePathname() ?? "";
+
   const items = ACTION_ITEMS.filter((a) => actions.includes(a.key)).map((a) => ({
     ...a,
     href: a.hrefFor(projectId),
@@ -79,7 +86,6 @@ export default function QuickAddFab({
   // 2026-09-30: the FAB was covering the Permit form's Continue footer)
   // and there's no "quick add" a filler needs while they're already
   // filling something. Match any create / edit route across mobile.
-  const pathname = usePathname() ?? "";
   const HIDE_FAB_PATTERNS = [
     "/permit/new",
     "/inspection/new",
