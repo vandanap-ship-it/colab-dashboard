@@ -225,12 +225,23 @@ export default function WorkPermitList({
   const rows = useMemo(() => {
     const from = filterDateFrom ? startOfLocalDay(filterDateFrom) : -Infinity;
     const to = filterDateTo ? startOfLocalDay(filterDateTo) : Infinity;
-    return (permits ?? []).filter((p) => {
+    const filtered = (permits ?? []).filter((p) => {
       if (bucket(p) !== tab) return false;
       if (filterContractorId && p.contractor?.id !== filterContractorId) return false;
       const w = startOfLocalDay(p.workDate);
       if (w < from || w > to) return false;
       return true;
+    });
+    // Per-tab ordering: Future shows next-up first (workDate asc); every
+    // other tab reads most-recent first (workDate desc) — a done/paused/
+    // rejected permit reviewer wants the latest at the top; a scheduler
+    // scanning Future wants tomorrow before next week.
+    const direction = tab === "future" ? 1 : -1;
+    return filtered.slice().sort((a, b) => {
+      const diff = startOfLocalDay(a.workDate) - startOfLocalDay(b.workDate);
+      if (diff !== 0) return diff * direction;
+      // Tie-break by createdAt (latest first for stability).
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
   }, [permits, tab, filterContractorId, filterDateFrom, filterDateTo]);
 
