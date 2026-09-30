@@ -9,6 +9,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { istDayStart } from "@/lib/istDay";
 
 // ---------------------------------------------------------------------------
 // Milestone Timeline
@@ -181,7 +182,13 @@ export async function getWeeklyLookAhead(
   daysAhead = 14,
   now = new Date(),
 ): Promise<LookAheadBucket> {
-  const today = startOfDay(now);
+  // Anchor "today" to IST — Amanvana's schedule and site team are in
+  // India. Naive server-tz startOfDay would misbucket overdue /
+  // upcoming windows between 00:00 and 05:30 IST when the server is
+  // in UTC. istDayStart(now) returns the UTC-midnight of the IST
+  // calendar day that contains `now`, which matches how the WBS
+  // baselineStart / baselineFinish columns are stored.
+  const today = istDayStart(now);
   const horizonEnd = new Date(today.getTime() + daysAhead * MS_PER_DAY);
   const windowStart = new Date(today.getTime() - 30 * MS_PER_DAY); // 30-day lookback for overdue
 

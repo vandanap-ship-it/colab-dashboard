@@ -29,6 +29,7 @@ import {
 import { parseBody } from "@/lib/parseBody";
 import { checkConflict } from "@/lib/optimisticLock";
 import { sendPushToUser } from "@/lib/push";
+import { istDayStart } from "@/lib/istDay";
 import { ROLES } from "@/lib/roles";
 
 const RescheduleSchema = z.object({
@@ -64,10 +65,11 @@ export async function POST(req: Request, ctx: RouteContext<"/api/inspections/[id
   if (isNaN(parsedDate.getTime())) {
     return NextResponse.json({ error: "Invalid rescheduledFor date" }, { status: 400 });
   }
-  // Compare against start-of-today in server tz — a same-day reschedule
-  // is fine ("reopen at 3pm"), but yesterday is not.
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
+  // Compare against IST-anchored start-of-today. A same-day reschedule
+  // is fine ("reopen at 3pm"), but yesterday is not. Server tz on Vercel
+  // is UTC — naive setHours(0) would let a reviewer reschedule to
+  // yesterday (IST) between 00:00 and 05:30 IST.
+  const startOfToday = istDayStart();
   if (parsedDate.getTime() < startOfToday.getTime()) {
     return NextResponse.json({ error: "Reschedule date must be today or later." }, { status: 400 });
   }
