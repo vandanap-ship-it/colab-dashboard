@@ -79,6 +79,12 @@ export default function ManpowerEntryForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // React batches state updates so the submit button's disabled
+    // state lags a render behind. A rapid double Enter would fire
+    // this loop twice, and since the batch-submit generates FRESH
+    // idempotencyKeys per row on each attempt, that duplicates every
+    // successful row from the first attempt in the server DB.
+    if (pending) return;
     setError(null);
 
     if (!contractorId) { setError("Pick a contractor"); return; }
