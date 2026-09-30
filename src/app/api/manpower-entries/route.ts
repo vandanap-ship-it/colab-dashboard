@@ -7,6 +7,7 @@ import { canAccessModule, MODULES } from "@/lib/modules";
 import { readIdempotencyKey } from "@/lib/idempotency";
 import { TRADES } from "@/lib/manpower";
 import { parseBody } from "@/lib/parseBody";
+import { istDayStart } from "@/lib/istDay";
 
 const PostManpowerSchema = z.object({
   projectId: z.string().min(1),
@@ -42,9 +43,10 @@ export async function GET(req: Request) {
   const toStr = searchParams.get("to");
   if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
 
-  // Default window: today only.
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  // Default window: today only, anchored to IST since the site team is in
+  // India and stored entryDate is UTC-midnight-for-an-IST-day. Naive UTC
+  // "today" between 00:00 and 05:30 IST would return yesterday's rollup.
+  const today = istDayStart();
   const from = fromStr ? new Date(fromStr + "T00:00:00Z") : today;
   const to = toStr ? new Date(toStr + "T00:00:00Z") : today;
   if (isNaN(from.getTime()) || isNaN(to.getTime())) {
@@ -79,11 +81,11 @@ export async function POST(req: Request) {
   const body = parsed.data;
   const { projectId, contractorId, trade, entryDate, actualCount, notes } = body;
   const count = Math.floor(actualCount);
-  const day = entryDate ? new Date(entryDate + "T00:00:00Z") : (() => {
-    const t = new Date();
-    t.setUTCHours(0, 0, 0, 0);
-    return t;
-  })();
+  // When the client doesn't tag the entry with a date, default to IST
+  // "today" (00:00 IST = 18:30 UTC previous day). A naive UTC default
+  // would file the entry against yesterday's calendar day between
+  // 00:00 and 05:30 IST.
+  const day = entryDate ? new Date(entryDate + "T00:00:00Z") : istDayStart();
   const cleanNotes = (notes ?? "").trim();
   const idempotencyKey = readIdempotencyKey(body);
 

@@ -19,6 +19,7 @@
 // ---------------------------------------------------------------------------
 
 import { prisma } from "@/lib/prisma";
+import { istDayStart } from "@/lib/istDay";
 import {
   AMANVANA_CONTRACTORS,
   AMANVANA_VILLA_NUMBER_TO_BLOCK,
@@ -162,8 +163,11 @@ export async function getContractorScorecard(projectId: string): Promise<Contrac
   }
 
   // Progress metrics computed inline from the wbsNodes we already have.
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  // "today" is IST-anchored — baselineFinish is stored as UTC midnight of
+  // an IST calendar day, so the "overdue" comparison needs the same
+  // frame or activities due tomorrow read as overdue between 00:00 and
+  // 05:30 IST.
+  const today = istDayStart();
   const progressByContractor = new Map<
     string,
     { completed: number; overdue: number; delaySumDays: number; delayCount: number }

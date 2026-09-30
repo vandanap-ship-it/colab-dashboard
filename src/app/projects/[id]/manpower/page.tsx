@@ -6,6 +6,7 @@ import { isAdmin, ROLES } from "@/lib/roles";
 import Navbar from "@/components/Navbar";
 import ManpowerConsole, { type ContractorOption, type PlanRow, type EntryRow } from "@/components/ManpowerConsole";
 import { TRADES } from "@/lib/manpower";
+import { istDayStart } from "@/lib/istDay";
 
 export const dynamic = "force-dynamic";
 
@@ -40,15 +41,16 @@ export default async function ManpowerPage({
   });
   if (!project) notFound();
 
-  // Determine the day we're viewing (default today, UTC midnight).
+  // Determine the day we're viewing. Explicit date param wins; otherwise
+  // default to IST "today" (matches how stored entryDate is UTC-midnight
+  // for an IST calendar day). Naive UTC "today" would show yesterday's
+  // manpower to anyone opening the page between 00:00 and 05:30 IST.
   const day = (() => {
     if (dateParam) {
       const d = new Date(dateParam + "T00:00:00Z");
       if (!isNaN(d.getTime())) return d;
     }
-    const t = new Date();
-    t.setUTCHours(0, 0, 0, 0);
-    return t;
+    return istDayStart();
   })();
 
   const [contractors, plans, entries] = await Promise.all([

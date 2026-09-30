@@ -7,6 +7,7 @@ import { isAdmin, ROLES } from "@/lib/roles";
 import { canAccessModule, isScopedUser, MODULES } from "@/lib/modules";
 import { TRADES } from "@/lib/manpower";
 import { parseBody } from "@/lib/parseBody";
+import { istDayStart } from "@/lib/istDay";
 
 const PostTradePlanSchema = z.object({
   contractorId: z.string().min(1),
@@ -77,11 +78,10 @@ export async function POST(
   const { contractorId, trade, plannedCount, startDate, endDate, notes } = parsed.data;
   const count = Math.floor(plannedCount);
 
-  const start = startDate ? new Date(startDate + "T00:00:00Z") : (() => {
-    const t = new Date();
-    t.setUTCHours(0, 0, 0, 0);
-    return t;
-  })();
+  // Default start = today (IST). A naive UTC "today" here would file a
+  // trade plan as "effective from yesterday" for anyone submitting
+  // between 00:00 and 05:30 IST.
+  const start = startDate ? new Date(startDate + "T00:00:00Z") : istDayStart();
 
   let end: Date | null = null;
   if (endDate) {
