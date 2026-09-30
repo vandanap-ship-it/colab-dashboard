@@ -100,6 +100,26 @@ export async function POST(req: Request) {
   const note = (reasonNote ?? "").trim();
   const team = (responsibleTeam ?? "").trim();
   const idempotencyKey = readIdempotencyKey(body);
+  const hindranceInclude = {
+    createdBy: { select: { id: true, name: true } },
+    wbsNode: { select: { id: true, name: true, taskCode: true } },
+    photos: true,
+  } as const;
+
+  // Idempotency short-circuit · a replay whose original write already
+  // exists shouldn't re-run FK guards. Between the original write and
+  // the retry, a WBS node might be soft-deleted or a contractor might
+  // be moved to a different project — either would 400 the retry even
+  // though the row is already there.
+  if (idempotencyKey) {
+    const existing = await prisma.hindrance.findUnique({
+      where: { idempotencyKey },
+      include: hindranceInclude,
+    });
+    if (existing) {
+      return NextResponse.json({ hindrance: existing }, { status: 200 });
+    }
+  }
 
   // Cross-project FK guard on the activity tag.
   const wbsErr = await assertWbsNodeInProject(wbsNodeId, projectId);
@@ -120,12 +140,6 @@ export async function POST(req: Request) {
       );
     }
   }
-  const hindranceInclude = {
-    createdBy: { select: { id: true, name: true } },
-    wbsNode: { select: { id: true, name: true, taskCode: true } },
-    photos: true,
-  } as const;
-
   const { record: hindrance, duplicate } = await createIdempotent(
     idempotencyKey,
     () => prisma.hindrance.findUnique({ where: { idempotencyKey: idempotencyKey! }, include: hindranceInclude }),

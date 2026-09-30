@@ -193,13 +193,34 @@ export async function POST(req: Request) {
   }
   if (itemsClean.length === 0) return NextResponse.json({ error: "At least one checklist item required" }, { status: 400 });
 
+  const inspectionInclude = {
+    filledBy: { select: { id: true, name: true } },
+    reviewedBy: { select: { id: true, name: true } },
+    wbsNode: { select: { id: true, name: true, taskCode: true } },
+    items: { orderBy: { orderIndex: "asc" as const } },
+    photos: true,
+  } as const;
+
+  // Idempotency short-circuit · a replay whose original write exists
+  // shouldn't 400 because the WBS node was soft-deleted (or moved to
+  // another project) between the original and the retry.
+  const idempotencyKey = readIdempotencyKey(body);
+  if (idempotencyKey) {
+    const existing = await prisma.inspection.findUnique({
+      where: { idempotencyKey },
+      include: inspectionInclude,
+    });
+    if (existing) {
+      return NextResponse.json({ inspection: existing }, { status: 200 });
+    }
+  }
+
   // Cross-project FK guard on the activity tag.
   const wbsErr = await assertWbsNodeInProject(wbsNodeId, projectId);
   if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
 
   const photos = Array.isArray(photoUrls) ? photoUrls.filter((u) => typeof u === "string" && u.length > 0).slice(0, 8) : [];
   const moduleTag = primaryModuleFor(session.user.modules);
-  const idempotencyKey = readIdempotencyKey(body);
 
   // De-dupe assigned reviewers and drop the filler themselves — a WIR
   // reviewed by its own author defeats the checklist. Cap at 20 to match
@@ -209,13 +230,6 @@ export async function POST(req: Request) {
     ? [...new Set(assignedReviewerIds.filter((id) => typeof id === "string" && id.length > 0 && id !== session.user.id))].slice(0, 20)
     : [];
   const cleanSubmitRemark = submitRemark?.trim() || null;
-  const inspectionInclude = {
-    filledBy: { select: { id: true, name: true } },
-    reviewedBy: { select: { id: true, name: true } },
-    wbsNode: { select: { id: true, name: true, taskCode: true } },
-    items: { orderBy: { orderIndex: "asc" as const } },
-    photos: true,
-  } as const;
 
   const { record: inspection, duplicate } = await createIdempotent(
     idempotencyKey,
