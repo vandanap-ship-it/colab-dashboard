@@ -136,14 +136,17 @@ export async function POST(req: Request, ctx: RouteContext<"/api/inspections/[id
       });
       for (const r of reviewers) toNotify.add(r.id);
     }
-    for (const uid of toNotify) {
-      void sendPushToUser(uid, {
-        title: `WIR reopened · ${before.title.slice(0, 40)}`,
-        body: `${session.user.name ?? session.user.username} moved it back into the review queue.`,
-        url: `/mobile/${inspection.projectId}/qaqc/${inspection.id}`,
-        tag: `wir-reopen-${inspection.id}`,
-      });
-    }
+    // Await — see /api/inspections/route.ts twin comment.
+    await Promise.allSettled(
+      Array.from(toNotify).map((uid) =>
+        sendPushToUser(uid, {
+          title: `WIR reopened · ${before.title.slice(0, 40)}`,
+          body: `${session.user.name ?? session.user.username} moved it back into the review queue.`,
+          url: `/mobile/${inspection.projectId}/qaqc/${inspection.id}`,
+          tag: `wir-reopen-${inspection.id}`,
+        }),
+      ),
+    );
 
     return NextResponse.json({ inspection });
   } catch (e) {

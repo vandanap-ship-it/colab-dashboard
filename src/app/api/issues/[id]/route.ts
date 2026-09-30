@@ -134,7 +134,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/issues/[id]">)
           }),
         );
       }
-      void sendPushToUser(issue.assignedToId, {
+      // Await — see /api/inspections/route.ts twin comment.
+      await sendPushToUser(issue.assignedToId, {
         title: "Snag assigned to you",
         body: `${title} · from ${issue.createdBy.name}`,
         url: `/mobile/${issue.projectId}/info`,

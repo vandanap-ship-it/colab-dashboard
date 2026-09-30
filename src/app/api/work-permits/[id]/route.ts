@@ -290,8 +290,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       }
       // Push notification alongside the email — reaches the requester's
       // phone even when Siddhi is closed and email is unread. Tap opens
-      // the mobile permit page.
-      void sendPushToUser(existing.requesterId, {
+      // the mobile permit page. AWAITed — see twin comment in
+      // /api/inspections/route.ts about Vercel killing fire-and-forget.
+      await sendPushToUser(existing.requesterId, {
         title:
           kind === "approve"
             ? `Permit approved · ${existing.title.slice(0, 40)}`

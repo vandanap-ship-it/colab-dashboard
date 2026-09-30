@@ -326,16 +326,26 @@ export async function POST(req: Request) {
       });
       reviewerIds = reviewers.map((u) => u.id);
     }
-    for (const rid of reviewerIds) {
-      void sendPushToUser(rid, {
-        title: assigned
-          ? `Assigned WIR · ${t.slice(0, 40)}`
-          : `New WIR to review · ${t.slice(0, 40)}`,
-        body: `${session.user.name ?? session.user.username} submitted ${itemsClean.length} item${itemsClean.length === 1 ? "" : "s"}.${passedCount === itemsClean.length ? " All Yes so far." : ""}${cleanSubmitRemark ? ` · "${cleanSubmitRemark.slice(0, 80)}"` : ""}`,
-        url: `/mobile/${projectId}/qaqc/${inspection.id}?tab=pending${moduleTag ? `&module=${moduleTag}` : ""}`,
-        tag: `wir-new-${inspection.id}`,
-      });
-    }
+    // Await every push so the Notification-table insert commits BEFORE
+    // we return the HTTP response. On Vercel serverless the function
+    // shuts down the moment the response leaves, killing any
+    // still-pending `void sendPushToUser` — which is why Thangamani's
+    // inbox was empty for Nagarjuna's WIRs. allSettled so one slow /
+    // failing push doesn't block the rest. Same fix applied to the
+    // decision route, the permit raise route, and the permit decision
+    // route (twin comment lives there too).
+    await Promise.allSettled(
+      reviewerIds.map((rid) =>
+        sendPushToUser(rid, {
+          title: assigned
+            ? `Assigned WIR · ${t.slice(0, 40)}`
+            : `New WIR to review · ${t.slice(0, 40)}`,
+          body: `${session.user.name ?? session.user.username} submitted ${itemsClean.length} item${itemsClean.length === 1 ? "" : "s"}.${passedCount === itemsClean.length ? " All Yes so far." : ""}${cleanSubmitRemark ? ` · "${cleanSubmitRemark.slice(0, 80)}"` : ""}`,
+          url: `/mobile/${projectId}/qaqc/${inspection.id}?tab=pending${moduleTag ? `&module=${moduleTag}` : ""}`,
+          tag: `wir-new-${inspection.id}`,
+        }),
+      ),
+    );
   }
 
   return NextResponse.json({ inspection }, { status: duplicate ? 200 : 201 });

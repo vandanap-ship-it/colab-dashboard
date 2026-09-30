@@ -154,14 +154,17 @@ export async function POST(req: Request, ctx: RouteContext<"/api/inspections/[id
       for (const r of reviewers) toNotify.add(r.id);
     }
     const dateLabel = parsedDate.toISOString().slice(0, 10);
-    for (const uid of toNotify) {
-      void sendPushToUser(uid, {
-        title: `WIR rescheduled · ${before.title.slice(0, 40)}`,
-        body: `${session.user.name ?? session.user.username} pushed the inspection to ${dateLabel}.${note?.trim() ? ` "${note.trim().slice(0, 80)}"` : ""}`,
-        url: `/mobile/${inspection.projectId}/qaqc/${inspection.id}`,
-        tag: `wir-reschedule-${inspection.id}`,
-      });
-    }
+    // Await — see /api/inspections/route.ts twin comment.
+    await Promise.allSettled(
+      Array.from(toNotify).map((uid) =>
+        sendPushToUser(uid, {
+          title: `WIR rescheduled · ${before.title.slice(0, 40)}`,
+          body: `${session.user.name ?? session.user.username} pushed the inspection to ${dateLabel}.${note?.trim() ? ` "${note.trim().slice(0, 80)}"` : ""}`,
+          url: `/mobile/${inspection.projectId}/qaqc/${inspection.id}`,
+          tag: `wir-reschedule-${inspection.id}`,
+        }),
+      ),
+    );
 
     return NextResponse.json({ inspection });
   } catch (e) {

@@ -426,16 +426,25 @@ export async function POST(req: Request) {
     // Push notification alongside the email — reaches the approver's phone
     // even when Siddhi is closed and email is unread. First-approver-wins,
     // but we notify all listed approvers so any of them can pick it up.
+    //
+    // AWAIT (see twin comment in /api/inspections/route.ts): on Vercel
+    // serverless the function is shut down the moment the HTTP response
+    // returns, killing any still-pending fire-and-forget writes — which
+    // is why the Notification-inbox rows for Girish never appeared even
+    // though the code called sendPushToUser. allSettled so one slow /
+    // failing push doesn't stall the rest.
     const typeLabel = WORK_PERMIT_TYPE_LABELS[workPermit.type as WorkPermitType] ?? workPermit.type;
     const requesterName = workPermit.requester?.name ?? "Someone";
-    for (const approverId of approverUserIds) {
-      void sendPushToUser(approverId, {
-        title: `Permit awaiting your approval · ${workPermit.title.slice(0, 40)}`,
-        body: `${typeLabel} raised by ${requesterName}. Tap to review.`,
-        url: `/mobile/${body.projectId}/permit/${workPermit.id}`,
-        tag: `permit-${workPermit.id}`,
-      });
-    }
+    await Promise.allSettled(
+      approverUserIds.map((approverId) =>
+        sendPushToUser(approverId, {
+          title: `Permit awaiting your approval · ${workPermit.title.slice(0, 40)}`,
+          body: `${typeLabel} raised by ${requesterName}. Tap to review.`,
+          url: `/mobile/${body.projectId}/permit/${workPermit.id}`,
+          tag: `permit-${workPermit.id}`,
+        }),
+      ),
+    );
 
     // Also FYI-ping the planner queue (Shraddha 2026-09-30: Harish, DPM
     // Projects, needs the permit to appear in his alerts even when he
@@ -453,14 +462,16 @@ export async function POST(req: Request) {
       },
       select: { id: true },
     });
-    for (const p of planners) {
-      void sendPushToUser(p.id, {
-        title: `Permit raised · ${workPermit.title.slice(0, 40)}`,
-        body: `${typeLabel} by ${requesterName}. For your visibility.`,
-        url: `/mobile/${body.projectId}/permit/${workPermit.id}`,
-        tag: `permit-fyi-${workPermit.id}`,
-      });
-    }
+    await Promise.allSettled(
+      planners.map((p) =>
+        sendPushToUser(p.id, {
+          title: `Permit raised · ${workPermit.title.slice(0, 40)}`,
+          body: `${typeLabel} by ${requesterName}. For your visibility.`,
+          url: `/mobile/${body.projectId}/permit/${workPermit.id}`,
+          tag: `permit-fyi-${workPermit.id}`,
+        }),
+      ),
+    );
   }
 
   return NextResponse.json({ workPermit }, { status: duplicate ? 200 : 201 });

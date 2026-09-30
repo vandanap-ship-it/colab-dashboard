@@ -116,8 +116,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/concerns/[id]"
           }),
         );
       }
-      // Push: fire-and-forget. Push failures never block the API response.
-      void sendPushToUser(concern.assignedToId, {
+      // Await — see /api/inspections/route.ts twin comment. Failures
+      // are still caught inside sendPushToUser so a bad recipient
+      // doesn't fail the whole PATCH.
+      await sendPushToUser(concern.assignedToId, {
         title: "Concern assigned to you",
         body: `${title} · from ${concern.raisedBy.name}`,
         // Deep-link to the Snapshot page's #concerns section on desktop

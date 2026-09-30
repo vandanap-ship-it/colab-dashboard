@@ -262,16 +262,19 @@ export async function PUT(req: Request, ctx: RouteContext<"/api/inspections/[id]
             select: { id: true },
           })).map((u) => u.id);
       const assigned = cleanReviewerIds.length > 0;
-      for (const rid of reviewerIds) {
-        void sendPushToUser(rid, {
-          title: assigned
-            ? `Assigned WIR · ${inspection.title.slice(0, 40)}`
-            : `New WIR to review · ${inspection.title.slice(0, 40)}`,
-          body: `${session.user.name ?? session.user.username} finished a draft and sent ${itemsClean.length} item${itemsClean.length === 1 ? "" : "s"}.${passedCount === itemsClean.length ? " All Yes." : ""}${cleanSubmitRemark ? ` · "${cleanSubmitRemark.slice(0, 80)}"` : ""}`,
-          url: `/mobile/${inspection.projectId}/qaqc/${inspection.id}?tab=pending${moduleTag ? `&module=${moduleTag}` : ""}`,
-          tag: `wir-new-${inspection.id}`,
-        });
-      }
+      // Await — see /api/inspections/route.ts twin comment.
+      await Promise.allSettled(
+        reviewerIds.map((rid) =>
+          sendPushToUser(rid, {
+            title: assigned
+              ? `Assigned WIR · ${inspection.title.slice(0, 40)}`
+              : `New WIR to review · ${inspection.title.slice(0, 40)}`,
+            body: `${session.user.name ?? session.user.username} finished a draft and sent ${itemsClean.length} item${itemsClean.length === 1 ? "" : "s"}.${passedCount === itemsClean.length ? " All Yes." : ""}${cleanSubmitRemark ? ` · "${cleanSubmitRemark.slice(0, 80)}"` : ""}`,
+            url: `/mobile/${inspection.projectId}/qaqc/${inspection.id}?tab=pending${moduleTag ? `&module=${moduleTag}` : ""}`,
+            tag: `wir-new-${inspection.id}`,
+          }),
+        ),
+      );
     }
 
     return NextResponse.json({ inspection });

@@ -103,7 +103,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/hindrances/[id
       // already knows what they did.
       if (isStatusChange && before.createdById && before.createdById !== session.user.id) {
         const desc = before.description.slice(0, 60);
-        void sendPushToUser(before.createdById, {
+        // Await — see /api/inspections/route.ts twin comment.
+        await sendPushToUser(before.createdById, {
           title:
             hindrance.status === "RESOLVED"
               ? `Hindrance resolved · ${desc}`

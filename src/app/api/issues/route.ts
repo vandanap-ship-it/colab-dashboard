@@ -288,7 +288,8 @@ export async function POST(req: Request) {
     // their own push tile.
     if (resolvedAssigneeId && resolvedAssigneeId !== session.user.id) {
       const preview = desc.length > 60 ? desc.slice(0, 60) + "…" : desc;
-      void sendPushToUser(resolvedAssigneeId, {
+      // Await — see /api/inspections/route.ts twin comment.
+      await sendPushToUser(resolvedAssigneeId, {
         title: "Snag assigned to you",
         body: `${preview} · from ${session.user.name ?? "site team"}`,
         url: `/mobile/${projectId}/my-actions`,

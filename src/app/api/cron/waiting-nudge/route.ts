@@ -225,7 +225,10 @@ export async function runNudge(overrideRecipients?: Array<{ id: string; name: st
       // notification tile.
       const pushBody = buildPushBody(buckets);
       if (pushBody) {
-        void sendPushToUser(user.id, {
+        // Await — same fix as the WIR / permit routes: on Vercel serverless
+        // the cron's response ends the function and kills fire-and-forget.
+        // See /api/inspections/route.ts twin comment.
+        await sendPushToUser(user.id, {
           title: `Waiting on you · ${pStale.projectName}`,
           body: pushBody,
           url: `/mobile/${pStale.projectId}`,

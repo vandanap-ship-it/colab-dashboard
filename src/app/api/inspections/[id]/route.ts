@@ -86,7 +86,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
     // Skip IN_REVIEW (no decision made yet); notify on PASSED + REJECTED.
     if (status !== "IN_REVIEW" && before.filledById) {
       const reviewer = inspection.reviewedBy?.name ?? session.user.username;
-      void sendPushToUser(before.filledById, {
+      // Await — see inspections/route.ts twin comment for why fire-and-
+      // forget silently dropped notifications on Vercel serverless.
+      await sendPushToUser(before.filledById, {
         title:
           status === "PASSED"
             ? `Inspection passed · ${before.title.slice(0, 40)}`
