@@ -534,6 +534,7 @@ export default function InspectionForm({
   // the inspection, and if reviewers were picked they go in the payload
   // so the server knows to route the pushes only to them.
   async function submitForReview(remark: string) {
+    if (pending) return;
     const v = validate();
     if (!v.ok) {
       setError(v.error);
@@ -648,6 +649,7 @@ export default function InspectionForm({
   // can pause partway through a 20-item checklist without losing the
   // work they've already done.
   async function saveDraft() {
+    if (pending) return;
     const v = validateDraft();
     if (!v.ok) {
       setError(v.error);
@@ -751,6 +753,7 @@ export default function InspectionForm({
   // date + note. If the create fails, the reschedule never fires — the
   // WIR is either fully committed and parked, or nothing.
   async function submitAndReschedule(date: string, note: string) {
+    if (pending) return;
     const v = validate();
     if (!v.ok) {
       setError(v.error);
