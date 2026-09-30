@@ -92,7 +92,8 @@ export default function MobilePermitActions({
   }
 
   const canReject =
-    iAmApprover && (currentStatus === "PENDING" || currentStatus === "APPROVED");
+    iAmApprover &&
+    (currentStatus === "PENDING" || currentStatus === "APPROVED" || currentStatus === "SUSPENDED");
   const canApprove = iAmApprover && currentStatus === "PENDING";
   const canClose =
     (currentStatus === "APPROVED" || currentStatus === "SUSPENDED") &&
@@ -177,6 +178,22 @@ export default function MobilePermitActions({
               Close permit
             </button>
           )}
+        </div>
+      )}
+      {/* Reject as a secondary link when Suspend / Resume dominates the
+          primary grid. Keeps the destructive action available on
+          APPROVED and SUSPENDED permits without stealing focus from the
+          more common Close / Resume flows. */}
+      {!canApprove && canReject && (canSuspend || canResume) && (
+        <div className="pt-1 text-center">
+          <button
+            type="button"
+            onClick={() => setRejectOpen(true)}
+            disabled={isPending}
+            className="text-[12px] font-semibold text-red-700 underline disabled:opacity-40"
+          >
+            Reject permit instead
+          </button>
         </div>
       )}
 
