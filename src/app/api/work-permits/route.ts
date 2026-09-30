@@ -107,7 +107,7 @@ const workPermitInclude = {
   labourEntries: { orderBy: { orderIndex: "asc" } },
 } satisfies Prisma.WorkPermitInclude;
 
-const STATUSES = new Set(["PENDING", "APPROVED", "REJECTED", "CLOSED"] as WorkPermitStatus[]);
+const STATUSES = new Set(["PENDING", "APPROVED", "REJECTED", "CLOSED", "SUSPENDED"] as WorkPermitStatus[]);
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -148,7 +148,7 @@ export async function GET(req: Request) {
     where: { projectId, deletedAt: null },
     _count: { _all: true },
   });
-  const counts: Record<string, number> = { PENDING: 0, APPROVED: 0, REJECTED: 0, CLOSED: 0 };
+  const counts: Record<string, number> = { PENDING: 0, APPROVED: 0, REJECTED: 0, CLOSED: 0, SUSPENDED: 0 };
   for (const g of grouped) counts[g.status] = g._count._all;
 
   return NextResponse.json({ workPermits, counts });
