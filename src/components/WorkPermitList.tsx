@@ -440,6 +440,11 @@ function PermitCard({
                 Awaiting you
               </span>
             )}
+            {isApproverForThis && permit.status === "SUSPENDED" && (
+              <span className="mt-1 inline-flex items-center rounded-full bg-orange-100 text-orange-800 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5">
+                Paused — you can resume
+              </span>
+            )}
           </div>
         </div>
 
