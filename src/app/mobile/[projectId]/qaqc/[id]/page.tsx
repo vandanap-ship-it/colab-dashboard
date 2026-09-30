@@ -390,7 +390,7 @@ export default async function MobileInspectionDetailPage({
             other     → Pass/Reject for reviewers on IN_REVIEW; the
                         "already reviewed" hint on PASSED/REJECTED. */}
       {inspection.status === "DRAFT" && iAmTheFiller && (
-        <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3">
+        <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3" style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
           <MobileQaqcDraftActions
             inspectionId={inspection.id}
             projectId={projectId}
@@ -399,7 +399,7 @@ export default async function MobileInspectionDetailPage({
         </div>
       )}
       {iCanReview && inspection.status !== "RESCHEDULED" && inspection.status !== "DRAFT" && (
-        <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3">
+        <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3" style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
           <MobileQaqcReviewActions
             inspectionId={inspection.id}
             currentStatus={inspection.status as "IN_REVIEW" | "PASSED" | "REJECTED"}

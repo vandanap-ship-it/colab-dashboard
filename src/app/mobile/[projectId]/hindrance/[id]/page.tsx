@@ -161,7 +161,7 @@ export default async function MobileHindranceDetailPage({
       </div>
 
       {iCanReview && (
-        <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3">
+        <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3" style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
           <MobileHindranceActions
             hindranceId={h.id}
             currentStatus={h.status as "OPEN" | "RESOLVED"}

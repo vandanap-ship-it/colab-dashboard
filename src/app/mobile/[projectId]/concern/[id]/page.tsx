@@ -118,7 +118,7 @@ export default async function MobileConcernDetailPage({
       </div>
 
       {showBar && (
-        <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3">
+        <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3" style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
           <MobileConcernActions
             concernId={concern.id}
             currentStatus={concern.status as "PENDING" | "READ" | "TASK_ASSIGNED" | "RESOLVED"}

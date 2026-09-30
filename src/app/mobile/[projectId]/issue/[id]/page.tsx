@@ -156,7 +156,7 @@ export default async function MobileIssueDetailPage({
           based on role / ownership; it renders nothing when the current
           user has no legitimate action to take. */}
       {(iCanReview || iAmAssignee) && issue.status !== "RESOLVED" && (
-        <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3">
+        <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3" style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
           <MobileIssueActions
             issueId={issue.id}
             currentStatus={issue.status as "OPEN" | "IN_REINSPECTION" | "RESOLVED"}
