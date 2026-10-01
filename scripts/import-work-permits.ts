@@ -32,6 +32,7 @@ if (/neon\.tech/i.test(url) && process.env.ALLOW_WORK_PERMIT_IMPORT !== "1") {
 
 const csvPathEnv = process.env.CSV_PATH;
 const projectName = process.env.PROJECT_NAME ?? "Amanvana";
+const wipeFirst = process.env.WIPE_FIRST === "1";
 if (!csvPathEnv) {
   console.error("CSV_PATH env var required");
   process.exit(1);
@@ -171,6 +172,15 @@ async function main() {
   const text = readFileSync(csvPath, "utf8");
   const rows = parseCsv(text);
   console.log(`Parsed ${rows.length} CSV rows`);
+
+  if (wipeFirst) {
+    console.log("WIPE_FIRST=1 — wiping existing WorkPermit rows for this project...");
+    // PermitApprover + PermitLabourEntry + WorkPermitPhoto cascade via onDelete.
+    const wiped = await prisma.workPermit.deleteMany({
+      where: { projectId: project.id },
+    });
+    console.log(`  deleted ${wiped.count} existing permits`);
+  }
 
   const userCache = new Map<string, string | null>();
   const contractorCache = new Map<string, string | null>();
