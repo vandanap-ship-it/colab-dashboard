@@ -48,7 +48,8 @@ export type AuditEntityType =
   | "Permit"
   | "WorkPermit"
   | "TradePlan"
-  | "ManpowerEntry";
+  | "ManpowerEntry"
+  | "SafetyInduction";
 
 export type AuditInput = {
   projectId?: string | null;

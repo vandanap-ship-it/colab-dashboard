@@ -123,6 +123,11 @@ function createClient() {
           return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
         },
       },
+      safetyInduction: {
+        async $allOperations({ operation, args, query }) {
+          return filterDeleted(operation, args as AnyArgs, query as (a: AnyArgs) => Promise<unknown>);
+        },
+      },
     },
   });
 }
