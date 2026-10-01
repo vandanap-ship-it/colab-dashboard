@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
@@ -41,9 +41,16 @@ export default function ReportForm({
 }) {
   const router = useRouter();
   const toast = useToast();
+  // Deep-link pre-fill. The WIR reviewer's per-item "flag" icon links to
+  // /issue/new?inspectionId=…&wbsNodeId=… so the raised snag is tagged
+  // to both the activity being inspected AND the parent WIR for later
+  // back-trace. Also used by the Observations tile from WIR detail.
+  const searchParams = useSearchParams();
+  const initialWbsNodeId = searchParams.get("wbsNodeId") ?? "";
+  const initialInspectionId = searchParams.get("inspectionId") ?? "";
 
   const [activities, setActivities] = useState<Activity[] | null>(null);
-  const [activityId, setActivityId] = useState("");
+  const [activityId, setActivityId] = useState(initialWbsNodeId);
   const [activitySearch, setActivitySearch] = useState("");
   // Explicit Villa filter above the activity search. Shraddha 2026-09-30
   // on Thangamani's observation form: he wanted to tag which villa the
@@ -89,7 +96,18 @@ export default function ReportForm({
         const r = await fetch(`/api/projects/${projectId}/wbs?leaves=true`, { cache: "no-store" });
         if (!r.ok) throw new Error(`WBS fetch failed: ${r.status}`);
         const d = (await r.json()) as { nodes?: Activity[] };
-        if (!cancelled) setActivities(Array.isArray(d.nodes) ? d.nodes : []);
+        if (!cancelled) {
+          const nodes = Array.isArray(d.nodes) ? d.nodes : [];
+          setActivities(nodes);
+          // Deep-link pre-fill: if we arrived with ?wbsNodeId= and that
+          // activity has a villaId, carry it to the villa dropdown so
+          // the picker reads coherently rather than showing "All villas"
+          // over a pre-selected activity.
+          if (initialWbsNodeId) {
+            const picked = nodes.find((n) => n.id === initialWbsNodeId);
+            if (picked?.villaId) setVillaId(picked.villaId);
+          }
+        }
       } catch (e) {
         if (!cancelled) {
           setActivities([]); // exits the "Loading…" state instead of hanging forever
@@ -100,7 +118,7 @@ export default function ReportForm({
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, initialWbsNodeId]);
 
   // Villa list feeds the top-of-picker Villa dropdown. Silent failure
   // (empty list) is fine — the dropdown just doesn't render extra
@@ -193,10 +211,12 @@ export default function ReportForm({
       wbsNodeId: activityId || undefined,
       // Villa tag rides on the payload separately so a project-level
       // observation (no specific activity picked) can still be filtered
-      // by villa downstream. Server-side schemas that don't yet accept
-      // villaId simply ignore it (added additive to the Issue POST
-      // in a follow-up when Shraddha wants reports grouped by villa).
+      // by villa downstream.
       villaId: villaId || undefined,
+      // Parent WIR back-link — set when the user came in via a WIR
+      // reviewer's per-item flag icon. Ignored by endpoints that don't
+      // accept it; stored by /api/issues.
+      inspectionId: initialInspectionId || undefined,
       description: description.trim(),
       photoUrls,
       ...coercedExtras,
