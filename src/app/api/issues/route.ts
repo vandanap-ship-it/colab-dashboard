@@ -40,7 +40,10 @@ const PostIssueSchema = z.object({
   villaId: z.string().min(1).nullable().optional(),
   idempotencyKey: z.string().max(120).optional(),
 });
-const STATUSES = new Set(["OPEN", "RESOLVED", "IN_REINSPECTION"]);
+// REJECTED added 2026-10-01 for Colab-parity 4-tab list (New / In Review /
+// Closed / Rejected). Status is stored as a plain String column, not a
+// Prisma enum, so adding a new value is a validator-only change.
+const STATUSES = new Set(["OPEN", "RESOLVED", "IN_REINSPECTION", "REJECTED"]);
 
 export async function GET(req: Request) {
   const session = await auth();

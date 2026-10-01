@@ -159,7 +159,7 @@ export default async function MobileIssueDetailPage({
         <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3" style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
           <MobileIssueActions
             issueId={issue.id}
-            currentStatus={issue.status as "OPEN" | "IN_REINSPECTION" | "RESOLVED"}
+            currentStatus={issue.status as "OPEN" | "IN_REINSPECTION" | "RESOLVED" | "REJECTED"}
             expectedUpdatedAt={issue.updatedAt.toISOString()}
             projectId={projectId}
             iCanReview={iCanReview}

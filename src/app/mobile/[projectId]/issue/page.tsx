@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { AlertTriangle, Plus, CheckCircle2, Clock } from "lucide-react";
+import { AlertTriangle, Plus, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -15,28 +15,46 @@ import IssueVillaFilter from "@/components/mobile/IssueVillaFilter";
 export const dynamic = "force-dynamic";
 
 /**
- * Mobile Issues & Defects list. Sits behind the home "Issues" card so the
- * site engineer can see everything OPEN on their patch without hopping to
- * desktop. Three tabs mirror the QA/QC list vocabulary:
+ * Mobile Issues & Defects list. Colab 2026-10-01 parity: four tabs with
+ * Colab vocab. The underlying DB status values (OPEN / IN_REINSPECTION /
+ * RESOLVED / REJECTED) stay as they are — the tabs are a UX re-skin that
+ * maps to those statuses.
  *
- *   - Open — status OPEN, the queue people actually walk on their phone.
- *   - Reinspection — snags marked IN_REINSPECTION (fixed, awaiting re-visit).
- *   - Resolved — closed / resolved snags for a recency check.
+ *   - New        — status OPEN, raised and awaiting contractor fix.
+ *   - In Review  — status IN_REINSPECTION, contractor marked fixed,
+ *                  awaiting reviewer re-visit.
+ *   - Closed     — status RESOLVED, reviewer approved the fix.
+ *   - Rejected   — status REJECTED, reviewer rejected the fix on
+ *                  re-inspection. From here the contractor can
+ *                  "ready for re-inspection" again, looping back to
+ *                  In Review.
  *
  * Scoped contractors (QA/QC-only, SAFETY-only) only see snags tagged to
  * their module. Same rule the API enforces.
  */
 
-type Tab = "open" | "reinspection" | "resolved";
-const VALID_TABS: readonly Tab[] = ["open", "reinspection", "resolved"] as const;
+type Tab = "new" | "in-review" | "closed" | "rejected";
+const VALID_TABS: readonly Tab[] = ["new", "in-review", "closed", "rejected"] as const;
+// Backwards-compat: pre-2026-10-01 links used ?tab=open / reinspection /
+// resolved. Translate the legacy value so bookmarks + the old notification
+// URLs keep landing on the right tab.
+const LEGACY_TAB_MAP: Record<string, Tab> = {
+  open: "new",
+  reinspection: "in-review",
+  resolved: "closed",
+};
 function normaliseTab(v: string | undefined): Tab {
-  return (VALID_TABS as readonly string[]).includes(v ?? "") ? (v as Tab) : "open";
+  if (!v) return "new";
+  if ((VALID_TABS as readonly string[]).includes(v)) return v as Tab;
+  if (LEGACY_TAB_MAP[v]) return LEGACY_TAB_MAP[v];
+  return "new";
 }
 
 const STATUS_FOR_TAB: Record<Tab, string> = {
-  open: "OPEN",
-  reinspection: "IN_REINSPECTION",
-  resolved: "RESOLVED",
+  "new": "OPEN",
+  "in-review": "IN_REINSPECTION",
+  "closed": "RESOLVED",
+  "rejected": "REJECTED",
 };
 
 export default async function MobileIssuesListPage({
@@ -147,9 +165,10 @@ export default async function MobileIssuesListPage({
 
       <nav className="sticky top-12 z-10 bg-ivory/95 backdrop-blur-md border-b border-stone-200 px-4">
         <div className="flex items-center gap-1 -mb-px overflow-x-auto">
-          <TabLink projectId={projectId} tab="open" current={tab} villaFilter={villaFilter} label="Open" count={countByStatus.get("OPEN") ?? 0} icon={AlertTriangle} />
-          <TabLink projectId={projectId} tab="reinspection" current={tab} villaFilter={villaFilter} label="Reinspection" count={countByStatus.get("IN_REINSPECTION") ?? 0} icon={Clock} />
-          <TabLink projectId={projectId} tab="resolved" current={tab} villaFilter={villaFilter} label="Resolved" count={countByStatus.get("RESOLVED") ?? 0} icon={CheckCircle2} />
+          <TabLink projectId={projectId} tab="new" current={tab} villaFilter={villaFilter} label="New" count={countByStatus.get("OPEN") ?? 0} icon={AlertTriangle} />
+          <TabLink projectId={projectId} tab="in-review" current={tab} villaFilter={villaFilter} label="In Review" count={countByStatus.get("IN_REINSPECTION") ?? 0} icon={Clock} />
+          <TabLink projectId={projectId} tab="closed" current={tab} villaFilter={villaFilter} label="Closed" count={countByStatus.get("RESOLVED") ?? 0} icon={CheckCircle2} />
+          <TabLink projectId={projectId} tab="rejected" current={tab} villaFilter={villaFilter} label="Rejected" count={countByStatus.get("REJECTED") ?? 0} icon={XCircle} />
         </div>
       </nav>
 
@@ -289,15 +308,16 @@ function SeverityPill({ severity }: { severity: string | null }) {
 }
 
 function EmptyState({ tab }: { tab: Tab }) {
-  const copy = {
-    open: "No open snags. Nice.",
-    reinspection: "Nothing awaiting reinspection.",
-    resolved: "No resolved snags on record yet.",
-  }[tab];
+  const copy: Record<Tab, string> = {
+    "new": "No new snags. Nice.",
+    "in-review": "Nothing awaiting review.",
+    "closed": "No closed snags on record yet.",
+    "rejected": "No rejected snags.",
+  };
   return (
     <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-8 text-center">
       <AlertTriangle className="w-6 h-6 text-stone-300 mx-auto" />
-      <p className="text-sm text-stone-500 mt-2">{copy}</p>
+      <p className="text-sm text-stone-500 mt-2">{copy[tab]}</p>
     </div>
   );
 }

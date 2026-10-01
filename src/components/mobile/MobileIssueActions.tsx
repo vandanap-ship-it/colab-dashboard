@@ -2,18 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, RotateCcw, Send, Loader2 } from "lucide-react";
+import { CheckCircle2, RotateCcw, Send, Loader2, XCircle } from "lucide-react";
 
 /**
  * Sticky action bar on the mobile snag detail. Renders different affordances
- * depending on who's looking:
+ * depending on who's looking (Colab 2026-10-01 parity: 4-state state machine
+ * New → In Review → Closed / Rejected, with Rejected → In Review loopback):
  *
- *   - REVIEWER + status OPEN            → "Mark resolved" (skips reinspection)
- *   - REVIEWER + status IN_REINSPECTION → "Mark resolved" | "Reopen"
- *   - ASSIGNEE + status OPEN            → "Ready for re-inspection" (single
- *                                        button; assignee ≠ reviewer, so
- *                                        that's the only action they can take)
- *   - Anyone else                       → parent hides the bar entirely
+ *   - REVIEWER + status OPEN               → "Mark resolved" (skips reinspection)
+ *   - REVIEWER + status IN_REINSPECTION    → "Reject" | "Reopen" | "Mark resolved"
+ *   - ASSIGNEE + status OPEN               → "Ready for re-inspection"
+ *   - ASSIGNEE + status REJECTED           → "Ready for re-inspection" (re-loop
+ *                                            after a reviewer bounce)
+ *   - Anyone else                          → parent hides the bar entirely
  *
  * The API PATCH does the security work; this bar just steers the UX to the
  * right transition and reflects the current row with the optimistic-lock
@@ -28,7 +29,7 @@ export default function MobileIssueActions({
   iAmAssignee,
 }: {
   issueId: string;
-  currentStatus: "OPEN" | "IN_REINSPECTION" | "RESOLVED";
+  currentStatus: "OPEN" | "IN_REINSPECTION" | "RESOLVED" | "REJECTED";
   expectedUpdatedAt: string;
   projectId: string;
   iCanReview: boolean;
@@ -39,7 +40,7 @@ export default function MobileIssueActions({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function patch(status: "OPEN" | "IN_REINSPECTION" | "RESOLVED") {
+  async function patch(status: "OPEN" | "IN_REINSPECTION" | "RESOLVED" | "REJECTED") {
     if (saving) return;
     setSaving(true);
     setError(null);
@@ -60,20 +61,30 @@ export default function MobileIssueActions({
       setSaving(false);
       return;
     }
-    // Back to the tab that matches the NEW status — Open → open list,
-    // Reinspection → reinspection list, Resolved → resolved list. So the
-    // engineer sees the snag reappear where it now belongs.
+    // Back to the tab that matches the NEW status — Colab-parity 4-tab
+    // list (New / In Review / Closed / Rejected). Mapping: OPEN → new,
+    // IN_REINSPECTION → in-review, RESOLVED → closed, REJECTED → rejected.
     const tab =
-      status === "RESOLVED" ? "resolved" : status === "IN_REINSPECTION" ? "reinspection" : "open";
+      status === "RESOLVED"
+        ? "closed"
+        : status === "IN_REINSPECTION"
+          ? "in-review"
+          : status === "REJECTED"
+            ? "rejected"
+            : "new";
     startTransition(() => {
       router.push(`/mobile/${projectId}/issue?tab=${tab}`);
       router.refresh();
     });
   }
 
-  // Assignee (contractor) can only signal "please re-check" from OPEN. Any
-  // other combination for a non-reviewer means we've got no action to show.
-  const showAssigneeReinspect = iAmAssignee && !iCanReview && currentStatus === "OPEN";
+  // Assignee (contractor) can signal "please re-check" from OPEN or from
+  // REJECTED (reviewer bounced a prior fix). Everything else for a non-
+  // reviewer has no action.
+  const showAssigneeReinspect =
+    iAmAssignee &&
+    !iCanReview &&
+    (currentStatus === "OPEN" || currentStatus === "REJECTED");
 
   return (
     <div className="space-y-2">
@@ -94,11 +105,46 @@ export default function MobileIssueActions({
           className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-stone-900 text-white text-sm font-semibold py-3 disabled:opacity-60"
         >
           {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-          Mark resolved
+          Close
         </button>
       )}
 
       {iCanReview && currentStatus === "IN_REINSPECTION" && (
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => patch("REJECTED")}
+            disabled={isPending || saving}
+            className="inline-flex items-center justify-center gap-1 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm font-semibold py-3 disabled:opacity-60"
+          >
+            <XCircle className="w-4 h-4" />
+            Reject
+          </button>
+          <button
+            type="button"
+            onClick={() => patch("OPEN")}
+            disabled={isPending || saving}
+            className="inline-flex items-center justify-center gap-1 rounded-xl border border-stone-300 bg-white text-stone-800 text-sm font-semibold py-3 disabled:opacity-60"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Reopen
+          </button>
+          <button
+            type="button"
+            onClick={() => patch("RESOLVED")}
+            disabled={isPending || saving}
+            className="inline-flex items-center justify-center gap-1 rounded-xl bg-stone-900 text-white text-sm font-semibold py-3 disabled:opacity-60"
+          >
+            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            Close
+          </button>
+        </div>
+      )}
+
+      {/* Reviewer looking at a REJECTED snag can still reopen it to NEW
+          or close it directly (sometimes a reject gets overturned after
+          chat). Keeps the review loop short. */}
+      {iCanReview && currentStatus === "REJECTED" && (
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
@@ -116,7 +162,7 @@ export default function MobileIssueActions({
             className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-stone-900 text-white text-sm font-semibold py-3 disabled:opacity-60"
           >
             {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-            Mark resolved
+            Close
           </button>
         </div>
       )}

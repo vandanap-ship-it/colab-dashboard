@@ -562,7 +562,7 @@ function QualityStrip({
   moduleFilter: string | null;
 }) {
   const wirHref = `/mobile/${projectId}/qaqc?tab=pending${moduleFilter ? `&module=${moduleFilter}` : ""}`;
-  const issuesHref = `/mobile/${projectId}/issue?tab=open`;
+  const issuesHref = `/mobile/${projectId}/issue?tab=new`;
   return (
     <section aria-label="Quality dashboard">
       <SectionEyebrow>On your desk</SectionEyebrow>
@@ -683,7 +683,7 @@ function WaitingOnYouStrip({
     { key: "wir", href: wirHref, count: staleWirCount, label: staleWirCount === 1 ? "stale WIR" : "stale WIRs", Icon: ClipboardList, tone: "stale" as const },
     { key: "permit", href: `/mobile/${projectId}/permit`, count: stalePermitCount, label: stalePermitCount === 1 ? "stale permit" : "stale permits", Icon: ShieldCheck, tone: "stale" as const },
     { key: "hindrance", href: `/mobile/${projectId}/hindrance?tab=open`, count: staleHindranceCount, label: staleHindranceCount === 1 ? "stale blocker" : "stale blockers", Icon: AlertTriangle, tone: "stale" as const },
-    { key: "issue", href: `/mobile/${projectId}/issue?tab=open`, count: staleIssueCount, label: staleIssueCount === 1 ? "stale snag" : "stale snags", Icon: Bug, tone: "stale" as const },
+    { key: "issue", href: `/mobile/${projectId}/issue?tab=new`, count: staleIssueCount, label: staleIssueCount === 1 ? "stale snag" : "stale snags", Icon: Bug, tone: "stale" as const },
     { key: "concern", href: `/mobile/${projectId}/concern?tab=pending`, count: staleConcernCount, label: staleConcernCount === 1 ? "stale concern" : "stale concerns", Icon: MessageSquare, tone: "stale" as const },
     { key: "drafts", href: draftsHref, count: myDraftCount, label: myDraftCount === 1 ? "draft to finish" : "drafts to finish", Icon: FileEdit, tone: "draft" as const },
   ].filter((p) => p.count > 0);

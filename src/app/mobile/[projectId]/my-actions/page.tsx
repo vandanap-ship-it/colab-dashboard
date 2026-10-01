@@ -234,7 +234,7 @@ export default async function MobileMyActionsPage({
                 {snags.map((s) => (
                   <ActionRow
                     key={s.id}
-                    href={`/mobile/${projectId}/issue/${s.id}?tab=open`}
+                    href={`/mobile/${projectId}/issue/${s.id}?tab=new`}
                     primary={s.description}
                     secondary={secondaryLine(s.createdBy?.name, s.wbsNode?.name, fmtDate(s.createdAt))}
                     right={s.severity ? severityLabel(s.severity) : undefined}
