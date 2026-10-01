@@ -340,6 +340,18 @@ export default async function MobileProjectHome({
       tier: "primary",
     },
     {
+      // Safety Induction landing — Shraddha 2026-10-01 Colab-parity 3rd
+      // safety tile. Lands on the list (My Pending for Girish,
+      // My Submissions for Abhishek/Harshit). + button inside the
+      // list raises a new induction.
+      key: "safety-induction",
+      href: `/mobile/${projectId}/induction`,
+      label: "Safety Induction",
+      hint: "Worker induction · 12-month validity",
+      icon: ShieldCheck,
+      tier: "secondary",
+    },
+    {
       key: "permit-list",
       href: `/mobile/${projectId}/permit`,
       label: "Work permits",

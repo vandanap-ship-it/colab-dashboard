@@ -139,6 +139,11 @@ export const TOOL_MODULES: Record<string, ModuleKey[]> = {
   // same InspectionForm as WIR, filtered to SAFETY templates server-
   // side via /api/inspection-templates's module scope.
   "raise-hse-checklist": [MODULES.SAFETY],
+  // "safety-induction" — the Safety team's third Colab tile (alongside
+  // Permits and Inspection Checklist). Covers labour induction tracking
+  // with a 12-month expiry. Shraddha 2026-10-01 pulled it out of
+  // Phase 2; see colab_safety_induction_spec memory for the spec.
+  "safety-induction": [MODULES.SAFETY],
   // "raise-snag" — standalone defect/safety-issue raise flow, no WIR
   // required. Shraddha, Sep 24: "the in-house QAQC person only will
   // raise snags without a WIR." Available to both quality and safety

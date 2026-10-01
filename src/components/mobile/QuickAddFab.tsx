@@ -97,6 +97,7 @@ export default function QuickAddFab({
     "/concern/new",
     "/issue/new",
     "/manpower/new",
+    "/induction/new",
   ];
   if (HIDE_FAB_PATTERNS.some((p) => pathname.includes(p))) return null;
 
@@ -240,6 +241,13 @@ const ACTION_ITEMS: readonly {
     hint: "Hot work · night work · deshuttering",
     icon: ShieldCheck,
     hrefFor: (p) => `/mobile/${p}/permit/new`,
+  },
+  {
+    key: "raise-induction",
+    label: "New safety induction",
+    hint: "Capture worker · 12-month validity · Girish approves",
+    icon: ShieldCheck,
+    hrefFor: (p) => `/mobile/${p}/induction/new`,
   },
   {
     key: "add-hindrance",

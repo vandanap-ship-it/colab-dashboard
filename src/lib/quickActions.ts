@@ -23,7 +23,8 @@ export type QuickAddKey =
   | "raise-wir"
   | "raise-snag"
   | "raise-hse-checklist"
-  | "raise-permit";
+  | "raise-permit"
+  | "raise-induction";
 
 export function quickActionsFor(modulesField: string | null | undefined): QuickAddKey[] {
   const out: QuickAddKey[] = [];
@@ -42,6 +43,10 @@ export function quickActionsFor(modulesField: string | null | undefined): QuickA
     // same two actions.
     out.push("raise-hse-checklist");
     out.push("raise-permit");
+    // Safety Induction — Shraddha 2026-10-01 pulled it out of Phase 2.
+    // Same gating as the other two safety raise-flows; shows for anyone
+    // with SAFETY access so Abhishek, Harshit, and Girish all see it.
+    out.push("raise-induction");
   }
   // Observation (Colab: snag) — either QA/QC or Safety scope can raise
   // one. Shraddha 2026-09-30: Thangamani needed a one-tap way to file
