@@ -65,7 +65,20 @@ export function isAdmin(role: string): boolean {
  * the same permission boundary the UI already enforces.
  */
 export function canReview(role: string): boolean {
-  return role === ROLES.PLANNER || role === ROLES.PRODUCT_TEAM || role === ROLES.ADMIN;
+  // SITE_MANAGER added 2026-10-01 after Girish R (Asst Mgr Safety &
+  // Compliance, role=SITE_MANAGER) hit a 403 trying to Conditionally
+  // Approve an HSE Checklist end-to-end. Site managers are the on-site
+  // reviewers for safety flows — same reason they already carry the
+  // canApproveWorkPermits flag on individual rows. Keeping the role-
+  // only gate (no module scope here) is fine because the row-level
+  // module gate in canAccessScopedRow runs AFTER this check in every
+  // caller — a QAQC-scoped site manager can't resolve a SAFETY row.
+  return (
+    role === ROLES.PLANNER ||
+    role === ROLES.PRODUCT_TEAM ||
+    role === ROLES.ADMIN ||
+    role === ROLES.SITE_MANAGER
+  );
 }
 
 /**
