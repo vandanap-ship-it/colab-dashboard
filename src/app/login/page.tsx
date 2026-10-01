@@ -97,23 +97,6 @@ function LoginForm() {
             {pending ? "Signing in…" : "Sign in"}
           </button>
         </form>
-
-        <details className="mt-4 group">
-          <summary className="text-xs text-stone-500 text-center cursor-pointer hover:text-stone-700 list-none flex items-center justify-center gap-1">
-            <span className="group-open:hidden">Show demo accounts</span>
-            <span className="hidden group-open:inline">Hide demo accounts</span>
-          </summary>
-          <div className="mt-3 rounded-lg bg-white/60 border border-stone-200 p-3 text-[11px] text-stone-600">
-            <p className="text-stone-400 mb-2">All passwords: <code className="text-stone-700">password</code></p>
-            <ul className="grid grid-cols-2 gap-x-4 gap-y-1 font-mono">
-              <li><code>admin</code> <span className="text-stone-400">— Admin</span></li>
-              <li><code>planner</code> <span className="text-stone-400">— Planner</span></li>
-              <li><code>product</code> <span className="text-stone-400">— Product</span></li>
-              <li><code>manager</code> <span className="text-stone-400">— Manager</span></li>
-              <li><code>engineer</code> <span className="text-stone-400">— Engineer</span></li>
-            </ul>
-          </div>
-        </details>
       </div>
     </div>
   );
