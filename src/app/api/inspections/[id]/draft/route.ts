@@ -255,10 +255,12 @@ export async function PUT(req: Request, ctx: RouteContext<"/api/inspections/[id]
           })).map((u) => u.id)
         : (await prisma.user.findMany({
             // Fallback broadcast — scope by module (Shraddha rule: safety
-            // → Girish only, QAQC → Thangamani only). See inspections/route.ts.
+            // → Girish only, QAQC → Thangamani only). PLANNER + SITE_MANAGER
+            // so Girish (SITE_MANAGER + SAFETY) matches. See
+            // inspections/route.ts twin comment.
             where: {
               active: true,
-              role: ROLES.PLANNER,
+              role: { in: [ROLES.PLANNER, ROLES.SITE_MANAGER] },
               id: { not: session.user.id },
               ...(moduleTag ? { modules: { contains: `"${moduleTag}"` } } : {}),
             },

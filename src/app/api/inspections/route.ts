@@ -344,7 +344,13 @@ export async function POST(req: Request) {
       const reviewers = await prisma.user.findMany({
         where: {
           active: true,
-          role: ROLES.PLANNER,
+          // PLANNER + SITE_MANAGER — matches canReview widening on
+          // 2026-10-01. For QAQC WIRs this is still just Thangamani
+          // (PLANNER + ["QAQC"]). For SAFETY HSE Checklists this is
+          // Girish R (SITE_MANAGER + ["SAFETY"]) — previously he was
+          // excluded and the Approvers card read "no reviewers
+          // configured".
+          role: { in: [ROLES.PLANNER, ROLES.SITE_MANAGER] },
           id: { not: session.user.id },
           ...(moduleTag ? { modules: { contains: `"${moduleTag}"` } } : {}),
         },

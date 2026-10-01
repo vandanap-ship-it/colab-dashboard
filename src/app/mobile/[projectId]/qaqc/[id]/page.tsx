@@ -79,7 +79,13 @@ export default async function MobileInspectionDetailPage({
       ? await prisma.user.findMany({
           where: {
             active: true,
-            role: "PLANNER",
+            // PLANNER + SITE_MANAGER — matches the raise-side fallback
+            // query. Thangamani (PLANNER + QAQC) and Girish R
+            // (SITE_MANAGER + SAFETY) both land here under their
+            // module scope. Previously SITE_MANAGER was excluded and
+            // the Approvers card for an EHS WIR read "No reviewers
+            // configured... grant Planner / Product / Admin."
+            role: { in: ["PLANNER", "SITE_MANAGER"] },
             id: { not: inspection.filledById ?? undefined },
             ...(inspection.module
               ? { modules: { contains: `"${inspection.module}"` } }

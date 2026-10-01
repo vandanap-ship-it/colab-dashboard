@@ -147,7 +147,9 @@ export async function POST(req: Request, ctx: RouteContext<"/api/inspections/[id
       const reviewers = await prisma.user.findMany({
         where: {
           active: true,
-          role: ROLES.PLANNER,
+          // PLANNER + SITE_MANAGER — see inspections/route.ts twin
+          // comment.
+          role: { in: [ROLES.PLANNER, ROLES.SITE_MANAGER] },
           id: { not: session.user.id },
           ...(before.module ? { modules: { contains: `"${before.module}"` } } : {}),
         },
