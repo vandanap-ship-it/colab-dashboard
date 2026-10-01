@@ -25,6 +25,10 @@
     {
       "path": "/api/cron/notification-cleanup",
       "schedule": "30 21 * * *"
+    },
+    {
+      "path": "/api/cron/induction-expiry",
+      "schedule": "30 0 * * *"
     }
   ]
 }
