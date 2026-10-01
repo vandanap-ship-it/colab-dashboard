@@ -1,6 +1,7 @@
 /**
  * One-off: set a unique password for each of the 8 named-user accounts
- * on Siddhi. Each user's password matches their own login ID.
+ * on Siddhi. Each user's password is {firstname}wl (first name from the
+ * login ID + the "wl" suffix for White Lotus).
  *
  *   DATABASE_URL="postgresql://..." \
  *   ALLOW_PASSWORD_RESET=1 \
@@ -11,8 +12,8 @@
  *
  * Rationale (Shraddha 2026-10-01): the earlier shared password `Wlg123`
  * was convenient for seeding but every real user should have a unique
- * credential. Using the login ID as the password keeps the scheme easy
- * to recall and to communicate per-user.
+ * credential. Using {firstname}wl keeps the scheme easy to recall and
+ * visibly distinct from the login ID (which uses firstname.surname).
  */
 
 import bcrypt from "bcryptjs";
@@ -28,19 +29,19 @@ if (/neon\.tech/i.test(url) && process.env.ALLOW_PASSWORD_RESET !== "1") {
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
 
-// Password = login ID for each named user, per Shraddha's 2026-10-01 call.
-const USERS: Array<{ username: string; module: string }> = [
+// {firstname}wl pattern — first segment of the login ID + "wl" suffix.
+const USERS: Array<{ username: string; password: string; module: string }> = [
   // Progress
-  { username: "harish.bs",     module: "Progress" },
-  { username: "samarth.p",     module: "Progress" },
+  { username: "harish.bs",     password: "harishwl",     module: "Progress" },
+  { username: "samarth.p",     password: "samarthwl",    module: "Progress" },
   // QA / QC
-  { username: "thangamani.g",  module: "QA/QC" },
-  { username: "nagarjuna.c",   module: "QA/QC" },
-  { username: "harshit.g",     module: "QA/QC" },
+  { username: "thangamani.g",  password: "thangamaniwl", module: "QA/QC" },
+  { username: "nagarjuna.c",   password: "nagarjunawl",  module: "QA/QC" },
+  { username: "harshit.g",     password: "harshitwl",    module: "QA/QC" },
   // Safety
-  { username: "girish.r",      module: "Safety" },
-  { username: "abhishek.m",    module: "Safety" },
-  { username: "mohd.asif",     module: "Safety" },
+  { username: "girish.r",      password: "girishwl",     module: "Safety" },
+  { username: "abhishek.m",    password: "abhishekwl",   module: "Safety" },
+  { username: "mohd.asif",     password: "mohdwl",       module: "Safety" },
 ];
 
 async function main() {
@@ -56,12 +57,12 @@ async function main() {
       notFound++;
       continue;
     }
-    const passwordHash = await bcrypt.hash(u.username, 10);
+    const passwordHash = await bcrypt.hash(u.password, 10);
     await prisma.user.update({
       where: { id: exists.id },
       data: { passwordHash },
     });
-    console.log(`  ~ ${u.username} (${exists.name}, ${u.module}) → password set to login ID`);
+    console.log(`  ~ ${u.username} (${exists.name}, ${u.module}) → ${u.password}`);
     reset++;
   }
 
@@ -70,7 +71,6 @@ async function main() {
   console.log(`Passwords reset: ${reset} / ${USERS.length}`);
   if (notFound > 0) console.log(`Not found:       ${notFound}`);
   console.log("=".repeat(60));
-  console.log("Each user's password is now the same as their login ID.");
 }
 
 main()
