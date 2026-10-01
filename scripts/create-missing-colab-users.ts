@@ -76,7 +76,11 @@ const SPECS: Spec[] = [
 ];
 
 async function main() {
-  const passwordHash = await bcrypt.hash(password, 10);
+  // Non-null assertion: TypeScript's module-scope narrowing from the
+  // `if (!password) process.exit(1)` check above doesn't persist into
+  // this async closure. Build-time typecheck sees `password` as
+  // `string | undefined` here; runtime it is always `string`.
+  const passwordHash = await bcrypt.hash(password!, 10);
 
   for (const spec of SPECS) {
     const existing = await prisma.user.findUnique({
