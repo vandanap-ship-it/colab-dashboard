@@ -22,6 +22,7 @@ export type QuickAddKey =
   | "add-concern"
   | "raise-wir"
   | "raise-snag"
+  | "raise-hse-checklist"
   | "raise-permit";
 
 export function quickActionsFor(modulesField: string | null | undefined): QuickAddKey[] {
@@ -29,15 +30,17 @@ export function quickActionsFor(modulesField: string | null | undefined): QuickA
   if (canAccessModule(modulesField, MODULES.PROGRESS)) {
     out.push("log-progress", "log-manpower");
   }
-  // WIRs are QAQC's whole raise-flow (quality inspections). Safety
-  // has a separate raise-flow (work permits), gated below. The two
-  // are distinct workflows on purpose — Shraddha, Sep 24: "safety
-  // personnel will raise only permit requests, and the quality
-  // person will raise work inspection requests."
+  // WIRs = QAQC's whole raise-flow (quality inspections).
   if (canAccessModule(modulesField, MODULES.QAQC)) {
     out.push("raise-wir");
   }
   if (canAccessModule(modulesField, MODULES.SAFETY)) {
+    // Safety raises BOTH permits and HSE Inspection Checklists —
+    // Colab 2026-10-01 parity, Girish's native app home has three
+    // tiles: Inspection Checklist / Permits / Safety Induction.
+    // Both the FAB entries sit here so the + button carries the
+    // same two actions.
+    out.push("raise-hse-checklist");
     out.push("raise-permit");
   }
   // Observation (Colab: snag) — either QA/QC or Safety scope can raise

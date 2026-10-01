@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, X } from "lucide-react";
 import VoiceTextarea from "./VoiceTextarea";
@@ -48,6 +48,11 @@ type Reviewer = { id: string; name: string | null; username: string; role: strin
 
 type ChecklistItem = {
   label: string;
+  // Colab 2026-10-01 parity: HSE Checklists group items under section
+  // headers like "PRE CHECKS" / "POST CHECKS". Rendered as a sticky
+  // header above the row's group; null = ungrouped. Templates carry
+  // this on InspectionTemplateItem.section — we just forward it here.
+  section: string | null;
   passed: boolean | null;
   notApplicable: boolean;
   notes: string;
@@ -195,13 +200,20 @@ export default function InspectionForm({
     editDraft
       ? editDraft.items.map((i) => ({
           label: i.label,
+          // Drafts pre-2026-10-01 don't carry section; defaulting to null
+          // keeps them in the ungrouped bucket, same as the renderer's
+          // default. Future draft rounds will persist it from the saved
+          // row once the InspectionItem schema gains the field.
+          section: ("section" in i && typeof (i as { section?: unknown }).section === "string"
+            ? (i as { section: string }).section
+            : null) as string | null,
           passed: i.passed,
           notApplicable: i.notApplicable,
           notes: i.notes ?? "",
           photo: null,
           photoUrl: i.photoUrl,
         }))
-      : DEFAULT_ITEMS.map((label) => ({ label, passed: null, notApplicable: false, notes: "", photo: null, photoUrl: null })),
+      : DEFAULT_ITEMS.map((label) => ({ label, section: null, passed: null, notApplicable: false, notes: "", photo: null, photoUrl: null })),
   );
   const [photos, setPhotos] = useState<File[]>([]);
   // Whole-checklist photos already saved on this draft. Each carries
@@ -311,6 +323,7 @@ export default function InspectionForm({
                   .sort((a, b) => a.seq - b.seq)
                   .map((it) => ({
                     label: it.description,
+                    section: it.section ?? null,
                     passed: null,
                     notApplicable: false,
                     notes: "",
@@ -421,7 +434,15 @@ export default function InspectionForm({
       tpl.items
         .slice()
         .sort((a, b) => a.seq - b.seq)
-        .map((it) => ({ label: it.description, passed: null, notApplicable: false, notes: "", photo: null, photoUrl: null })),
+        .map((it) => ({
+          label: it.description,
+          section: it.section ?? null,
+          passed: null,
+          notApplicable: false,
+          notes: "",
+          photo: null,
+          photoUrl: null,
+        })),
     );
   }
 
@@ -485,7 +506,7 @@ export default function InspectionForm({
     setItems((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
   function addItem() {
-    setItems((rows) => [...rows, { label: "", passed: null, notApplicable: false, notes: "", photo: null, photoUrl: null }]);
+    setItems((rows) => [...rows, { label: "", section: null, passed: null, notApplicable: false, notes: "", photo: null, photoUrl: null }]);
   }
   function removeItem(i: number) {
     setItems((rows) => rows.filter((_, idx) => idx !== i));
@@ -902,7 +923,7 @@ export default function InspectionForm({
     setActivityId("");
     setActivitySearch("");
     setTitle("");
-    setItems(DEFAULT_ITEMS.map((label) => ({ label, passed: null, notApplicable: false, notes: "", photo: null, photoUrl: null })));
+    setItems(DEFAULT_ITEMS.map((label) => ({ label, section: null, passed: null, notApplicable: false, notes: "", photo: null, photoUrl: null })));
     setPhotos([]);
     setTemplateId("");
     setSelectedReviewerIds(new Set());
@@ -1196,9 +1217,26 @@ export default function InspectionForm({
             const isNo = !it.notApplicable && it.passed === false;
             const isNA = it.notApplicable === true;
             const isUntouched = !isYes && !isNo && !isNA;
+            // Colab 2026-10-01 parity: render a section header above the
+            // first item of each new section (PRE CHECKS / POST CHECKS
+            // etc.). HSE templates group checkpoints this way. Pre-filled
+            // DEFAULT_ITEMS and legacy drafts have section=null; those
+            // rows stay flat without a header. Compare against the
+            // previous row's section — if it changed and is non-null,
+            // draw a header.
+            const prevSection = i === 0 ? null : items[i - 1].section;
+            const showSectionHeader = !!it.section && it.section !== prevSection;
             return (
+              <Fragment key={i}>
+                {showSectionHeader && (
+                  <li
+                    className="list-none rounded-md bg-ink text-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider mt-3 first:mt-0"
+                    aria-hidden
+                  >
+                    {it.section}
+                  </li>
+                )}
               <li
-                key={i}
                 className={`rounded-lg border bg-white p-3 space-y-2 ${
                   isUntouched ? "border-stone-200 border-l-4 border-l-amber-400" : "border-stone-200"
                 }`}
@@ -1279,6 +1317,7 @@ export default function InspectionForm({
                   />
                 </div>
               </li>
+              </Fragment>
             );
           })}
         </ul>

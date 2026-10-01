@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   MessageSquare,
   ClipboardList,
+  ClipboardCheck,
   ShieldCheck,
   Bug,
 } from "lucide-react";
@@ -220,6 +221,18 @@ const ACTION_ITEMS: readonly {
     hint: "Defect · quality · safety — tagged to a villa",
     icon: Bug,
     hrefFor: (p) => `/mobile/${p}/issue/new`,
+  },
+  {
+    key: "raise-hse-checklist",
+    label: "Raise HSE Checklist",
+    hint: "Power tools · scaffolding · PPE · P&M",
+    icon: ClipboardCheck,
+    // Same raise URL as the WIR — the server-side template picker
+    // filters to SAFETY templates based on the user's module scope,
+    // so Girish/Abhishek land on their checklist library and
+    // Nagarjuna lands on his QAQC library. ?module= hint makes the
+    // intent explicit on the URL for analytics / deep links.
+    hrefFor: (p) => `/mobile/${p}/inspection/new?module=SAFETY`,
   },
   {
     key: "raise-permit",

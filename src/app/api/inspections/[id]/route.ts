@@ -16,7 +16,14 @@ import { checkConflict } from "@/lib/optimisticLock";
 import { sendPushToUser } from "@/lib/push";
 
 const PatchInspectionSchema = z.object({
-  status: z.enum(["IN_REVIEW", "PASSED", "REJECTED"]),
+  // Added CONDITIONALLY_APPROVED 2026-10-01 for HSE Inspection Checklist
+  // parity (Girish's native app has 5 tabs: New / In-Review /
+  // Conditionally Approved / Closed / Rejected). Semantically a "pass
+  // with caveats" — the inspection is approved but the reviewer wants
+  // the filler to action the attached remarks before the next cycle.
+  // Treated as a terminal state like PASSED for the queue (moves out
+  // of the reviewer's inbox) but renders in its own tab on the list.
+  status: z.enum(["IN_REVIEW", "PASSED", "REJECTED", "CONDITIONALLY_APPROVED"]),
   rejectionReason: z.string().max(1000).optional(),
   // Colab-parity: Approve & Close sheet carries an optional remark.
   // Folded into the audit summary — no dedicated column yet, but the
@@ -83,20 +90,29 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
       });
     }
     // Push the engineer who filled it — they care most about the outcome.
-    // Skip IN_REVIEW (no decision made yet); notify on PASSED + REJECTED.
+    // Skip IN_REVIEW (no decision made yet); notify on PASSED / REJECTED /
+    // CONDITIONALLY_APPROVED. The last one is a "pass with caveats" —
+    // the reviewer wants the filler to look at the per-item remarks
+    // before the next cycle; see schema comment at the top of this file.
     if (status !== "IN_REVIEW" && before.filledById) {
       const reviewer = inspection.reviewedBy?.name ?? session.user.username;
+      const titlePrefix =
+        status === "PASSED"
+          ? "Inspection passed"
+          : status === "CONDITIONALLY_APPROVED"
+            ? "Conditionally approved"
+            : "Inspection failed";
+      const body =
+        status === "PASSED"
+          ? `Reviewed by ${reviewer}. No rework needed.`
+          : status === "CONDITIONALLY_APPROVED"
+            ? `Reviewed by ${reviewer}. Approved — check the attached remarks for follow-ups.`
+            : `Reviewed by ${reviewer}.${rejectionReason?.trim() ? ` Reason: ${rejectionReason.slice(0, 100)}` : " Check the failed rows and re-submit."}`;
       // Await — see inspections/route.ts twin comment for why fire-and-
       // forget silently dropped notifications on Vercel serverless.
       await sendPushToUser(before.filledById, {
-        title:
-          status === "PASSED"
-            ? `Inspection passed · ${before.title.slice(0, 40)}`
-            : `Inspection failed · ${before.title.slice(0, 40)}`,
-        body:
-          status === "PASSED"
-            ? `Reviewed by ${reviewer}. No rework needed.`
-            : `Reviewed by ${reviewer}.${rejectionReason?.trim() ? ` Reason: ${rejectionReason.slice(0, 100)}` : " Check the failed rows and re-submit."}`,
+        title: `${titlePrefix} · ${before.title.slice(0, 40)}`,
+        body,
         url: `/mobile/${inspection.projectId}/info`,
         tag: `inspection-${inspection.id}`,
       });

@@ -127,9 +127,18 @@ export const TOOL_MODULES: Record<string, ModuleKey[]> = {
   "manpower-list": [MODULES.PROGRESS],
   concern: [MODULES.CONCERN],
   // "raise-wir" (Work Inspection Request) — QAQC contractor's whole job.
-  // Deliberately NOT gated on SAFETY: Safety persona raises work permits,
-  // not WIRs; the two workflows are distinct.
+  // Deliberately NOT gated on SAFETY: Safety raises permits + the HSE
+  // Inspection Checklist (next key) instead; the two workflows are
+  // distinct even though they share the same InspectionForm underneath.
   "raise-wir": [MODULES.QAQC],
+  // "raise-hse-checklist" — the Safety team's parallel to raise-wir.
+  // Colab 2026-10-01 parity (Girish's native screenshots): HSE
+  // Inspection Checklist is a safety-scoped Inspection with its own
+  // templates (Power Tools, Scaffolding, PPE, P&M, etc.). Girish /
+  // Abhishek / Rishi tap it from their home + FAB. Backed by the
+  // same InspectionForm as WIR, filtered to SAFETY templates server-
+  // side via /api/inspection-templates's module scope.
+  "raise-hse-checklist": [MODULES.SAFETY],
   // "raise-snag" — standalone defect/safety-issue raise flow, no WIR
   // required. Shraddha, Sep 24: "the in-house QAQC person only will
   // raise snags without a WIR." Available to both quality and safety

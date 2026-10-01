@@ -317,6 +317,21 @@ export default async function MobileProjectHome({
       tier: "primary",
     },
     {
+      // Safety's parallel to raise-wir: the HSE Inspection Checklist
+      // (Girish's native app home 2026-10-01 — Power Tools, Scaffolding,
+      // PPE, P&M templates). Backed by the same InspectionForm; the
+      // ?module=SAFETY query hint keeps the template library scoped
+      // to safety templates even for full-access users who could see
+      // both. Scoped SAFETY contractors see only safety templates
+      // regardless.
+      key: "raise-hse-checklist",
+      href: `/mobile/${projectId}/inspection/new?module=SAFETY`,
+      label: "Raise HSE Checklist",
+      hint: "Power tools · scaffolding · PPE · P&M",
+      icon: ClipboardCheck,
+      tier: "primary",
+    },
+    {
       key: "raise-snag",
       href: `/mobile/${projectId}/issue/new`,
       label: "Raise snag",

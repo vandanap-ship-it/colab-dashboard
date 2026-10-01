@@ -37,9 +37,17 @@ type Villa = { id: string; number: number; label: string | null };
 export default function WIRTemplatePickerScreen({
   projectId,
   wbsNodeId,
+  moduleHint,
 }: {
   projectId: string;
   wbsNodeId?: string | null;
+  // When set to "SAFETY" / "QAQC", the picker filters templates to that
+  // module (plus null-module general templates). Lets a full-access
+  // staffer land on just the HSE library when they tap Raise HSE
+  // Checklist, instead of seeing every QAQC template mixed in. Scoped
+  // contractors are already server-filtered via /api/inspection-templates,
+  // so this is a no-op for them.
+  moduleHint?: "QAQC" | "SAFETY" | null;
 }) {
   const [tab, setTab] = useState<"manual" | "activity">("manual");
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -90,6 +98,12 @@ export default function WIRTemplatePickerScreen({
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
     let list = templates;
+    // Scope by moduleHint when the caller came in via Raise HSE
+    // Checklist (?module=SAFETY) or Raise WIR (?module=QAQC). null
+    // module = general template, always visible on both scopes.
+    if (moduleHint) {
+      list = list.filter((t) => t.module === moduleHint || t.module === null);
+    }
     if (tab === "activity") {
       // Activity-tab filter: match on activity string if head picked. Villa
       // is captured so the caller-side form can pre-fill location but does
@@ -110,7 +124,7 @@ export default function WIRTemplatePickerScreen({
         t.code.toLowerCase().includes(s) ||
         (t.activity ?? "").toLowerCase().includes(s),
     );
-  }, [templates, tab, search, activityHead]);
+  }, [templates, tab, search, activityHead, moduleHint]);
 
   // Activity heads = distinct t.activity values across all templates.
   const activityHeads = useMemo(() => {

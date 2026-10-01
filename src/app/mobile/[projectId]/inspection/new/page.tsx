@@ -24,7 +24,16 @@ export default async function NewInspectionPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ wbsNodeId?: string; templateId?: string; villaId?: string }>;
+  searchParams: Promise<{
+    wbsNodeId?: string;
+    templateId?: string;
+    villaId?: string;
+    // Colab 2026-10-01 parity: Safety raises an HSE Inspection
+    // Checklist through this same URL with ?module=SAFETY. The
+    // picker then shows only safety templates. QAQC users land here
+    // via Raise WIR with no module hint, defaulting to QAQC.
+    module?: string;
+  }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -32,11 +41,18 @@ export default async function NewInspectionPage({
   if (!canAccessTool(session.user.modules, TOOL_MODULES.inspection)) {
     redirect(`/mobile/${projectId}`);
   }
-  const { wbsNodeId, templateId } = await searchParams;
+  const { wbsNodeId, templateId, module: moduleHint } = await searchParams;
+  const scoped = moduleHint === "SAFETY" || moduleHint === "QAQC" ? moduleHint : null;
 
   // No template picked yet → show the picker.
   if (!templateId) {
-    return <WIRTemplatePickerScreen projectId={projectId} wbsNodeId={wbsNodeId ?? null} />;
+    return (
+      <WIRTemplatePickerScreen
+        projectId={projectId}
+        wbsNodeId={wbsNodeId ?? null}
+        moduleHint={scoped}
+      />
+    );
   }
 
   // Template picked → render the form with it applied.

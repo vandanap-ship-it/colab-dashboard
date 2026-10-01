@@ -33,6 +33,7 @@ const HOME_TILE_KEYS = [
   "permit",
   "permit-list",
   "raise-wir",
+  "raise-hse-checklist",
   "raise-snag",
   "site-progress",
   "qaqc-tile",
@@ -90,13 +91,16 @@ describe("mobile home tile visibility", () => {
     );
   });
 
-  it("SAFETY-scoped contractor sees Raise permit + Raise snag + Work permits list + ehs-tile + search", () => {
+  it("SAFETY-scoped contractor sees Raise permit + Raise HSE Checklist + Raise snag + Work permits list + ehs-tile + search", () => {
     // permit + permit-list moved from PERMIT module to SAFETY on Sep 24
     // to match the real workflow (Safety persona raises work permits).
     // raise-snag is universal across QAQC + SAFETY.
+    // raise-hse-checklist added 2026-10-01 for the Colab HSE Inspection
+    // Checklist parity (Girish's native home has Inspection Checklist
+    // + Permits + Safety Induction tiles).
     const visible = visibleTiles(serialize([MODULES.SAFETY]));
     expect([...visible].sort()).toEqual(
-      ["ehs-tile", "permit", "permit-list", "raise-snag", "search"].sort(),
+      ["ehs-tile", "permit", "permit-list", "raise-hse-checklist", "raise-snag", "search"].sort(),
     );
   });
 
@@ -128,7 +132,16 @@ describe("mobile home tile visibility", () => {
   it("multi-scope QAQC+SAFETY contractor sees the union of both", () => {
     const visible = visibleTiles(serialize([MODULES.QAQC, MODULES.SAFETY]));
     expect([...visible].sort()).toEqual(
-      ["ehs-tile", "permit", "permit-list", "qaqc-tile", "raise-wir", "raise-snag", "search"].sort(),
+      [
+        "ehs-tile",
+        "permit",
+        "permit-list",
+        "qaqc-tile",
+        "raise-wir",
+        "raise-hse-checklist",
+        "raise-snag",
+        "search",
+      ].sort(),
     );
   });
 });
@@ -141,6 +154,7 @@ describe("QuickAdd FAB action visibility", () => {
         "log-manpower",
         "raise-wir",
         "raise-snag",
+        "raise-hse-checklist",
         "raise-permit",
         "add-hindrance",
         "add-concern",
@@ -157,9 +171,13 @@ describe("QuickAdd FAB action visibility", () => {
     );
   });
 
-  it("SAFETY-scoped contractor sees Raise permit + Raise observation — safety persona's raise-flow", () => {
+  it("SAFETY-scoped contractor sees Raise permit + Raise HSE Checklist + Raise observation", () => {
+    // raise-hse-checklist added 2026-10-01: Girish's native Colab home
+    // shows Inspection Checklist + Permits + Safety Induction. The HSE
+    // Inspection Checklist is a safety-scoped Inspection raised through
+    // the same InspectionForm as a WIR, so the FAB carries both.
     expect(quickActionsFor(serialize([MODULES.SAFETY])).sort()).toEqual(
-      ["raise-permit", "raise-snag"].sort(),
+      ["raise-permit", "raise-hse-checklist", "raise-snag"].sort(),
     );
   });
 
