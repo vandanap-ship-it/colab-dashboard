@@ -523,6 +523,40 @@ CREATE TABLE "InspectionTemplateItem" (
 );
 
 -- CreateTable
+CREATE TABLE "SafetyInduction" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "displayId" TEXT NOT NULL,
+    "workerName" TEXT NOT NULL,
+    "workerPhotoUrl" TEXT,
+    "trade" TEXT NOT NULL,
+    "contractorId" TEXT,
+    "gender" TEXT NOT NULL,
+    "age" INTEGER,
+    "dob" TIMESTAMP(3),
+    "contactNumber" TEXT,
+    "aadhaarNumber" TEXT,
+    "aadhaarFrontUrl" TEXT,
+    "aadhaarBackUrl" TEXT,
+    "signatureUrl" TEXT,
+    "inductionDate" TIMESTAMP(3) NOT NULL,
+    "expiryDate" TIMESTAMP(3) NOT NULL,
+    "createdById" TEXT NOT NULL,
+    "approvedById" TEXT,
+    "approvedAt" TIMESTAMP(3),
+    "rejectedById" TEXT,
+    "rejectedAt" TIMESTAMP(3),
+    "rejectionReason" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "deletedAt" TIMESTAMP(3),
+    "idempotencyKey" TEXT,
+
+    CONSTRAINT "SafetyInduction_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "AuditLog" (
     "id" TEXT NOT NULL,
     "projectId" TEXT,
@@ -883,6 +917,27 @@ CREATE UNIQUE INDEX "InspectionTemplate_code_key" ON "InspectionTemplate"("code"
 CREATE INDEX "InspectionTemplateItem_templateId_idx" ON "InspectionTemplateItem"("templateId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "SafetyInduction_displayId_key" ON "SafetyInduction"("displayId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "SafetyInduction_idempotencyKey_key" ON "SafetyInduction"("idempotencyKey");
+
+-- CreateIndex
+CREATE INDEX "SafetyInduction_projectId_idx" ON "SafetyInduction"("projectId");
+
+-- CreateIndex
+CREATE INDEX "SafetyInduction_status_idx" ON "SafetyInduction"("status");
+
+-- CreateIndex
+CREATE INDEX "SafetyInduction_expiryDate_idx" ON "SafetyInduction"("expiryDate");
+
+-- CreateIndex
+CREATE INDEX "SafetyInduction_createdById_idx" ON "SafetyInduction"("createdById");
+
+-- CreateIndex
+CREATE INDEX "SafetyInduction_contractorId_idx" ON "SafetyInduction"("contractorId");
+
+-- CreateIndex
 CREATE INDEX "AuditLog_projectId_createdAt_idx" ON "AuditLog"("projectId", "createdAt");
 
 -- CreateIndex
@@ -1127,6 +1182,21 @@ ALTER TABLE "ProjectDrawing" ADD CONSTRAINT "ProjectDrawing_projectId_fkey" FORE
 
 -- AddForeignKey
 ALTER TABLE "InspectionTemplateItem" ADD CONSTRAINT "InspectionTemplateItem_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "InspectionTemplate"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SafetyInduction" ADD CONSTRAINT "SafetyInduction_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SafetyInduction" ADD CONSTRAINT "SafetyInduction_contractorId_fkey" FOREIGN KEY ("contractorId") REFERENCES "Contractor"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SafetyInduction" ADD CONSTRAINT "SafetyInduction_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SafetyInduction" ADD CONSTRAINT "SafetyInduction_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SafetyInduction" ADD CONSTRAINT "SafetyInduction_rejectedById_fkey" FOREIGN KEY ("rejectedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "SubContractorBill" ADD CONSTRAINT "SubContractorBill_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;

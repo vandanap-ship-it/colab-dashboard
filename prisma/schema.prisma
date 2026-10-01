@@ -63,6 +63,9 @@ model User {
   permitApprovals          PermitApprover[]        @relation("PermitApproverUser")
   pushSubscriptions        PushSubscription[]
   notifications            Notification[]
+  createdInductions        SafetyInduction[]       @relation("InductionCreator")
+  approvedInductions       SafetyInduction[]       @relation("InductionApprover")
+  rejectedInductions       SafetyInduction[]       @relation("InductionRejector")
 }
 
 /// Web Push subscriptions per user. One user may have multiple entries when
@@ -163,6 +166,7 @@ model Project {
   workPermits        WorkPermit[]
   tradePlans         TradePlan[]
   manpowerEntries    ManpowerEntry[]
+  safetyInductions   SafetyInduction[]
 
   @@index([createdById])
 }
@@ -296,6 +300,7 @@ model Contractor {
   inspections     Inspection[]
   issuesDebited   Issue[]             @relation("IssueDebitContractor")
   hindrancesResponsibleFor Hindrance[] @relation("HindranceResponsibleContractor")
+  safetyInductions SafetyInduction[]
 
   @@unique([projectId, name])
   @@index([projectId])
@@ -1005,6 +1010,96 @@ model InspectionTemplateItem {
   template InspectionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@index([templateId])
+}
+
+// ---------------------------------------------------------------------------
+// Safety Induction — one record per inducted labour worker. Colab-parity
+// (2026-10-01 captured in colab_safety_induction_spec memory): the safety
+// team's third Colab tile alongside Permits and Inspection Checklist. Each
+// row is a worker who's been through site safety induction, with a 12-month
+// validity (Shraddha's rule — matches BOCW norms). Expired rows get flipped
+// by a nightly cron so the "Expired" chip on the mobile list stays correct
+// without the safety officer having to re-check manually.
+//
+// Flow: maker (per contractor) → one approver. Approver is any user that
+// passes canReview (PLANNER/PRODUCT_TEAM/ADMIN/SITE_MANAGER as of
+// 2026-10-01 canReview widening) AND has the SAFETY module. For Amanvana
+// today that's Girish R only (SITE_MANAGER + ["SAFETY"]), matching the
+// same gate as HSE Inspection Checklist review. Shraddha confirmed
+// single-approver 2026-10-01 — no L1/L2 split.
+//
+// Field set is the Colab "core 10" (profile picture + name + trade +
+// contractor + gender + age + DOB + contact + aadhaar + 3 photos) — the
+// long tail (father name, bank account, languages, worker height/weight,
+// marital status, no of children) stays in Colab for now; see
+// phase2_exclusions_log for the deferral note.
+// ---------------------------------------------------------------------------
+model SafetyInduction {
+  id        String @id @default(cuid())
+  projectId String
+
+  // Human-readable id shown on cards + print, EP-XXXXXXXX (Colab parity).
+  // Random 8-char uppercase-alphanumeric from a confusable-free alphabet,
+  // same approach as ProgressEntry.displayId (see src/lib/progress.ts).
+  displayId String @unique
+
+  // Worker core.
+  workerName     String
+  workerPhotoUrl String? // profile picture — mandatory in UI, nullable here
+                          // so a draft without upload-complete doesn't 500
+  trade          String // "Carpenter", "Mason", "Helper", etc. free text
+  contractorId  String?
+  gender         String // "Male" | "Female" | "Other" — enforced in form
+  age            Int?
+  dob            DateTime?
+  contactNumber  String?
+  aadhaarNumber  String?
+
+  // Supporting photos the safety officer collects during the walk-through.
+  // All three nullable so a slow-upload or network blip doesn't block the
+  // induction from being submitted; the mobile form requires the first.
+  aadhaarFrontUrl String?
+  aadhaarBackUrl  String?
+  signatureUrl    String?
+
+  // Dates — inductionDate is when the walk-through happened; expiryDate is
+  // 12 months later. Both set by the server on create.
+  inductionDate DateTime
+  expiryDate    DateTime
+
+  // Who raised it + who decided + when. status is the authoritative
+  // workflow state; the dated fields are the audit trail. Only the maker
+  // writes createdById; approvedBy/rejectedBy are written atomically with
+  // the status flip by the reviewer.
+  createdById     String
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectedById    String?
+  rejectedAt      DateTime?
+  rejectionReason String?
+
+  // PENDING | APPROVED | REJECTED | EXPIRED. EXPIRED is set by the nightly
+  // cron (api/cron/induction-expiry) when inductionDate + 12mo < today AND
+  // status was previously APPROVED.
+  status String @default("PENDING")
+
+  // Standard.
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  idempotencyKey String?   @unique
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contractor Contractor? @relation(fields: [contractorId], references: [id])
+  createdBy  User        @relation("InductionCreator", fields: [createdById], references: [id])
+  approvedBy User?       @relation("InductionApprover", fields: [approvedById], references: [id])
+  rejectedBy User?       @relation("InductionRejector", fields: [rejectedById], references: [id])
+
+  @@index([projectId])
+  @@index([status])
+  @@index([expiryDate]) // cron query filters on this
+  @@index([createdById])
+  @@index([contractorId])
 }
 
 // Records every meaningful create / update / delete across the system so that
