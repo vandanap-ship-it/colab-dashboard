@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Bug, MessageSquare, ShieldCheck, ClipboardList, Inbox } from "lucide-react";
+import { Bug, MessageSquare, ShieldCheck, ClipboardList, UserCheck, Inbox } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
@@ -87,9 +87,15 @@ export default async function MobileMyActionsPage({
       }
     : {};
 
-  // All four queues in parallel — this is the tightest server-fetch on the
+  // Safety Induction reviewer gate — same shape as WIRs: canReview role
+  // check + the SAFETY module must be in the user's scope. Separation
+  // of duty excludes rows the user themselves raised (parity with the
+  // induction API's PATCH guard — a maker can't approve their own).
+  const iCanReviewInductions = iCanReview && canAccessScopedRow(session.user.modules, "SAFETY");
+
+  // All five queues in parallel — this is the tightest server-fetch on the
   // app, so we lean into Promise.all to keep the page open time low.
-  const [snags, concerns, permits, wirsToReview] = await Promise.all([
+  const [snags, concerns, permits, wirsToReview, inductions] = await Promise.all([
     prisma.issue.findMany({
       where: { projectId, deletedAt: null, assignedToId: userId, status: "OPEN", ...villaWhere },
       orderBy: { createdAt: "desc" },
@@ -164,6 +170,29 @@ export default async function MobileMyActionsPage({
           },
         })
       : Promise.resolve([]),
+    // Pending Safety Inductions where the viewer isn't the maker. Villa
+    // filter is intentionally skipped — an induction isn't tied to a
+    // villa, it's a worker-level record that applies project-wide.
+    iCanReviewInductions
+      ? prisma.safetyInduction.findMany({
+          where: {
+            projectId,
+            deletedAt: null,
+            status: "PENDING",
+            createdById: { not: userId },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 30,
+          select: {
+            id: true,
+            displayId: true,
+            workerName: true,
+            trade: true,
+            createdAt: true,
+            contractor: { select: { name: true } },
+          },
+        })
+      : Promise.resolve([]),
   ]);
 
   // Scope-filter WIRs to the reviewer's modules. A QAQC-only reviewer
@@ -174,7 +203,12 @@ export default async function MobileMyActionsPage({
     canAccessScopedRow(session.user.modules, r.module),
   );
 
-  const total = snags.length + concerns.length + permits.length + scopedWirsToReview.length;
+  const total =
+    snags.length +
+    concerns.length +
+    permits.length +
+    scopedWirsToReview.length +
+    inductions.length;
 
   return (
     <div className="flex-1 flex flex-col bg-ivory min-h-0">
@@ -287,6 +321,28 @@ export default async function MobileMyActionsPage({
                     primary={i.title}
                     secondary={secondaryLine(i.filledBy?.name, fmtDate(i.createdAt))}
                     age={wirAgeFor(i.createdAt)}
+                  />
+                ))}
+              </ActionSection>
+            )}
+
+            {inductions.length > 0 && (
+              <ActionSection
+                eyebrow="Inductions to approve"
+                count={inductions.length}
+                icon={UserCheck}
+              >
+                {inductions.map((ind) => (
+                  <ActionRow
+                    key={ind.id}
+                    href={`/mobile/${projectId}/induction/${ind.id}`}
+                    label="SAFETY INDUCTION"
+                    primary={`${ind.workerName} · ${ind.trade}`}
+                    secondary={secondaryLine(
+                      ind.displayId,
+                      ind.contractor?.name,
+                      fmtDate(ind.createdAt),
+                    )}
                   />
                 ))}
               </ActionSection>
