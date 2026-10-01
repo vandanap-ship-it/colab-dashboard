@@ -55,7 +55,15 @@ const PostInspectionSchema = z.object({
   idempotencyKey: z.string().max(120).optional(),
 });
 
-const STATUSES = new Set(["IN_REVIEW", "PASSED", "REJECTED", "RESCHEDULED", "DRAFT"]);
+const STATUSES = new Set([
+  "IN_REVIEW",
+  "PASSED",
+  "REJECTED",
+  "RESCHEDULED",
+  "DRAFT",
+  // Colab 2026-10-01 parity · HSE Inspection Checklist 5th state.
+  "CONDITIONALLY_APPROVED",
+]);
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -119,7 +127,12 @@ export async function GET(req: Request) {
     where: scopedModule ? { projectId, module: scopedModule } : { projectId },
     _count: { _all: true },
   });
-  const counts: Record<string, number> = { IN_REVIEW: 0, PASSED: 0, REJECTED: 0 };
+  const counts: Record<string, number> = {
+    IN_REVIEW: 0,
+    PASSED: 0,
+    REJECTED: 0,
+    CONDITIONALLY_APPROVED: 0,
+  };
   for (const g of grouped) counts[g.status] = g._count._all;
 
   return NextResponse.json({ inspections, counts });

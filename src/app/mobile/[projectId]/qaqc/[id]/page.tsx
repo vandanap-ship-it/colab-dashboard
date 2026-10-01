@@ -404,8 +404,22 @@ export default async function MobileInspectionDetailPage({
               <ApproverCard
                 name={inspection.reviewedBy?.name ?? "—"}
                 roleLabel={null}
-                statusLabel={inspection.status === "PASSED" ? "Approved" : "Rejected"}
-                statusTone={inspection.status === "PASSED" ? "approved" : "rejected"}
+                // CONDITIONALLY_APPROVED added 2026-10-01 for HSE
+                // Checklist parity. Renders in the sandstone "approved
+                // tone" (same visual family as the status pill on the
+                // list) rather than the stark red of a Rejected row.
+                statusLabel={
+                  inspection.status === "PASSED"
+                    ? "Approved"
+                    : inspection.status === "CONDITIONALLY_APPROVED"
+                      ? "Conditionally approved"
+                      : "Rejected"
+                }
+                statusTone={
+                  inspection.status === "PASSED" || inspection.status === "CONDITIONALLY_APPROVED"
+                    ? "approved"
+                    : "rejected"
+                }
                 remark={inspection.rejectionReason ?? null}
                 timestamp={inspection.reviewedAt ? fmtDateTime(inspection.reviewedAt) : null}
               />
@@ -434,7 +448,7 @@ export default async function MobileInspectionDetailPage({
         <div className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3" style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
           <MobileQaqcReviewActions
             inspectionId={inspection.id}
-            currentStatus={inspection.status as "IN_REVIEW" | "PASSED" | "REJECTED"}
+            currentStatus={inspection.status as "IN_REVIEW" | "PASSED" | "REJECTED" | "CONDITIONALLY_APPROVED"}
             expectedUpdatedAt={inspection.updatedAt.toISOString()}
             projectId={projectId}
             moduleFilter={reviewModuleFilter}
@@ -534,6 +548,14 @@ function ApproverLevelPill({ status }: { status: string }) {
     return (
       <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
         Approved
+      </span>
+    );
+  // Conditionally approved sits visually between PASSED (green) and
+  // REJECTED (red) — same palette as the list's StatusPill.
+  if (status === "CONDITIONALLY_APPROVED")
+    return (
+      <span className="inline-flex items-center rounded-full bg-sandstone-50 text-ferrous-700 ring-1 ring-sandstone-300 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+        Conditionally Approved
       </span>
     );
   if (status === "REJECTED")

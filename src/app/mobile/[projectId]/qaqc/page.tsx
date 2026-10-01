@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ClipboardCheck, Plus, AlertTriangle, CalendarClock, CheckCircle2, FileEdit, X, Clock } from "lucide-react";
+import { ClipboardCheck, Plus, AlertTriangle, CalendarClock, CheckCircle2, FileEdit, X, Clock, CheckCheck } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
@@ -30,9 +30,24 @@ export const dynamic = "force-dynamic";
  * Rows tap into /mobile/[projectId]/qaqc/[id] which does review-in-place.
  */
 
-type Tab = "pending" | "all" | "rescheduled" | "passed" | "rejected" | "drafts";
+type Tab =
+  | "pending"
+  | "all"
+  | "rescheduled"
+  | "passed"
+  | "conditional"
+  | "rejected"
+  | "drafts";
 
-const VALID_TABS: readonly Tab[] = ["pending", "all", "rescheduled", "passed", "rejected", "drafts"] as const;
+const VALID_TABS: readonly Tab[] = [
+  "pending",
+  "all",
+  "rescheduled",
+  "passed",
+  "conditional",
+  "rejected",
+  "drafts",
+] as const;
 function normaliseTab(v: string | undefined): Tab {
   return (VALID_TABS as readonly string[]).includes(v ?? "") ? (v as Tab) : "pending";
 }
@@ -139,6 +154,11 @@ export default async function MobileQaqcPage({
   // fillers is a data-privacy footgun, not a feature.
   const tabWhere = (() => {
     if (tab === "passed") return { ...baseWhere, status: "PASSED" };
+    // Colab 2026-10-01 parity: 5th tab for HSE Inspection Checklists
+    // closed with reviewer-attached remarks. API-side status is
+    // CONDITIONALLY_APPROVED (added same day as the review-action
+    // widening).
+    if (tab === "conditional") return { ...baseWhere, status: "CONDITIONALLY_APPROVED" };
     if (tab === "rejected") return { ...baseWhere, status: "REJECTED" };
     if (tab === "rescheduled") return { ...baseWhere, status: "RESCHEDULED" };
     if (tab === "drafts") return { ...baseWhere, status: "DRAFT", filledById: userId };
@@ -236,7 +256,15 @@ export default async function MobileQaqcPage({
           <TabLink projectId={projectId} tab="pending" current={tab} moduleFilter={moduleFilter} label="My Pending" count={pendingCount} icon={Clock} />
           <TabLink projectId={projectId} tab="all" current={tab} moduleFilter={moduleFilter} label="All" icon={ClipboardCheck} />
           <TabLink projectId={projectId} tab="rescheduled" current={tab} moduleFilter={moduleFilter} label="Rescheduled" count={countByStatus.get("RESCHEDULED") ?? 0} icon={CalendarClock} />
-          <TabLink projectId={projectId} tab="passed" current={tab} moduleFilter={moduleFilter} label="Passed" count={countByStatus.get("PASSED") ?? 0} icon={CheckCircle2} />
+          <TabLink projectId={projectId} tab="passed" current={tab} moduleFilter={moduleFilter} label={moduleFilter === "SAFETY" ? "Closed" : "Passed"} count={countByStatus.get("PASSED") ?? 0} icon={CheckCircle2} />
+          {/* Colab-parity 5th state (HSE Inspection Checklist) — only
+              surface when the module filter is EHS/SAFETY or combined,
+              since QA/QC WIRs don't use this status today. Full-access
+              users on the combined view still see it so admins can
+              audit it across both modules. */}
+          {moduleFilter !== "QAQC" && (
+            <TabLink projectId={projectId} tab="conditional" current={tab} moduleFilter={moduleFilter} label="Conditionally Approved" count={countByStatus.get("CONDITIONALLY_APPROVED") ?? 0} icon={CheckCheck} />
+          )}
           <TabLink projectId={projectId} tab="rejected" current={tab} moduleFilter={moduleFilter} label="Rejected" count={countByStatus.get("REJECTED") ?? 0} icon={AlertTriangle} />
           {/* My Drafts is only meaningful when the caller has at least
               one — the tab still shows when they don't, so they can
@@ -378,6 +406,11 @@ function StatusPill({ status }: { status: string }) {
   const map: Record<string, { bg: string; fg: string; label: string; Icon: typeof CheckCircle2 }> = {
     IN_REVIEW: { bg: "bg-amber-50 ring-amber-200", fg: "text-amber-800", label: "In review", Icon: Clock },
     PASSED: { bg: "bg-emerald-50 ring-emerald-200", fg: "text-emerald-800", label: "Passed", Icon: CheckCircle2 },
+    // Conditionally approved sits between PASSED (green) and REJECTED
+    // (red) — approved but with reviewer caveats to action. Sandstone
+    // ring with ferrous ink reads as "approved, worth another look"
+    // rather than either extreme.
+    CONDITIONALLY_APPROVED: { bg: "bg-sandstone-50 ring-sandstone-300", fg: "text-ferrous-700", label: "Conditionally approved", Icon: CheckCheck },
     REJECTED: { bg: "bg-red-50 ring-red-200", fg: "text-red-800", label: "Rejected", Icon: X },
     // Sandstone rather than a cold blue — this state means "waiting", not
     // "cancelled", and the warm palette carries the "still ours to
@@ -400,18 +433,20 @@ function StatusPill({ status }: { status: string }) {
 }
 
 function EmptyState({ tab }: { tab: Tab }) {
-  const copy = {
+  const copy: Record<Tab, string> = {
     pending: "Nothing waiting for your review.",
     all: "No inspections logged on this project yet.",
     rescheduled: "No inspections parked for later.",
     passed: "No passed inspections yet.",
+    conditional: "Nothing conditionally approved yet.",
     rejected: "No rejected inspections. Good.",
     drafts: "You have no unfinished drafts. Start a new WIR from the button above.",
-  }[tab];
+  };
+  const text = copy[tab];
   return (
     <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-8 text-center">
       <ClipboardCheck className="w-6 h-6 text-stone-300 mx-auto" />
-      <p className="text-sm text-stone-500 mt-2">{copy}</p>
+      <p className="text-sm text-stone-500 mt-2">{text}</p>
     </div>
   );
 }
