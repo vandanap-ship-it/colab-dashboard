@@ -6,6 +6,7 @@ import { ROLE_LABELS } from "@/lib/roles";
 import SwitchProjectButton from "@/components/SwitchProjectButton";
 import SignOutButton from "@/components/SignOutButton";
 import PushTestButton from "@/components/PushTestButton";
+import { ChangePasswordCard } from "@/components/ProfileEditForms";
 
 function initials(name: string | null | undefined, fallback = "?") {
   if (!name) return fallback;
@@ -124,9 +125,12 @@ export default async function MobileProfilePage() {
           icon={<KeyRound className="w-3.5 h-3.5 text-stone-400" />}
         />
         <p className="text-[11px] text-stone-500 leading-relaxed pt-1">
-          To change your phone, email, or password, ask the product team.
+          To change your phone or email, ask the product team. You can change
+          your password yourself in the card below.
         </p>
       </Section>
+
+      <ChangePasswordCard />
 
       {/* Sync status — kept, useful signal. Renamed "Available for Sync"
           off the misleading "0 offline queue v1.1" line; PendingSyncBadge
