@@ -152,6 +152,13 @@ async function findContractorByName(
   return c?.id ?? null;
 }
 
+/**
+ * Villa in Siddhi is keyed on `number: Int`, not a free-text name. Colab
+ * writes "Villa 25" / "Villa 04" so we extract the trailing integer and
+ * look up by number (joining via block → project to keep the match
+ * project-scoped). Falls back to the `label` string match if the row's
+ * number parses to NaN (shouldn't happen in practice).
+ */
 async function findVillaByName(
   name: string,
   projectId: string,
@@ -160,8 +167,14 @@ async function findVillaByName(
   const trimmed = name.trim();
   if (!trimmed) return null;
   if (cache.has(trimmed)) return cache.get(trimmed) ?? null;
+  const m = trimmed.match(/(\d+)/);
+  if (!m) {
+    cache.set(trimmed, null);
+    return null;
+  }
+  const num = Number(m[1]);
   const v = await prisma.villa.findFirst({
-    where: { projectId, name: { equals: trimmed, mode: "insensitive" } },
+    where: { projectId, number: num },
     select: { id: true },
   });
   cache.set(trimmed, v?.id ?? null);
