@@ -57,6 +57,15 @@ export default function NewProgressForm({
   const router = useRouter();
   const toast = useToast();
   const today = istDayString();
+  // 7-day backdate window — Shraddha 2026-10-01. istDayString is IST-
+  // anchored, so subtracting 7 days off its parsed date keeps the
+  // window on the same calendar axis the engineer sees in the picker.
+  const backdateMin = (() => {
+    const [y, m, d] = today.split("-").map(Number);
+    const t = new Date(Date.UTC(y, m - 1, d));
+    t.setUTCDate(t.getUTCDate() - 7);
+    return t.toISOString().slice(0, 10);
+  })();
 
   const [selected, setSelected] = useState<PickedActivity | null>(null);
   const activityId = selected?.id ?? "";
@@ -785,12 +794,48 @@ export default function NewProgressForm({
             <Step number={2} label="How much done in total?" />
             <div className="mt-3 rounded-2xl border border-sandstone-100 bg-cream p-4">
               <div className="flex items-baseline gap-2">
-                <span
-                  className="font-serif text-ferrous-600"
+                {/* Shraddha 2026-10-01: engineers wanted to type the
+                    percentage directly in addition to dragging the
+                    slider — faster for exact numbers like 35 or 50
+                    where dragging on a phone is imprecise. The input
+                    shares pctState with the range below so the two
+                    stay in sync. Clamped to [floorPct, 100] on each
+                    keystroke so a stray "500" can't slip through. */}
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={
+                    Math.max(
+                      0,
+                      Math.min(
+                        100,
+                        totalQty > 0
+                          ? Math.floor((priorMaxCumulative / totalQty) * 100)
+                          : Math.floor(priorMaxCumulative),
+                      ),
+                    )
+                  }
+                  max={100}
+                  step={1}
+                  value={Math.round(pct)}
+                  onChange={(e) => {
+                    const raw = Number(e.target.value);
+                    if (!Number.isFinite(raw)) return;
+                    const floor = Math.max(
+                      0,
+                      Math.min(
+                        100,
+                        totalQty > 0
+                          ? Math.floor((priorMaxCumulative / totalQty) * 100)
+                          : Math.floor(priorMaxCumulative),
+                      ),
+                    );
+                    setPctState(Math.max(floor, Math.min(100, raw)));
+                  }}
+                  aria-label="Progress percentage"
+                  className="font-serif text-ferrous-600 bg-transparent border-b border-dashed border-sandstone-200 focus:border-ferrous-500 focus:outline-none w-[1.6em] text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
                   style={{ fontSize: "48px", lineHeight: "1", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}
-                >
-                  {Math.round(pct)}
-                </span>
+                />
                 <span className="font-serif text-[22px] text-ferrous-600 leading-none">%</span>
                 {totalQty > 0 && (
                   <span className="ml-auto text-[12px] text-ink-3 tabular-nums">
@@ -961,18 +1006,28 @@ export default function NewProgressForm({
                   </label>
                 )}
 
-                {/* Date — moved down here since 99% of entries are today */}
+                {/* Date — moved down here since 99% of entries are today.
+                    Backdate window: 7 days (Shraddha 2026-10-01). The
+                    native date picker enforces [today - 7, today] via
+                    min + max; a bad clock could still send an out-of-
+                    range value, which the server should reject but
+                    currently just accepts (comment-only).
+                    `backdateMin` is recomputed on every render so the
+                    window slides correctly if the engineer leaves the
+                    form open past midnight IST. */}
                 <label className="block">
                   <span className="text-[13px] font-semibold text-ink">Date</span>
                   <input
                     type="date"
                     required
                     value={date}
+                    min={backdateMin}
+                    max={today}
                     onChange={(e) => setDate(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
                   />
                   <p className="text-[12px] text-ink-3 mt-1">
-                    Defaults to today. Change it only if you&apos;re back-logging.
+                    Defaults to today. You can back-log up to 7 days.
                   </p>
                 </label>
               </div>
