@@ -352,6 +352,10 @@ export async function importMspCsv(
     // villas that are outside the filter set, so we must not rename the
     // block, reorder it, or reparent a villa. Only rows that don't exist
     // yet get created.
+    const unscheduledBlockId: string | null = (await tx.block.findUnique({
+      where: { projectId_code: { projectId: project.id, code: "UNSCHEDULED" } },
+      select: { id: true },
+    }))?.id ?? null;
     let blockOrder = 0;
     if (opts.onlyVillas) {
       const maxBlock = await tx.block.findFirst({
@@ -388,6 +392,13 @@ export async function importMspCsv(
         });
         let villa: { id: string };
         if (existingVilla && opts.onlyVillas) {
+          // Exception: Colab placeholder villas wait in the "UNSCHEDULED"
+          // holding block (scripts/reconcile-colab-locations.ts) until their
+          // schedule arrives — move those into the block MSP says they
+          // belong to. Every other existing villa stays where it is.
+          if (existingVilla.blockId !== block.id && unscheduledBlockId && existingVilla.blockId === unscheduledBlockId) {
+            await tx.villa.update({ where: { id: existingVilla.id }, data: { blockId: block.id } });
+          }
           villa = existingVilla;
           stats.villas.updated++;
         } else {
