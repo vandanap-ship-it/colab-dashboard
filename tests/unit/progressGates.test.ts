@@ -183,7 +183,10 @@ describe("checkPrecheck", () => {
     expect(result).toEqual({ ok: true });
   });
 
-  it("blocks Concreting when no PASSED rebar inspection exists on the same villa", async () => {
+  // SKIPPED 2026-10-07: checkPrecheck returns {ok: true} unconditionally while
+  // the QA/QC team isn't yet using Siddhi. Un-skip when the gate is re-enabled
+  // in src/lib/progressGates.ts.
+  it.skip("blocks Concreting when no PASSED rebar inspection exists on the same villa", async () => {
     const { prisma } = await import("@/lib/prisma");
     (prisma.wBSNode.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "wbs-conc",
@@ -239,7 +242,8 @@ describe("checkPrecheck", () => {
     expect(result).toEqual({ ok: true });
   });
 
-  it("isolates villas — V12's rebar pass does not clear V30's concreting", async () => {
+  // SKIPPED 2026-10-07: see note on the sibling "blocks Concreting" test above.
+  it.skip("isolates villas — V12's rebar pass does not clear V30's concreting", async () => {
     // The check queries wbsNodes on the target's villa; a pass on a
     // different villa would only clear the gate if that villa's rebar
     // row happens to be in the fetched set. Verify by handing back only

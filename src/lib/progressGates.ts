@@ -47,7 +47,9 @@
  * ---------------------------------------------------------------------
  */
 
-import { prisma } from "@/lib/prisma";
+// Note: `prisma` import was previously used by the active-gate implementation
+// below. Kept as a line of history in the file comments only; add back when
+// the gate is re-enabled.
 
 export type ProgressGateResult =
   | { ok: true }
@@ -155,69 +157,26 @@ export function gatesForActivity(activityName: string): readonly GateRule[] {
 /**
  * Server-side precheck. Given the WBSNode the engineer is trying to log
  * progress against, verifies that every applicable gate's prerequisite
- * has at least one PASSED inspection on the *same villa*. Returns a
- * refusal on the first missing prerequisite so the UX message is
- * specific ("Rebar checklist must pass on this villa first") rather
- * than a generic "prerequisites not met".
+ * has at least one PASSED inspection on the *same villa*.
  *
- * Villa isolation is enforced via `WBSNode.villaId`. Two activities that
- * are not tagged to the same villaId are never each other's
- * prerequisites — otherwise Villa 12 rebar could gate Villa 30 concreting,
- * which is not what construction sequencing means.
+ * ---------------------------------------------------------------------
+ * GATE DISABLED 2026-10-07 (Shraddha, product side):
  *
- * Nodes without a `villaId` (structural / parent rows) fall through as
- * `{ ok: true }`. Those aren't the leaf activities the mobile form ever
- * targets, but the guard keeps the API safe for direct callers.
+ * The QA/QC team hasn't started using Siddhi yet, so no villa has
+ * PASSED inspections for the gate to check against. That means every
+ * Progress submission on a gated activity (Concreting, Plastering,
+ * Painting, etc.) was being blocked by the gate even though the QA/QC
+ * workflow it depends on isn't live yet. The execution team was stuck.
+ *
+ * We return `{ ok: true }` unconditionally for now. The rule registry
+ * above (PROGRESS_GATES) is preserved so this can be re-enabled with a
+ * one-line revert the day the QA/QC team starts raising WIRs on
+ * Siddhi. All callers (POST /api/progress, GET
+ * /api/progress/precheck, publish, quality-gate-status, UI banners)
+ * continue to call this function; they just always see "ok" now.
+ * ---------------------------------------------------------------------
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function checkPrecheck(wbsNodeId: string): Promise<ProgressGateResult> {
-  const target = await prisma.wBSNode.findUnique({
-    where: { id: wbsNodeId },
-    select: { id: true, name: true, projectId: true, villaId: true },
-  });
-  if (!target) return { ok: true }; // let the caller's own FK guard fail on a bad id
-
-  const applicable = gatesForActivity(target.name);
-  if (applicable.length === 0) return { ok: true };
-
-  // No villa tag means we can't meaningfully search "same villa" for the
-  // prerequisite — skip the gate rather than block on ambiguity.
-  if (!target.villaId) return { ok: true };
-
-  // Pull every activity on this villa once; each gate walks the same
-  // in-memory list. Villa rowcount on Amanvana is bounded (< 300 nodes
-  // per villa) so a single query stays fast.
-  const villaActivities = await prisma.wBSNode.findMany({
-    where: { projectId: target.projectId, villaId: target.villaId },
-    select: { id: true, name: true },
-  });
-
-  for (const gate of applicable) {
-    const prereqNodes = villaActivities.filter((n) => gate.prerequisiteMatch.test(n.name));
-    if (prereqNodes.length === 0) {
-      // The villa's WBS has no matching prerequisite row — the gate
-      // doesn't apply here (e.g. an activity named "Concreting" on a
-      // section that skipped rebar sub-tasks). Skip.
-      continue;
-    }
-
-    // Passed inspections tagged to any of the prerequisite rows.
-    const passedCount = await prisma.inspection.count({
-      where: {
-        projectId: target.projectId,
-        wbsNodeId: { in: prereqNodes.map((n) => n.id) },
-        status: "PASSED",
-        deletedAt: null,
-      },
-    });
-    if (passedCount === 0) {
-      return {
-        ok: false,
-        reason: `${gate.requirement} must be passed on this villa before you can log progress on ${target.name}.`,
-        requiredActivityName: gate.requirement,
-        requiredWbsNodeId: prereqNodes[0]?.id ?? null,
-      };
-    }
-  }
-
   return { ok: true };
 }
