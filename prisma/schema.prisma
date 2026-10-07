@@ -66,6 +66,11 @@ model User {
   createdInductions        SafetyInduction[]       @relation("InductionCreator")
   approvedInductions       SafetyInduction[]       @relation("InductionApprover")
   rejectedInductions       SafetyInduction[]       @relation("InductionRejector")
+  createdRegisterRows      RegisterRow[]           @relation("RegisterRowCreator")
+  updatedRegisterRows      RegisterRow[]           @relation("RegisterRowUpdater")
+  preparedRegisterSubs     RegisterSubmission[]    @relation("RegisterSubPreparer")
+  approvedRegisterSubs     RegisterSubmission[]    @relation("RegisterSubApprover")
+  rejectedRegisterSubs     RegisterSubmission[]    @relation("RegisterSubRejector")
 }
 
 /// Web Push subscriptions per user. One user may have multiple entries when
@@ -167,6 +172,7 @@ model Project {
   tradePlans         TradePlan[]
   manpowerEntries    ManpowerEntry[]
   safetyInductions   SafetyInduction[]
+  registers          Register[]
 
   @@index([createdById])
 }
@@ -221,6 +227,7 @@ model Villa {
   block      Block            @relation(fields: [blockId], references: [id], onDelete: Cascade)
   milestones VillaMilestone[]
   issues     Issue[]          @relation("IssueVilla")
+  registerRows RegisterRow[]
 
   @@unique([projectId, number])
   @@index([projectId])
@@ -907,11 +914,18 @@ model Inspection {
   triggerType     String?   @default("Manual") // Manual | Auto
   reviewerNote    String?
 
+  // Register link — Oct 2026. Set when the checklist inspects one item
+  // from a project register (e.g. CL-SAF-03 Fire Extinguishers → one
+  // extinguisher row). When the inspection is PASSED, the row's
+  // last-inspected date + next due date roll forward automatically.
+  registerRowId String?
+
   project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   wbsNode    WBSNode?          @relation(fields: [wbsNodeId], references: [id])
   filledBy   User              @relation("InspectionFiller", fields: [filledById], references: [id])
   reviewedBy User?             @relation("InspectionReviewer", fields: [reviewedById], references: [id])
   contractor Contractor?       @relation(fields: [contractorId], references: [id])
+  registerRow RegisterRow?      @relation(fields: [registerRowId], references: [id], onDelete: SetNull)
   items      InspectionItem[]
   photos     InspectionPhoto[]
   issues     Issue[]
@@ -919,6 +933,7 @@ model Inspection {
   @@index([projectId])
   @@index([wbsNodeId])
   @@index([contractorId])
+  @@index([registerRowId])
 }
 
 model InspectionItem {
@@ -1100,6 +1115,153 @@ model SafetyInduction {
   @@index([expiryDate]) // cron query filters on this
   @@index([createdById])
   @@index([contractorId])
+}
+
+// ---------------------------------------------------------------------------
+// Registers — tabular inventories the safety team keeps per project and
+// signs off monthly. First type: "Inventory of Fire Extinguishers" (the
+// safety team's 9th Oct-7 checklist, which is a table, not Yes/No).
+//
+// Three layers:
+//   RegisterType       — global definition, seeded from
+//                        prisma/register-types-data.ts on every build
+//                        (same as InspectionTemplate). Holds the column
+//                        schema, so a new list type (equipment, scaffold
+//                        tags…) is a data-file change, not a migration.
+//   Register           — one live list per project per type.
+//   RegisterRow        — one physical item (one extinguisher). Lives on
+//                        across sign-offs. Field values are JSON keyed by
+//                        the type's column keys; identifier + nextDueDate
+//                        are copied out for search and the due-date cron.
+//   RegisterSubmission — one monthly sign-off. `snapshot` freezes the
+//                        columns + rows at submit time so an approved
+//                        register never changes after the fact; the print
+//                        view renders from it.
+//
+// Flow: SAFETY maker (Abhishek) keeps the list current → Submit for
+// sign-off → single approver (Girish — canReview + SAFETY, not the
+// preparer) approves or rejects. Shraddha 2026-10-07: Girish approves,
+// monthly cadence.
+// ---------------------------------------------------------------------------
+model RegisterType {
+  id                     String   @id @default(cuid())
+  code                   String   @unique // "REG-SAF-01"
+  name                   String // "Inventory of Fire Extinguishers"
+  shortName              String // "Fire extinguishers" — tiles + pushes
+  module                 String // SAFETY
+  // RegisterColumn[] — see src/lib/registers.ts for the shape.
+  columns                Json
+  identifierKey          String // column whose value is the row's display id
+  dueDateKey             String? // column the due-date cron watches
+  lastInspectedKey       String? // column rolled forward by a PASSED linked inspection
+  defaultIntervalDays    Int? // pre-fills due = last inspected + N
+  signOffIntervalDays    Int? // monthly = 30; drives the "sign-off due" nudge
+  inspectionTemplateCode String? // e.g. "CL-SAF-03" — checklist that inspects one row
+  preparedByLabel        String?
+  approvedByLabel        String?
+  orderIndex             Int      @default(0)
+  active                 Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  registers Register[]
+}
+
+model Register {
+  id              String    @id @default(cuid())
+  projectId       String
+  typeId          String
+  // Last time the cron nudged the maintainers that the monthly sign-off
+  // is due. Cleared whenever a submission is raised.
+  signOffNudgedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project     Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type        RegisterType         @relation(fields: [typeId], references: [id])
+  rows        RegisterRow[]
+  submissions RegisterSubmission[]
+
+  @@unique([projectId, typeId])
+}
+
+model RegisterRow {
+  id             String    @id @default(cuid())
+  registerId     String
+  values         Json // { [columnKey]: string } — dates stored as YYYY-MM-DD
+  identifier     String // copied from values[identifierKey], trimmed
+  // Normalised (upper-cased, whitespace-collapsed) identifier. Uniqueness
+  // among live rows is enforced in the API, not by a DB constraint, so a
+  // row deleted as a typo frees its id for reuse.
+  identifierNorm String
+  nextDueDate    DateTime? // copied from values[dueDateKey] for the cron
+  villaId        String? // optional — many items sit outside villas
+  orderIndex     Int       @default(0)
+
+  // Retired = taken off site. Kept for history and printed records.
+  retiredAt         DateTime?
+  retiredReason     String?
+  // Set the first time the row is frozen into a sign-off. Rows that have
+  // never been signed off can be deleted outright (typos); after that
+  // they can only be retired.
+  firstSubmittedAt  DateTime?
+  // Inspection (e.g. CL-SAF-03) that last rolled the dates forward.
+  lastInspectionId  String?
+  // Cron bookkeeping so each reminder fires once per due date. Both are
+  // cleared whenever nextDueDate changes.
+  dueSoonNotifiedAt DateTime?
+  overdueNotifiedAt DateTime?
+
+  createdById    String
+  updatedById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  idempotencyKey String?   @unique
+
+  register    Register     @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  villa       Villa?       @relation(fields: [villaId], references: [id], onDelete: SetNull)
+  createdBy   User         @relation("RegisterRowCreator", fields: [createdById], references: [id])
+  updatedBy   User         @relation("RegisterRowUpdater", fields: [updatedById], references: [id])
+  inspections Inspection[]
+
+  @@index([registerId])
+  @@index([nextDueDate])
+  @@index([villaId])
+}
+
+model RegisterSubmission {
+  id         String   @id @default(cuid())
+  registerId String
+  displayId  String   @unique // INV-XXXXXXXX
+  asOfDate   DateTime // the "Date:" on the printed sheet
+  // { columns, rows: [{ id, identifier, values, villaLabel }], ... }
+  // Frozen at submit time — never rewritten.
+  snapshot   Json
+  rowCount   Int
+  remark     String?
+
+  status          String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  preparedById    String
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectedById    String?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  // Optional photo of the wet-signed paper sheet (transition period).
+  signedPaperUrl  String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  idempotencyKey String?  @unique
+
+  register   Register @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  preparedBy User     @relation("RegisterSubPreparer", fields: [preparedById], references: [id])
+  approvedBy User?    @relation("RegisterSubApprover", fields: [approvedById], references: [id])
+  rejectedBy User?    @relation("RegisterSubRejector", fields: [rejectedById], references: [id])
+
+  @@index([registerId])
+  @@index([status])
 }
 
 // Records every meaningful create / update / delete across the system so that

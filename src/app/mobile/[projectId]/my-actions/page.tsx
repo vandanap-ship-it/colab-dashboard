@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Bug, MessageSquare, ShieldCheck, ClipboardList, UserCheck, Inbox } from "lucide-react";
+import { Bug, MessageSquare, ShieldCheck, ClipboardList, UserCheck, Inbox, FireExtinguisher } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReview } from "@/lib/roles";
@@ -95,7 +95,7 @@ export default async function MobileMyActionsPage({
 
   // All five queues in parallel — this is the tightest server-fetch on the
   // app, so we lean into Promise.all to keep the page open time low.
-  const [snags, concerns, permits, wirsToReview, inductions] = await Promise.all([
+  const [snags, concerns, permits, wirsToReview, inductions, registerSignOffs] = await Promise.all([
     prisma.issue.findMany({
       where: { projectId, deletedAt: null, assignedToId: userId, status: "OPEN", ...villaWhere },
       orderBy: { createdAt: "desc" },
@@ -193,6 +193,28 @@ export default async function MobileMyActionsPage({
           },
         })
       : Promise.resolve([]),
+    // Register sign-offs (fire extinguisher inventory) waiting on this
+    // reviewer. Same gate as inductions — SAFETY reviewers, not the
+    // preparer. Project-wide, so the villa filter doesn't apply.
+    iCanReviewInductions
+      ? prisma.registerSubmission.findMany({
+          where: {
+            status: "PENDING",
+            preparedById: { not: userId },
+            register: { projectId },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 30,
+          select: {
+            id: true,
+            displayId: true,
+            rowCount: true,
+            createdAt: true,
+            preparedBy: { select: { name: true } },
+            register: { select: { type: { select: { code: true, shortName: true, module: true } } } },
+          },
+        })
+      : Promise.resolve([]),
   ]);
 
   // Scope-filter WIRs to the reviewer's modules. A QAQC-only reviewer
@@ -208,7 +230,8 @@ export default async function MobileMyActionsPage({
     concerns.length +
     permits.length +
     scopedWirsToReview.length +
-    inductions.length;
+    inductions.length +
+    registerSignOffs.length;
 
   return (
     <div className="flex-1 flex flex-col bg-ivory min-h-0">
@@ -343,6 +366,24 @@ export default async function MobileMyActionsPage({
                       ind.contractor?.name,
                       fmtDate(ind.createdAt),
                     )}
+                  />
+                ))}
+              </ActionSection>
+            )}
+
+            {registerSignOffs.length > 0 && (
+              <ActionSection
+                eyebrow="Registers to sign off"
+                count={registerSignOffs.length}
+                icon={FireExtinguisher}
+              >
+                {registerSignOffs.map((s) => (
+                  <ActionRow
+                    key={s.id}
+                    href={`/mobile/${projectId}/registers/${s.register.type.code}/submissions/${s.id}`}
+                    label="REGISTER"
+                    primary={`${s.register.type.shortName} · ${s.rowCount} item${s.rowCount === 1 ? "" : "s"}`}
+                    secondary={secondaryLine(s.displayId, s.preparedBy.name, fmtDate(s.createdAt))}
                   />
                 ))}
               </ActionSection>

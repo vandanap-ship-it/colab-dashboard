@@ -50,6 +50,7 @@ import { checkConflict } from "@/lib/optimisticLock";
 import { sendPushToUser } from "@/lib/push";
 import { ROLES } from "@/lib/roles";
 import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
+import { assertRegisterRowInProject } from "@/lib/registersServer";
 import { isOwnUploadUrl, sanitizeUploadUrls } from "@/lib/upload";
 
 const PutDraftSchema = z.object({
@@ -76,6 +77,9 @@ const PutDraftSchema = z.object({
   exactLocation: z.string().max(500).nullable().optional(),
   totalQuantityPct: z.number().min(0).max(100).nullable().optional(),
   executedQuantityPct: z.number().min(0).max(100).nullable().optional(),
+  // Register link (Oct 2026) — the register row this checklist inspects,
+  // e.g. one extinguisher for CL-SAF-03. PASSED rolls its dates forward.
+  registerRowId: z.string().min(1).nullable().optional(),
   expectedUpdatedAt: z.string().optional(),
 });
 
@@ -132,6 +136,8 @@ export async function PUT(req: Request, ctx: RouteContext<"/api/inspections/[id]
 
     const wbsErr = await assertWbsNodeInProject(body.wbsNodeId ?? null, before.projectId);
     if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
+    const rowErr = await assertRegisterRowInProject(body.registerRowId, before.projectId);
+    if (rowErr) return NextResponse.json({ error: rowErr }, { status: 400 });
 
     // Reuse the same validation POST uses for the "review" branch — every
     // non-empty row has to be answered Yes/No/NA before we let the WIR
@@ -210,6 +216,7 @@ export async function PUT(req: Request, ctx: RouteContext<"/api/inspections/[id]
           executedQuantityPct: body.executedQuantityPct === undefined
             ? undefined
             : (typeof body.executedQuantityPct === "number" ? body.executedQuantityPct : null),
+          registerRowId: body.registerRowId === undefined ? undefined : (body.registerRowId || null),
           ...(isReviewSubmit ? { status: "IN_REVIEW" } : {}),
           items: { create: itemsClean },
           ...(appendedPhotos.length > 0

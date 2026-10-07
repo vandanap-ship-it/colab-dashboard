@@ -29,6 +29,10 @@
     {
       "path": "/api/cron/induction-expiry",
       "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/cron/register-due",
+      "schedule": "45 0 * * *"
     }
   ]
 }

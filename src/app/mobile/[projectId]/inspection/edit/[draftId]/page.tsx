@@ -74,6 +74,7 @@ export default async function EditDraftPage({
         exactLocation: draft.exactLocation,
         totalQuantityPct: draft.totalQuantityPct,
         executedQuantityPct: draft.executedQuantityPct,
+        registerRowId: draft.registerRowId,
         items: draft.items.map((i) => ({
           label: i.label,
           passed: i.passed,

@@ -85,6 +85,9 @@ export type EditDraftInput = {
   exactLocation: string | null;
   totalQuantityPct: number | null;
   executedQuantityPct: number | null;
+  // Register link (Oct 2026) — e.g. which fire extinguisher a CL-SAF-03
+  // checklist covers. Optional; absent on drafts that predate it.
+  registerRowId?: string | null;
   items: Array<{
     label: string;
     passed: boolean | null;
@@ -167,6 +170,7 @@ export default function InspectionForm({
   editDraft,
   initialWbsNodeId,
   initialTemplateId,
+  initialRegisterRowId,
 }: {
   projectId: string;
   // `redirectTo` was accepted in an earlier iteration but never wired up.
@@ -188,6 +192,9 @@ export default function InspectionForm({
   // set to a template id. The form pre-applies that template so the
   // filler sees the checklist rows and title without extra taps.
   initialTemplateId?: string;
+  // Register deep link — "Raise inspection checklist" on a fire
+  // extinguisher in the register pre-picks that extinguisher.
+  initialRegisterRowId?: string | null;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -244,6 +251,21 @@ export default function InspectionForm({
   const [contractorPickerOpen, setContractorPickerOpen] = useState(false);
   const [contractorSearch, setContractorSearch] = useState("");
   const [exactLocation, setExactLocation] = useState<string>(editDraft?.exactLocation ?? "");
+  // Register link — populated when the applied template is tied to a
+  // project register (CL-SAF-03 ↔ fire extinguisher inventory). Approving
+  // the checklist rolls the picked item's inspection dates forward.
+  const [registerRowId, setRegisterRowId] = useState<string>(
+    editDraft?.registerRowId ?? initialRegisterRowId ?? "",
+  );
+  // Keyed by the lookup that produced it so a template change can't show
+  // a stale register. `register: null` = looked up, nothing linked.
+  const [linkedLookup, setLinkedLookup] = useState<null | {
+    key: string;
+    register: null | {
+      shortName: string;
+      rows: Array<{ id: string; identifier: string; values: Record<string, string> }>;
+    };
+  }>(null);
   const [totalQuantityStr, setTotalQuantityStr] = useState<string>(
     editDraft?.totalQuantityPct == null ? "100" : String(editDraft.totalQuantityPct),
   );
@@ -298,6 +320,50 @@ export default function InspectionForm({
       cancelled = true;
     };
   }, [projectId]);
+
+  const appliedTemplateCode = templates.find((t) => t.id === templateId)?.code ?? null;
+  const draftRegisterRowId = editDraft?.registerRowId ?? null;
+  const linkedKey = appliedTemplateCode
+    ? `templateCode=${encodeURIComponent(appliedTemplateCode)}`
+    : draftRegisterRowId
+      ? `registerRowId=${encodeURIComponent(draftRegisterRowId)}`
+      : null;
+  useEffect(() => {
+    if (!linkedKey) return;
+    let cancelled = false;
+    fetch(`/api/projects/${projectId}/registers/linked?${linkedKey}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { register: null }))
+      .then((d) => {
+        if (cancelled) return;
+        setLinkedLookup({ key: linkedKey, register: d.register ?? null });
+        // Deep link from the register: pre-fill Exact Location with the
+        // item's location unless the filler already typed one.
+        const deepLinked = d.register?.rows?.find(
+          (r: { id: string; values: Record<string, string> }) => r.id === initialRegisterRowId,
+        );
+        if (deepLinked?.values.location) {
+          setExactLocation((cur) => (cur.trim() ? cur : deepLinked.values.location));
+        }
+      })
+      .catch(() => {
+        // Offline / failed lookup: leave it unresolved so a deep-linked
+        // registerRowId still ships (the server validates it).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, linkedKey, initialRegisterRowId]);
+  const linkedRegister = linkedLookup && linkedLookup.key === linkedKey ? linkedLookup.register : null;
+  const linkedResolved = !!linkedLookup && linkedLookup.key === linkedKey;
+  // What actually ships: once the lookup resolved, only a row that's on
+  // the linked register; before that (or offline), whatever was picked.
+  const effectiveRegisterRowId = !linkedKey
+    ? null
+    : linkedResolved
+      ? linkedRegister?.rows.some((r) => r.id === registerRowId)
+        ? registerRowId
+        : null
+      : registerRowId || null;
 
   useEffect(() => {
     let cancelled = false;
@@ -655,6 +721,7 @@ export default function InspectionForm({
       exactLocation: exactLocation.trim() || null,
       totalQuantityPct: totalQ,
       executedQuantityPct: executedQ,
+      registerRowId: effectiveRegisterRowId,
     };
     if (isEditingDraft) {
       payload.mode = "review";
@@ -766,6 +833,7 @@ export default function InspectionForm({
       exactLocation: exactLocation.trim() || null,
       totalQuantityPct: totalQ,
       executedQuantityPct: executedQ,
+      registerRowId: effectiveRegisterRowId,
     };
     if (isEditingDraft) {
       payload.expectedUpdatedAt = editDraft!.expectedUpdatedAt;
@@ -859,6 +927,7 @@ export default function InspectionForm({
       photoUrls: wholePhotos.urls,
       assignedReviewerIds: Array.from(selectedReviewerIds),
       submitRemark: undefined,
+      registerRowId: effectiveRegisterRowId,
     };
 
     let inspectionId: string | null = null;
@@ -1041,6 +1110,41 @@ export default function InspectionForm({
           </span>
         </label>
       ) : null}
+
+      {/* Register item picker — only for templates linked to a register
+          (CL-SAF-03 ↔ fire extinguisher inventory). Approving the
+          checklist updates the picked item's last-inspected date. */}
+      {linkedRegister && (
+        <label className="block rounded-lg border border-stone-200 bg-white p-3">
+          <span className="text-sm font-medium text-stone-700">
+            Which {linkedRegister.shortName.replace(/s$/, "").toLowerCase()}?{" "}
+            <span className="text-stone-400">(optional)</span>
+          </span>
+          <select
+            value={linkedRegister.rows.some((r) => r.id === registerRowId) ? registerRowId : ""}
+            onChange={(e) => {
+              const id = e.target.value;
+              setRegisterRowId(id);
+              const row = linkedRegister.rows.find((r) => r.id === id);
+              if (row?.values.location && !exactLocation.trim()) setExactLocation(row.values.location);
+            }}
+            className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">Not for one specific item</option>
+            {linkedRegister.rows.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.identifier}
+                {r.values.location ? ` · ${r.values.location}` : ""}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-stone-500">
+            {linkedRegister.rows.length === 0
+              ? "No items on the register yet."
+              : "When this checklist is approved, the item's inspection date on the register updates automatically."}
+          </span>
+        </label>
+      )}
 
       <label className="block">
         <span className="text-sm font-medium text-stone-700">Title</span>

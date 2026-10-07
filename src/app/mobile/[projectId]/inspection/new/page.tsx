@@ -33,6 +33,9 @@ export default async function NewInspectionPage({
     // picker then shows only safety templates. QAQC users land here
     // via Raise WIR with no module hint, defaulting to QAQC.
     module?: string;
+    // Register deep link — pre-picks the item (e.g. one fire
+    // extinguisher) the checklist is for.
+    registerRowId?: string;
   }>;
 }) {
   const session = await auth();
@@ -41,7 +44,7 @@ export default async function NewInspectionPage({
   if (!canAccessTool(session.user.modules, TOOL_MODULES.inspection)) {
     redirect(`/mobile/${projectId}`);
   }
-  const { wbsNodeId, templateId, module: moduleHint } = await searchParams;
+  const { wbsNodeId, templateId, module: moduleHint, registerRowId } = await searchParams;
   const scoped = moduleHint === "SAFETY" || moduleHint === "QAQC" ? moduleHint : null;
 
   // No template picked yet → show the picker.
@@ -61,6 +64,7 @@ export default async function NewInspectionPage({
       projectId={projectId}
       initialWbsNodeId={wbsNodeId ?? null}
       initialTemplateId={templateId}
+      initialRegisterRowId={registerRowId ?? null}
     />
   );
 }

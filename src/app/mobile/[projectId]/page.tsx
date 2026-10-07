@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   FileEdit,
+  FireExtinguisher,
   HardHat,
   ListChecks,
   MessageSquare,
@@ -352,6 +353,17 @@ export default async function MobileProjectHome({
       tier: "secondary",
     },
     {
+      // Safety registers (Oct 2026) — the fire extinguisher inventory,
+      // kept current by Abhishek and signed off monthly by Girish. The
+      // hub skips straight to the list while there's only one register.
+      key: "registers",
+      href: `/mobile/${projectId}/registers`,
+      label: "Fire extinguishers",
+      hint: "Inventory · due dates · monthly sign-off",
+      icon: FireExtinguisher,
+      tier: "secondary",
+    },
+    {
       key: "permit-list",
       href: `/mobile/${projectId}/permit`,
       label: "Work permits",
@@ -455,10 +467,14 @@ export default async function MobileProjectHome({
   // of the WIR he raised; a Safety contractor opens permit-list to
   // check whether the approver has signed off yet. For in-house
   // approvers on those tiles, they're the review queue itself.
+  //
+  // "registers" stays too: the safety contractor (Abhishek) is the one
+  // who keeps the fire extinguisher list current and submits it.
   const scopedKeepSecondary = new Set([
     "qaqc-tile",
     "ehs-tile",
     "permit-list",
+    "registers",
     "search",
   ]);
   const secondaryTools = tools

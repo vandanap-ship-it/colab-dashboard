@@ -8,6 +8,7 @@ import { createIdempotent, readIdempotencyKey } from "@/lib/idempotency";
 import { isOwnUploadUrl, sanitizeUploadUrls } from "@/lib/upload";
 import { parseBody } from "@/lib/parseBody";
 import { assertWbsNodeInProject } from "@/lib/projectFkGuards";
+import { assertRegisterRowInProject } from "@/lib/registersServer";
 import { sendPushToUser } from "@/lib/push";
 import { ROLES } from "@/lib/roles";
 
@@ -52,6 +53,9 @@ const PostInspectionSchema = z.object({
   exactLocation: z.string().max(500).nullable().optional(),
   totalQuantityPct: z.number().min(0).max(100).nullable().optional(),
   executedQuantityPct: z.number().min(0).max(100).nullable().optional(),
+  // Register link (Oct 2026) — the register row this checklist inspects,
+  // e.g. one extinguisher for CL-SAF-03. PASSED rolls its dates forward.
+  registerRowId: z.string().min(1).nullable().optional(),
   idempotencyKey: z.string().max(120).optional(),
 });
 
@@ -165,6 +169,7 @@ export async function POST(req: Request) {
     exactLocation,
     totalQuantityPct,
     executedQuantityPct,
+    registerRowId,
   } = body;
   const t = title.trim();
   const isDraft = mode === "draft";
@@ -239,6 +244,8 @@ export async function POST(req: Request) {
   // Cross-project FK guard on the activity tag.
   const wbsErr = await assertWbsNodeInProject(wbsNodeId, projectId);
   if (wbsErr) return NextResponse.json({ error: wbsErr }, { status: 400 });
+  const rowErr = await assertRegisterRowInProject(registerRowId, projectId);
+  if (rowErr) return NextResponse.json({ error: rowErr }, { status: 400 });
 
   const photos = sanitizeUploadUrls(
     Array.isArray(photoUrls) ? photoUrls.filter((u): u is string => typeof u === "string" && u.length > 0) : undefined,
@@ -277,6 +284,7 @@ export async function POST(req: Request) {
           exactLocation: exactLocation?.trim() || null,
           totalQuantityPct: typeof totalQuantityPct === "number" ? totalQuantityPct : null,
           executedQuantityPct: typeof executedQuantityPct === "number" ? executedQuantityPct : null,
+          registerRowId: registerRowId || null,
           items: { create: itemsClean },
           photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,
         },

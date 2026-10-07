@@ -6,12 +6,23 @@ import styles from "./safety-tab.module.css";
 import type { SafetyBundle } from "@/lib/safetyServer";
 import { SAFETY_CATEGORIES } from "@/lib/safetyCategories";
 
+export type RegisterSummary = {
+  code: string;
+  name: string;
+  live: number;
+  overdue: number;
+  dueSoon: number;
+  pendingDisplayId: string | null;
+  lastSignedOff: string | null;
+};
+
 export interface SafetyTabViewProps {
   projectId: string;
   bundle: SafetyBundle;
+  registers?: RegisterSummary[];
 }
 
-export default function SafetyTabView({ projectId, bundle }: SafetyTabViewProps) {
+export default function SafetyTabView({ projectId, bundle, registers = [] }: SafetyTabViewProps) {
   const [submissionsWindow, setSubmissionsWindow] = useState<"7d" | "weekly" | "monthly">("7d");
 
   const submissionsData = useMemo(() => {
@@ -27,6 +38,9 @@ export default function SafetyTabView({ projectId, bundle }: SafetyTabViewProps)
       <ComplianceMatrixCard rows={bundle.compliance} />
       <SafetyDetailsCard inductions={bundle.inductions} />
       <PermitsCard permits={bundle.permits} projectId={projectId} />
+      {registers.map((r) => (
+        <RegisterCard key={r.code} register={r} projectId={projectId} />
+      ))}
       <SubmissionsCard
         data={submissionsData}
         window={submissionsWindow}
@@ -275,6 +289,33 @@ function PermitsCard({ permits, projectId }: { permits: SafetyBundle["permits"];
             </Link>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// §5b Registers (fire extinguisher inventory, Oct 2026)
+// ---------------------------------------------------------------------------
+
+function RegisterCard({ register: r, projectId }: { register: RegisterSummary; projectId: string }) {
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardHd}>
+        {r.name}
+        <span className={styles.cardMeta}>
+          {r.live} on site · {r.overdue} overdue · {r.dueSoon} due in 7 days ·{" "}
+          {r.pendingDisplayId
+            ? `${r.pendingDisplayId} awaiting sign-off`
+            : r.lastSignedOff
+              ? `signed off ${r.lastSignedOff}`
+              : "not signed off yet"}
+        </span>
+      </div>
+      <div className={styles.cardBd}>
+        <Link href={`/projects/${projectId}/registers/${r.code}`} className={styles.actionBtnFullWidth}>
+          Open register →
+        </Link>
       </div>
     </div>
   );

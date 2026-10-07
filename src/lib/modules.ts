@@ -144,6 +144,9 @@ export const TOOL_MODULES: Record<string, ModuleKey[]> = {
   // with a 12-month expiry. Shraddha 2026-10-01 pulled it out of
   // Phase 2; see colab_safety_induction_spec memory for the spec.
   "safety-induction": [MODULES.SAFETY],
+  // "registers" — tabular safety registers signed off monthly (Fire
+  // Extinguisher inventory first). Oct 2026, safety team's 9th checklist.
+  registers: [MODULES.SAFETY],
   // "raise-snag" — standalone defect/safety-issue raise flow, no WIR
   // required. Shraddha, Sep 24: "the in-house QAQC person only will
   // raise snags without a WIR." Available to both quality and safety

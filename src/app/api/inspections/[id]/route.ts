@@ -14,6 +14,7 @@ import {
 import { parseBody } from "@/lib/parseBody";
 import { checkConflict } from "@/lib/optimisticLock";
 import { sendPushToUser } from "@/lib/push";
+import { applyPassedInspectionToRegister } from "@/lib/registersServer";
 
 const PatchInspectionSchema = z.object({
   // Added CONDITIONALLY_APPROVED 2026-10-01 for HSE Inspection Checklist
@@ -48,7 +49,17 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
   try {
     const before = await prisma.inspection.findUnique({
       where: { id },
-      select: { id: true, projectId: true, status: true, title: true, updatedAt: true, module: true, filledById: true },
+      select: {
+        id: true,
+        projectId: true,
+        status: true,
+        title: true,
+        updatedAt: true,
+        module: true,
+        filledById: true,
+        registerRowId: true,
+        createdAt: true,
+      },
     });
     if (!before) return notFound();
     // Module gate — QAQC-scoped contractor cannot pass/reject a SAFETY
@@ -88,6 +99,16 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/inspections/[i
         }`,
         changes: trimmedReview ? { reviewRemark: trimmedReview.slice(0, 1000) } : undefined,
       });
+    }
+    // Register link — an approved checklist for a register item (e.g.
+    // CL-SAF-03 for one fire extinguisher) rolls that item's last-
+    // inspected + due dates forward. Conditional approval counts: the
+    // inspection happened, the caveats are follow-ups.
+    if ((status === "PASSED" || status === "CONDITIONALLY_APPROVED") && before.registerRowId) {
+      await applyPassedInspectionToRegister(
+        { id: before.id, registerRowId: before.registerRowId, createdAt: before.createdAt, projectId: before.projectId },
+        session.user.id,
+      );
     }
     // Push the engineer who filled it — they care most about the outcome.
     // Skip IN_REVIEW (no decision made yet); notify on PASSED / REJECTED /
