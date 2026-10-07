@@ -18,6 +18,8 @@ interface Stats {
   villasNotFound: string[];
   villaPairAliases: string[];
   siddhiWinsRows: number;
+  dailyLogRows: number;
+  sameDayMerged: number;
   sectionsUnmatched: string[];
   progressEntriesCreated: number;
   progressEntriesUpdated: number;
@@ -84,6 +86,8 @@ function mergeStats(all: Stats[]): Stats {
     villasNotFound: [],
     villaPairAliases: [],
     siddhiWinsRows: 0,
+    dailyLogRows: 0,
+    sameDayMerged: 0,
     sectionsUnmatched: [],
     progressEntriesCreated: 0,
     progressEntriesUpdated: 0,
@@ -107,6 +111,8 @@ function mergeStats(all: Stats[]): Stats {
     out.wbsNodesUpdated += s.wbsNodesUpdated;
     out.villaMilestonesUpdated += s.villaMilestonesUpdated;
     out.siddhiWinsRows += s.siddhiWinsRows ?? 0;
+    out.dailyLogRows += s.dailyLogRows ?? 0;
+    out.sameDayMerged += s.sameDayMerged ?? 0;
     out.elapsedMs += s.elapsedMs;
     for (const v of s.villasNotFound) if (!seenVillas.has(v)) { seenVillas.add(v); out.villasNotFound.push(v); }
     for (const a of s.villaPairAliases ?? []) if (!out.villaPairAliases.includes(a)) out.villaPairAliases.push(a);
@@ -316,6 +322,21 @@ export default function ColabProgressImportForm({ projectId }: { projectId: stri
                 <li>Matched to villa + section: <strong>{result.stats.matchedRows}</strong></li>
                 <li>Also matched to specific activity: <strong>{result.stats.matchedActivityRows}</strong></li>
                 <li className="text-orange-700">Unmatched: <strong>{result.stats.unmatchedRows}</strong></li>
+                {result.stats.dailyLogRows > 0 && (
+                  <>
+                    <li className="pt-2">
+                      Day-by-day log detected — history only: progress entries + photos are written;
+                      activity %, dates and Master Report figures are left as they are.
+                    </li>
+                    <li>Same-day updates combined into one entry: <strong>{result.stats.sameDayMerged}</strong></li>
+                    {result.dryRun && (
+                      <>
+                        <li>Progress entries that would be created: <strong>{result.stats.progressEntriesCreated}</strong></li>
+                        <li>Progress entries that would be updated: <strong>{result.stats.progressEntriesUpdated}</strong></li>
+                      </>
+                    )}
+                  </>
+                )}
                 {!result.dryRun && (
                   <>
                     <li className="pt-2">Progress entries created: <strong>{result.stats.progressEntriesCreated}</strong></li>

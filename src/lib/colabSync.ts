@@ -70,6 +70,10 @@ interface ColabRow {
   Milestone?: string;
   Milestone_type?: string;
   Activity_ID?: string;
+  daily_id?: string;          // present only in Colab's day-by-day progress log
+  Progress_added_by?: string; // "Name (ColabUserId)" — daily-log variant export
+  /** Set when same-day daily-log rows are merged: every Image_Link. */
+  __imageLinks?: string[];
 }
 
 export interface ColabSyncStats {
@@ -91,6 +95,10 @@ export interface ColabSyncStats {
   /** Rows that left an activity's progress alone because the site team
    *  entered progress for it in Siddhi (Siddhi wins). */
   siddhiWinsRows: number;
+  /** Rows handled in history-only mode (Colab's day-by-day log). */
+  dailyLogRows: number;
+  /** Same activity + same day rows combined into one entry. */
+  sameDayMerged: number;
   sectionsUnmatched: string[];
   progressEntriesCreated: number;
   progressEntriesUpdated: number;
@@ -122,10 +130,11 @@ function parseColabDate(s: string | undefined | null): Date | null {
   if (!s) return null;
   const t = s.trim();
   if (!t || t === "-") return null;
-  // Handles "29-07-26", "2026-07-29 15:54:18", "29-07-2026"
+  // Handles "29-07-26", "24/07/26", "2026-07-29 15:54:18", "29-07-2026"
   let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
-  m = t.match(/^(\d{2})-(\d{2})-(\d{2,4})$/);
+  // Colab's day-by-day log uses slashes ("24/07/26"); the snapshot uses dashes.
+  m = t.match(/^(\d{2})[-/](\d{2})[-/](\d{2,4})$/);
   if (m) {
     const day = +m[1];
     const mon = +m[2] - 1;
@@ -241,6 +250,8 @@ export async function importColabProgress(
     villasNotFound: [],
     villaPairAliases: [],
     siddhiWinsRows: 0,
+    dailyLogRows: 0,
+    sameDayMerged: 0,
     sectionsUnmatched: [],
     progressEntriesCreated: 0,
     progressEntriesUpdated: 0,
@@ -251,13 +262,66 @@ export async function importColabProgress(
     elapsedMs: 0,
   };
 
+  // The day-by-day log spells two headers differently from the snapshot.
+  const HEADER_ALIASES: Record<string, string> = { Actvity_Head: "Activity_Head", Milestone_Type: "Milestone_type" };
   const parsed = Papa.parse<ColabRow>(csvText, {
     header: true,
     skipEmptyLines: true,
-    transformHeader: (h) => h.trim(),
+    transformHeader: (h) => HEADER_ALIASES[h.trim()] ?? h.trim(),
   });
-  const rows = parsed.data;
-  stats.totalRows = rows.length;
+  stats.totalRows = parsed.data.length;
+
+  // HISTORY-ONLY mode — Colab's day-by-day progress log (has a daily_id
+  // column; one row per progress update, many per activity). It replays
+  // past days, so it must NOT drive an activity's current state: the
+  // snapshot export already set %/actuals/baselines/ColabActivity, and
+  // replaying an older day would drag them backwards. In this mode only
+  // ProgressEntry rows (+ photos) are written, keyed exactly like the
+  // snapshot's (colab:{Activity_ID}:{date}) so overlapping days update in
+  // place. Same-activity same-day rows are separate updates in Colab
+  // (e.g. +76.72 then +6.57 → cumulative 83.29) — merged into one entry:
+  // achieved summed, cumulative/% maxed, remarks + photos kept.
+  const historyOnly = (parsed.meta.fields ?? []).includes("daily_id");
+  let rows = parsed.data;
+  if (historyOnly) {
+    stats.dailyLogRows = rows.length;
+    const groups = new Map<string, ColabRow[]>();
+    for (const r of rows) {
+      const k = `${r.Activity_ID?.trim() ?? ""}|${r.Progress_Date?.trim() ?? ""}`;
+      const g = groups.get(k);
+      if (g) g.push(r); else groups.set(k, [r]);
+    }
+    rows = [...groups.values()].map((g) => {
+      if (g.length === 1) return g[0];
+      stats.sameDayMerged += g.length - 1;
+      const num = (v: string | undefined) => toFloat(v) ?? 0;
+      const raw = (r: ColabRow, key: string) => (r as unknown as Record<string, string | undefined>)[key];
+      const last = g.reduce((a, b) => (num(b.Cumulative__achieved_Qty) >= num(a.Cumulative__achieved_Qty) ? b : a));
+      const merged: ColabRow = { ...last };
+      merged.Achieved_Qty = String(g.reduce((n, r) => n + num(r.Achieved_Qty), 0));
+      merged.Cumulative__achieved_Qty = String(Math.max(...g.map((r) => num(r.Cumulative__achieved_Qty))));
+      (merged as unknown as Record<string, string>)["Total__Progress_%"] =
+        String(Math.max(...g.map((r) => num(raw(r, "Total__Progress_%") ?? raw(r, "Total__Progress_")))));
+      merged.Remark = [...new Set(g.map((r) => r.Remark?.trim()).filter(Boolean))].join(" | ");
+      merged.__imageLinks = g.map((r) => r.Image_Link ?? "").filter((l) => l.trim());
+      return merged;
+    });
+  }
+
+  // Credit each entry to the Siddhi user who logged it in Colab, when the
+  // export says who ("Madhavarajan Soundararajan  (WL-MadhavanS)") and that
+  // name has a Siddhi account; otherwise the importing admin.
+  const userIdByName = new Map<string, string>();
+  if (rows.some((r) => r.Progress_added_by)) {
+    const users = await prisma.user.findMany({ select: { id: true, name: true } });
+    for (const u of users as Array<{ id: string; name: string }>) {
+      userIdByName.set(u.name.toLowerCase().replace(/\s+/g, " ").trim(), u.id);
+    }
+  }
+  const creatorFor = (r: ColabRow): string => {
+    const who = (r.Progress_added_by ?? "").replace(/\(.*\)/, "").toLowerCase().replace(/\s+/g, " ").trim();
+    return (who && userIdByName.get(who)) || options.createdById;
+  };
 
   // Purge any placeholder ColabActivity rows that got imported before
   // this filter was in place. Structured columns tell us it's a
@@ -265,7 +329,7 @@ export async function importColabProgress(
   // planned window, no actuals, no progress date. The new-row filter
   // (isColabPlaceholderRow) catches them going forward; this catches
   // the ones already sitting in the table.
-  if (!options.dryRun) {
+  if (!options.dryRun && !historyOnly) {
     await prisma.$executeRawUnsafe(
       `DELETE FROM "ColabActivity"
        WHERE "projectId" = $1
@@ -693,18 +757,17 @@ export async function importColabProgress(
     //      actually resolves. If Colab changes hosts we'll see 404s on
     //      the client — cleaner failure than a blank <img>.
     const COLAB_UPLOAD_BASE = "https://node.colabtools.com/";
-    let imageUrl: string | null = null;
-    if (r.Image_Link && r.Image_Link.includes("/uploads/")) {
-      const raw = r.Image_Link.trim();
-      if (raw.startsWith("None/")) {
-        imageUrl = COLAB_UPLOAD_BASE + raw.slice("None/".length);
-      } else if (raw.startsWith("http://") || raw.startsWith("https://")) {
-        imageUrl = raw;
-      } else {
-        // Bare "/uploads/..." — prepend the CDN base.
-        imageUrl = COLAB_UPLOAD_BASE + raw.replace(/^\/+/, "");
-      }
-    }
+    const toImageUrl = (link: string | undefined): string | null => {
+      if (!link || !link.includes("/uploads/")) return null;
+      const raw = link.trim();
+      if (raw.startsWith("None/")) return COLAB_UPLOAD_BASE + raw.slice("None/".length);
+      if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+      // Bare "/uploads/..." — prepend the CDN base.
+      return COLAB_UPLOAD_BASE + raw.replace(/^\/+/, "");
+    };
+    // A merged daily-log entry can carry several photos.
+    const imageUrls = [...new Set((r.__imageLinks ?? [r.Image_Link]).map(toImageUrl).filter((u): u is string => !!u))];
+    const imageUrl = imageUrls[0] ?? null;
     const activityId  = r.Activity_ID?.trim();
 
     // Queue the Colab row for bulk ColabActivity write at end of chunk —
@@ -745,6 +808,16 @@ export async function importColabProgress(
     // ----- 7. Write (skip in dry-run)
     if (options.dryRun) {
       if (bestWbs && siddhiFirstEntry.has(bestWbs.id)) stats.siddhiWinsRows++;
+      // History mode: report what the real run would write (read-only).
+      if (historyOnly && bestWbs && progressAt && activityId) {
+        const since = siddhiFirstEntry.get(bestWbs.id);
+        if (since && progressAt.toISOString().slice(0, 10) >= since.toISOString().slice(0, 10)) continue;
+        const exists = await prisma.progressEntry.findUnique({
+          where: { idempotencyKey: `colab:${activityId}:${progressAt.toISOString().slice(0, 10)}` },
+          select: { id: true },
+        });
+        if (exists) stats.progressEntriesUpdated++; else stats.progressEntriesCreated++;
+      }
       continue;
     }
 
@@ -764,7 +837,10 @@ export async function importColabProgress(
     await prisma.$transaction(async (tx: any) => {
       // 7a. Update WBSNode if we matched one — accumulate the state.
       const siddhiSince = bestWbs ? siddhiFirstEntry.get(bestWbs.id) : undefined;
-      if (bestWbs && siddhiSince) {
+      if (historyOnly) {
+        // Past days never drive the activity's current state (see above).
+        if (bestWbs && siddhiSince) perRowCounters.siddhiWinsRows++;
+      } else if (bestWbs && siddhiSince) {
         // Siddhi wins: keep the team's %/actuals/quantity/contractor; only
         // the Colab schedule (baselines) and weight still apply.
         await tx.wBSNode.update({
@@ -843,17 +919,20 @@ export async function importColabProgress(
             });
           }
 
-          // If the entry has NO photos at all yet and this row has one, attach
-          // it. Covers entries created before Image_Link parsing was fixed.
-          if (imageUrl && brokenPhotos.length === 0) {
-            const anyPhoto = await tx.progressPhoto.findFirst({
-              where: { progressEntryId: existing.id },
-              select: { id: true },
-            });
-            if (!anyPhoto) {
-              await tx.progressPhoto.create({
-                data: { progressEntryId: existing.id, url: imageUrl },
-              });
+          // Attach any of this row's photos the entry doesn't have yet
+          // (compared by URL, after the heal above, so re-runs never
+          // duplicate). Covers entries created before Image_Link parsing
+          // was fixed and merged daily-log entries with several photos.
+          if (imageUrls.length > 0) {
+            const have = new Set(
+              ((await tx.progressPhoto.findMany({
+                where: { progressEntryId: existing.id },
+                select: { url: true },
+              })) as Array<{ url: string }>).map((ph) => ph.url),
+            );
+            for (const url of imageUrls) {
+              if (have.has(url)) continue;
+              await tx.progressPhoto.create({ data: { progressEntryId: existing.id, url } });
               perRowCounters.photosCreated++;
             }
           }
@@ -869,7 +948,7 @@ export async function importColabProgress(
               notes,
               reasonCode: reasonCode ?? undefined,
               reasonNote,
-              createdById: options.createdById,
+              createdById: creatorFor(r),
               idempotencyKey,
             },
             select: { id: true },
@@ -878,9 +957,9 @@ export async function importColabProgress(
 
           // 7c. Attach the photo (only for freshly-created entries — updates
           //     would risk piling up duplicates otherwise).
-          if (imageUrl) {
+          for (const url of imageUrls) {
             await tx.progressPhoto.create({
-              data: { progressEntryId: created.id, url: imageUrl },
+              data: { progressEntryId: created.id, url },
             });
             perRowCounters.photosCreated++;
           }
@@ -895,7 +974,7 @@ export async function importColabProgress(
     stats.photosCreated += perRowCounters.photosCreated;
   }
 
-  if (!options.dryRun) {
+  if (!options.dryRun && !historyOnly) {
     // Wrap the five post-loop phases in a single transaction. Individual
     // per-row writes above are idempotent (idempotencyKey on ProgressEntry,
     // no-op-if-no-change on WBSNode), so a retry after a mid-loop crash is
@@ -919,7 +998,8 @@ export async function importColabProgress(
       },
       { timeout: 300_000, maxWait: 30_000 },
     );
-  } else {
+  } else if (!historyOnly) {
+    // Dry run: report how many milestones a real run would roll up.
     stats.villaMilestonesUpdated = touchedVillaMilestones.size;
   }
 
