@@ -57,15 +57,8 @@ export default function NewProgressForm({
   const router = useRouter();
   const toast = useToast();
   const today = istDayString();
-  // 7-day backdate window — Shraddha 2026-10-01. istDayString is IST-
-  // anchored, so subtracting 7 days off its parsed date keeps the
-  // window on the same calendar axis the engineer sees in the picker.
-  const backdateMin = (() => {
-    const [y, m, d] = today.split("-").map(Number);
-    const t = new Date(Date.UTC(y, m - 1, d));
-    t.setUTCDate(t.getUTCDate() - 7);
-    return t.toISOString().slice(0, 10);
-  })();
+  // Backdate window removed 2026-10-07 (Vandana). Engineers can pick
+  // any past date; the server still blocks future dates.
 
   const [selected, setSelected] = useState<PickedActivity | null>(null);
   const activityId = selected?.id ?? "";
@@ -1006,28 +999,22 @@ export default function NewProgressForm({
                   </label>
                 )}
 
-                {/* Date — moved down here since 99% of entries are today.
-                    Backdate window: 7 days (Shraddha 2026-10-01). The
-                    native date picker enforces [today - 7, today] via
-                    min + max; a bad clock could still send an out-of-
-                    range value, which the server should reject but
-                    currently just accepts (comment-only).
-                    `backdateMin` is recomputed on every render so the
-                    window slides correctly if the engineer leaves the
-                    form open past midnight IST. */}
+                {/* Date — defaults to today, but any past date is allowed
+                    (2026-10-07 Vandana: removed the 7-day cap). Future
+                    dates stay blocked by max={today}; the server also
+                    rejects future dates as a belt-and-braces guard. */}
                 <label className="block">
                   <span className="text-[13px] font-semibold text-ink">Date</span>
                   <input
                     type="date"
                     required
                     value={date}
-                    min={backdateMin}
                     max={today}
                     onChange={(e) => setDate(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
                   />
                   <p className="text-[12px] text-ink-3 mt-1">
-                    Defaults to today. You can back-log up to 7 days.
+                    Defaults to today. Pick any past date to back-log.
                   </p>
                 </label>
               </div>

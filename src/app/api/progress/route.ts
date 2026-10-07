@@ -170,25 +170,15 @@ export async function POST(req: Request) {
   } = body;
   const isDraft = mode === "draft";
 
-  // Backdate window — Shraddha 2026-10-01: engineers can log progress up
-  // to 7 days back, no further. The client enforces this with min/max
-  // on the date picker; this is the belt-and-braces server guard so a
-  // scripted / curl'd POST can't backdate further. Drafts skip the
-  // check — a draft started before the window will fail only when
-  // the engineer tries to PUBLISH it, which routes through
-  // /api/progress/[id]/publish with its own date check.
+  // Date window — Vandana 2026-10-07: removed the 7-day backdate limit.
+  // Engineers can now log progress for any past date without a cap.
+  // Only guard that remains is "no future dates" — you can't have
+  // progress on work scheduled for tomorrow. Drafts skip the check.
   if (!isDraft && date) {
     const parsedDate = new Date(date);
     if (!Number.isNaN(parsedDate.getTime())) {
       const now = new Date();
-      const minMs = now.getTime() - 7 * 24 * 60 * 60 * 1000 - 60 * 60 * 1000; // 1h slack for IST
       const maxMs = now.getTime() + 24 * 60 * 60 * 1000; // 1 day forward slack for clock drift
-      if (parsedDate.getTime() < minMs) {
-        return NextResponse.json(
-          { error: "You can only log progress up to 7 days back." },
-          { status: 400 },
-        );
-      }
       if (parsedDate.getTime() > maxMs) {
         return NextResponse.json(
           { error: "Progress date can't be in the future." },
