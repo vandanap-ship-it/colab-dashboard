@@ -9,7 +9,6 @@ import { milestoneCompletionEmail, sendEmail } from "@/lib/email";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { checkConflict } from "@/lib/optimisticLock";
-import { monotonicViolationMessage } from "@/lib/progress";
 import { sanitizeUploadUrls } from "@/lib/upload";
 import {
   badRequest,
@@ -107,6 +106,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
       cumulativeQuantity: true,
       contractorId: true,
       notes: true,
+      reasonNote: true,
       status: true,
       updatedAt: true,
     },
@@ -165,12 +165,13 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
 
   try {
     const updated = await prisma.$transaction(async (tx) => {
-      // Colab-parity monotonic invariant on the edit path: a PUBLISHED
-      // entry's cumulativeQuantity cannot drop below the max cumulative
-      // of *other* PUBLISHED entries on the same activity, otherwise a
-      // planner editing an earlier row could silently make a later row
-      // read as "backward progress" — corrupting rollups and DLR. Drafts
-      // aren't in the invariant (they don't count toward priorMax).
+      // Vandana 2026-10-07: dropped the "cumulative-only-goes-up" hard
+      // rejection on the edit path. Engineers now correct over-counts
+      // (like the Villa 13 Column GF→FF 100.2% case) by editing the
+      // row directly. A reduction below the max of *other* PUBLISHED
+      // entries on this activity is still allowed only when the final
+      // row carries a short note (notes OR reasonNote ≥ 3 chars) so
+      // the audit trail explains the correction. Drafts are unchecked.
       if (
         !isDraft &&
         data.cumulativeQuantity !== undefined
@@ -186,7 +187,16 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
         });
         const priorMaxTx = maxPriorTx._max.cumulativeQuantity ?? 0;
         if (data.cumulativeQuantity < priorMaxTx) {
-          throw new RangeError(`MONOTONIC:${priorMaxTx}`);
+          const finalNotes = data.notes !== undefined
+            ? (data.notes ?? "").trim()
+            : (entry.notes ?? "").trim();
+          const finalReasonNote = data.reasonNote !== undefined
+            ? (data.reasonNote ?? "").trim()
+            : (entry.reasonNote ?? "").trim();
+          const hasExplanation = finalNotes.length >= 3 || finalReasonNote.length >= 3;
+          if (!hasExplanation) {
+            throw new RangeError("REDUCE_NEEDS_NOTE");
+          }
         }
       }
       const u = await tx.progressEntry.update({ where: { id }, data });
@@ -314,12 +324,14 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
 
     return NextResponse.json({ entry: updated });
   } catch (e) {
-    // Monotonic-invariant refusal from the in-tx check above.
-    if (e instanceof RangeError && e.message.startsWith("MONOTONIC:")) {
-      const priorMax = Number(e.message.split(":")[1] ?? "0");
+    // Reduction without an explanatory note (see in-tx check above).
+    if (e instanceof RangeError && e.message === "REDUCE_NEEDS_NOTE") {
       return NextResponse.json(
-        { error: monotonicViolationMessage(priorMax, "new") },
-        { status: 409 },
+        {
+          error:
+            "You're reducing cumulative progress below the previous value. Please add a short note explaining why (e.g. 'Fixing over-count from earlier entry').",
+        },
+        { status: 400 },
       );
     }
     return handleApiError(e, "PATCH /api/progress/:id");

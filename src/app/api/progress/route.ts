@@ -11,7 +11,7 @@ import { isValidReasonCode } from "@/lib/hindranceReasons";
 import { sanitizeUploadUrls } from "@/lib/upload";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { checkPrecheck } from "@/lib/progressGates";
-import { generateProgressDisplayId, monotonicViolationMessage } from "@/lib/progress";
+import { generateProgressDisplayId } from "@/lib/progress";
 
 const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
@@ -252,19 +252,12 @@ export async function POST(req: Request) {
   const achieved = achievedQuantity ?? 0;
   const cumulative = cumulativeQuantity ?? 0;
 
-  // Colab-parity monotonic constraint (Madhavan zip · Edit Progress
-  // slider min-locks to the current cumulative). Progress can only
-  // increase — a new PUBLISHED entry's cumulative must be >= the max
-  // cumulative of prior PUBLISHED entries on the same activity.
-  // Drafts skip the check for the same reason they skip the precheck
-  // gate: the engineer's stashed unfinished attempt shouldn't be
-  // policed until they hit Publish.
-  //
-  // Pre-check outside the tx: cheap, catches the vast majority of
-  // violations before the tx cost. The tx below re-runs the check so
-  // two concurrent submits can't BOTH pass this pre-check and BOTH
-  // commit — an in-tx aggregate over PUBLISHED rows is the closest
-  // Prisma gets to SELECT ... FOR UPDATE across the constraint.
+  // Vandana 2026-10-07: dropped the "cumulative-only-goes-up" hard
+  // rejection. Engineers can now correct earlier over-counts (or
+  // under-counts) from the form directly, instead of asking an admin
+  // to void a row. A REDUCTION still needs a short note so the
+  // audit trail carries intent — otherwise a stray finger-slip could
+  // silently rewrite history. Drafts remain unchecked.
   if (!isDraft) {
     const maxPrior = await prisma.progressEntry.aggregate({
       where: { wbsNodeId, status: "PUBLISHED", deletedAt: null },
@@ -272,7 +265,18 @@ export async function POST(req: Request) {
     });
     const priorMax = maxPrior._max.cumulativeQuantity ?? 0;
     if (cumulative < priorMax) {
-      return NextResponse.json({ error: monotonicViolationMessage(priorMax, "new") }, { status: 409 });
+      const notesClean = typeof notes === "string" ? notes.trim() : "";
+      const reasonTextClean = typeof reasonNote === "string" ? reasonNote.trim() : "";
+      const hasExplanation = notesClean.length >= 3 || reasonTextClean.length >= 3;
+      if (!hasExplanation) {
+        return NextResponse.json(
+          {
+            error:
+              "You're reducing cumulative progress below the previous value. Please add a short note explaining why (e.g. 'Fixing over-count from earlier entry').",
+          },
+          { status: 400 },
+        );
+      }
     }
   }
 
@@ -306,22 +310,10 @@ export async function POST(req: Request) {
       idempotencyKey,
       () => prisma.progressEntry.findUnique({ where: { idempotencyKey: idempotencyKey! }, include: entryInclude }),
       () => prisma.$transaction(async (tx) => {
-    // Re-check the monotonic invariant inside the tx. Without this,
-    // two concurrent PUBLISHED submits could both pass the pre-check
-    // above (they'd both read the same priorMax before either wrote)
-    // and both commit — silent invariant violation. The tx-scoped
-    // aggregate + throw is Prisma's closest equivalent to
-    // "SELECT MAX(cumulativeQuantity) ... FOR UPDATE".
-    if (!isDraft) {
-      const maxPriorTx = await tx.progressEntry.aggregate({
-        where: { wbsNodeId, status: "PUBLISHED", deletedAt: null },
-        _max: { cumulativeQuantity: true },
-      });
-      const priorMaxTx = maxPriorTx._max.cumulativeQuantity ?? 0;
-      if (cumulative < priorMaxTx) {
-        throw new RangeError(`MONOTONIC:${priorMaxTx}`);
-      }
-    }
+    // Monotonic re-check removed 2026-10-07 (Vandana). Progress can
+    // now go up or down; the pre-check above requires a note when it
+    // goes down, which is enough — we no longer need the in-tx
+    // race-guard against two writers both reducing concurrently.
     const created = await tx.progressEntry.create({
       data: {
         projectId: node.projectId,
@@ -387,17 +379,8 @@ export async function POST(req: Request) {
     entry = outcome.record;
     duplicate = outcome.duplicate;
   } catch (e) {
-    // In-tx monotonic re-check refused the write because another
-    // concurrent submit landed higher first. Return the same 409 shape
-    // the pre-tx check returns so the client's error handling doesn't
-    // have to know about the race path.
-    if (e instanceof RangeError && e.message.startsWith("MONOTONIC:")) {
-      const priorMax = Number(e.message.split(":")[1] ?? "0");
-      return NextResponse.json(
-        { error: monotonicViolationMessage(priorMax, "new") },
-        { status: 409 },
-      );
-    }
+    // Monotonic re-check removed 2026-10-07 — no more MONOTONIC
+    // RangeError to catch. Any other error bubbles.
     throw e;
   }
 

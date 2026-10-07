@@ -797,33 +797,14 @@ export default function NewProgressForm({
                 <input
                   type="number"
                   inputMode="numeric"
-                  min={
-                    Math.max(
-                      0,
-                      Math.min(
-                        100,
-                        totalQty > 0
-                          ? Math.floor((priorMaxCumulative / totalQty) * 100)
-                          : Math.floor(priorMaxCumulative),
-                      ),
-                    )
-                  }
+                  min={0}
                   max={100}
                   step={1}
                   value={Math.round(pct)}
                   onChange={(e) => {
                     const raw = Number(e.target.value);
                     if (!Number.isFinite(raw)) return;
-                    const floor = Math.max(
-                      0,
-                      Math.min(
-                        100,
-                        totalQty > 0
-                          ? Math.floor((priorMaxCumulative / totalQty) * 100)
-                          : Math.floor(priorMaxCumulative),
-                      ),
-                    );
-                    setPctState(Math.max(floor, Math.min(100, raw)));
+                    setPctState(Math.max(0, Math.min(100, raw)));
                   }}
                   aria-label="Progress percentage"
                   className="font-serif text-ferrous-600 bg-transparent border-b border-dashed border-sandstone-200 focus:border-ferrous-500 focus:outline-none w-[1.6em] text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
@@ -838,24 +819,7 @@ export default function NewProgressForm({
               </div>
               <input
                 type="range"
-                min={
-                  // Colab-parity: slider min-locks to current cumulative
-                  // so progress can only increase. Falls back to 0 when
-                  // the activity is fresh (no prior rows). Clamped to
-                  // [0, 100] so bad data (e.g. an admin who bumped
-                  // totalQty below the already-logged cumulative) can't
-                  // produce an out-of-range attribute that browsers
-                  // handle inconsistently.
-                  Math.max(
-                    0,
-                    Math.min(
-                      100,
-                      totalQty > 0
-                        ? Math.floor((priorMaxCumulative / totalQty) * 100)
-                        : Math.floor(priorMaxCumulative),
-                    ),
-                  )
-                }
+                min={0}
                 max={100}
                 step={1}
                 value={pct}
@@ -867,18 +831,34 @@ export default function NewProgressForm({
                 <span>Not started</span>
                 <span>Complete</span>
               </div>
-              {/* Colab-parity monotonic floor hint · shown only when a
-                  prior PUBLISHED entry has already logged progress on
-                  this activity, so the slider can't drag below that.
-                  Silent on fresh activities to avoid noise. */}
-              {priorMaxCumulative > 0 && (
-                <p className="text-[11px] text-ink-3 mt-2 leading-snug">
-                  Last logged {totalQty > 0
-                    ? `${priorMaxCumulative.toFixed(1)} / ${totalQty} ${selected.unit ?? "units"} (${Math.floor((priorMaxCumulative / totalQty) * 100)}%)`
-                    : `${priorMaxCumulative.toFixed(0)}%`} — you can only add more from here.
-                  To correct an over-count, ask an admin to void the wrong row.
-                </p>
-              )}
+              {/* Reduction hint · Vandana 2026-10-07: monotonic lock
+                  removed. Engineers can now drag below the last-logged
+                  value to fix an over-count, but if they do, the server
+                  requires a one-line note (notes OR reasonNote ≥ 3
+                  chars). Hint flips tone based on whether the current
+                  pct is below the prior max. */}
+              {priorMaxCumulative > 0 && (() => {
+                const priorText = totalQty > 0
+                  ? `${priorMaxCumulative.toFixed(1)} / ${totalQty} ${selected.unit ?? "units"} (${Math.floor((priorMaxCumulative / totalQty) * 100)}%)`
+                  : `${priorMaxCumulative.toFixed(0)}%`;
+                const isReducing = cumulative < priorMaxCumulative;
+                const hasExplanation = notes.trim().length >= 3 || reasonNote.trim().length >= 3;
+                if (isReducing) {
+                  return (
+                    <p className={`text-[11px] mt-2 leading-snug ${hasExplanation ? "text-ink-3" : "text-ferrous-600"}`}>
+                      You&apos;re reducing progress below the last logged value ({priorText}).
+                      {hasExplanation
+                        ? " Thanks — your note explains why."
+                        : " Please add a short note below (e.g. “Fixing earlier over-count”) before saving."}
+                    </p>
+                  );
+                }
+                return (
+                  <p className="text-[11px] text-ink-3 mt-2 leading-snug">
+                    Last logged {priorText}. You can edit this freely — if you lower it, add a short note below.
+                  </p>
+                );
+              })()}
             </div>
           </section>
 

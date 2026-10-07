@@ -10,7 +10,7 @@ import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { maybeSendMilestoneCompletionEmail } from "@/lib/progressPublish";
 import { sanitizeUploadUrls } from "@/lib/upload";
-import { generateProgressDisplayId, monotonicViolationMessage } from "@/lib/progress";
+import { generateProgressDisplayId } from "@/lib/progress";
 
 /**
  * POST /api/progress/[id]/publish
@@ -109,9 +109,10 @@ export async function POST(req: Request, ctx: RouteContext<"/api/progress/[id]/p
   const achieved = body.achievedQuantity ?? 0;
   const cumulative = body.cumulativeQuantity ?? 0;
 
-  // Colab-parity monotonic constraint — same rule as fresh POST. Prior
-  // rows here exclude this draft row itself; publishing a draft with a
-  // value below the highest prior PUBLISHED cumulative is refused.
+  // Vandana 2026-10-07: monotonic hard-rejection dropped. Same rule as
+  // the fresh POST path — a reduction below the highest prior PUBLISHED
+  // cumulative is allowed when the engineer supplies a short note
+  // (notes OR reasonNote ≥ 3 chars) so the audit trail carries intent.
   const maxPrior = await prisma.progressEntry.aggregate({
     where: {
       wbsNodeId: draft.wbsNodeId,
@@ -123,7 +124,18 @@ export async function POST(req: Request, ctx: RouteContext<"/api/progress/[id]/p
   });
   const priorMax = maxPrior._max.cumulativeQuantity ?? 0;
   if (cumulative < priorMax) {
-    return NextResponse.json({ error: monotonicViolationMessage(priorMax, "draft") }, { status: 409 });
+    const notesClean = typeof body.notes === "string" ? body.notes.trim() : "";
+    const reasonTextClean = typeof body.reasonNote === "string" ? body.reasonNote.trim() : "";
+    const hasExplanation = notesClean.length >= 3 || reasonTextClean.length >= 3;
+    if (!hasExplanation) {
+      return NextResponse.json(
+        {
+          error:
+            "You're reducing cumulative progress below the previous value. Please add a short note explaining why (e.g. 'Fixing over-count from earlier entry').",
+        },
+        { status: 400 },
+      );
+    }
   }
   const labourClean = (body.labour ?? [])
     .map((l) => ({ category: (l.category ?? "").trim(), count: Math.floor(l.count ?? 0) }))
@@ -143,24 +155,9 @@ export async function POST(req: Request, ctx: RouteContext<"/api/progress/[id]/p
   let justClosed: Date | undefined;
   try {
     const outcome = await prisma.$transaction(async (tx) => {
-    // Re-check the monotonic invariant inside the tx. Without this,
-    // two concurrent publishes could both pass the pre-check above and
-    // both commit — the invariant would be silently violated. Tx-scoped
-    // aggregate + throw is the closest Prisma gets to SELECT ... FOR
-    // UPDATE across the constraint.
-    const maxPriorTx = await tx.progressEntry.aggregate({
-      where: {
-        wbsNodeId: draft.wbsNodeId,
-        status: "PUBLISHED",
-        deletedAt: null,
-        id: { not: id },
-      },
-      _max: { cumulativeQuantity: true },
-    });
-    const priorMaxTx = maxPriorTx._max.cumulativeQuantity ?? 0;
-    if (cumulative < priorMaxTx) {
-      throw new RangeError(`MONOTONIC:${priorMaxTx}`);
-    }
+    // Monotonic re-check removed 2026-10-07 (Vandana). Publish can go
+    // up or down; the pre-check above requires a note on reductions,
+    // which is enough — no need for the in-tx race-guard.
     // Nuke and repave labour + photos so the resumed edits stick.
     // Simpler than diffing per-row, and the draft is tiny.
     await tx.progressLabour.deleteMany({ where: { progressEntryId: id } });
@@ -215,13 +212,8 @@ export async function POST(req: Request, ctx: RouteContext<"/api/progress/[id]/p
     entry = outcome.entry;
     justClosed = outcome.justClosed;
   } catch (e) {
-    if (e instanceof RangeError && e.message.startsWith("MONOTONIC:")) {
-      const priorMax = Number(e.message.split(":")[1] ?? "0");
-      return NextResponse.json(
-        { error: monotonicViolationMessage(priorMax, "draft") },
-        { status: 409 },
-      );
-    }
+    // Monotonic re-check removed 2026-10-07 — no MONOTONIC RangeError
+    // to catch any more. Any other error bubbles.
     throw e;
   }
 
