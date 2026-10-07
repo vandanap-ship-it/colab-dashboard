@@ -21,14 +21,22 @@
  * TradePlan with a new `trade` string and it just appears in reports.
  * Ordering here also drives the report display order.
  */
-// Order matches Python's TRADE_ORDER (build_wk30.py L150) and Shraddha's
+// Order matches Python's TRADE_ORDER (build_wk30.py L150) and Vandana's
 // WEEKLY_HANDOFF.md §4. "Bar Bender Helper" is aliased to "Helper" at import
 // time via ColabManpowerImportOptions.tradeAliases — not a distinct trade.
+//
+// 2026-10-07: added Electrician + JCB Operator + Tractor Operator + Crane
+// Operator per site-team request. Appended at the end to preserve existing
+// report display order the team is used to.
 export const TRADES = [
   "Bar Bender",
   "Carpenter",
   "Helper",
   "Mason",
+  "Electrician",
+  "JCB Operator",
+  "Tractor Operator",
+  "Crane Operator",
 ] as const;
 
 export type TradeName = (typeof TRADES)[number];

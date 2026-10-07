@@ -18,8 +18,17 @@ const AT = "contractor-abraham-thomas";
 const TBD = "contractor-tbd";
 
 describe("TRADES + tradeOrder", () => {
-  it("has the four Amanvana trades in display order", () => {
-    expect(TRADES).toEqual(["Bar Bender", "Carpenter", "Helper", "Mason"]);
+  it("has the Amanvana trades in display order", () => {
+    expect(TRADES).toEqual([
+      "Bar Bender",
+      "Carpenter",
+      "Helper",
+      "Mason",
+      "Electrician",
+      "JCB Operator",
+      "Tractor Operator",
+      "Crane Operator",
+    ]);
   });
 
   it("orders known trades by their index", () => {
@@ -27,6 +36,10 @@ describe("TRADES + tradeOrder", () => {
     expect(tradeOrder("Carpenter")).toBe(1);
     expect(tradeOrder("Helper")).toBe(2);
     expect(tradeOrder("Mason")).toBe(3);
+    expect(tradeOrder("Electrician")).toBe(4);
+    expect(tradeOrder("JCB Operator")).toBe(5);
+    expect(tradeOrder("Tractor Operator")).toBe(6);
+    expect(tradeOrder("Crane Operator")).toBe(7);
   });
 
   it("puts unknown trades last", () => {
