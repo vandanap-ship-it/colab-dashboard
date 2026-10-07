@@ -74,7 +74,6 @@ export default function SignedPaperPhoto({
             ref={input}
             type="file"
             accept="image/*"
-            capture="environment"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];

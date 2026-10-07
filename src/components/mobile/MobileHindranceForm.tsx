@@ -502,7 +502,6 @@ export default function MobileHindranceForm({
               <input
                 type="file"
                 accept="image/*"
-                capture="environment"
                 multiple
                 className="hidden"
                 onChange={(e) => {

@@ -64,7 +64,9 @@ async function compressImage(file: File): Promise<File> {
  * Behaviour:
  *   - Each picked file gets a square thumbnail with an X to remove it.
  *   - "Add photo" tile is shown as long as we're below the cap; tapping it
- *     opens the camera by default (capture="environment").
+ *     opens the phone's own chooser (take a photo, or pick from the
+ *     gallery). No `capture` attribute on purpose: it would force the
+ *     camera and hide the gallery (Shraddha, 2026-10-07).
  *   - Picks merge with the existing set instead of replacing it, so the
  *     engineer can take photos one at a time.
  *   - Object URLs are revoked when the file list changes / the picker
@@ -150,7 +152,6 @@ export default function PhotoPicker({
             <input
               type="file"
               accept="image/*"
-              capture="environment"
               multiple
               className="sr-only"
               onChange={(e) => {

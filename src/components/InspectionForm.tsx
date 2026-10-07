@@ -1961,7 +1961,6 @@ function ItemPhotoButton({
       <input
         type="file"
         accept="image/*"
-        capture="environment"
         className="sr-only"
         onChange={async (e) => {
           const f = e.target.files?.[0];

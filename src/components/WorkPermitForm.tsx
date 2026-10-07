@@ -679,7 +679,6 @@ export default function WorkPermitForm({
                       <input
                         type="file"
                         accept="image/*"
-                        capture="environment"
                         className="hidden"
                         disabled={uploadingCheckpointIdx === idx}
                         onChange={(e) => {

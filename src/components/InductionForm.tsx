@@ -13,8 +13,8 @@ import { istDayString } from "@/lib/istDay";
  * photos). Long-tail HR fields (father name, bank account, etc.)
  * deferred to Phase 2 (see colab_safety_induction_spec).
  *
- * Four photo slots backed by camera-first <input type="file"
- * capture="environment">: the primary worker profile picture plus
+ * Four photo slots backed by <input type="file" accept="image/*"> (camera
+ * or gallery — the phone offers both): the primary worker profile picture plus
  * Aadhaar front, Aadhaar back, and the worker's signature on paper.
  * Each uploads to /api/upload with a dedicated scope so the server
  * can reason about provenance before accepting the URL.
@@ -227,8 +227,8 @@ export default function InductionForm({
       </header>
 
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
-        {/* Worker photo — top of the form, big tap target. Camera-first
-            via `capture="environment"` so iOS opens the back camera. */}
+        {/* Worker photo — top of the form, big tap target. Opens the
+            phone's chooser: take a photo or pick from the gallery. */}
         <section>
           <label className="block text-[13px] font-semibold text-ink mb-2">
             Worker photo <span className="text-red-500">*</span>
@@ -491,7 +491,6 @@ function PhotoCapture({
       <input
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
