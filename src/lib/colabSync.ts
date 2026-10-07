@@ -763,10 +763,19 @@ export async function importColabProgress(
     //      actually resolves. If Colab changes hosts we'll see 404s on
     //      the client — cleaner failure than a blank <img>.
     const COLAB_UPLOAD_BASE = "https://node.colabtools.com/";
+    // Every Colab upload link is normalised onto COLAB_UPLOAD_BASE. The
+    // day-by-day log exports kalpataru-api.colabtools.com links, which
+    // redirect to a CDN that answers 403; the same file path on
+    // node.colabtools.com loads (verified 2026-10-07). One canonical host
+    // also lets the "already has this photo" check below match the same
+    // file across exports.
     const toImageUrl = (link: string | undefined): string | null => {
       if (!link || !link.includes("/uploads/")) return null;
       const raw = link.trim();
       if (raw.startsWith("None/")) return COLAB_UPLOAD_BASE + raw.slice("None/".length);
+      if (/^https?:\/\/[^/]*colabtools\.com\/uploads\//.test(raw)) {
+        return COLAB_UPLOAD_BASE + raw.slice(raw.indexOf("/uploads/") + 1);
+      }
       if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
       // Bare "/uploads/..." — prepend the CDN base.
       return COLAB_UPLOAD_BASE + raw.replace(/^\/+/, "");

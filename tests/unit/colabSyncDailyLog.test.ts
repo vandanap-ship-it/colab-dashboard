@@ -142,6 +142,14 @@ describe("importColabProgress — day-by-day log (history only)", () => {
     expect(wbsUpdates).toEqual([]);
   });
 
+  it("stores day-by-day log photos on the working Colab host and never doubles a photo across exports", async () => {
+    const { db, photos } = fakeDb();
+    const file = "uploads/progress_upload/PROGRESS_UPLOAD-x.jpg";
+    await importColabProgress(db, "p1", [HEADER, row({ img: `None/${file}` })].join("\n"), opts);
+    await importColabProgress(db, "p1", [HEADER, row({ img: `https://kalpataru-api.colabtools.com/${file}` })].join("\n"), opts);
+    expect(photos.map((p) => p.url)).toEqual([`https://node.colabtools.com/${file}`]);
+  });
+
   it("dry run writes nothing but reports would-create / would-update", async () => {
     const { db, entries } = fakeDb();
     const csv = [HEADER, row({ act: "A1", id: "1" }), row({ act: "A2", id: "2", date: "19/08/26" })].join("\n");
