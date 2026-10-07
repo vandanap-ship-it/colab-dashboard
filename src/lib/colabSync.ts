@@ -281,7 +281,13 @@ export async function importColabProgress(
   // place. Same-activity same-day rows are separate updates in Colab
   // (e.g. +76.72 then +6.57 → cumulative 83.29) — merged into one entry:
   // achieved summed, cumulative/% maxed, remarks + photos kept.
-  const historyOnly = (parsed.meta.fields ?? []).includes("daily_id");
+  // Detected by daily_id, or by the absence of Physical_Progress: every
+  // snapshot export carries the weight column and neither day-by-day
+  // variant does (the "Progress_added_by" variant has no daily_id either).
+  // Erring towards history-only is the safe direction — it never touches
+  // activity state.
+  const fields = parsed.meta.fields ?? [];
+  const historyOnly = fields.includes("daily_id") || !fields.includes("Physical_Progress");
   let rows = parsed.data;
   if (historyOnly) {
     stats.dailyLogRows = rows.length;

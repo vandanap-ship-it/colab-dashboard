@@ -132,6 +132,16 @@ describe("importColabProgress — day-by-day log (history only)", () => {
     expect([...entries.keys()]).toEqual(["colab:A1:2026-08-17"]);
   });
 
+  it("detects the Progress_added_by variant (no daily_id, no Physical_Progress) as history-only", async () => {
+    const { db, wbsUpdates } = fakeDb();
+    const noDailyId = HEADER.replace(",daily_id", "");
+    const r = row({}).split(",").slice(0, -1).join(",");
+    const stats = await importColabProgress(db, "p1", [noDailyId, r].join("\n"), opts);
+    expect(stats.dailyLogRows).toBe(1);
+    expect(stats.progressEntriesCreated).toBe(1);
+    expect(wbsUpdates).toEqual([]);
+  });
+
   it("dry run writes nothing but reports would-create / would-update", async () => {
     const { db, entries } = fakeDb();
     const csv = [HEADER, row({ act: "A1", id: "1" }), row({ act: "A2", id: "2", date: "19/08/26" })].join("\n");
