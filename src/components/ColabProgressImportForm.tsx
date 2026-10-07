@@ -17,6 +17,7 @@ interface Stats {
   }>;
   villasNotFound: string[];
   villaPairAliases: string[];
+  siddhiWinsRows: number;
   sectionsUnmatched: string[];
   progressEntriesCreated: number;
   progressEntriesUpdated: number;
@@ -82,6 +83,7 @@ function mergeStats(all: Stats[]): Stats {
     unmatchedSamples: [],
     villasNotFound: [],
     villaPairAliases: [],
+    siddhiWinsRows: 0,
     sectionsUnmatched: [],
     progressEntriesCreated: 0,
     progressEntriesUpdated: 0,
@@ -104,6 +106,7 @@ function mergeStats(all: Stats[]): Stats {
     out.photosCreated += s.photosCreated;
     out.wbsNodesUpdated += s.wbsNodesUpdated;
     out.villaMilestonesUpdated += s.villaMilestonesUpdated;
+    out.siddhiWinsRows += s.siddhiWinsRows ?? 0;
     out.elapsedMs += s.elapsedMs;
     for (const v of s.villasNotFound) if (!seenVillas.has(v)) { seenVillas.add(v); out.villasNotFound.push(v); }
     for (const a of s.villaPairAliases ?? []) if (!out.villaPairAliases.includes(a)) out.villaPairAliases.push(a);
@@ -331,6 +334,11 @@ export default function ColabProgressImportForm({ projectId }: { projectId: stri
                   <li className="text-orange-700 pt-2">
                     Villa numbers in CSV but not in project: {result.stats.villasNotFound.slice(0, 30).join(", ")}
                     {result.stats.villasNotFound.length > 30 && ` (+${result.stats.villasNotFound.length - 30} more)`}
+                  </li>
+                )}
+                {result.stats.siddhiWinsRows > 0 && (
+                  <li className="pt-2">
+                    Rows that left progress alone because the team entered it in Siddhi (Siddhi wins): {result.stats.siddhiWinsRows}
                   </li>
                 )}
                 {result.stats.villaPairAliases.length > 0 && (

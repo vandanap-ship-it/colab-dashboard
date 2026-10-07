@@ -88,6 +88,9 @@ export interface ColabSyncStats {
   villasNotFound: string[];
   /** Colab villas folded into their MSP pair, e.g. "16→15". */
   villaPairAliases: string[];
+  /** Rows that left an activity's progress alone because the site team
+   *  entered progress for it in Siddhi (Siddhi wins). */
+  siddhiWinsRows: number;
   sectionsUnmatched: string[];
   progressEntriesCreated: number;
   progressEntriesUpdated: number;
@@ -237,6 +240,7 @@ export async function importColabProgress(
     unmatchedSamples: [],
     villasNotFound: [],
     villaPairAliases: [],
+    siddhiWinsRows: 0,
     sectionsUnmatched: [],
     progressEntriesCreated: 0,
     progressEntriesUpdated: 0,
@@ -341,6 +345,33 @@ export async function importColabProgress(
     stats.contractorsCreated.push(cleaned);
     return created.id;
   };
+
+  // Siddhi wins (Shraddha, 2026-10-07): where an activity has progress the
+  // site team entered in Siddhi, Colab must not overwrite it. Map each such
+  // activity to the date of its first Siddhi entry: Colab rows leave its
+  // %/actuals/quantity alone, and Colab entries dated on or after that day
+  // are skipped (earlier Colab history still lands). Keys "colab:" and
+  // "colab-progress:" mark entries written by Colab imports.
+  const siddhiFirstEntry = new Map<string, Date>();
+  const nativeEntries = await prisma.progressEntry.findMany({
+    where: {
+      projectId,
+      deletedAt: null,
+      status: "PUBLISHED",
+      OR: [
+        { idempotencyKey: null },
+        { AND: [
+          { NOT: { idempotencyKey: { startsWith: "colab:" } } },
+          { NOT: { idempotencyKey: { startsWith: "colab-progress:" } } },
+        ] },
+      ],
+    },
+    select: { wbsNodeId: true, date: true },
+  });
+  for (const e of nativeEntries as Array<{ wbsNodeId: string; date: Date }>) {
+    const first = siddhiFirstEntry.get(e.wbsNodeId);
+    if (!first || e.date < first) siddhiFirstEntry.set(e.wbsNodeId, e.date);
+  }
 
   // Preload the WBS-nodes-per-villa-milestone map for fast activity fuzzy match.
   // Only load leaf nodes (level 5) tied to a villaMilestone. Include isStar
@@ -712,7 +743,10 @@ export async function importColabProgress(
     }
 
     // ----- 7. Write (skip in dry-run)
-    if (options.dryRun) continue;
+    if (options.dryRun) {
+      if (bestWbs && siddhiFirstEntry.has(bestWbs.id)) stats.siddhiWinsRows++;
+      continue;
+    }
 
     // Wrap the per-row WBS update + ProgressEntry write + ProgressPhoto
     // write in a single transaction. Previously a torn state was possible
@@ -725,11 +759,24 @@ export async function importColabProgress(
     // supporting ProgressEntry until an admin re-ran the sync.
     // Per-row transaction cost is bounded — Prisma's interactive
     // transactions on Neon are cheap in the shared driver.
-    const perRowCounters = { wbsNodesUpdated: 0, progressEntriesCreated: 0, progressEntriesUpdated: 0, photosCreated: 0 };
+    const perRowCounters = { wbsNodesUpdated: 0, progressEntriesCreated: 0, progressEntriesUpdated: 0, photosCreated: 0, siddhiWinsRows: 0 };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await prisma.$transaction(async (tx: any) => {
       // 7a. Update WBSNode if we matched one — accumulate the state.
-      if (bestWbs) {
+      const siddhiSince = bestWbs ? siddhiFirstEntry.get(bestWbs.id) : undefined;
+      if (bestWbs && siddhiSince) {
+        // Siddhi wins: keep the team's %/actuals/quantity/contractor; only
+        // the Colab schedule (baselines) and weight still apply.
+        await tx.wBSNode.update({
+          where: { id: bestWbs.id },
+          data: {
+            baselineStart: plannedStart ?? undefined,
+            baselineFinish: plannedEnd ?? undefined,
+            weightPct: weightPct ?? undefined,
+          },
+        });
+        perRowCounters.siddhiWinsRows++;
+      } else if (bestWbs) {
         await tx.wBSNode.update({
           where: { id: bestWbs.id },
           data: {
@@ -755,7 +802,11 @@ export async function importColabProgress(
       //     completion date OR meaningful remark), and only if we matched an
       //     activity (ProgressEntry.wbsNodeId is required).
       const hasMeaningfulSignal = achieved > 0 || cumulative > 0 || actualEnd || notes || imageUrl;
-      if (bestWbs && progressAt && hasMeaningfulSignal && activityId) {
+      // Day-level, so a time-of-day difference can't let a same-day Colab
+      // entry through.
+      const siddhiHasDay = !!siddhiSince && !!progressAt &&
+        progressAt.toISOString().slice(0, 10) >= siddhiSince.toISOString().slice(0, 10);
+      if (bestWbs && progressAt && hasMeaningfulSignal && activityId && !siddhiHasDay) {
         const idempotencyKey = `colab:${activityId}:${progressAt.toISOString().slice(0, 10)}`;
         const existing = await tx.progressEntry.findUnique({
           where: { idempotencyKey },
@@ -838,6 +889,7 @@ export async function importColabProgress(
     });
     if (bestWbs) touchedWbsNodes.add(bestWbs.id);
     stats.wbsNodesUpdated += perRowCounters.wbsNodesUpdated;
+    stats.siddhiWinsRows += perRowCounters.siddhiWinsRows;
     stats.progressEntriesCreated += perRowCounters.progressEntriesCreated;
     stats.progressEntriesUpdated += perRowCounters.progressEntriesUpdated;
     stats.photosCreated += perRowCounters.photosCreated;
