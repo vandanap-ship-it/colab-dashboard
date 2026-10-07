@@ -173,8 +173,14 @@ async function findVillaByName(
     return null;
   }
   const num = Number(m[1]);
+  // MSP pairing: Colab's second half of a pair (e.g. "Villa 16") lives on
+  // the Siddhi pair record (Villa 15, unitCount 2) — see
+  // resolvePairedVillaNumber in src/lib/colabSyncMapping.ts.
   const v = await prisma.villa.findFirst({
     where: { projectId, number: num },
+    select: { id: true },
+  }) ?? await prisma.villa.findFirst({
+    where: { projectId, number: num - 1, unitCount: { gte: 2 } },
     select: { id: true },
   });
   cache.set(trimmed, v?.id ?? null);

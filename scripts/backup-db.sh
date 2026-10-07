@@ -4,7 +4,7 @@
 # uploads to Vercel Blob under backups/YYYY-MM/. Otherwise leaves the .sql.gz
 # file in the current directory.
 #
-# Requires: postgresql-client (matching Neon's version 17), curl, python3.
+# Requires: postgresql-client (matching Neon, currently version 18), curl, python3.
 #
 # Usage:
 #   DATABASE_URL="postgresql://..." ./scripts/backup-db.sh
@@ -19,7 +19,7 @@ if [ -z "${DATABASE_URL:-}" ]; then
 fi
 
 if ! command -v pg_dump >/dev/null 2>&1; then
-  echo "✗ pg_dump not found. Install postgresql-client (matching version 17)." >&2
+  echo "✗ pg_dump not found. Install postgresql-client (matching Neon, currently version 18)." >&2
   exit 1
 fi
 

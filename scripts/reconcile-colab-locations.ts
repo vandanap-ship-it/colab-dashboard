@@ -23,12 +23,17 @@
  * Siddhi are never touched, so re-running only creates what's missing.
  * Missing villas with a full Colab tree are reported, not created — those
  * should already have come from an MSP schedule and need a real block.
+ *
+ * Villa pairing follows the MSP (Shraddha, 2026-10-07): a Siddhi villa with
+ * unitCount 2 already holds Colab's next number (Siddhi 15 = Colab 15 + 16),
+ * so that Colab villa counts as matched, not missing. A second half that
+ * ALSO exists as its own Siddhi villa is flagged as double-counted.
  */
 
 import { existsSync, readFileSync } from "node:fs";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { mapColabToMspSection } from "../src/lib/colabSyncMapping";
+import { mapColabToMspSection, resolvePairedVillaNumber } from "../src/lib/colabSyncMapping";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is required");
@@ -138,11 +143,6 @@ async function main() {
     orderBy: { number: "asc" },
   });
   const siddhi = new Map(villas.map((v) => [v.number, v]));
-  // A grouped Colab villa ("10 & 11") must not also exist as a separate
-  // Siddhi villa 11 — that would double-count units.
-  const secondaryNumbers = new Set(
-    [...colab.values()].filter((v) => v.unitCount === 2).map((v) => v.number + 1),
-  );
 
   console.log(`Project: ${project.name} (${project.id})`);
   console.log(`Colab villas: ${colab.size} (${[...colab.values()].reduce((n, v) => n + v.unitCount, 0)} units)`);
@@ -150,19 +150,39 @@ async function main() {
   console.log(`Colab pseudo-locations (not villas, skipped): ${pseudo.join(" · ") || "none"}`);
   console.log(`Sublocations with no MSP section mapping: ${[...unmappedSubs].join(" · ") || "none"}`);
 
+  // Pairing follows the MSP (Shraddha, 2026-10-07): a Siddhi villa with
+  // unitCount 2 holds Colab's N and N+1, e.g. Siddhi 15 = Colab 15 + 16.
   const missing: ColabVilla[] = [];
-  const mismatched: string[] = [];
+  const pairedVia: string[] = [];
   for (const c of [...colab.values()].sort((a, b) => a.number - b.number)) {
-    const s = siddhi.get(c.number);
-    if (!s) { missing.push(c); continue; }
-    if (s.unitCount !== c.unitCount) {
-      mismatched.push(`Villa ${c.number}: unitCount Siddhi=${s.unitCount} Colab=${c.unitCount} ("${c.label}")`);
+    const resolved = resolvePairedVillaNumber(c.number, siddhi);
+    if (resolved == null) { missing.push(c); continue; }
+    if (resolved !== c.number) pairedVia.push(`Colab ${c.label} → Siddhi Villa ${resolved} (MSP pair)`);
+  }
+  // Unit counts must agree once pairs are accounted for: a Siddhi pair is
+  // fine when Colab has it either grouped ("10 & 11") or as two halves.
+  const mismatched: string[] = [];
+  for (const v of villas) {
+    const c = colab.get(v.number);
+    if (!c) continue;
+    const colabUnits = c.unitCount === 2 ? 2 : c.unitCount + (v.unitCount >= 2 && colab.has(v.number + 1) ? 1 : 0);
+    if (colabUnits !== v.unitCount) {
+      mismatched.push(`Villa ${v.number}: unitCount Siddhi=${v.unitCount} Colab=${colabUnits} ("${c.label}")`);
     }
   }
   const siddhiOnly = villas.filter((v) => !colab.has(v.number));
-  const doubleCounted = villas.filter((v) => secondaryNumbers.has(v.number));
+  // A villa that is already the second half of a pair must not also exist
+  // as its own record — Colab-grouped ("10 & 11" + separate 11) or
+  // MSP-paired (Villa 3 unitCount 2 + separate Villa 4).
+  const colabSecondaries = new Set(
+    [...colab.values()].filter((v) => v.unitCount === 2).map((v) => v.number + 1),
+  );
+  const doubleCounted = villas.filter(
+    (v) => colabSecondaries.has(v.number) || (siddhi.get(v.number - 1)?.unitCount ?? 1) >= 2,
+  );
 
-  console.log(`\n── Matched: ${colab.size - missing.length}`);
+  console.log(`\n── Matched: ${colab.size - missing.length} (${pairedVia.length} via MSP pair)`);
+  for (const p of pairedVia) console.log(`  ~ ${p}`);
   // Colab placeholders are the locations with only the "All Floors" row.
   const isPlaceholder = (c: ColabVilla) => c.sublocations.length === 1 && c.sublocations[0] === "All Floors";
   const toCreate = missing.filter(isPlaceholder);
@@ -182,8 +202,10 @@ async function main() {
   }
   console.log(`\n── unitCount mismatches: ${mismatched.length}`);
   for (const m of mismatched) console.log(`  ${m}`);
-  console.log(`\n── Grouped-villa partners existing as separate Siddhi villas: ${doubleCounted.length}`);
-  for (const v of doubleCounted) console.log(`  Villa ${v.number} (${v.label ?? "-"}) block=${v.block.code}`);
+  console.log(`\n── Second half of a pair ALSO existing as its own Siddhi villa (double-counted): ${doubleCounted.length}`);
+  for (const v of doubleCounted) {
+    console.log(`  Villa ${v.number} (${v.label ?? "-"}) block=${v.block.code} milestones=${v._count.milestones} — fold into Villa ${v.number - 1} (scripts/fold-paired-villa.ts)`);
+  }
 
   const noMilestones = villas.filter((v) => colab.get(v.number)?.sublocations.length === 12 && v._count.milestones === 0);
   console.log(`\n── Active in Colab (full tree) but no milestones in Siddhi: ${noMilestones.length}`);

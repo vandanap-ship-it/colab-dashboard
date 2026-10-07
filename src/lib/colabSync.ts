@@ -19,7 +19,7 @@
 //                    just no activity-level ProgressEntry gets a wbsNodeId.
 
 import Papa from "papaparse";
-import { mapColabToMspSection, mapColabReasonToCode, COLAB_MILESTONE_LABEL_TO_SECTION } from "@/lib/colabSyncMapping";
+import { mapColabToMspSection, mapColabReasonToCode, COLAB_MILESTONE_LABEL_TO_SECTION, resolvePairedVillaNumber } from "@/lib/colabSyncMapping";
 import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 
 // Extended Prisma client with the pg adapter doesn't line up with the vanilla
@@ -86,6 +86,8 @@ export interface ColabSyncStats {
     reason: string;
   }>;
   villasNotFound: string[];
+  /** Colab villas folded into their MSP pair, e.g. "16→15". */
+  villaPairAliases: string[];
   sectionsUnmatched: string[];
   progressEntriesCreated: number;
   progressEntriesUpdated: number;
@@ -234,6 +236,7 @@ export async function importColabProgress(
     placeholderRowsDropped: 0,
     unmatchedSamples: [],
     villasNotFound: [],
+    villaPairAliases: [],
     sectionsUnmatched: [],
     progressEntriesCreated: 0,
     progressEntriesUpdated: 0,
@@ -279,7 +282,7 @@ export async function importColabProgress(
   const [villas, sections, contractors, allVillaMilestones] = await Promise.all([
     prisma.villa.findMany({
       where: { projectId },
-      select: { id: true, number: true, label: true },
+      select: { id: true, number: true, label: true, unitCount: true },
     }),
     prisma.milestoneSection.findMany({
       where: { projectId },
@@ -296,7 +299,7 @@ export async function importColabProgress(
   ]);
 
   // Types are widened to any because PrismaLike smokes the row types.
-  type VillaRow = { id: string; number: number; label: string | null };
+  type VillaRow = { id: string; number: number; label: string | null; unitCount: number };
   type SectionRow = { id: string; name: string };
   type ContractorRow = { id: string; name: string };
   type VmRow = { id: string; villaId: string; sectionId: string };
@@ -393,6 +396,7 @@ export async function importColabProgress(
     maxActualEnd: Date | null;
     endMarkerClose: Date | null;    // Actual_End_Date of the CSV row marked as this stage's END-marker
     endMarkerSeen: boolean;         // did we see a Milestone-column row for this stage?
+    endMarkerOpen: boolean;         // an END-marker row with no Actual_End_Date (see stage close rule below)
   }
   const milestoneAgg = new Map<string, MilestoneAgg>();
 
@@ -410,10 +414,18 @@ export async function importColabProgress(
     pe: Date | null;
     endMarkerActualEnd: Date | null;
     endMarkerSeen: boolean;
+    endMarkerOpen: boolean;
     earliestProgress: Date | null;    // min Progress_Date / Actual_Start across block
   }
+  // Stage close rule: one Siddhi villaMilestone can receive END-markers from
+  // BOTH halves of an MSP villa pair (Colab "Villa 15" + "Villa 16" → Siddhi
+  // Villa 15). The stage is closed only when every END-marker it received is
+  // closed, on the latest close date. Unpaired villas have exactly one
+  // END-marker per stage, so for them this is the plain Python-parity rule.
   const stageAgg = new Map<string, StageAgg>();
-  let lastVillaId: string | null = null;
+  // Keyed on Colab's Location_Name, not the Siddhi villa: paired halves
+  // share a Siddhi villa but must not share a stage buffer.
+  let lastLocation: string | null = null;
   let stageBuffer: Array<{ ps: Date | null; pe: Date | null; progress: Date | null }> = [];
 
   // Queue for the per-chunk bulk ColabActivity upsert.
@@ -473,7 +485,12 @@ export async function importColabProgress(
       recordUnmatched(stats, i + 2, r, "villa-number-unparseable");
       continue;
     }
-    const villa = villaByNumber.get(villaNum);
+    const siddhiVillaNum = resolvePairedVillaNumber(villaNum, villaByNumber);
+    const villa = siddhiVillaNum == null ? undefined : villaByNumber.get(siddhiVillaNum);
+    if (villa && siddhiVillaNum !== villaNum) {
+      const alias = `${villaNum}→${siddhiVillaNum}`;
+      if (!stats.villaPairAliases.includes(alias)) stats.villaPairAliases.push(alias);
+    }
     if (!villa) {
       if (!stats.villasNotFound.includes(String(villaNum))) {
         stats.villasNotFound.push(String(villaNum));
@@ -525,6 +542,7 @@ export async function importColabProgress(
       maxActualEnd: null,
       endMarkerClose: null,   // Actual_End_Date of the row that IS the stage END-marker
       endMarkerSeen: false,   // did we see a Milestone-column row for this stage yet?
+      endMarkerOpen: false,
     };
     if (_plannedStart && (!agg.minPlannedStart || _plannedStart < agg.minPlannedStart)) agg.minPlannedStart = _plannedStart;
     if (_plannedEnd   && (!agg.maxPlannedEnd   || _plannedEnd   > agg.maxPlannedEnd  )) agg.maxPlannedEnd   = _plannedEnd;
@@ -540,6 +558,8 @@ export async function importColabProgress(
       agg.endMarkerSeen = true;
       if (_actualEnd) {
         if (!agg.endMarkerClose || _actualEnd > agg.endMarkerClose) agg.endMarkerClose = _actualEnd;
+      } else {
+        agg.endMarkerOpen = true;
       }
     }
     milestoneAgg.set(villaMilestoneId, agg);
@@ -548,8 +568,9 @@ export async function importColabProgress(
     // hit an END-marker (Milestone column set to a MORDER label). Reset the
     // buffer when the villa changes so a new villa's rows don't get mixed
     // into the previous villa's dangling stage buffer.
-    if (villa.id !== lastVillaId) {
-      lastVillaId = villa.id;
+    const location = (r.Location_Name ?? "").trim();
+    if (location !== lastLocation) {
+      lastLocation = location;
       stageBuffer = [];
     }
     const _progressDate = parseColabDate(r.Progress_Date) ?? _actualStart;
@@ -567,11 +588,15 @@ export async function importColabProgress(
           if (b.pe && (!stagePe || b.pe > stagePe)) stagePe = b.pe;
           if (b.progress && (!stageEarliestProgress || b.progress < stageEarliestProgress)) stageEarliestProgress = b.progress;
         }
-        const existing = stageAgg.get(stageVmId) ?? { ps: null, pe: null, endMarkerActualEnd: null, endMarkerSeen: false, earliestProgress: null };
+        const existing = stageAgg.get(stageVmId) ?? { ps: null, pe: null, endMarkerActualEnd: null, endMarkerSeen: false, endMarkerOpen: false, earliestProgress: null };
         if (stagePs && (!existing.ps || stagePs < existing.ps)) existing.ps = stagePs;
         if (stagePe && (!existing.pe || stagePe > existing.pe)) existing.pe = stagePe;
         if (stageEarliestProgress && (!existing.earliestProgress || stageEarliestProgress < existing.earliestProgress)) existing.earliestProgress = stageEarliestProgress;
-        existing.endMarkerActualEnd = _actualEnd ?? existing.endMarkerActualEnd;
+        if (_actualEnd) {
+          if (!existing.endMarkerActualEnd || _actualEnd > existing.endMarkerActualEnd) existing.endMarkerActualEnd = _actualEnd;
+        } else {
+          existing.endMarkerOpen = true;
+        }
         existing.endMarkerSeen = true;
         stageAgg.set(stageVmId, existing);
       }
@@ -861,6 +886,7 @@ interface StageAggState {
   pe: Date | null;
   endMarkerActualEnd: Date | null;
   endMarkerSeen: boolean;
+  endMarkerOpen: boolean;
   earliestProgress: Date | null;
 }
 interface MilestoneAggState {
@@ -870,6 +896,16 @@ interface MilestoneAggState {
   maxActualEnd: Date | null;
   endMarkerClose: Date | null;
   endMarkerSeen: boolean;
+  endMarkerOpen: boolean;
+}
+
+/** A stage is closed only when no END-marker it received is still open —
+ *  matters when both halves of an MSP villa pair feed one villaMilestone. */
+function stageCloseDate(s: StageAggState): Date | null {
+  return s.endMarkerOpen ? null : s.endMarkerActualEnd;
+}
+function milestoneCloseDate(a: MilestoneAggState): Date | null {
+  return a.endMarkerOpen ? null : a.endMarkerClose;
 }
 interface ColabActivityQueueRow {
   projectId: string;
@@ -981,7 +1017,7 @@ async function applyStageAggregateBaselines(
     if (agg.endMarkerSeen) {
       await prisma.villaMilestone.update({
         where: { id: vmId },
-        data: { actualFinish: agg.endMarkerClose ?? null },
+        data: { actualFinish: milestoneCloseDate(agg) },
       });
       const star = await prisma.wBSNode.findFirst({
         where: { villaMilestoneId: vmId, isSubMilestone: true },
@@ -993,7 +1029,7 @@ async function applyStageAggregateBaselines(
       if (star) {
         await prisma.wBSNode.update({
           where: { id: star.id },
-          data: { actualFinish: agg.endMarkerClose ?? null },
+          data: { actualFinish: milestoneCloseDate(agg) },
         });
       }
     }
@@ -1061,7 +1097,7 @@ async function overrideAuthoritativeCloseDates(
     await prisma.villaMilestone.update({
       where: { id: vmId },
       data: {
-        actualFinish: sagg.endMarkerActualEnd ?? null,
+        actualFinish: stageCloseDate(sagg),
         actualStart: sagg.earliestProgress ?? undefined,
       },
     });
@@ -1070,7 +1106,7 @@ async function overrideAuthoritativeCloseDates(
     if (seen.has(vmId) || !agg.endMarkerSeen) continue;
     await prisma.villaMilestone.update({
       where: { id: vmId },
-      data: { actualFinish: agg.endMarkerClose ?? null },
+      data: { actualFinish: milestoneCloseDate(agg) },
     });
   }
 }

@@ -16,6 +16,7 @@ interface Stats {
     reason: string;
   }>;
   villasNotFound: string[];
+  villaPairAliases: string[];
   sectionsUnmatched: string[];
   progressEntriesCreated: number;
   progressEntriesUpdated: number;
@@ -80,6 +81,7 @@ function mergeStats(all: Stats[]): Stats {
     unmatchedRows: 0,
     unmatchedSamples: [],
     villasNotFound: [],
+    villaPairAliases: [],
     sectionsUnmatched: [],
     progressEntriesCreated: 0,
     progressEntriesUpdated: 0,
@@ -104,6 +106,7 @@ function mergeStats(all: Stats[]): Stats {
     out.villaMilestonesUpdated += s.villaMilestonesUpdated;
     out.elapsedMs += s.elapsedMs;
     for (const v of s.villasNotFound) if (!seenVillas.has(v)) { seenVillas.add(v); out.villasNotFound.push(v); }
+    for (const a of s.villaPairAliases ?? []) if (!out.villaPairAliases.includes(a)) out.villaPairAliases.push(a);
     for (const x of s.sectionsUnmatched) if (!seenSections.has(x)) { seenSections.add(x); out.sectionsUnmatched.push(x); }
     for (const c of s.contractorsCreated) if (!seenContractors.has(c)) { seenContractors.add(c); out.contractorsCreated.push(c); }
     for (const u of s.unmatchedSamples) if (out.unmatchedSamples.length < 30) out.unmatchedSamples.push(u);
@@ -328,6 +331,11 @@ export default function ColabProgressImportForm({ projectId }: { projectId: stri
                   <li className="text-orange-700 pt-2">
                     Villa numbers in CSV but not in project: {result.stats.villasNotFound.slice(0, 30).join(", ")}
                     {result.stats.villasNotFound.length > 30 && ` (+${result.stats.villasNotFound.length - 30} more)`}
+                  </li>
+                )}
+                {result.stats.villaPairAliases.length > 0 && (
+                  <li className="pt-2">
+                    Colab villas recorded on their MSP pair: {result.stats.villaPairAliases.join(", ")}
                   </li>
                 )}
                 {result.stats.sectionsUnmatched.length > 0 && (

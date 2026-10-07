@@ -82,9 +82,23 @@ const ALL_FLOORS_RULES: AllFloorsRule[] = [
 ];
 
 /**
- * Return the MSP section name a Colab row should land under, or null if the
- * mapping can't be resolved. Caller should log unmatched rows for review.
+ * Villa pairing follows the MSP, not Colab (Shraddha, 2026-10-07). The MSP
+ * schedules some neighbours as one unit built together — Siddhi keeps ONE
+ * Villa record (number = first of the pair, unitCount = 2) while Colab
+ * tracks each half as its own location (e.g. Siddhi Villa 15 = Colab
+ * "Villa 15" + "Villa 16"). Resolve a Colab villa number to the Siddhi
+ * villa number that holds it: exact match first, else the preceding villa
+ * when that one is a 2-unit pair. Null when neither exists.
  */
+export function resolvePairedVillaNumber(
+  colabNumber: number,
+  siddhiVillas: ReadonlyMap<number, { unitCount: number }>,
+): number | null {
+  if (siddhiVillas.has(colabNumber)) return colabNumber;
+  const prev = siddhiVillas.get(colabNumber - 1);
+  return prev && prev.unitCount >= 2 ? colabNumber - 1 : null;
+}
+
 /**
  * Colab CSV `Milestone` column — non-empty on rows that ARE the END-marker
  * for a stage. Python's build_wk23.py MORDER list, mapped to our
