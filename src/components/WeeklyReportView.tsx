@@ -102,6 +102,9 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
   // upstream (weeklyReportServer.ts).
   const p1 = report.milestonePlans.find((m) => m.contractorName.trim().toLowerCase() !== "elegant construction" && m.hasSchedule);
   const elegant = report.milestonePlans.find((m) => m.contractorName.trim().toLowerCase() === "elegant construction");
+  // A contractor appears in §4 when it has a plan OR attendance this week —
+  // attendance logged without a plan must still show up in the report.
+  const manpowerShown = report.manpowerByContractor.filter((c) => c.hasPlan || c.weeklyActual > 0);
 
   return (
     <>
@@ -309,7 +312,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
             <div className={weekly.secNote}>headcount planned vs on site · contractor-wise · numbers and %</div>
           </div>
 
-          {report.manpowerByContractor.filter((c) => c.hasPlan).map((c) => {
+          {manpowerShown.map((c) => {
             const totalDays = c.perDay.length || 7;
             const workingDays = c.perDay.filter((d) => !d.isHoliday).length;
             const loggedDays = c.perDay.filter((d) => d.actualTotal > 0).length;
@@ -317,19 +320,20 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
             const avgActualPerDay = totalDays > 0 ? Math.round(c.weeklyActual / totalDays) : 0;
             const pct = c.pctOfPlan ?? 0;
             const pctColor = pct >= 100 ? "#8CA04A" : "#C9756A";
+            const isElegant = c.contractorName.trim().toLowerCase() === "elegant construction";
             return (
               <div key={c.contractorId}>
                 <div className={weekly.cbar}>
-                  <span className={weekly.cbarName}>Contractor 1 — {c.contractorName}</span>
-                  <span className={weekly.cbarNote}>all site labour is under Contractor 1</span>
+                  <span className={weekly.cbarName}>Contractor {isElegant ? 2 : 1} — {c.contractorName}</span>
+                  <span className={weekly.cbarNote}>{c.hasPlan ? (manpowerShown.length === 1 ? "all site labour is under this contractor" : "") : "no planned headcount set this week"}</span>
                   <span className={`${weekly.cbarPill} ${weekly.cbarPillActive}`}>Active</span>
                 </div>
                 <div className={weekly.mpwrap}>
                   <div className={weekly.mptotal}>
                     <div className={weekly.mptCell}>
                       <div className={weekly.mptL}>Weekly target (labour-days)</div>
-                      <div className={weekly.mptV}>{c.weeklyPlanned}</div>
-                      <div className={weekly.mptSub}>{planPerDay}/day × {workingDays} days</div>
+                      <div className={weekly.mptV}>{c.hasPlan ? c.weeklyPlanned : "—"}</div>
+                      <div className={weekly.mptSub}>{c.hasPlan ? `${planPerDay}/day × ${workingDays} days` : "no plan set"}</div>
                     </div>
                     <div className={weekly.mptCell}>
                       <div className={weekly.mptL}>Achieved (labour-days)</div>
@@ -338,7 +342,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
                     </div>
                     <div className={weekly.mptCell}>
                       <div className={weekly.mptL}>Week achieved vs target</div>
-                      <div className={weekly.mptV} style={{ color: pctColor }}>{pct}%</div>
+                      <div className={weekly.mptV} style={c.hasPlan ? { color: pctColor } : undefined}>{c.hasPlan ? `${pct}%` : "—"}</div>
                       <div className={weekly.mptSub}>avg {avgActualPerDay}/day on site</div>
                     </div>
                   </div>
@@ -357,7 +361,7 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
             );
           })}
 
-          {elegant && (
+          {elegant && !manpowerShown.some((c) => c.contractorName.trim().toLowerCase() === "elegant construction") && (
             <div className={weekly.c2}>
               <span className={weekly.c2N}>Contractor 2 — {elegant.contractorName}</span>
               <span className={weekly.c2T}>52 villas · schedule received; collab-tool integration under process, so no manpower feed yet.</span>
@@ -444,8 +448,28 @@ export default function WeeklyReportView({ report, projectId, weekEndingStr }: W
           )}
         </div>
 
+        {/* §6 Data entry by day */}
+        {report.dataEntry && report.dataEntry.length > 0 && (
+          <div className={weekly.sec}>
+            <div className={weekly.sechd}>
+              <div className={weekly.secNum}>06</div>
+              <h2 className={weekly.secTitle}>Data entry by day</h2>
+              <div className={weekly.secNote}>what was recorded each day · entered in Siddhi or brought in from Colab</div>
+            </div>
+            <div className={weekly.mpday}>
+              Data recorded on <b>{report.dataEntry.filter(hasData).length} of {report.dataEntry.length} days</b>
+              {report.dataEntry.some((d) => !hasData(d)) && (
+                <> · nothing entered on <b>{report.dataEntry.filter((d) => !hasData(d)).map((d) => fmtDayFull(d.date)).join(", ")}</b></>
+              )}.
+            </div>
+            <div className={weekly.dwwrap}>
+              <DataEntryTable days={report.dataEntry} />
+            </div>
+          </div>
+        )}
+
         <div className={weekly.foot}>
-          Week defined Mon–Sun, ending {wkEndStrFull} {wkEnd.getFullYear()}. Contractor 1 (Abraham Thomas) is the only party with a loaded schedule; Contractor 2 (Elegant Construction) is awarded with 52 villas across 12 blocks; its schedule has been received and integration with the collab tools is under process, so it carries no milestones here yet. Milestone dates are stage-level (all activities in a stage), not the tracker&apos;s single END-marker date, so they reflect true stage finish.
+          Week runs {fmtDayFull(wkStart)} – {wkEndStrFull} {wkEnd.getFullYear()}. Contractor 1 (Abraham Thomas) is the only party with a loaded schedule; Contractor 2 (Elegant Construction) is awarded with 52 villas across 12 blocks; its schedule has been received and integration with the collab tools is under process, so it carries no milestones here yet. Milestone dates are stage-level (all activities in a stage), not the tracker&apos;s single END-marker date, so they reflect true stage finish.
         </div>
       </div>
     </>
@@ -686,6 +710,50 @@ function ManpowerTradeTable({ perDay }: { perDay: WeeklyReport["manpowerByContra
             const val = `${d.actualTotal}/${d.plannedTotal}`;
             return <td key={i} className={holidays[i] ? "hol" : ""}>{cell(val, holidays[i])}</td>;
           })}
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
+// -------- Data entry by day (§6) --------
+type DataEntryDay = WeeklyReport["dataEntry"][number];
+function hasData(d: DataEntryDay): boolean {
+  return d.progressSiddhi + d.progressColab + d.labourSiddhi + d.labourColab + d.hindrances > 0;
+}
+function sourceCell(siddhi: number, colab: number): string {
+  if (siddhi === 0 && colab === 0) return "-";
+  if (colab === 0) return `${siddhi} · Siddhi`;
+  if (siddhi === 0) return `${colab} · Colab`;
+  return `${siddhi + colab} (Siddhi ${siddhi}, Colab ${colab})`;
+}
+function DataEntryTable({ days }: { days: DataEntryDay[] }) {
+  return (
+    <table className={weekly.dwTable}>
+      <thead>
+        <tr>
+          <th>Recorded</th>
+          {days.map((d) => <th key={d.date}>{fmtDayFull(d.date)}</th>)}
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td className="tt">Progress updates</td>
+          {days.map((d) => <td key={d.date}>{sourceCell(d.progressSiddhi, d.progressColab)}</td>)}
+        </tr>
+        <tr>
+          <td className="tt">Labour (workers)</td>
+          {days.map((d) => <td key={d.date}>{sourceCell(d.labourSiddhi, d.labourColab)}</td>)}
+        </tr>
+        <tr>
+          <td className="tt">Hindrances raised</td>
+          {days.map((d) => <td key={d.date}>{d.hindrances || "-"}</td>)}
+        </tr>
+        <tr className="dwtot">
+          <td className="tt">Data entered</td>
+          {days.map((d) => (
+            <td key={d.date} style={hasData(d) ? undefined : { color: "#C9756A" }}>{hasData(d) ? "Yes" : "None"}</td>
+          ))}
         </tr>
       </tbody>
     </table>

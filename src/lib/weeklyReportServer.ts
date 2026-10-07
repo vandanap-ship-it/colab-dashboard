@@ -106,6 +106,18 @@ export interface WeeklyManpowerSiteTotal {
   loggedDays: number;
 }
 
+/** One day of the week: what got recorded, split by where it was entered
+ *  (directly in Siddhi vs imported from Colab). Powers §6 "Data entry by
+ *  day" so a reader can see which days have no data at all. */
+export interface WeeklyDataEntryDay {
+  date: string;              // YYYY-MM-DD (IST calendar day)
+  progressSiddhi: number;    // published progress updates for that day
+  progressColab: number;
+  labourSiddhi: number;      // workers recorded for that day
+  labourColab: number;
+  hindrances: number;        // hindrances that started that day
+}
+
 export interface WeeklyReport {
   project: {
     id: string;
@@ -121,6 +133,7 @@ export interface WeeklyReport {
   manpowerSiteTotal: WeeklyManpowerSiteTotal;
   manpowerByContractor: WeeklyManpowerRow[];
   delayReasons: DelayReasonWithMitigation[];
+  dataEntry: WeeklyDataEntryDay[];
 }
 
 // ---------------------------------------------------------------------------
@@ -750,6 +763,41 @@ async function getWeeklyReportUncached(projectId: string, weekEnding: Date): Pro
     mitigation: mitigationForLabel(r.reason),
   }));
 
+  // ------- §6 Data entry by day -------
+  // Per IST day: progress updates, workers and new hindrances, split by
+  // where they were entered. Rows written by a Colab import carry a
+  // "colab…" idempotencyKey; everything else was entered in Siddhi.
+  const [entryProgress, entryManpower, entryHindrances] = await Promise.all([
+    prisma.progressEntry.findMany({
+      where: { projectId, deletedAt: null, status: "PUBLISHED", date: { gte: weekStart, lt: weekEndExclusive } },
+      select: { date: true, idempotencyKey: true },
+    }),
+    prisma.manpowerEntry.findMany({
+      where: { projectId, deletedAt: null, entryDate: { gte: weekStart, lte: weekEnd } },
+      select: { entryDate: true, idempotencyKey: true, actualCount: true },
+    }),
+    prisma.hindrance.findMany({
+      // startDate is a real timestamp: shift the IST-day bounds back 5h30.
+      where: { projectId, deletedAt: null, startDate: { gte: new Date(weekStart.getTime() - 330 * 60000), lt: new Date(weekEndExclusive.getTime() - 330 * 60000) } },
+      select: { startDate: true },
+    }),
+  ]);
+  const fromColab = (k: string | null) => !!k && k.startsWith("colab");
+  const dataEntry: WeeklyDataEntryDay[] = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(weekStart.getTime() + i * 86400000).toISOString().slice(0, 10);
+    const sameDay = (d: Date) => istDayStart(d).toISOString().slice(0, 10) === date;
+    const prog = entryProgress.filter((p) => p.date.toISOString().slice(0, 10) === date);
+    const lab = entryManpower.filter((m) => m.entryDate.toISOString().slice(0, 10) === date);
+    return {
+      date,
+      progressSiddhi: prog.filter((p) => !fromColab(p.idempotencyKey)).length,
+      progressColab: prog.filter((p) => fromColab(p.idempotencyKey)).length,
+      labourSiddhi: lab.filter((m) => !fromColab(m.idempotencyKey)).reduce((n, m) => n + m.actualCount, 0),
+      labourColab: lab.filter((m) => fromColab(m.idempotencyKey)).reduce((n, m) => n + m.actualCount, 0),
+      hindrances: entryHindrances.filter((h) => sameDay(h.startDate)).length,
+    };
+  });
+
   return {
     project,
     weekStart,
@@ -759,6 +807,7 @@ async function getWeeklyReportUncached(projectId: string, weekEnding: Date): Pro
     manpowerSiteTotal,
     manpowerByContractor,
     delayReasons,
+    dataEntry,
   };
 }
 
