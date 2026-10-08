@@ -86,7 +86,7 @@ function VillaRow({ villa: v }: { villa: BlockDetailVilla }) {
 
 function slipColor(slip: number): string {
   if (slip === 0) return styles.good;
-  if (slip > 30) return styles.bad;
+  if (slip > 15) return styles.bad;
   return styles.warn;
 }
 

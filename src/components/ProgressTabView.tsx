@@ -175,7 +175,7 @@ function VillaProgressCard({ projectId, rows }: { projectId: string; rows: Villa
                         <span className={styles.vpPctVal}>{r.pctComplete}%</span>
                       </div>
                     </td>
-                    <td className={`${styles.vpNum} ${r.slipDays > 30 ? styles.vpSlipBad : r.slipDays > 7 ? styles.vpSlipWarn : styles.vpSlipZero}`}>
+                    <td className={`${styles.vpNum} ${r.slipDays > 15 ? styles.vpSlipBad : r.slipDays > 7 ? styles.vpSlipWarn : styles.vpSlipZero}`}>
                       {r.slipDays === 0 ? "0d" : `+${r.slipDays}d`}
                     </td>
                     <td className={styles.vpStatusCell}>

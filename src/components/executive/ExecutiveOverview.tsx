@@ -173,14 +173,14 @@ export default function ExecutiveOverview({
           </div>
           <div
             className={`${styles.kpiSmall} ${h.criticalBlocks > 0 ? styles.bad : styles.neutral}`}
-            title="Blocks running more than 30 days behind baseline."
+            title="Blocks running more than 15 days behind baseline."
           >
             <div className={styles.kpiLbl}>Critical Blocks</div>
             <div className={`${styles.kpiSmallVal} ${h.criticalBlocks > 0 ? styles.bad : styles.neutral}`}>
               {h.criticalBlocks}
               <span className={styles.unit}>/ {activeBlocks.length}</span>
             </div>
-            <div className={styles.kpiSub}>Slip &gt; 30 days</div>
+            <div className={styles.kpiSub}>Slip &gt; 15 days</div>
           </div>
         </div>
 
@@ -475,8 +475,8 @@ function BlockBuckets({ blocks }: { blocks: BlockRollup[] }) {
   return (
     <div className={styles.bucketGrid}>
       <BlockBucket kind="healthy" title="Healthy" subtitle="≤ 0d slip" blocks={healthy} />
-      <BlockBucket kind="warning" title="Warning" subtitle="1–30d slip" blocks={warning} />
-      <BlockBucket kind="critical" title="Critical" subtitle="&gt; 30d slip" blocks={critical} />
+      <BlockBucket kind="warning" title="Warning" subtitle="1–15d slip" blocks={warning} />
+      <BlockBucket kind="critical" title="Critical" subtitle="&gt; 15d slip" blocks={critical} />
     </div>
   );
 }
@@ -550,8 +550,8 @@ function VillaBuckets({ villas }: { villas: VillaRollup[] }) {
   return (
     <div className={styles.bucketGrid}>
       <VillaBucket kind="healthy" title="Healthy" subtitle="≤ 0d slip" villas={healthy} />
-      <VillaBucket kind="warning" title="Warning" subtitle="1–30d slip" villas={warning} />
-      <VillaBucket kind="critical" title="Critical" subtitle="&gt; 30d slip" villas={critical} />
+      <VillaBucket kind="warning" title="Warning" subtitle="1–15d slip" villas={warning} />
+      <VillaBucket kind="critical" title="Critical" subtitle="&gt; 15d slip" villas={critical} />
     </div>
   );
 }

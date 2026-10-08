@@ -137,15 +137,20 @@ export function activeVillas(): VillaRollup[] {
   return rows;
 }
 
+// Slip-day thresholds for the Overview block + villa health buckets.
+// Changed 2026-10-08 (Vandana): RED cutoff tightened from 30 to 15 days
+// to match how the site team actually talks about critical slip.
+// ORANGE stays at "any slip > 0" so a block starts flagging the moment
+// it goes past its planned finish, not only once it's two weeks late.
 export function blockStatus(b: BlockRollup): BlockStatus {
   if (!b.active) return "not-started";
-  if (b.slipDays > 30) return "critical";
+  if (b.slipDays > 15) return "critical";
   if (b.slipDays > 0)  return "warning";
   return "healthy";
 }
 
 export function villaStatus(v: VillaRollup): "healthy" | "warning" | "critical" {
-  if (v.slipDays > 30) return "critical";
+  if (v.slipDays > 15) return "critical";
   if (v.slipDays > 0)  return "warning";
   return "healthy";
 }
@@ -364,7 +369,7 @@ export function healthSummary(): ProjectHealthSummary {
     totalDelayDays: maxSlip,
     reraDelayDays: 0,
     hindrances: 3,
-    criticalBlocks: active.filter((b) => b.slipDays > 30).length,
+    criticalBlocks: active.filter((b) => b.slipDays > 15).length,
     probability: maxSlip > 30 ? "low" : maxSlip > 14 ? "med" : "high",
     plannedPct: 2.74,
     achievedPct: 0.01,

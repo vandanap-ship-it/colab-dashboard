@@ -21,7 +21,12 @@ export const GRACE_DAYS = 15;
 
 // Bucket thresholds for the health pills (green/orange/red)
 export const HEALTHY_MAX_SLIP = 0;    // ≤ 0 days slip → healthy
-export const WARNING_MAX_SLIP = 30;   // ≤ 30 days slip → warning; > 30 → critical
+// Changed 2026-10-08 (Vandana): tightened from 30 to 15 days so a block
+// turns red the moment it's two weeks past baseline — matches how the
+// site team talks about critical slip at Amanvana. Any user-visible
+// label ("Slip > 15 days", "1-15d slip") was updated in the Overview
+// components to match.
+export const WARNING_MAX_SLIP = 15;   // ≤ 15 days slip → warning; > 15 → critical
 
 export type HealthBucket = "healthy" | "warning" | "critical" | "not-started";
 export type Probability = "HIGH" | "MEDIUM" | "LOW";

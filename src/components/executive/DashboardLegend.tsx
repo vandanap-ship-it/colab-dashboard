@@ -33,7 +33,7 @@ const ITEMS: { term: string; def: string }[] = [
   },
   {
     term: "Critical Blocks",
-    def: "Blocks running more than 30 days behind baseline. These need immediate escalation.",
+    def: "Blocks running more than 15 days behind baseline. These need immediate escalation.",
   },
   {
     term: "Daily Manpower",

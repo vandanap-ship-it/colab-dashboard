@@ -39,7 +39,7 @@ function cellStatusFor(
 function overallStatus(villaCurrentSection: number, villaSlipDays: number): CellStatus {
   if (villaCurrentSection < 0) return "stOos";
   if (villaSlipDays === 0) return "stGood";
-  if (villaSlipDays > 30) return "stSlip";
+  if (villaSlipDays > 15) return "stSlip";
   if (villaSlipDays > 7) return "stBad";
   return "stWarn";
 }

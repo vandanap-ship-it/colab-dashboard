@@ -97,9 +97,9 @@ export default async function LogicReferencePage() {
           <Formula>
             <ul>
               <li><strong>Not Started</strong> — no villa milestone has actualStart yet</li>
-              <li><strong>Healthy</strong> — slip ≤ 7 days</li>
-              <li><strong>Warning</strong> — slip 8–30 days</li>
-              <li><strong>Critical</strong> — slip &gt; 30 days</li>
+              <li><strong>Healthy</strong> — slip ≤ 0 days (on time or ahead)</li>
+              <li><strong>Warning</strong> — slip 1–15 days</li>
+              <li><strong>Critical</strong> — slip &gt; 15 days</li>
             </ul>
           </Formula>
           <p>
