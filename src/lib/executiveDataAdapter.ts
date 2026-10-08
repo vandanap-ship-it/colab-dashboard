@@ -106,7 +106,14 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
       villas: b.villas.map((v) => v.number),
       villaLabels: b.villas.map((v) => `Villa ${v.number}`),
       active,
-      slipDays: b.handoverSlipDays,
+      // Dashboard colour reflects slip on the CURRENT in-progress stage,
+      // not the slip on the far-off Handover milestone. Vandana 2026-10-08:
+      // handoverSlipDays stays 0 for most Amanvana villas (handover is
+      // years out, no projected drift yet), so every block was rendering
+      // GREEN even when the current Plinth / Foundation stage was 55+
+      // days late. currentSlipDays bubbles up to the colour the site
+      // team actually recognises.
+      slipDays: b.currentSlipDays,
       currentSection,
       currentPct: Math.round(b.percentComplete),
       pod: `Block ${b.code}`,      // pod grouping isn't in schema yet; fall back to block name
@@ -122,7 +129,7 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
       .map((v) => ({
         number: v.number,
         blockCode: b.code,
-        slipDays: v.handoverSlipDays,
+        slipDays: v.currentSlipDays,
         pctComplete: Math.round(v.percentComplete),
         currentSection: v.currentSection,
         staleDays: v.staleDays ?? 0,
