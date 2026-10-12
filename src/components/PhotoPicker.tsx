@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Camera, X } from "lucide-react";
+import { Camera, Image as ImageIcon, X } from "lucide-react";
 
 /**
  * Resize + re-encode an image on the client before it hits the network.
@@ -140,27 +140,48 @@ export default function PhotoPicker({
           </div>
         ))}
         {showAddTile && (
-          <label className="aspect-square rounded-lg border-2 border-dashed border-stone-300 flex flex-col items-center justify-center text-stone-400 hover:border-stone-500 hover:text-stone-700 active:bg-stone-50 cursor-pointer transition-colors min-h-11">
-            <Camera className="w-6 h-6" />
-            <span className="text-[11px] mt-1.5 font-medium">
-              {compressing
-                ? "Compressing…"
-                : photos.length === 0
-                  ? "Add photo"
-                  : `+${max - photos.length} more`}
-            </span>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              className="sr-only"
-              onChange={(e) => {
-                add(e.target.files);
-                // Reset so the same file can be re-picked next time after a remove.
-                e.target.value = "";
-              }}
-            />
-          </label>
+          <>
+            {/* Camera · Vandana 2026-10-12: progress team reported the
+                phone's native "take photo" option was missing from the
+                combined picker on some devices. A dedicated tile with
+                capture="environment" forces the camera and gives an
+                unambiguous entry path. The gallery tile sits next to it
+                for picks from an existing album — never remove it, that
+                was deliberately kept per the Shraddha 2026-10-07 rule. */}
+            <label className="aspect-square rounded-lg border-2 border-dashed border-stone-300 flex flex-col items-center justify-center text-stone-500 hover:border-stone-500 hover:text-stone-700 active:bg-stone-50 cursor-pointer transition-colors min-h-11">
+              <Camera className="w-6 h-6" />
+              <span className="text-[11px] mt-1.5 font-medium">
+                {compressing ? "Working…" : "Camera"}
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="sr-only"
+                onChange={(e) => {
+                  add(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <label className="aspect-square rounded-lg border-2 border-dashed border-stone-300 flex flex-col items-center justify-center text-stone-500 hover:border-stone-500 hover:text-stone-700 active:bg-stone-50 cursor-pointer transition-colors min-h-11">
+              <ImageIcon className="w-6 h-6" />
+              <span className="text-[11px] mt-1.5 font-medium">
+                {compressing ? "Working…" : "Gallery"}
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                onChange={(e) => {
+                  add(e.target.files);
+                  // Reset so the same file can be re-picked next time after a remove.
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </>
         )}
       </div>
     </div>
