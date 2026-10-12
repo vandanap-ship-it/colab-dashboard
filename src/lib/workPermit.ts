@@ -82,22 +82,27 @@ export const WORK_PERMIT_STATUS_LABELS: Record<WorkPermitStatus, string> = {
  * remark · optional photo attach.
  */
 export const WORK_PERMIT_CHECKPOINTS: Record<WorkPermitType, string[]> = {
+  // Order re-shuffled 2026-10-12 (Vandana) to match Colab's HOT WORK
+  // template exactly, per Abhishek's 30 Sep iPhone walkthrough. Site
+  // team's muscle memory is Colab; keeping Siddhi divergent for no good
+  // reason was costing them. Question TEXT is unchanged (still traces
+  // back to Shraddha's paper HSE source form).
   HOT_WORK: [
     "Has a Work method Risk Assessment been carried out specifically identifying the risks associated with Hot work?",
-    "Are appropriate PPEs provided to every one involved in this work?",
     "Have the Risk Assessment Control Measures/Actions been implemented?",
     "Area clear of combustible and flammable materials?",
-    "Is Toolbox Talk conducted before start of activity?",
     "Fire extinguisher present?",
-    "Cylinders fitted with flash back arrestors & kept in trolley. Use of approved lighter",
     "Fire watch provided?",
-    "All power tools in good working order",
     "Shields / guards in place?",
+    "Proper working platform (min 1000mm) with safe means of access while work at height & bottom area barricaded with caution",
+    "Is the operator/welder/cutter competent?",
+    "Are appropriate PPEs provided to every one involved in this work?",
+    "Are All personal involved in this activity undergone Hot Work training?",
+    "Is Toolbox Talk conducted before start of activity?",
+    "Cylinders fitted with flash back arrestors & kept in trolley. Use of approved lighter",
+    "All power tools in good working order",
     "Ventilation sufficient?",
     "No overlapping tasks / work",
-    "Is the operator/welder/cutter competent?",
-    "Are All personal involved in this activity undergone Hot Work training?",
-    "Proper working platform (min 1000mm) with safe means of access while work at height & bottom area barricaded with caution",
   ],
   NIGHT_WORK: [
     "Has a Work method Risk Assessment been carried out specifically identifying the risks associated with work activity?",
@@ -115,24 +120,29 @@ export const WORK_PERMIT_CHECKPOINTS: Record<WorkPermitType, string[]> = {
     "Is Alcohol and drug inspection carried out for workmen?",
     "Clear signage, Reflective tape provided?",
   ],
+  // Order re-shuffled 2026-10-12 (Vandana) to match Colab's
+  // DE-SHUTTERING WORK PERMIT template. Colab bundles PPEs + "undergone
+  // training" into one checkpoint (a known Colab bug); Siddhi correctly
+  // keeps them separate, both placed at Colab's slot 10. Question TEXT
+  // unchanged.
   DESHUTTERING: [
     "Has a Work method statement and Risk Assessment been carried out specifically identifying the risks associated with De-shuttering?",
-    "Are appropriate PPEs provided to every one involved in work at height activity?",
     "Have the Risk Assessment Control Measures/Actions been implemented?",
     "Workers are trained/skilled workers are deployed?",
-    "Is Toolbox Talk conducted before start of activity?",
     "Is the de-shuttering area maintained with good illumination (Minimum 200 lux)?",
-    "Ensure that entire activities are carried out under proper supervision?",
     "All Electrical wires, DB boards are removed from deshuttering area?",
-    "All openings are covered and barricaded?",
     "Proper working platform (min 1000mm) provided?",
-    "Is activity monitored by a competent person?",
     "Is Slab has attained the stipulated strength to de-shutter?",
-    "Is the area of deshuttering barricaded to avoided unauthorized entry?",
     "Correct tools are used for de-shuttering?",
-    "Warning signage is displayed?",
     "No overlapping tasks / work?",
+    "Are appropriate PPEs provided to every one involved in work at height activity?",
     "Are All personal involved in this activity undergone De-shuttering training?",
+    "Is Toolbox Talk conducted before start of activity?",
+    "Ensure that entire activities are carried out under proper supervision?",
+    "All openings are covered and barricaded?",
+    "Is activity monitored by a competent person?",
+    "Is the area of deshuttering barricaded to avoided unauthorized entry?",
+    "Warning signage is displayed?",
   ],
   GENERAL: [
     "Work area barricaded and warning signs displayed",
