@@ -128,6 +128,59 @@ function approvalProgress(p: WorkPermit): {
   }
 }
 
+/**
+ * Colab-parity chip-filter set per tab. Values stay stable (lowercase,
+ * kebab-safe) so the chipFilter state can be a simple string. "all" is
+ * the universal reset.
+ *
+ * Active / Future / Rejected  →  All | Pending | Partial | Approved
+ * Closed                      →  All | Manually Closed | Auto-Closed
+ * Suspended                   →  All (no sub-filter, kept for consistency)
+ *
+ * "Partial" is defined here as a permit still in PENDING but with at
+ * least one of its multi-level approvers having signed off. Siddhi today
+ * has one approver level, so Partial is always empty — the chip
+ * light up once max-5-levels lands. Including it now keeps the UI
+ * stable; no visible flicker when the backend grows.
+ */
+type ChipDef = { key: string; label: string };
+function chipsForTab(tab: TabKey): ChipDef[] {
+  if (tab === "closed") {
+    return [
+      { key: "all", label: "All" },
+      { key: "manually-closed", label: "Manually Closed" },
+      { key: "auto-closed", label: "Auto-Closed" },
+    ];
+  }
+  if (tab === "suspended") {
+    return [{ key: "all", label: "All" }];
+  }
+  return [
+    { key: "all", label: "All" },
+    { key: "pending", label: "Pending" },
+    { key: "partial", label: "Partial" },
+    { key: "approved", label: "Approved" },
+  ];
+}
+
+/** True when the permit matches the chip, within its already-bucketed tab. */
+function permitMatchesChip(p: WorkPermit, chip: string): boolean {
+  if (chip === "all") return true;
+  if (chip === "pending") return p.status === "PENDING";
+  if (chip === "approved") return p.status === "APPROVED";
+  if (chip === "partial") {
+    // Multi-level approval partial state. Lights up when max-levels > 1.
+    if (p.status !== "PENDING") return false;
+    const levels = p.approvers ?? [];
+    if (levels.length <= 1) return false;
+    const anySigned = levels.some((a) => a.user?.id); // placeholder — refine when per-level sign tracking lands
+    return anySigned && levels.length > 1;
+  }
+  if (chip === "manually-closed") return p.status === "CLOSED" && p.closer != null;
+  if (chip === "auto-closed") return p.status === "CLOSED" && p.closer == null;
+  return true;
+}
+
 export default function WorkPermitList({
   projectId,
   currentUserId,
@@ -142,6 +195,15 @@ export default function WorkPermitList({
 }) {
   const [tab, setTab] = useState<TabKey>("active");
   const [permits, setPermits] = useState<WorkPermit[] | null>(null);
+  // Colab-parity chip row below the tab bar. The chip set changes by
+  // tab, so switching tabs resets the chip to "all" to avoid the
+  // confusing "I'm on Closed but the chip says Pending so I see nothing"
+  // state. See chipsForTab() for the per-tab chip list.
+  const [chipFilter, setChipFilter] = useState<string>("all");
+  const onSetTab = useCallback((next: TabKey) => {
+    setTab(next);
+    setChipFilter("all");
+  }, []);
   // Colab-parity Advanced Filters (Abhishek zip · permit list · filter
   // sheet). Contractor + date range this pass; 3-level location cascade
   // is a follow-up when the permit picker component lands. Filters run
@@ -210,6 +272,7 @@ export default function WorkPermitList({
     const to = filterDateTo ? startOfLocalDay(filterDateTo) : Infinity;
     const filtered = (permits ?? []).filter((p) => {
       if (bucket(p) !== tab) return false;
+      if (!permitMatchesChip(p, chipFilter)) return false;
       if (filterContractorId && p.contractor?.id !== filterContractorId) return false;
       const w = startOfLocalDay(p.workDate);
       if (w < from || w > to) return false;
@@ -226,7 +289,7 @@ export default function WorkPermitList({
       // Tie-break by createdAt (latest first for stability).
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [permits, tab, filterContractorId, filterDateFrom, filterDateTo]);
+  }, [permits, tab, chipFilter, filterContractorId, filterDateFrom, filterDateTo]);
 
   const activeFilterCount =
     (filterContractorId ? 1 : 0) + (filterDateFrom ? 1 : 0) + (filterDateTo ? 1 : 0);
@@ -247,7 +310,7 @@ export default function WorkPermitList({
               active={tab === t.key}
               label={t.label}
               count={counts[t.key]}
-              onClick={() => setTab(t.key)}
+              onClick={() => onSetTab(t.key)}
             />
           ))}
         </div>
@@ -268,6 +331,29 @@ export default function WorkPermitList({
             </span>
           )}
         </button>
+      </div>
+
+      {/* Chip sub-filter row — Colab parity. Set depends on the active tab;
+          see chipsForTab(). Suspended returns a single "All" chip so the
+          row keeps its height, keeps the vertical rhythm stable. */}
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto no-scrollbar px-1">
+        {chipsForTab(tab).map((c) => {
+          const active = chipFilter === c.key;
+          return (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setChipFilter(c.key)}
+              className={`shrink-0 rounded-full text-[12px] font-semibold px-3 py-1 border transition-colors ${
+                active
+                  ? "bg-ink text-white border-ink"
+                  : "bg-white text-stone-700 border-stone-200 hover:border-stone-400"
+              }`}
+            >
+              {c.label}
+            </button>
+          );
+        })}
       </div>
 
       {filtersOpen && (
