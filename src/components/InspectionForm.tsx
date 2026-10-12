@@ -1346,12 +1346,28 @@ export default function InspectionForm({
                 }`}
               >
                 <div className="flex gap-2 items-start">
-                  <input
-                    type="text"
+                  {/* Textarea instead of single-line input so long HSE
+                      checkpoint questions (some run 25-30 words) wrap and
+                      are fully readable without horizontal scrolling.
+                      Vandana 2026-10-12. Auto-resize on both mount and
+                      every input event so the field matches content
+                      height. `resize-none` hides the drag-handle. */}
+                  <textarea
                     value={it.label}
                     onChange={(e) => updateItem(i, { label: e.target.value })}
                     placeholder="Item label"
-                    className="flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+                    rows={1}
+                    ref={(el) => {
+                      if (!el) return;
+                      el.style.height = "auto";
+                      el.style.height = `${el.scrollHeight}px`;
+                    }}
+                    onInput={(e) => {
+                      const t = e.currentTarget;
+                      t.style.height = "auto";
+                      t.style.height = `${t.scrollHeight}px`;
+                    }}
+                    className="flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm resize-none leading-snug overflow-hidden"
                   />
                   {items.length > 1 && (
                     <button
