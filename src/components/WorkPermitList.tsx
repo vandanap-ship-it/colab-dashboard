@@ -55,7 +55,15 @@ type WorkPermit = {
   approver: { id: string; name: string; username: string } | null;
   closer: { id: string; name: string; username: string } | null;
   contractor: { id: string; name: string } | null;
-  wbsNode: { id: string; name: string; taskCode: string } | null;
+  wbsNode: {
+    id: string;
+    name: string;
+    taskCode: string;
+    villaId: string | null;
+    villaMilestone: {
+      section: { id: string; name: string; orderIndex: number };
+    } | null;
+  } | null;
   approvers?: Array<{
     id: string;
     levelIndex: number;
@@ -213,8 +221,33 @@ export default function WorkPermitList({
   const [filterContractorId, setFilterContractorId] = useState<string>("");
   const [filterDateFrom, setFilterDateFrom] = useState<string>("");
   const [filterDateTo, setFilterDateTo] = useState<string>("");
+  // Colab-parity 3-level location cascade in the Advanced Filters
+  // sheet. Villa → Section → WBS activity. Each level narrows what the
+  // downstream picker lists. Shipped 2026-10-12 (Vandana).
+  const [filterVillaId, setFilterVillaId] = useState<string>("");
+  const [filterSectionId, setFilterSectionId] = useState<string>("");
+  const [filterWbsNodeId, setFilterWbsNodeId] = useState<string>("");
+  const [villas, setVillas] = useState<Array<{ id: string; number: number; label: string | null }>>([]);
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+
+  // Load the project's villa list once. The endpoint auto-filters to
+  // the user's contractor (if they're contractor-tagged), so this list
+  // already reflects what the user can see.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/projects/${projectId}/villas`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { villas: [] }))
+      .then((d) => {
+        if (!cancelled) setVillas(d.villas ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setVillas([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   const load = useCallback(async () => {
     const url = new URL(`/api/work-permits`, window.location.origin);
@@ -267,6 +300,53 @@ export default function WorkPermitList({
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [permits]);
 
+  // Section options: distinct sections across permits whose WBS node
+  // belongs to the chosen villa. When no villa is picked, show every
+  // section that appears on any permit. Sorted by section orderIndex
+  // so Foundation → Plinth → GF Structure read in build order.
+  const sectionOptions = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string; orderIndex: number }>();
+    for (const p of permits ?? []) {
+      const sec = p.wbsNode?.villaMilestone?.section;
+      if (!sec) continue;
+      if (filterVillaId && p.wbsNode?.villaId !== filterVillaId) continue;
+      seen.set(sec.id, sec);
+    }
+    return Array.from(seen.values()).sort((a, b) => a.orderIndex - b.orderIndex);
+  }, [permits, filterVillaId]);
+
+  // Activity options: distinct WBS nodes that satisfy the chosen villa
+  // AND section. If a user picks only a villa (no section), still show
+  // every activity on that villa so the third picker is usable.
+  const activityOptions = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string; taskCode: string }>();
+    for (const p of permits ?? []) {
+      const node = p.wbsNode;
+      if (!node) continue;
+      if (filterVillaId && node.villaId !== filterVillaId) continue;
+      if (filterSectionId && node.villaMilestone?.section?.id !== filterSectionId) continue;
+      seen.set(node.id, { id: node.id, name: node.name, taskCode: node.taskCode });
+    }
+    return Array.from(seen.values()).sort((a, b) => a.taskCode.localeCompare(b.taskCode));
+  }, [permits, filterVillaId, filterSectionId]);
+
+  // Downstream reset when upstream changes. If the user clears or
+  // changes a Villa, the previously-picked Section may no longer exist
+  // under it; same for Activity under Section.
+  useEffect(() => {
+    if (!filterVillaId) return;
+    if (filterSectionId && !sectionOptions.some((s) => s.id === filterSectionId)) {
+      setFilterSectionId("");
+      setFilterWbsNodeId("");
+    }
+  }, [filterVillaId, filterSectionId, sectionOptions]);
+  useEffect(() => {
+    if (!filterSectionId) return;
+    if (filterWbsNodeId && !activityOptions.some((a) => a.id === filterWbsNodeId)) {
+      setFilterWbsNodeId("");
+    }
+  }, [filterSectionId, filterWbsNodeId, activityOptions]);
+
   const rows = useMemo(() => {
     const from = filterDateFrom ? startOfLocalDay(filterDateFrom) : -Infinity;
     const to = filterDateTo ? startOfLocalDay(filterDateTo) : Infinity;
@@ -274,6 +354,9 @@ export default function WorkPermitList({
       if (bucket(p) !== tab) return false;
       if (!permitMatchesChip(p, chipFilter)) return false;
       if (filterContractorId && p.contractor?.id !== filterContractorId) return false;
+      if (filterVillaId && p.wbsNode?.villaId !== filterVillaId) return false;
+      if (filterSectionId && p.wbsNode?.villaMilestone?.section?.id !== filterSectionId) return false;
+      if (filterWbsNodeId && p.wbsNode?.id !== filterWbsNodeId) return false;
       const w = startOfLocalDay(p.workDate);
       if (w < from || w > to) return false;
       return true;
@@ -289,12 +372,30 @@ export default function WorkPermitList({
       // Tie-break by createdAt (latest first for stability).
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [permits, tab, chipFilter, filterContractorId, filterDateFrom, filterDateTo]);
+  }, [
+    permits,
+    tab,
+    chipFilter,
+    filterContractorId,
+    filterVillaId,
+    filterSectionId,
+    filterWbsNodeId,
+    filterDateFrom,
+    filterDateTo,
+  ]);
 
   const activeFilterCount =
-    (filterContractorId ? 1 : 0) + (filterDateFrom ? 1 : 0) + (filterDateTo ? 1 : 0);
+    (filterContractorId ? 1 : 0) +
+    (filterVillaId ? 1 : 0) +
+    (filterSectionId ? 1 : 0) +
+    (filterWbsNodeId ? 1 : 0) +
+    (filterDateFrom ? 1 : 0) +
+    (filterDateTo ? 1 : 0);
   function clearFilters() {
     setFilterContractorId("");
+    setFilterVillaId("");
+    setFilterSectionId("");
+    setFilterWbsNodeId("");
     setFilterDateFrom("");
     setFilterDateTo("");
   }
@@ -371,6 +472,79 @@ export default function WorkPermitList({
               {contractorOptions.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Colab-parity 3-level location cascade. Downstream pickers
+              disable until their upstream is picked, like Colab's
+              Location → Sub-location → Sub-sub-location sheet. */}
+          <div>
+            <label className="block text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
+              Location (villa)
+            </label>
+            <select
+              value={filterVillaId}
+              onChange={(e) => {
+                setFilterVillaId(e.target.value);
+                setFilterSectionId("");
+                setFilterWbsNodeId("");
+              }}
+              className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">All villas</option>
+              {villas.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label ?? `Villa ${String(v.number).padStart(2, "0")}`}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
+              Sub-location (section)
+            </label>
+            <select
+              value={filterSectionId}
+              onChange={(e) => {
+                setFilterSectionId(e.target.value);
+                setFilterWbsNodeId("");
+              }}
+              disabled={sectionOptions.length === 0}
+              className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm disabled:bg-stone-100 disabled:text-stone-400"
+            >
+              <option value="">
+                {filterVillaId ? "All sections on this villa" : "All sections"}
+              </option>
+              {sectionOptions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            {sectionOptions.length === 0 && filterVillaId && (
+              <p className="text-[11px] text-stone-400 italic mt-1">
+                No permits on this villa yet.
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
+              Sub-sub-location (activity)
+            </label>
+            <select
+              value={filterWbsNodeId}
+              onChange={(e) => setFilterWbsNodeId(e.target.value)}
+              disabled={activityOptions.length === 0}
+              className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm disabled:bg-stone-100 disabled:text-stone-400"
+            >
+              <option value="">
+                {filterVillaId || filterSectionId ? "All activities in scope" : "All activities"}
+              </option>
+              {activityOptions.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.taskCode} · {a.name}
                 </option>
               ))}
             </select>

@@ -103,7 +103,23 @@ const workPermitInclude = {
   approver: { select: { id: true, name: true, username: true } },
   closer: { select: { id: true, name: true, username: true } },
   contractor: { select: { id: true, name: true } },
-  wbsNode: { select: { id: true, name: true, taskCode: true } },
+  // villaId + villaMilestone.section plumbed through 2026-10-12 to drive
+  // the Colab-parity 3-level location cascade in Advanced Filters
+  // (Location / Sub-location / Sub-sub-location = Villa / Section /
+  // Activity). All three are nullable: a permit raised without a WBS
+  // link doesn't anchor to any level, which is fine — those permits
+  // only appear when all three cascade pickers are empty.
+  wbsNode: {
+    select: {
+      id: true,
+      name: true,
+      taskCode: true,
+      villaId: true,
+      villaMilestone: {
+        select: { section: { select: { id: true, name: true, orderIndex: true } } },
+      },
+    },
+  },
   photos: { select: { id: true, url: true } },
   approvers: {
     orderBy: [{ levelIndex: "asc" }, { orderIndex: "asc" }],
