@@ -21,6 +21,11 @@ export type SessionToken = {
   role?: string;
   username?: string;
   modules?: string | null;
+  // Added 2026-10-12 (Vandana): contractor-scoped users (Harish on
+  // Abraham, etc.) carry their contractorId on the token so API routes
+  // can filter pickers (villas, activities) to their contractor's
+  // scope without an extra DB round-trip per request.
+  contractorId?: string | null;
   validatedAt?: number;
   [key: string]: unknown;
 };
@@ -30,6 +35,7 @@ export type DbUserSnapshot = {
   role: string;
   username: string;
   modules: string | null;
+  contractorId: string | null;
 };
 
 /** Default: re-check the DB at most once per minute per session. */
@@ -69,6 +75,7 @@ export async function refreshTokenFromDb<T extends SessionToken>(
       role: db.role,
       username: db.username,
       modules: db.modules,
+      contractorId: db.contractorId,
       validatedAt: opts.now,
     };
   } catch {

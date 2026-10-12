@@ -14,6 +14,7 @@ const activeUser: DbUserSnapshot = {
   role: "PLANNER",
   username: "engineer",
   modules: '["QAQC"]',
+  contractorId: null,
 };
 
 describe("refreshTokenFromDb", () => {

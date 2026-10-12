@@ -26,12 +26,14 @@ declare module "next-auth" {
       role: string;
       username: string;
       modules: string | null;
+      contractorId: string | null;
     } & DefaultSession["user"];
   }
   interface User {
     role: string;
     username: string;
     modules: string | null;
+    contractorId: string | null;
   }
 }
 
@@ -70,6 +72,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           username: user.username,
           role: user.role,
           modules: user.modules ?? null,
+          contractorId: user.contractorId ?? null,
         };
       },
     }),
@@ -82,6 +85,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = (user as { role: string }).role;
         token.username = (user as { username: string }).username;
         token.modules = (user as { modules: string | null }).modules ?? null;
+        token.contractorId = (user as { contractorId: string | null }).contractorId ?? null;
         token.validatedAt = Date.now();
         return token;
       }
@@ -94,10 +98,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           prisma.user
             .findUnique({
               where: { id },
-              select: { active: true, role: true, username: true, modules: true },
+              select: { active: true, role: true, username: true, modules: true, contractorId: true },
             })
             .then((u) =>
-              u ? { active: u.active, role: u.role, username: u.username, modules: u.modules ?? null } : null,
+              u
+                ? {
+                    active: u.active,
+                    role: u.role,
+                    username: u.username,
+                    modules: u.modules ?? null,
+                    contractorId: u.contractorId ?? null,
+                  }
+                : null,
             ),
         { now: Date.now(), intervalMs: REVALIDATE_MS },
       );
@@ -108,6 +120,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role as string;
         session.user.username = token.username as string;
         session.user.modules = (token.modules as string | null) ?? null;
+        session.user.contractorId = (token.contractorId as string | null) ?? null;
       }
       return session;
     },
