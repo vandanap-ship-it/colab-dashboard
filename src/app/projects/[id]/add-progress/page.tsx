@@ -70,7 +70,7 @@ export default async function AddProgressPage({
       orderBy: [{ taskCode: "asc" }],
     }),
     prisma.contractor.findMany({
-      where: { projectId, active: true },
+      where: { projectId, active: true, showInPickers: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),

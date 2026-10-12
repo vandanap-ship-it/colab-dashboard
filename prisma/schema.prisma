@@ -294,6 +294,17 @@ model Contractor {
   name      String
   category  String
   active    Boolean  @default(true)
+  // showInPickers = true (default) means this contractor appears in the
+  // mobile pickers (New Progress contractor dropdown, Inspection form,
+  // Permit form, etc.). Set to false to hide a contractor that was
+  // auto-created by an import but isn't a real main contractor the site
+  // team should pick from. Does NOT soft-delete — the row still exists,
+  // existing records still reference it, reports still roll it up. The
+  // flag only controls visibility in the create-new flows.
+  // Added 2026-10-12 (Vandana) to hide labour-supply vendors
+  // (Achyutananda Naik, Nilakar, Sanjay Das) that the Oct 1 safety
+  // induction import auto-created.
+  showInPickers Boolean  @default(true)
   createdAt DateTime @default(now())
 
   project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)

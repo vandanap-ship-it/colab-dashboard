@@ -26,7 +26,7 @@ export default async function NewManpowerPage({
   if (!project) notFound();
 
   const contractors = await prisma.contractor.findMany({
-    where: { projectId, active: true },
+    where: { projectId, active: true, showInPickers: true },
     orderBy: { name: "asc" },
     select: { id: true, name: true, category: true },
   });

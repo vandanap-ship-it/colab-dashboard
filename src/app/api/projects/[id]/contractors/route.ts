@@ -16,18 +16,30 @@ export const runtime = "nodejs";
  * every module (Progress, QAQC, EHS, Permits) needs the contractor
  * list at some point, so the endpoint is broadly available; the
  * sensitive stuff (write, admin) lives elsewhere.
+ *
+ * By default, hides contractors with showInPickers=false (auto-created
+ * labour-supply vendors). Pass ?all=1 to override — used by the admin
+ * contractor-assign + contractors-toggle pages so admins can see every
+ * contractor regardless of visibility flag.
  */
 export async function GET(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: projectId } = await ctx.params;
+  const url = new URL(req.url);
+  const includeHidden = url.searchParams.get("all") === "1";
+
   const contractors = await prisma.contractor.findMany({
-    where: { projectId, active: true },
-    select: { id: true, name: true, category: true },
+    where: {
+      projectId,
+      active: true,
+      ...(includeHidden ? {} : { showInPickers: true }),
+    },
+    select: { id: true, name: true, category: true, showInPickers: true },
     orderBy: { name: "asc" },
   });
 
