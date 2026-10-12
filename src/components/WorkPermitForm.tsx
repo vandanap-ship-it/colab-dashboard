@@ -27,6 +27,31 @@ type ApproverCandidate = {
 type Contractor = { id: string; name: string; category: string };
 
 /**
+ * One approval level inside the Step 2 picker. `levelIndex` is 1-based
+ * and stays stable even when earlier levels are removed, so the server
+ * stores the exact index the requester saw. `userIds` is the set of
+ * approvers in that level; a user may appear in multiple levels (Colab
+ * allows this; the server's (permit, user, levelIndex) unique index
+ * deduplicates on insert).
+ */
+type ApproverLevel = { levelIndex: number; userIds: Set<string> };
+
+/** Maximum approval levels supported — Colab parity. */
+const MAX_APPROVER_LEVELS = 5;
+
+/** Count unique approvers across all levels (deduped). */
+function totalUniqueApprovers(levels: ApproverLevel[]): number {
+  const seen = new Set<string>();
+  for (const l of levels) for (const u of l.userIds) seen.add(u);
+  return seen.size;
+}
+
+/** Count levels that have at least one approver. */
+function nonEmptyLevelCount(levels: ApproverLevel[]): number {
+  return levels.filter((l) => l.userIds.size > 0).length;
+}
+
+/**
  * Mobile-first form for raising a WorkPermit. Same offline-queue pattern
  * as the other mobile forms (progress, manpower) — try direct POST,
  * fall through to IndexedDB queue on network / 5xx, surface 4xx errors
@@ -120,7 +145,19 @@ export default function WorkPermitForm({
   const [endTime, setEndTime] = useState("18:00");
   const [location, setLocation] = useState("");
   const [contractorId, setContractorId] = useState<string>("");
-  const [selectedApprovers, setSelectedApprovers] = useState<Set<string>>(new Set());
+  // Approvers · 2026-10-12 (Vandana): widened from one flat Set to a
+  // list of up to 5 approval levels (Colab parity, Abhishek 30 Sep
+  // screenshots). Each level is independent and can hold multiple
+  // approvers; the same user may appear in more than one level (Colab
+  // allows this and the server dedupes on insert via the (permit,
+  // user, levelIndex) unique index). Level 1 is mandatory and cannot
+  // be removed; levels 2-5 are added on demand via a button. Approval
+  // semantics on the API remain first-approver-wins across all levels
+  // for now — proper sequential multi-level sign-off is a follow-up
+  // (schema already supports it).
+  const [approverLevels, setApproverLevels] = useState<ApproverLevel[]>([
+    { levelIndex: 1, userIds: new Set() },
+  ]);
   const [photos, setPhotos] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -150,12 +187,33 @@ export default function WorkPermitForm({
   // engineers raising back-to-back permits don't get bounced home each time.
   const [saved, setSaved] = useState<null | { queued: boolean; title: string }>(null);
 
-  function toggleApprover(id: string) {
-    setSelectedApprovers((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  function toggleApprover(levelPos: number, id: string) {
+    setApproverLevels((prev) =>
+      prev.map((l, i) => {
+        if (i !== levelPos) return l;
+        const next = new Set(l.userIds);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return { ...l, userIds: next };
+      }),
+    );
+  }
+
+  /** Append a new empty approval level, up to MAX_APPROVER_LEVELS. */
+  function addApprovalLevel() {
+    setApproverLevels((prev) => {
+      if (prev.length >= MAX_APPROVER_LEVELS) return prev;
+      const nextIndex = Math.max(...prev.map((l) => l.levelIndex), 0) + 1;
+      return [...prev, { levelIndex: nextIndex, userIds: new Set() }];
+    });
+  }
+
+  /** Remove the level at this UI position. Level at position 0 is
+   *  mandatory (first-approver-wins at least needs one), so refuse. */
+  function removeApprovalLevel(levelPos: number) {
+    setApproverLevels((prev) => {
+      if (prev.length <= 1 || levelPos === 0) return prev;
+      return prev.filter((_, i) => i !== levelPos);
     });
   }
 
@@ -167,7 +225,7 @@ export default function WorkPermitForm({
       setError("Give the permit a short title (3+ characters).");
       return;
     }
-    if (selectedApprovers.size === 0) {
+    if (totalUniqueApprovers(approverLevels) === 0) {
       setError("Pick at least one approver.");
       return;
     }
@@ -265,17 +323,23 @@ export default function WorkPermitForm({
         ? [...cleanLabour, ...cleanAttendance]
         : cleanLabour;
 
-    const approverIdsArr = Array.from(selectedApprovers);
-    // Every selected approver gets both capabilities. Shraddha 2026-09-30:
-    // capabilities are not the requester's call — Girish (head of safety)
-    // has close + suspend by default, and any future approver picked by
-    // an admin inherits the same.
-    const approversWithCaps = approverIdsArr.map((userId) => ({
-      userId,
-      levelIndex: 1,
-      canClose: true,
-      canSuspend: true,
-    }));
+    // Build per-level approver rows for the server. Each selected
+    // user at a level becomes one PermitApprover row with that level's
+    // real levelIndex. The capability chips are intentionally skipped
+    // (Shraddha 2026-09-30 rule): every picked approver gets both
+    // canClose + canSuspend. The top-level approverIds array is the
+    // deduped union of all level members so the first-approver-wins
+    // code path keeps working unchanged.
+    const approversWithCaps = approverLevels.flatMap((lvl) =>
+      Array.from(lvl.userIds).map((userId) => ({
+        userId,
+        levelIndex: lvl.levelIndex,
+        levelName: `Level ${lvl.levelIndex}`,
+        canClose: true,
+        canSuspend: true,
+      })),
+    );
+    const approverIdsArr = Array.from(new Set(approversWithCaps.map((a) => a.userId)));
 
     const payload = {
       idempotencyKey: crypto.randomUUID(),
@@ -359,7 +423,7 @@ export default function WorkPermitForm({
     setEndTime("18:00");
     setLocation("");
     setContractorId("");
-    setSelectedApprovers(new Set());
+    setApproverLevels([{ levelIndex: 1, userIds: new Set() }]);
     setPhotos([]);
     // Step 2 collections must reset too on a hard "Add another" —
     // otherwise labour entries, personnel, activity head, and
@@ -416,7 +480,7 @@ export default function WorkPermitForm({
     setStep(1);
     setError(null);
     setSaved(null);
-    // type, location, contractorId, selectedApprovers, activityHead
+    // type, location, contractorId, approverLevels, activityHead
     // stay set — the supervisor keeps the approval routing across
     // the run.
   }
@@ -466,7 +530,7 @@ export default function WorkPermitForm({
     step === 1
       ? title.trim().length >= 3 && dateOkForStep1 && timeOkForStep1
       : step === 2
-        ? contractorId.length > 0 && selectedApprovers.size > 0
+        ? contractorId.length > 0 && totalUniqueApprovers(approverLevels) > 0
         : true;
 
   function goBack() {
@@ -503,7 +567,7 @@ export default function WorkPermitForm({
                 description.trim().length > 0 ||
                 location.trim().length > 0 ||
                 contractorId.length > 0 ||
-                selectedApprovers.size > 0 ||
+                totalUniqueApprovers(approverLevels) > 0 ||
                 labourEntries.some((l) => l.workerName || l.role || l.count) ||
                 personnelEntries.some((l) => l.workerName || l.role) ||
                 activityHead.length > 0 ||
@@ -996,47 +1060,82 @@ export default function WorkPermitForm({
           holder is picked. If we need multi-holder support later we
           bring the block back. */}
 
-      <div className={step === 2 ? "" : "hidden"}>
+      <div className={step === 2 ? "space-y-4" : "hidden"}>
         <FieldLabel hint="At least one approver across all levels is required">
-          Approval Levels — Level 1
+          Approval Levels
         </FieldLabel>
-        <div className="space-y-1.5 max-h-64 overflow-y-auto rounded-lg border border-sandstone-100 bg-cream p-2">
-          {approverOptions.length === 0 ? (
-            <p className="text-[13px] text-ink-3 px-2 py-2">
-              No approvers available. Ask an admin to provision an internal user.
-            </p>
-          ) : (
-            approverOptions.map((u) => {
-              const checked = selectedApprovers.has(u.id);
-              return (
-                <label
-                  key={u.id}
-                  className={`flex items-center gap-2.5 rounded-md px-2 py-2 cursor-pointer ${
-                    checked ? "bg-sandstone-100" : "hover:bg-sandstone-50"
-                  }`}
+
+        {/* One card per level. Colab shows each level as a titled
+            section with its own approver picker and (for levels 2+) a
+            remove button in the top-right. Capability chips are
+            intentionally omitted (Shraddha 2026-09-30 rule). */}
+        {approverLevels.map((lvl, pos) => (
+          <div
+            key={lvl.levelIndex}
+            className="rounded-lg border border-sandstone-100 bg-cream"
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b border-sandstone-100">
+              <div className="text-[13px] font-semibold text-ink">
+                Level {lvl.levelIndex}
+                <span className="ml-2 text-[11px] font-normal text-ink-3">
+                  {lvl.userIds.size} approver{lvl.userIds.size === 1 ? "" : "s"}
+                </span>
+              </div>
+              {pos > 0 && (
+                <button
+                  type="button"
+                  onClick={() => removeApprovalLevel(pos)}
+                  className="text-[12px] font-semibold text-ferrous-600 hover:text-ferrous-700"
+                  aria-label={`Remove level ${lvl.levelIndex}`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleApprover(u.id)}
-                    className="w-4 h-4 accent-ferrous-500"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[15px] text-ink">{u.name}</div>
-                    <div className="text-[11px] text-ink-3">
-                      @{u.username} · {u.role}
-                    </div>
-                  </div>
-                  {/* Can Close / Can Suspend chips used to sit here as
-                      per-approver toggles. Removed 2026-09-30: the
-                      requester shouldn't be deciding what an approver
-                      can do. The picked approver is granted both
-                      capabilities server-side. */}
-                </label>
-              );
-            })
-          )}
-        </div>
+                  Remove
+                </button>
+              )}
+            </div>
+            <div className="space-y-1.5 max-h-56 overflow-y-auto p-2">
+              {approverOptions.length === 0 ? (
+                <p className="text-[13px] text-ink-3 px-2 py-2">
+                  No approvers available. Ask an admin to provision an internal user.
+                </p>
+              ) : (
+                approverOptions.map((u) => {
+                  const checked = lvl.userIds.has(u.id);
+                  return (
+                    <label
+                      key={u.id}
+                      className={`flex items-center gap-2.5 rounded-md px-2 py-2 cursor-pointer ${
+                        checked ? "bg-sandstone-100" : "hover:bg-sandstone-50"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleApprover(pos, u.id)}
+                        className="w-4 h-4 accent-ferrous-500"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[15px] text-ink">{u.name}</div>
+                        <div className="text-[11px] text-ink-3">
+                          @{u.username} · {u.role}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        ))}
+
+        {/* Colab parity: `⊕ Add Approval Level (N/5)`, disabled at 5. */}
+        <button
+          type="button"
+          onClick={addApprovalLevel}
+          disabled={approverLevels.length >= MAX_APPROVER_LEVELS}
+          className="w-full rounded-lg border border-dashed border-ink text-ink text-sm font-semibold py-2.5 hover:bg-sandstone-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          ⊕ Add Approval Level ({approverLevels.length}/{MAX_APPROVER_LEVELS})
+        </button>
       </div>
 
       {/* Step 4 — Review Permit card. Everything the requester
@@ -1071,7 +1170,11 @@ export default function WorkPermitForm({
             />
             <ReviewRow
               label="Approval Levels"
-              value={`${selectedApprovers.size > 0 ? 1 : 0} level · ${selectedApprovers.size} approver${selectedApprovers.size === 1 ? "" : "s"}`}
+              value={(() => {
+                const nL = nonEmptyLevelCount(approverLevels);
+                const nA = totalUniqueApprovers(approverLevels);
+                return `${nL} level${nL === 1 ? "" : "s"} · ${nA} approver${nA === 1 ? "" : "s"}`;
+              })()}
             />
             {/* Show the count that will ACTUALLY submit — empty rows
                 (no name / role / count) are filtered on the payload
@@ -1105,18 +1208,27 @@ export default function WorkPermitForm({
             <ReviewRow label="Images" value={photos.length === 0 ? "None" : String(photos.length)} />
           </div>
 
-          <div className="rounded-lg border border-stone-200 bg-white p-4 space-y-2">
+          <div className="rounded-lg border border-stone-200 bg-white p-4 space-y-3">
             <p className="text-[13px] font-semibold text-ink">Approvers</p>
-            {Array.from(selectedApprovers).map((uid) => {
-              const u = approverOptions.find((a) => a.id === uid);
-              if (!u) return null;
-              return (
-                <div key={uid} className="text-[13px] text-ink">
-                  {u.name}
+            {approverLevels
+              .filter((l) => l.userIds.size > 0)
+              .map((l) => (
+                <div key={l.levelIndex}>
+                  <div className="text-[11px] font-semibold text-ink-3 uppercase tracking-wider mb-1">
+                    Level {l.levelIndex}
+                  </div>
+                  {Array.from(l.userIds).map((uid) => {
+                    const u = approverOptions.find((a) => a.id === uid);
+                    if (!u) return null;
+                    return (
+                      <div key={uid} className="text-[13px] text-ink">
+                        {u.name}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-            {selectedApprovers.size === 0 && (
+              ))}
+            {totalUniqueApprovers(approverLevels) === 0 && (
               <p className="text-[12px] text-red-600">
                 No approver picked — go back to Step 2 and pick at least one.
               </p>
@@ -1187,7 +1299,7 @@ export default function WorkPermitForm({
           ) : (
             <button
               type="submit"
-              disabled={pending || selectedApprovers.size === 0}
+              disabled={pending || totalUniqueApprovers(approverLevels) === 0}
               className="inline-flex items-center justify-center gap-1 rounded-xl bg-ferrous-500 text-white text-sm font-semibold py-2 disabled:opacity-40"
             >
               {pending ? "Submitting…" : "✓ Submit Permit"}
