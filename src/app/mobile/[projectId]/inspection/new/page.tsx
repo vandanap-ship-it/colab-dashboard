@@ -28,6 +28,11 @@ export default async function NewInspectionPage({
     wbsNodeId?: string;
     templateId?: string;
     villaId?: string;
+    // Colab-parity 2026-10-13: the template picker's "Add Checklist"
+    // tap opens a Select Location + Activity Head bottom sheet
+    // first; its Save navigates here with villaId + activityHead so
+    // the form opens with location already picked.
+    activityHead?: string;
     // Colab 2026-10-01 parity: Safety raises an HSE Inspection
     // Checklist through this same URL with ?module=SAFETY. The
     // picker then shows only safety templates. QAQC users land here
@@ -44,7 +49,14 @@ export default async function NewInspectionPage({
   if (!canAccessTool(session.user.modules, TOOL_MODULES.inspection)) {
     redirect(`/mobile/${projectId}`);
   }
-  const { wbsNodeId, templateId, module: moduleHint, registerRowId } = await searchParams;
+  const {
+    wbsNodeId,
+    templateId,
+    villaId,
+    activityHead,
+    module: moduleHint,
+    registerRowId,
+  } = await searchParams;
   const scoped = moduleHint === "SAFETY" || moduleHint === "QAQC" ? moduleHint : null;
 
   // No template picked yet → show the picker.
@@ -65,6 +77,8 @@ export default async function NewInspectionPage({
       initialWbsNodeId={wbsNodeId ?? null}
       initialTemplateId={templateId}
       initialRegisterRowId={registerRowId ?? null}
+      initialVillaId={villaId ?? null}
+      initialActivityHead={activityHead ?? null}
     />
   );
 }

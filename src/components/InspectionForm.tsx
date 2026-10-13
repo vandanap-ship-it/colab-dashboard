@@ -171,6 +171,8 @@ export default function InspectionForm({
   initialWbsNodeId,
   initialTemplateId,
   initialRegisterRowId,
+  initialVillaId,
+  initialActivityHead,
 }: {
   projectId: string;
   // `redirectTo` was accepted in an earlier iteration but never wired up.
@@ -195,6 +197,13 @@ export default function InspectionForm({
   // Register deep link — "Raise inspection checklist" on a fire
   // extinguisher in the register pre-picks that extinguisher.
   initialRegisterRowId?: string | null;
+  // Colab-parity · 2026-10-13 (Vandana): the template-picker's
+  // "Add Checklist" tap opens a Select Location + Activity Head
+  // bottom sheet before this form opens. The sheet's Save navigates
+  // here with the picked villa + head pre-filled so the filler
+  // doesn't re-pick the location inside the form.
+  initialVillaId?: string | null;
+  initialActivityHead?: string | null;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -283,9 +292,9 @@ export default function InspectionForm({
   // the slot renders as "—" for our project (see phase2 exclusions).
   const [villas, setVillas] = useState<Villa[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
-  const [pickedVillaId, setPickedVillaId] = useState<string>("");
+  const [pickedVillaId, setPickedVillaId] = useState<string>(initialVillaId ?? "");
   const [pickedSectionId, setPickedSectionId] = useState<string>("");
-  const [pickedActivityHead, setPickedActivityHead] = useState<string>("");
+  const [pickedActivityHead, setPickedActivityHead] = useState<string>(initialActivityHead ?? "");
   const [villaPickerOpen, setVillaPickerOpen] = useState(false);
   const [sectionPickerOpen, setSectionPickerOpen] = useState(false);
   const [headPickerOpen, setHeadPickerOpen] = useState(false);

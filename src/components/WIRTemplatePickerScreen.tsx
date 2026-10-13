@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 
 /**
@@ -49,6 +49,7 @@ export default function WIRTemplatePickerScreen({
   // so this is a no-op for them.
   moduleHint?: "QAQC" | "SAFETY" | null;
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState<"manual" | "activity">("manual");
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +59,35 @@ export default function WIRTemplatePickerScreen({
   const [villas, setVillas] = useState<Villa[]>([]);
   const [villaId, setVillaId] = useState<string>("");
   const [activityHead, setActivityHead] = useState<string>("");
+
+  // Colab-parity "Select" bottom sheet · 2026-10-13 (Vandana).
+  // Checklist PDF page 5: tapping "Add Checklist" on a template
+  // opens a sheet with Select Location + Select Activity Head
+  // dropdowns + Cancel + Save. Only after Save does the form open,
+  // pre-filled with those two values. The sheet also auto-fills from
+  // the Activity-tab filters when they're already set, so a user who
+  // narrowed the list on that tab doesn't re-pick inside the sheet.
+  const [selectOpen, setSelectOpen] = useState<Template | null>(null);
+  const [sheetVillaId, setSheetVillaId] = useState<string>("");
+  const [sheetActivityHead, setSheetActivityHead] = useState<string>("");
+
+  function openSelectSheet(t: Template) {
+    setSheetVillaId(villaId);
+    setSheetActivityHead(activityHead || t.activity || "");
+    setSelectOpen(t);
+  }
+
+  function confirmSelect() {
+    if (!selectOpen) return;
+    const t = selectOpen;
+    const params = new URLSearchParams();
+    params.set("templateId", t.id);
+    if (sheetVillaId) params.set("villaId", sheetVillaId);
+    if (sheetActivityHead) params.set("activityHead", sheetActivityHead);
+    if (wbsNodeId) params.set("wbsNodeId", wbsNodeId);
+    setSelectOpen(null);
+    router.push(`/mobile/${projectId}/inspection/new?${params.toString()}`);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -263,24 +293,103 @@ export default function WIRTemplatePickerScreen({
                   )}
                 </div>
                 <div className="flex justify-center pt-1">
-                  <Link
-                    href={{
-                      pathname: `/mobile/${projectId}/inspection/new`,
-                      query: {
-                        templateId: t.id,
-                        ...(villaId ? { villaId } : {}),
-                        ...(wbsNodeId ? { wbsNodeId } : {}),
-                      },
-                    }}
+                  <button
+                    type="button"
+                    onClick={() => openSelectSheet(t)}
                     className="rounded-full bg-ink px-6 py-2 text-sm font-semibold text-white hover:bg-ink/90"
                   >
                     Add Checklist
-                  </Link>
+                  </button>
                 </div>
               </div>
             </li>
           ))}
         </ul>
+      )}
+
+      {/* Colab-parity "Select" bottom sheet — the required gate between
+          template pick and form open. Checklist PDF page 5: this sheet
+          collects Location + Activity Head BEFORE the form appears. Save
+          is disabled until the villa is picked (Colab lets Save through
+          with both blank, but surfacing a required villa prevents the
+          "I forgot the location" case). */}
+      {selectOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setSelectOpen(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-2xl bg-white p-5 pb-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <p className="text-base font-semibold text-stone-900">Select</p>
+              <p className="text-[12px] text-stone-500 mt-0.5">
+                Pick where this checklist belongs before it opens.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wide mb-1">
+                Select Location
+              </label>
+              <select
+                value={sheetVillaId}
+                onChange={(e) => setSheetVillaId(e.target.value)}
+                className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+                autoFocus
+              >
+                <option value="">Choose villa</option>
+                {villas.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label ?? `Villa ${String(v.number).padStart(2, "0")}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wide mb-1">
+                Select Activity Head
+              </label>
+              <select
+                value={sheetActivityHead}
+                onChange={(e) => setSheetActivityHead(e.target.value)}
+                className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">Choose head (optional)</option>
+                {activityHeads.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-stone-400 italic mt-1">
+                If the template already names one, leaving this blank is fine.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setSelectOpen(null)}
+                className="rounded-xl border border-stone-300 bg-white text-stone-700 text-sm font-semibold py-2.5"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmSelect}
+                disabled={!sheetVillaId}
+                className="rounded-xl bg-ink text-white text-sm font-semibold py-2.5 disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
