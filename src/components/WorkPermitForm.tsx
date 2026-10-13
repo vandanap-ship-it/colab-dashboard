@@ -170,6 +170,13 @@ export default function WorkPermitForm({
   // Colab-parity Step 2 additions.
   type LabourEntry = { workerName: string; role: string; count: string };
   const [labourEntries, setLabourEntries] = useState<LabourEntry[]>([]);
+  // Colab-parity approver bottom sheet · 2026-10-13 (Vandana): "Select
+  // Approver — Level N" (video frame 20). Opens on tap of "Add
+  // Approver to Level N"; closes on tap-outside or Done. Already-picked
+  // approvers in that level show a grayed green ✓ and stay unclickable;
+  // the rest show a + icon.
+  const [approverSheetPos, setApproverSheetPos] = useState<number | null>(null);
+  const [approverSearch, setApproverSearch] = useState("");
   // Colab-parity: Night Work permit has a dedicated "Details of
   // Personnel in Attendance" section (Abhishek zip). Same row shape as
   // labour but the semantic is named supervisors / safety officers on
@@ -1118,36 +1125,57 @@ export default function WorkPermitForm({
                 </button>
               )}
             </div>
-            <div className="space-y-1.5 max-h-56 overflow-y-auto p-2">
-              {approverOptions.length === 0 ? (
-                <p className="text-[13px] text-ink-3 px-2 py-2">
-                  No approvers available. Ask an admin to provision an internal user.
+            {/* Approver chips for this level — tap × to remove. Matches
+                Colab (video frames 15 + 70): each picked approver sits
+                as a row with name + "Default" caption + an × remove
+                control, instead of an always-visible checkbox list. */}
+            <div className="p-2 space-y-1.5">
+              {lvl.userIds.size === 0 ? (
+                <p className="text-[12px] text-ink-3 px-2 py-1 italic">
+                  No approver picked yet.
                 </p>
               ) : (
-                approverOptions.map((u) => {
-                  const checked = lvl.userIds.has(u.id);
+                Array.from(lvl.userIds).map((uid) => {
+                  const u = approverOptions.find((a) => a.id === uid);
+                  if (!u) return null;
                   return (
-                    <label
-                      key={u.id}
-                      className={`flex items-center gap-2.5 rounded-md px-2 py-2 cursor-pointer ${
-                        checked ? "bg-sandstone-100" : "hover:bg-sandstone-50"
-                      }`}
+                    <div
+                      key={uid}
+                      className="flex items-center gap-2 rounded-md bg-white border border-sandstone-200 px-2.5 py-1.5"
                     >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleApprover(pos, u.id)}
-                        className="w-4 h-4 accent-ferrous-500"
-                      />
                       <div className="min-w-0 flex-1">
-                        <div className="text-[15px] text-ink">{u.name}</div>
+                        <div className="text-[14px] text-ink leading-tight">{u.name}</div>
                         <div className="text-[11px] text-ink-3">
-                          @{u.username} · {u.role}
+                          Default · {u.role}
                         </div>
                       </div>
-                    </label>
+                      <button
+                        type="button"
+                        onClick={() => toggleApprover(pos, uid)}
+                        className="text-ink-3 hover:text-ferrous-600 text-sm px-2 py-0.5"
+                        aria-label={`Remove ${u.name} from Level ${lvl.levelIndex}`}
+                      >
+                        ×
+                      </button>
+                    </div>
                   );
                 })
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setApproverSheetPos(pos);
+                  setApproverSearch("");
+                }}
+                disabled={approverOptions.length === 0}
+                className="w-full rounded-md border border-dashed border-ink text-ink text-sm font-semibold py-2 hover:bg-sandstone-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                + Add Approver to Level {lvl.levelIndex}
+              </button>
+              {approverOptions.length === 0 && (
+                <p className="text-[11px] text-ink-3 px-1 italic">
+                  No approvers available. Ask an admin to provision an internal user.
+                </p>
               )}
             </div>
           </div>
@@ -1339,6 +1367,104 @@ export default function WorkPermitForm({
           </p>
         )}
       </div>
+
+      {/* Colab-parity approver bottom sheet · opens when the raiser
+          taps "+ Add Approver to Level N" (video frame 20). Shows a
+          search input + a list of every eligible approver on this
+          project. Already-picked approvers in this level render
+          greyed-out with a green ✓; the rest get a + button that
+          adds them and keeps the sheet open so the user can pick
+          multiple without a round-trip. Close on tap-outside or Done. */}
+      {approverSheetPos !== null && (() => {
+        const level = approverLevels[approverSheetPos];
+        if (!level) return null;
+        const search = approverSearch.trim().toLowerCase();
+        const matches = approverOptions.filter((u) =>
+          !search ||
+          u.name.toLowerCase().includes(search) ||
+          u.username.toLowerCase().includes(search) ||
+          (u.role ?? "").toLowerCase().includes(search),
+        );
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/50"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setApproverSheetPos(null)}
+          >
+            <div
+              className="w-full max-w-md max-h-[80vh] rounded-t-2xl bg-white p-5 pb-6 space-y-3 flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div>
+                <p className="text-base font-semibold text-stone-900">
+                  Select Approver — Level {level.levelIndex}
+                  {level.levelName.trim() ? ` (${level.levelName.trim()})` : ""}
+                </p>
+                <p className="text-[12px] text-stone-500 mt-0.5">
+                  {level.userIds.size} picked. Pick as many as needed.
+                </p>
+              </div>
+              <input
+                type="search"
+                value={approverSearch}
+                onChange={(e) => setApproverSearch(e.target.value)}
+                placeholder="Search person"
+                autoFocus
+                className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+              />
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
+                {matches.length === 0 ? (
+                  <p className="text-[13px] text-stone-500 px-1 py-2 italic">
+                    No approvers match.
+                  </p>
+                ) : (
+                  matches.map((u) => {
+                    const alreadyPicked = level.userIds.has(u.id);
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => {
+                          if (!alreadyPicked) toggleApprover(approverSheetPos, u.id);
+                        }}
+                        disabled={alreadyPicked}
+                        className={`w-full flex items-center gap-3 rounded-md border px-3 py-2.5 text-left ${
+                          alreadyPicked
+                            ? "border-stone-100 bg-stone-50 cursor-not-allowed opacity-70"
+                            : "border-stone-200 bg-white hover:bg-sandstone-50"
+                        }`}
+                      >
+                        <div className="w-8 h-8 rounded-full bg-stone-200 text-stone-600 flex items-center justify-center text-sm font-semibold shrink-0">
+                          {(u.name?.[0] ?? "?").toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[14px] text-ink truncate">{u.name}</div>
+                          <div className="text-[11px] text-stone-500 truncate">
+                            {u.role}
+                          </div>
+                        </div>
+                        {alreadyPicked ? (
+                          <span className="text-emerald-500 text-base shrink-0">✓</span>
+                        ) : (
+                          <span className="text-ink text-base shrink-0">+</span>
+                        )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setApproverSheetPos(null)}
+                className="w-full rounded-xl bg-ink text-white text-sm font-semibold py-2.5"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </form>
   );
 }
