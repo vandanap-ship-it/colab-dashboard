@@ -50,6 +50,10 @@ const PatchWorkPermitSchema = z.object({
   // Optional free-text explanation shown alongside the SUSPENDED status
   // pill (Colab labels this "Suspend Remark").
   suspensionReason: z.string().max(1000).optional(),
+  // Required when status === "CLOSED" (Colab-parity, video frame 80 —
+  // the Close Permit bottom sheet has a "Reason for closing *"
+  // required textarea). Enforced below after status is read.
+  closedReason: z.string().max(1000).optional(),
   expectedUpdatedAt: z.string().optional(),
 });
 
@@ -96,7 +100,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
     const parsed = await parseBody(req, PatchWorkPermitSchema);
     if (!parsed.ok) return parsed.response;
-    const { status: newStatus, rejectionReason, suspensionReason, expectedUpdatedAt } = parsed.data;
+    const { status: newStatus, rejectionReason, suspensionReason, closedReason, expectedUpdatedAt } = parsed.data;
 
     const conflict = checkConflict(expectedUpdatedAt, existing.updatedAt, {
       id: existing.id, status: existing.status, title: existing.title,
@@ -169,6 +173,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (kind === "reject" && (!rejectionReason || rejectionReason.trim().length === 0)) {
       return badRequest("Rejection reason is required.");
     }
+    // Colab-parity: close requires a reason (video frame 80, "Reason
+    // for closing *"). Enforced here so a direct API caller can't
+    // bypass the UI's required-field guard. Added 2026-10-13 (Vandana).
+    if (kind === "close" && (!closedReason || closedReason.trim().length === 0)) {
+      return badRequest("Close reason is required.");
+    }
 
     // Only authorised staff can approve / reject a permit. Two paths:
     //   1. Internal full-access staff (`hasFullAccess` == modules === null).
@@ -209,6 +219,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     } else if (kind === "close") {
       data.closedById = session.user.id;
       data.closedAt = now;
+      data.closedReason = closedReason!.trim();
     } else if (kind === "suspend") {
       data.suspendedById = session.user.id;
       data.suspendedAt = now;

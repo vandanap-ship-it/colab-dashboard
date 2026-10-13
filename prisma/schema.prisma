@@ -716,6 +716,13 @@ model WorkPermit {
   approvedAt   DateTime?
   closedById   String?
   closedAt     DateTime?
+  // Colab-parity: the Close Permit bottom sheet (video frame 80)
+  // asks for a required "Reason for closing *" before the permit can
+  // be closed. Added 2026-10-13 (Vandana) to match Colab's muscle
+  // memory for Girish + the safety team. Required at the API layer
+  // for a close action; nullable in the DB so historical closes
+  // (pre-Oct 13) stay readable.
+  closedReason String?
   rejectedById String?
   rejectedAt   DateTime?
   rejectionReason String?

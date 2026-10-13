@@ -47,13 +47,19 @@ export default function MobilePermitActions({
   const [saving, setSaving] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [suspendOpen, setSuspendOpen] = useState(false);
+  // Close sheet · 2026-10-13 (Vandana): Colab's Close Permit bottom
+  // sheet (video frame 80) asks for a required "Reason for closing *"
+  // before the permit can close. Matches the existing reject + suspend
+  // sheet shapes so the three destructive actions read the same.
+  const [closeOpen, setCloseOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [suspendReason, setSuspendReason] = useState("");
+  const [closeReason, setCloseReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function patch(
     status: "APPROVED" | "REJECTED" | "CLOSED" | "SUSPENDED",
-    opts?: { rejectionReason?: string; suspensionReason?: string },
+    opts?: { rejectionReason?: string; suspensionReason?: string; closedReason?: string },
   ) {
     if (saving) return; // guard against a fast double-tap racing the fetch
     setSaving(true);
@@ -65,6 +71,7 @@ export default function MobilePermitActions({
         status,
         ...(opts?.rejectionReason ? { rejectionReason: opts.rejectionReason } : {}),
         ...(opts?.suspensionReason ? { suspensionReason: opts.suspensionReason } : {}),
+        ...(opts?.closedReason ? { closedReason: opts.closedReason } : {}),
         expectedUpdatedAt,
       }),
     });
@@ -82,8 +89,10 @@ export default function MobilePermitActions({
     }
     setRejectOpen(false);
     setSuspendOpen(false);
+    setCloseOpen(false);
     setReason("");
     setSuspendReason("");
+    setCloseReason("");
     // Resume + suspend stay on the detail page (user's just looking at
     // what they just did); approve/reject/close return to the list.
     startTransition(() => {
@@ -179,7 +188,7 @@ export default function MobilePermitActions({
           {canClose && (
             <button
               type="button"
-              onClick={() => patch("CLOSED")}
+              onClick={() => setCloseOpen(true)}
               disabled={isPending || saving}
               className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-stone-900 text-white text-sm font-semibold py-3 disabled:opacity-60"
             >
@@ -265,6 +274,48 @@ export default function MobilePermitActions({
               className="rounded-xl bg-amber-500 text-white text-sm font-semibold py-2 disabled:opacity-60"
             >
               {isPending ? "Saving…" : "Suspend"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Close Permit sheet · Colab-parity (video frame 80). Title +
+          subtitle + required reason textarea; the primary action stays
+          disabled until the reason has 3+ characters. */}
+      {closeOpen && (
+        <div className="rounded-xl border border-stone-300 bg-white p-3 space-y-2">
+          <div>
+            <p className="text-sm font-semibold text-stone-900">Close Permit</p>
+            <p className="text-[12px] text-stone-500 mt-0.5">
+              Manually close this permit?
+            </p>
+          </div>
+          <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wide">
+            Reason for closing <span className="text-red-600">*</span>
+          </label>
+          <textarea
+            value={closeReason}
+            onChange={(e) => setCloseReason(e.target.value)}
+            placeholder="Why close now — e.g. work completed, shift ended, re-raised under new permit."
+            className="w-full min-h-20 resize-y rounded-lg border border-stone-300 bg-white p-2 text-sm"
+            maxLength={1000}
+            autoFocus
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => { setCloseOpen(false); setCloseReason(""); setError(null); }}
+              className="rounded-xl border border-stone-300 bg-white text-stone-700 text-sm font-semibold py-2"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => patch("CLOSED", { closedReason: closeReason.trim() })}
+              disabled={isPending || saving || closeReason.trim().length < 3}
+              className="rounded-xl bg-stone-900 text-white text-sm font-semibold py-2 disabled:opacity-60"
+            >
+              {isPending ? "Saving…" : "Close Permit"}
             </button>
           </div>
         </div>
