@@ -112,13 +112,17 @@ describe("bucketForSlip", () => {
   it("returns healthy at 0 slip", () => {
     expect(bucketForSlip(0, true)).toBe("healthy");
   });
-  it("returns warning between 1 and 30 days", () => {
+  it("returns warning between 1 and 15 days", () => {
+    // Threshold tightened 2026-10-08 (Vandana): WARNING_MAX_SLIP = 15,
+    // down from the earlier 30. 1-15d slip = warning, >15d = critical.
+    // Matches how the Amanvana site team talks about critical slip.
     expect(bucketForSlip(1, true)).toBe("warning");
+    expect(bucketForSlip(10, true)).toBe("warning");
     expect(bucketForSlip(15, true)).toBe("warning");
-    expect(bucketForSlip(30, true)).toBe("warning");
   });
-  it("returns critical above 30 days", () => {
-    expect(bucketForSlip(31, true)).toBe("critical");
+  it("returns critical above 15 days", () => {
+    expect(bucketForSlip(16, true)).toBe("critical");
+    expect(bucketForSlip(30, true)).toBe("critical");
     expect(bucketForSlip(90, true)).toBe("critical");
   });
 });
@@ -214,8 +218,10 @@ describe("rollupVilla — current + handover slip", () => {
 
   it("villa status bucket uses HANDOVER slip (matches product owner spec)", () => {
     const v = rollupVilla(12, "4", [foundationDone, plinthInFlight, gfStructureNotStarted, handoverNotStarted]);
-    // handover slip = 30 → still 'warning' (≤ 30)
-    expect(v.status).toBe("warning");
+    // handover slip = 30 → 'critical' under the 2026-10-08 threshold
+    // (WARNING_MAX_SLIP = 15). Pre-2026-10-08 this returned 'warning'
+    // when the cutoff was 30.
+    expect(v.status).toBe("critical");
   });
 
   it("villa not-started when nothing has actualStart", () => {
