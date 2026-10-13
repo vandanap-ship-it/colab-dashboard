@@ -34,7 +34,7 @@ type Contractor = { id: string; name: string; category: string };
  * allows this; the server's (permit, user, levelIndex) unique index
  * deduplicates on insert).
  */
-type ApproverLevel = { levelIndex: number; userIds: Set<string> };
+type ApproverLevel = { levelIndex: number; levelName: string; userIds: Set<string> };
 
 /** Maximum approval levels supported — Colab parity. */
 const MAX_APPROVER_LEVELS = 5;
@@ -156,7 +156,7 @@ export default function WorkPermitForm({
   // for now — proper sequential multi-level sign-off is a follow-up
   // (schema already supports it).
   const [approverLevels, setApproverLevels] = useState<ApproverLevel[]>([
-    { levelIndex: 1, userIds: new Set() },
+    { levelIndex: 1, levelName: "", userIds: new Set() },
   ]);
   const [photos, setPhotos] = useState<File[]>([]);
   const [pending, setPending] = useState(false);
@@ -204,7 +204,7 @@ export default function WorkPermitForm({
     setApproverLevels((prev) => {
       if (prev.length >= MAX_APPROVER_LEVELS) return prev;
       const nextIndex = Math.max(...prev.map((l) => l.levelIndex), 0) + 1;
-      return [...prev, { levelIndex: nextIndex, userIds: new Set() }];
+      return [...prev, { levelIndex: nextIndex, levelName: "", userIds: new Set() }];
     });
   }
 
@@ -215,6 +215,14 @@ export default function WorkPermitForm({
       if (prev.length <= 1 || levelPos === 0) return prev;
       return prev.filter((_, i) => i !== levelPos);
     });
+  }
+
+  /** Rename a level. Empty name is allowed; server fills in "Level N"
+   *  on submit so the rendered label never reads just the number. */
+  function renameApprovalLevel(levelPos: number, name: string) {
+    setApproverLevels((prev) =>
+      prev.map((l, i) => (i === levelPos ? { ...l, levelName: name } : l)),
+    );
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -334,7 +342,11 @@ export default function WorkPermitForm({
       Array.from(lvl.userIds).map((userId) => ({
         userId,
         levelIndex: lvl.levelIndex,
-        levelName: `Level ${lvl.levelIndex}`,
+        // Colab-parity: a level can carry a human name ("Site", "safety")
+        // alongside the index, so the approver detail page can render
+        // "Site (Level 1)" instead of just "Level 1". Fall back to the
+        // generic "Level N" when the raiser leaves the name blank.
+        levelName: lvl.levelName.trim() || `Level ${lvl.levelIndex}`,
         canClose: true,
         canSuspend: true,
       })),
@@ -423,7 +435,7 @@ export default function WorkPermitForm({
     setEndTime("18:00");
     setLocation("");
     setContractorId("");
-    setApproverLevels([{ levelIndex: 1, userIds: new Set() }]);
+    setApproverLevels([{ levelIndex: 1, levelName: "", userIds: new Set() }]);
     setPhotos([]);
     // Step 2 collections must reset too on a hard "Add another" —
     // otherwise labour entries, personnel, activity head, and
@@ -1074,18 +1086,32 @@ export default function WorkPermitForm({
             key={lvl.levelIndex}
             className="rounded-lg border border-sandstone-100 bg-cream"
           >
-            <div className="flex items-center justify-between px-3 py-2 border-b border-sandstone-100">
-              <div className="text-[13px] font-semibold text-ink">
-                Level {lvl.levelIndex}
-                <span className="ml-2 text-[11px] font-normal text-ink-3">
-                  {lvl.userIds.size} approver{lvl.userIds.size === 1 ? "" : "s"}
-                </span>
+            {/* Colab names each approval level: "Level 1 — Site",
+                "Level 2 — safety" (video frame 15). The index on the
+                left is permanent; the name on the right is editable so
+                every project can label levels in site team's own
+                language. Blank falls back to generic "Level N" on
+                submit. */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-sandstone-100">
+              <div className="text-[13px] font-semibold text-ink shrink-0">
+                Level {lvl.levelIndex} —
               </div>
+              <input
+                type="text"
+                value={lvl.levelName}
+                onChange={(e) => renameApprovalLevel(pos, e.target.value)}
+                placeholder="e.g. Site, Safety, Project Head"
+                maxLength={40}
+                className="flex-1 min-w-0 rounded-md border border-dashed border-sandstone-200 bg-white px-2 py-1 text-[13px] placeholder:text-ink-4 focus:outline-none focus:border-ferrous-500"
+              />
+              <span className="text-[11px] text-ink-3 shrink-0">
+                {lvl.userIds.size}
+              </span>
               {pos > 0 && (
                 <button
                   type="button"
                   onClick={() => removeApprovalLevel(pos)}
-                  className="text-[12px] font-semibold text-ferrous-600 hover:text-ferrous-700"
+                  className="text-[12px] font-semibold text-ferrous-600 hover:text-ferrous-700 shrink-0"
                   aria-label={`Remove level ${lvl.levelIndex}`}
                 >
                   Remove
@@ -1216,6 +1242,7 @@ export default function WorkPermitForm({
                 <div key={l.levelIndex}>
                   <div className="text-[11px] font-semibold text-ink-3 uppercase tracking-wider mb-1">
                     Level {l.levelIndex}
+                    {l.levelName.trim() ? ` — ${l.levelName.trim()}` : ""}
                   </div>
                   {Array.from(l.userIds).map((uid) => {
                     const u = approverOptions.find((a) => a.id === uid);

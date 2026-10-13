@@ -427,10 +427,13 @@ export default async function MobilePermitDetailPage({
               {sortedLevels.map((lvl) => {
                 const rows = approversByLevel.get(lvl) ?? [];
                 const levelName = rows[0]?.levelName ?? `Level ${lvl}`;
+                // Colab-parity (video frame 80): pill reads "Site (Level 1)"
+                // when a custom name was set, otherwise just "Level 1".
+                const named = levelName && levelName !== `Level ${lvl}`;
                 return (
                   <div key={lvl}>
                     <div className="inline-flex items-center rounded-full bg-ink text-cream text-[10px] font-semibold px-2 py-0.5 uppercase tracking-wider">
-                      Level {lvl}{levelName && levelName !== `Level ${lvl}` ? ` · ${levelName}` : ""}
+                      {named ? `${levelName} (Level ${lvl})` : `Level ${lvl}`}
                     </div>
                     <ul className="mt-2 space-y-2">
                       {rows.map((a) => {
