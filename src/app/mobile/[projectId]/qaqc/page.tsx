@@ -10,46 +10,76 @@ import { wirAgeFor } from "@/lib/queueAge";
 export const dynamic = "force-dynamic";
 
 /**
- * Mobile QA/QC list — replaces the "tap goes to desktop /qaqc" fallback
- * with a phone-native list of inspections. Six tabs:
+ * Mobile QA/QC + EHS list — Colab-parity 3-tab shape (Checklist PDF
+ * page 4). Reviewers see:
  *
- *   - My Pending    — inspections still IN_REVIEW that this user filled OR
- *                     is eligible to review. Landing tab, so the reviewer
- *                     sees their queue on first open.
- *   - All           — every inspection in the project (respects module
- *                     scoping). Drafts are excluded here — a draft is a
- *                     private in-progress checklist, not project state.
- *   - Rescheduled   — status RESCHEDULED, sorted by rescheduledFor asc so
- *                     the soonest reopen is first.
- *   - Passed        — status PASSED, most recent first.
- *   - Rejected      — status REJECTED, most recent first.
- *   - My Drafts     — status DRAFT, filtered to the current user's own
- *                     drafts. Reviewers see only their own drafts here
- *                     too; no one ever sees anyone else's draft.
+ *   - New        — DRAFT status, scoped to the caller's own filledById.
+ *                   A draft is a private in-progress checklist; no one
+ *                   sees anyone else's.
+ *   - In-Review  — IN_REVIEW. For a reviewer (canReview), every pending
+ *                   WIR in scope; for a raiser, only the ones they
+ *                   filled. Landing tab so the reviewer walks their
+ *                   queue first.
+ *   - Closed     — PASSED, REJECTED, CONDITIONALLY_APPROVED, or
+ *                   RESCHEDULED. One tab for anything decided or
+ *                   paused. A chip sub-filter inside lets a user
+ *                   narrow to a specific outcome.
+ *
+ * Pre-2026-10-13 shape had 7 tabs (My Pending / All / Rescheduled /
+ * Passed / Conditional / Rejected / My Drafts). Vandana flattened to
+ * Colab's 3 so site team's muscle memory carries from Colab to Siddhi
+ * for tomorrow's safety-team walkthrough.
  *
  * Rows tap into /mobile/[projectId]/qaqc/[id] which does review-in-place.
  */
 
-type Tab =
-  | "pending"
-  | "all"
-  | "rescheduled"
-  | "passed"
-  | "conditional"
-  | "rejected"
-  | "drafts";
+type Tab = "new" | "in-review" | "closed";
 
-const VALID_TABS: readonly Tab[] = [
-  "pending",
-  "all",
-  "rescheduled",
-  "passed",
-  "conditional",
-  "rejected",
-  "drafts",
-] as const;
+const VALID_TABS: readonly Tab[] = ["new", "in-review", "closed"] as const;
+
+/**
+ * Backwards-compat alias map · the pre-2026-10-13 tabs still get linked
+ * from Home, My Actions, Info, notification URLs, and some draft-action
+ * flows. Rather than touch every caller, we fold legacy names into the
+ * new 3-tab shape at parse time.
+ *   pending      → in-review   (reviewer queue)
+ *   drafts       → new         (unsent personal drafts)
+ *   passed       → closed      (anything decided lands under Closed)
+ *   rejected     → closed
+ *   rescheduled  → closed
+ *   conditional  → closed
+ *   all          → closed      (closest shape — "everything but drafts
+ *                               and in-review" ≈ Colab's Closed bucket)
+ */
+const TAB_ALIAS: Record<string, Tab> = {
+  pending: "in-review",
+  drafts: "new",
+  passed: "closed",
+  rejected: "closed",
+  rescheduled: "closed",
+  conditional: "closed",
+  all: "closed",
+};
 function normaliseTab(v: string | undefined): Tab {
-  return (VALID_TABS as readonly string[]).includes(v ?? "") ? (v as Tab) : "pending";
+  const raw = v ?? "";
+  if ((VALID_TABS as readonly string[]).includes(raw)) return raw as Tab;
+  if (TAB_ALIAS[raw]) return TAB_ALIAS[raw];
+  return "in-review";
+}
+
+// Closed-tab chip sub-filter. Reviewers who want "just rescheduled" or
+// "just rejected" within Closed get it via this chip row — the same
+// pattern Permits list uses under its 5 tabs.
+type ClosedChip = "all" | "passed" | "rejected" | "conditional" | "rescheduled";
+const VALID_CLOSED_CHIPS: readonly ClosedChip[] = [
+  "all",
+  "passed",
+  "rejected",
+  "conditional",
+  "rescheduled",
+] as const;
+function normaliseClosedChip(v: string | undefined): ClosedChip {
+  return (VALID_CLOSED_CHIPS as readonly string[]).includes(v ?? "") ? (v as ClosedChip) : "all";
 }
 
 // Module filter · when the home splits QA / QC and EHS into separate
@@ -68,9 +98,10 @@ function moduleTitle(m: ModuleFilter): string {
   if (m === "QAQC") return "QA / QC";
   return "QA / QC · EHS";
 }
-function moduleTilePath(projectId: string, m: ModuleFilter, tab: Tab): string {
+function moduleTilePath(projectId: string, m: ModuleFilter, tab: Tab, chip?: ClosedChip): string {
   const qs = new URLSearchParams({ tab });
   if (m) qs.set("module", m);
+  if (chip && chip !== "all") qs.set("chip", chip);
   return `/mobile/${projectId}/qaqc?${qs.toString()}`;
 }
 
@@ -79,14 +110,15 @@ export default async function MobileQaqcPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ tab?: string; module?: string }>;
+  searchParams: Promise<{ tab?: string; module?: string; chip?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
   const { projectId } = await params;
-  const { tab: tabParam, module: moduleParam } = await searchParams;
+  const { tab: tabParam, module: moduleParam, chip: chipParam } = await searchParams;
   const tab = normaliseTab(tabParam);
+  const closedChip = normaliseClosedChip(chipParam);
   let moduleFilter = normaliseModule(moduleParam);
 
   if (
@@ -147,35 +179,38 @@ export default async function MobileQaqcPage({
   // project state and doesn't belong in the All or Pending views.
   const nonDraftWhere = { ...baseWhere, status: { not: "DRAFT" } } as const;
 
-  // Tab → status filter. `pending` shows IN_REVIEW inspections the current
-  // user should care about (they filled it OR they can review it), which is
-  // the queue people actually want to walk on their phone. `drafts` is
-  // always scoped to the caller's own filledById — draft leakage between
-  // fillers is a data-privacy footgun, not a feature.
+  // Tab → status filter. Colab's 3 tabs: New / In-Review / Closed.
+  // New is always scoped to the caller's own filledById — draft
+  // leakage between fillers is a data-privacy footgun, not a feature.
+  // Closed combines PASSED + REJECTED + CONDITIONALLY_APPROVED +
+  // RESCHEDULED; the chip sub-filter narrows further within Closed.
+  const CLOSED_STATUSES = ["PASSED", "REJECTED", "CONDITIONALLY_APPROVED", "RESCHEDULED"] as const;
+  const chipToStatus: Record<ClosedChip, string | null> = {
+    all: null,
+    passed: "PASSED",
+    rejected: "REJECTED",
+    conditional: "CONDITIONALLY_APPROVED",
+    rescheduled: "RESCHEDULED",
+  };
   const tabWhere = (() => {
-    if (tab === "passed") return { ...baseWhere, status: "PASSED" };
-    // Colab 2026-10-01 parity: 5th tab for HSE Inspection Checklists
-    // closed with reviewer-attached remarks. API-side status is
-    // CONDITIONALLY_APPROVED (added same day as the review-action
-    // widening).
-    if (tab === "conditional") return { ...baseWhere, status: "CONDITIONALLY_APPROVED" };
-    if (tab === "rejected") return { ...baseWhere, status: "REJECTED" };
-    if (tab === "rescheduled") return { ...baseWhere, status: "RESCHEDULED" };
-    if (tab === "drafts") return { ...baseWhere, status: "DRAFT", filledById: userId };
-    if (tab === "pending") {
-      return iCanReview
-        ? { ...baseWhere, status: "IN_REVIEW" }
-        : { ...baseWhere, status: "IN_REVIEW", filledById: userId };
+    if (tab === "new") return { ...baseWhere, status: "DRAFT", filledById: userId };
+    if (tab === "closed") {
+      const chipStatus = chipToStatus[closedChip];
+      return chipStatus
+        ? { ...baseWhere, status: chipStatus }
+        : { ...baseWhere, status: { in: [...CLOSED_STATUSES] } };
     }
-    // "All" tab · exclude drafts so a reviewer doesn't see their
-    // teammates' in-progress checklists.
-    return nonDraftWhere;
+    // in-review (default). For a reviewer, every IN_REVIEW in scope;
+    // for a raiser, just the ones they filled.
+    return iCanReview
+      ? { ...baseWhere, status: "IN_REVIEW" }
+      : { ...baseWhere, status: "IN_REVIEW", filledById: userId };
   })();
 
-  // Rescheduled sorts by rescheduledFor ASC so the soonest-to-reopen is on
-  // top — that's the row a reviewer actually needs to plan around today.
-  // Every other tab keeps createdAt DESC so the freshest work is first.
-  const tabOrderBy = tab === "rescheduled"
+  // Rescheduled rows sort by rescheduledFor ASC so the soonest-to-reopen
+  // is on top — that's the row a reviewer plans around. Everything else
+  // keeps createdAt DESC so the freshest work is first.
+  const tabOrderBy = tab === "closed" && closedChip === "rescheduled"
     ? ({ rescheduledFor: "asc" } as const)
     : ({ createdAt: "desc" } as const);
 
@@ -222,6 +257,13 @@ export default async function MobileQaqcPage({
     : await prisma.inspection.count({
         where: { ...baseWhere, status: "IN_REVIEW", filledById: userId },
       });
+  // Closed-tab total — sum of every "decided or paused" status, used
+  // for the Closed tab badge. Individual chip counts come straight
+  // from countByStatus.
+  const closedCount = CLOSED_STATUSES.reduce(
+    (n, s) => n + (countByStatus.get(s) ?? 0),
+    0,
+  );
 
   return (
     <div className="flex-1 flex flex-col bg-ivory min-h-0">
@@ -248,31 +290,37 @@ export default async function MobileQaqcPage({
         </div>
       </div>
 
-      {/* Tab bar — sticky so it stays reachable as the list scrolls.
-          Each TabLink now carries moduleFilter forward so tabbing keeps
-          the same view instead of dropping back to the combined feed. */}
+      {/* Tab bar — Colab's 3 tabs (New / In-Review / Closed). Each
+          link carries the module filter forward so tabbing stays
+          scoped. The Closed tab opens a chip sub-row below for
+          per-outcome filtering (Passed / Rejected / Conditional /
+          Rescheduled); other tabs don't need chips. */}
       <nav className="sticky top-12 z-10 bg-ivory/95 backdrop-blur-md border-b border-stone-200 px-4">
         <div className="flex items-center gap-1 -mb-px overflow-x-auto">
-          <TabLink projectId={projectId} tab="pending" current={tab} moduleFilter={moduleFilter} label="My Pending" count={pendingCount} icon={Clock} />
-          <TabLink projectId={projectId} tab="all" current={tab} moduleFilter={moduleFilter} label="All" icon={ClipboardCheck} />
-          <TabLink projectId={projectId} tab="rescheduled" current={tab} moduleFilter={moduleFilter} label="Rescheduled" count={countByStatus.get("RESCHEDULED") ?? 0} icon={CalendarClock} />
-          <TabLink projectId={projectId} tab="passed" current={tab} moduleFilter={moduleFilter} label={moduleFilter === "SAFETY" ? "Closed" : "Passed"} count={countByStatus.get("PASSED") ?? 0} icon={CheckCircle2} />
-          {/* Colab-parity 5th state (HSE Inspection Checklist) — only
-              surface when the module filter is EHS/SAFETY or combined,
-              since QA/QC WIRs don't use this status today. Full-access
-              users on the combined view still see it so admins can
-              audit it across both modules. */}
-          {moduleFilter !== "QAQC" && (
-            <TabLink projectId={projectId} tab="conditional" current={tab} moduleFilter={moduleFilter} label="Conditionally Approved" count={countByStatus.get("CONDITIONALLY_APPROVED") ?? 0} icon={CheckCheck} />
-          )}
-          <TabLink projectId={projectId} tab="rejected" current={tab} moduleFilter={moduleFilter} label="Rejected" count={countByStatus.get("REJECTED") ?? 0} icon={AlertTriangle} />
-          {/* My Drafts is only meaningful when the caller has at least
-              one — the tab still shows when they don't, so they can
-              hop in and confirm nothing's parked, but the badge stays
-              silent instead of showing "0". */}
-          <TabLink projectId={projectId} tab="drafts" current={tab} moduleFilter={moduleFilter} label="My Drafts" count={myDraftCount} icon={FileEdit} />
+          <TabLink projectId={projectId} tab="new" current={tab} moduleFilter={moduleFilter} label="New" count={myDraftCount} icon={FileEdit} />
+          <TabLink projectId={projectId} tab="in-review" current={tab} moduleFilter={moduleFilter} label="In-Review" count={pendingCount} icon={Clock} />
+          <TabLink projectId={projectId} tab="closed" current={tab} moduleFilter={moduleFilter} label="Closed" count={closedCount} icon={CheckCheck} />
         </div>
       </nav>
+
+      {/* Closed-tab chip sub-filter row. Only shows under the Closed
+          tab; mirrors the Permits list pattern so the chip grammar is
+          consistent across modules. QA/QC projects don't use the
+          Conditionally Approved outcome today, so the chip hides for
+          QAQC. */}
+      {tab === "closed" && (
+        <div className="sticky top-24 z-10 bg-ivory/95 backdrop-blur-md border-b border-stone-100 px-4 py-2">
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+            <ClosedChipLink projectId={projectId} chip="all" current={closedChip} moduleFilter={moduleFilter} label="All" />
+            <ClosedChipLink projectId={projectId} chip="passed" current={closedChip} moduleFilter={moduleFilter} label={moduleFilter === "SAFETY" ? "Approved" : "Passed"} count={countByStatus.get("PASSED") ?? 0} />
+            <ClosedChipLink projectId={projectId} chip="rejected" current={closedChip} moduleFilter={moduleFilter} label="Rejected" count={countByStatus.get("REJECTED") ?? 0} />
+            {moduleFilter !== "QAQC" && (
+              <ClosedChipLink projectId={projectId} chip="conditional" current={closedChip} moduleFilter={moduleFilter} label="Conditional" count={countByStatus.get("CONDITIONALLY_APPROVED") ?? 0} />
+            )}
+            <ClosedChipLink projectId={projectId} chip="rescheduled" current={closedChip} moduleFilter={moduleFilter} label="Rescheduled" count={countByStatus.get("RESCHEDULED") ?? 0} />
+          </div>
+        </div>
+      )}
 
       {/* List — Colab-parity card layout (Girish zip screen 5):
           - Top row: LEFT dark-ink card with title (uppercase, truncated)
@@ -290,7 +338,7 @@ export default async function MobileQaqcPage({
             {inspections.map((i) => (
               <li key={i.id}>
                 <Link
-                  href={`/mobile/${projectId}/qaqc/${i.id}?tab=${tab}${moduleFilter ? `&module=${moduleFilter}` : ""}`}
+                  href={`/mobile/${projectId}/qaqc/${i.id}?tab=${tab}${moduleFilter ? `&module=${moduleFilter}` : ""}${tab === "closed" && closedChip !== "all" ? `&chip=${closedChip}` : ""}`}
                   className="block rounded-xl overflow-hidden border border-stone-200 bg-white shadow-sm active:bg-stone-50"
                 >
                   {/* Top row — dark title card + gray ID card, side-by-side */}
@@ -402,6 +450,46 @@ function TabLink({
   );
 }
 
+/**
+ * Chip inside the Closed tab's sub-filter row. Lets a reviewer narrow
+ * Closed to just Passed / Rejected / Conditional / Rescheduled.
+ * Preserves the Closed tab in the URL so switching chips doesn't bounce
+ * the user back to In-Review.
+ */
+function ClosedChipLink({
+  projectId,
+  chip,
+  current,
+  moduleFilter,
+  label,
+  count,
+}: {
+  projectId: string;
+  chip: ClosedChip;
+  current: ClosedChip;
+  moduleFilter: ModuleFilter;
+  label: string;
+  count?: number;
+}) {
+  const active = chip === current;
+  return (
+    <Link
+      href={moduleTilePath(projectId, moduleFilter, "closed", chip)}
+      className={
+        "shrink-0 rounded-full text-[12px] font-semibold px-3 py-1 border transition-colors " +
+        (active
+          ? "bg-ink text-white border-ink"
+          : "bg-white text-stone-700 border-stone-200 hover:border-stone-400")
+      }
+    >
+      {label}
+      {count != null && count > 0 && (
+        <span className="ml-1 tabular-nums">({count})</span>
+      )}
+    </Link>
+  );
+}
+
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { bg: string; fg: string; label: string; Icon: typeof CheckCircle2 }> = {
     IN_REVIEW: { bg: "bg-amber-50 ring-amber-200", fg: "text-amber-800", label: "In review", Icon: Clock },
@@ -434,13 +522,9 @@ function StatusPill({ status }: { status: string }) {
 
 function EmptyState({ tab }: { tab: Tab }) {
   const copy: Record<Tab, string> = {
-    pending: "Nothing waiting for your review.",
-    all: "No inspections logged on this project yet.",
-    rescheduled: "No inspections parked for later.",
-    passed: "No passed inspections yet.",
-    conditional: "Nothing conditionally approved yet.",
-    rejected: "No rejected inspections. Good.",
-    drafts: "You have no unfinished drafts. Start a new WIR from the button above.",
+    new: "You have no unfinished drafts. Start a new WIR from the button above.",
+    "in-review": "Nothing waiting for your review.",
+    closed: "No closed inspections yet.",
   };
   const text = copy[tab];
   return (
