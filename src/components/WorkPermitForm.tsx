@@ -565,9 +565,10 @@ export default function WorkPermitForm({
     workDate.length > 0 && (!endDate || endDate >= workDate);
   // Step 3 (Checklist) gate · Vandana 2026-10-14 mid-walkthrough:
   // every checkpoint on an active HSE checklist MUST be answered
-  // (Yes / No / NA) before the raiser can move to Review. A permit
-  // the raiser clicked through without reading its own safety
-  // checklist is the opposite of what the module exists for.
+  // (Yes or No — matches Colab's binary toggle per video frame 30)
+  // before the raiser can move to Review. A permit the raiser clicked
+  // through without reading its own safety checklist is the opposite
+  // of what the module exists for.
   const checklistAllAnswered =
     activeChecklist.length === 0 ||
     activeChecklist.every((a) => a.passed !== null);
@@ -1314,7 +1315,7 @@ export default function WorkPermitForm({
                   ? "Pick a contractor before continuing."
                   : "Add at least one approver before continuing."
                 : step === 3
-                  ? `Answer all ${activeChecklist.length} checkpoints (Yes / No / NA) before continuing — ${activeChecklist.filter((a) => a.passed !== null).length} answered so far.`
+                  ? `Answer all ${activeChecklist.length} checkpoints (Yes / No) before continuing — ${activeChecklist.filter((a) => a.passed !== null).length} answered so far.`
                   : ""}
           </p>
         )}
