@@ -563,12 +563,22 @@ export default function WorkPermitForm({
     : true;
   const dateOkForStep1 =
     workDate.length > 0 && (!endDate || endDate >= workDate);
+  // Step 3 (Checklist) gate · Vandana 2026-10-14 mid-walkthrough:
+  // every checkpoint on an active HSE checklist MUST be answered
+  // (Yes / No / NA) before the raiser can move to Review. A permit
+  // the raiser clicked through without reading its own safety
+  // checklist is the opposite of what the module exists for.
+  const checklistAllAnswered =
+    activeChecklist.length === 0 ||
+    activeChecklist.every((a) => a.passed !== null);
   const canAdvance =
     step === 1
       ? title.trim().length >= 3 && dateOkForStep1 && timeOkForStep1
       : step === 2
         ? contractorId.length > 0 && totalUniqueApprovers(approverLevels) > 0
-        : true;
+        : step === 3
+          ? checklistAllAnswered
+          : true;
 
   function goBack() {
     if (step === 1) {
@@ -831,13 +841,14 @@ export default function WorkPermitForm({
         <PhotoPicker photos={photos} setPhotos={setPhotos} max={6} />
       </div>
 
-      {/* Colab-parity Valid From / Valid To pair — dates on the top row,
-          times on the bottom. A permit can now span multiple days
-          (Abhishek 2026-09-30: "the permit date can be from today to
-          tomorrow"). endDate defaults to workDate for the common
-          single-day case; the user can bump it forward independently. */}
+      {/* Valid From + Start time on one row, Valid To + End time on the
+          next. Vandana 2026-10-14 mid-walkthrough: pair each date with
+          its matching time horizontally so the eye reads "from DD at
+          HH" / "to DD at HH" instead of walking a 2x2 grid. Permits
+          can span multiple days — endDate defaults to workDate and
+          auto-tracks it until the user manually picks a different end. */}
       <div className={`space-y-2 ${step === 1 ? "" : "hidden"}`}>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
           <label className="block">
             <FieldLabel>Valid From</FieldLabel>
             <input
@@ -861,6 +872,17 @@ export default function WorkPermitForm({
             />
           </label>
           <label className="block">
+            <FieldLabel>Start time</FieldLabel>
+            <input
+              type="time"
+              className={inputCls}
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+            />
+          </label>
+        </div>
+        <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
+          <label className="block">
             <FieldLabel>Valid To</FieldLabel>
             <input
               type="date"
@@ -871,17 +893,6 @@ export default function WorkPermitForm({
                 setEndDate(e.target.value);
                 setEndDateTouched(true);
               }}
-            />
-          </label>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="block">
-            <FieldLabel>Start time</FieldLabel>
-            <input
-              type="time"
-              className={inputCls}
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
             />
           </label>
           <label className="block">
@@ -1097,117 +1108,71 @@ export default function WorkPermitForm({
           holder is picked. If we need multi-holder support later we
           bring the block back. */}
 
-      <div className={step === 2 ? "space-y-4" : "hidden"}>
-        <FieldLabel hint="At least one approver across all levels is required">
-          Approval Levels
+      <div className={step === 2 ? "space-y-3" : "hidden"}>
+        {/* Simplified "Approver" block · Vandana 2026-10-14 mid-walkthrough:
+            dropped the level 1 / level 2 / level N multi-level machinery
+            for now ("when the team grows, we can add these"). Shipped
+            today's permits route to a single approver (Girish). The
+            data model still writes levelIndex=1 so when multi-level
+            comes back it's a UI change, not a schema one. All code
+            still references approverLevels[0] under the hood. */}
+        <FieldLabel hint="Pick who signs off this permit">
+          Approver
         </FieldLabel>
-
-        {/* One card per level. Colab shows each level as a titled
-            section with its own approver picker and (for levels 2+) a
-            remove button in the top-right. Capability chips are
-            intentionally omitted (Shraddha 2026-09-30 rule). */}
-        {approverLevels.map((lvl, pos) => (
+        {approverLevels.slice(0, 1).map((lvl, pos) => (
           <div
             key={lvl.levelIndex}
-            className="rounded-lg border border-sandstone-100 bg-cream"
+            className="rounded-lg border border-sandstone-100 bg-cream p-2 space-y-1.5"
           >
-            {/* Colab names each approval level: "Level 1 — Site",
-                "Level 2 — safety" (video frame 15). The index on the
-                left is permanent; the name on the right is editable so
-                every project can label levels in site team's own
-                language. Blank falls back to generic "Level N" on
-                submit. */}
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-sandstone-100">
-              <div className="text-[13px] font-semibold text-ink shrink-0">
-                Level {lvl.levelIndex} —
-              </div>
-              <input
-                type="text"
-                value={lvl.levelName}
-                onChange={(e) => renameApprovalLevel(pos, e.target.value)}
-                placeholder="e.g. Site, Safety, Project Head"
-                maxLength={40}
-                className="flex-1 min-w-0 rounded-md border border-dashed border-sandstone-200 bg-white px-2 py-1 text-[13px] placeholder:text-ink-4 focus:outline-none focus:border-ferrous-500"
-              />
-              <span className="text-[11px] text-ink-3 shrink-0">
-                {lvl.userIds.size}
-              </span>
-              {pos > 0 && (
-                <button
-                  type="button"
-                  onClick={() => removeApprovalLevel(pos)}
-                  className="text-[12px] font-semibold text-ferrous-600 hover:text-ferrous-700 shrink-0"
-                  aria-label={`Remove level ${lvl.levelIndex}`}
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-            {/* Approver chips for this level — tap × to remove. Matches
-                Colab (video frames 15 + 70): each picked approver sits
-                as a row with name + "Default" caption + an × remove
-                control, instead of an always-visible checkbox list. */}
-            <div className="p-2 space-y-1.5">
-              {lvl.userIds.size === 0 ? (
-                <p className="text-[12px] text-ink-3 px-2 py-1 italic">
-                  No approver picked yet.
-                </p>
-              ) : (
-                Array.from(lvl.userIds).map((uid) => {
-                  const u = approverOptions.find((a) => a.id === uid);
-                  if (!u) return null;
-                  return (
-                    <div
-                      key={uid}
-                      className="flex items-center gap-2 rounded-md bg-white border border-sandstone-200 px-2.5 py-1.5"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[14px] text-ink leading-tight">{u.name}</div>
-                        <div className="text-[11px] text-ink-3">
-                          Default · {u.role}
-                        </div>
+            {lvl.userIds.size === 0 ? (
+              <p className="text-[12px] text-ink-3 px-2 py-1 italic">
+                No approver picked yet.
+              </p>
+            ) : (
+              Array.from(lvl.userIds).map((uid) => {
+                const u = approverOptions.find((a) => a.id === uid);
+                if (!u) return null;
+                return (
+                  <div
+                    key={uid}
+                    className="flex items-center gap-2 rounded-md bg-white border border-sandstone-200 px-2.5 py-1.5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[14px] text-ink leading-tight">{u.name}</div>
+                      <div className="text-[11px] text-ink-3">
+                        Default · {u.role}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => toggleApprover(pos, uid)}
-                        className="text-ink-3 hover:text-ferrous-600 text-sm px-2 py-0.5"
-                        aria-label={`Remove ${u.name} from Level ${lvl.levelIndex}`}
-                      >
-                        ×
-                      </button>
                     </div>
-                  );
-                })
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  setApproverSheetPos(pos);
-                  setApproverSearch("");
-                }}
-                disabled={approverOptions.length === 0}
-                className="w-full rounded-md border border-dashed border-ink text-ink text-sm font-semibold py-2 hover:bg-sandstone-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                + Add Approver to Level {lvl.levelIndex}
-              </button>
-              {approverOptions.length === 0 && (
-                <p className="text-[11px] text-ink-3 px-1 italic">
-                  No approvers available. Ask an admin to provision an internal user.
-                </p>
-              )}
-            </div>
+                    <button
+                      type="button"
+                      onClick={() => toggleApprover(pos, uid)}
+                      className="text-ink-3 hover:text-ferrous-600 text-sm px-2 py-0.5"
+                      aria-label={`Remove ${u.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setApproverSheetPos(pos);
+                setApproverSearch("");
+              }}
+              disabled={approverOptions.length === 0}
+              className="w-full rounded-md border border-dashed border-ink text-ink text-sm font-semibold py-2 hover:bg-sandstone-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              + Add Approver
+            </button>
+            {approverOptions.length === 0 && (
+              <p className="text-[11px] text-ink-3 px-1 italic">
+                No approvers available. Ask an admin to provision an internal user.
+              </p>
+            )}
           </div>
         ))}
-
-        {/* Colab parity: `⊕ Add Approval Level (N/5)`, disabled at 5. */}
-        <button
-          type="button"
-          onClick={addApprovalLevel}
-          disabled={approverLevels.length >= MAX_APPROVER_LEVELS}
-          className="w-full rounded-lg border border-dashed border-ink text-ink text-sm font-semibold py-2.5 hover:bg-sandstone-50 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          ⊕ Add Approval Level ({approverLevels.length}/{MAX_APPROVER_LEVELS})
-        </button>
       </div>
 
       {/* Step 4 — Review Permit card. Everything the requester
@@ -1348,7 +1313,9 @@ export default function WorkPermitForm({
                 ? contractorId.length === 0
                   ? "Pick a contractor before continuing."
                   : "Add at least one approver before continuing."
-                : ""}
+                : step === 3
+                  ? `Answer all ${activeChecklist.length} checkpoints (Yes / No / NA) before continuing — ${activeChecklist.filter((a) => a.passed !== null).length} answered so far.`
+                  : ""}
           </p>
         )}
         <div className="grid grid-cols-[auto_1fr] gap-2">
