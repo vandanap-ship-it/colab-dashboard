@@ -39,6 +39,30 @@ type ApproverLevel = { levelIndex: number; levelName: string; userIds: Set<strin
 /** Maximum approval levels supported — Colab parity. */
 const MAX_APPROVER_LEVELS = 5;
 
+/** Canonical activity heads for the Select Activity Head bottom sheet.
+ *  Mirrors the previous datalist contents + Colab's screenshot examples
+ *  (Earthwork, Waterproofing). Sorted alphabetically for predictable
+ *  scanning. The sheet also lets the user commit free-text so site
+ *  teams aren't locked out of a less common head. */
+const ACTIVITY_HEADS: readonly string[] = [
+  "Anti-Termite",
+  "Concrete Pour",
+  "Earthwork",
+  "Electrical",
+  "Excavation",
+  "Flooring",
+  "Hacking",
+  "Masonry",
+  "Painting",
+  "PCC",
+  "Plastering",
+  "Plumbing",
+  "Reinforcement",
+  "Shuttering",
+  "Surface Finishing",
+  "Waterproofing",
+];
+
 /** Count unique approvers across all levels (deduped). */
 function totalUniqueApprovers(levels: ApproverLevel[]): number {
   const seen = new Set<string>();
@@ -195,6 +219,12 @@ export default function WorkPermitForm({
   // the rest show a + icon.
   const [approverSheetPos, setApproverSheetPos] = useState<number | null>(null);
   const [approverSearch, setApproverSearch] = useState("");
+  // Activity head picker (bottom sheet) · Colab-parity, Vandana
+  // 2026-10-14 mid-walkthrough. Keeps the activityHead state as a
+  // simple string; sheet just offers a search-filtered list of common
+  // heads with a "Use custom text" fallback.
+  const [activityPickerOpen, setActivityPickerOpen] = useState(false);
+  const [activitySearch, setActivitySearch] = useState("");
   // Colab-parity: Night Work permit has a dedicated "Details of
   // Personnel in Attendance" section (Abhishek zip). Same row shape as
   // labour but the semantic is named supervisors / safety officers on
@@ -842,38 +872,33 @@ export default function WorkPermitForm({
         <PhotoPicker photos={photos} setPhotos={setPhotos} max={6} />
       </div>
 
-      {/* Valid From + Start time on one row, Valid To + End time on the
-          next. Vandana 2026-10-14 mid-walkthrough: pair each date with
-          its matching time horizontally so the eye reads "from DD at
-          HH" / "to DD at HH" instead of walking a 2x2 grid. Permits
-          can span multiple days — endDate defaults to workDate and
-          auto-tracks it until the user manually picks a different end. */}
+      {/* Permit Date on top, Valid From (time) + Valid To (time) in the
+          row beneath. Vandana 2026-10-14: collapsed to a single-day
+          permit model to match Colab exactly (video + screenshot
+          reference). No end-date input — permits are for ONE day
+          between the two times. The underlying endDate state is kept
+          and set equal to workDate on every workDate change so the
+          submit payload still carries both for API compatibility
+          (server accepts endDate as nullable; passing it equal to
+          workDate keeps single-day queries correct). */}
       <div className={`space-y-2 ${step === 1 ? "" : "hidden"}`}>
-        <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
+        <label className="block">
+          <FieldLabel>Permit Date</FieldLabel>
+          <input
+            type="date"
+            className={inputCls}
+            value={workDate}
+            onChange={(e) => {
+              const next = e.target.value;
+              setWorkDate(next);
+              // Keep endDate pinned to workDate — single-day only now.
+              setEndDate(next);
+            }}
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
           <label className="block">
             <FieldLabel>Valid From</FieldLabel>
-            <input
-              type="date"
-              className={inputCls}
-              value={workDate}
-              onChange={(e) => {
-                const next = e.target.value;
-                // Auto-track endDate while the user hasn't touched it —
-                // moving Valid From forward drags Valid To with it so a
-                // single-day permit stays single-day without a second
-                // click. Once the user picks endDate manually, we stop.
-                if (!endDateTouched) setEndDate(next);
-                else if (endDate && next && next > endDate) {
-                  // But if the new start is AFTER the user's manual end,
-                  // pull end forward too — an inverted window is a bug.
-                  setEndDate(next);
-                }
-                setWorkDate(next);
-              }}
-            />
-          </label>
-          <label className="block">
-            <FieldLabel>Start time</FieldLabel>
             <input
               type="time"
               className={inputCls}
@@ -881,23 +906,8 @@ export default function WorkPermitForm({
               onChange={(e) => setStartTime(e.target.value)}
             />
           </label>
-        </div>
-        <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
           <label className="block">
             <FieldLabel>Valid To</FieldLabel>
-            <input
-              type="date"
-              className={inputCls}
-              value={endDate}
-              min={workDate || undefined}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setEndDateTouched(true);
-              }}
-            />
-          </label>
-          <label className="block">
-            <FieldLabel>End time</FieldLabel>
             <input
               type="time"
               className={inputCls}
@@ -919,40 +929,26 @@ export default function WorkPermitForm({
         />
       </label>
 
-      {/* Step 1: Activity Head (Colab's Step-1 dropdown). Free-text
-          for now — a picker with the seeded activity heads is Phase 2
-          work marked in phase2_exclusions_log if it applies. */}
-      <label className={`block ${step === 1 ? "" : "hidden"}`}>
-        <FieldLabel optional>Activity Head</FieldLabel>
-        <input
-          className={inputCls}
-          value={activityHead}
-          onChange={(e) => setActivityHead(e.target.value)}
-          placeholder="e.g. Reinforcement · Shuttering · Surface Finishing"
-          maxLength={120}
-          list="permit-activity-head-suggestions"
-        />
-        {/* Colab-parity: free-text field with autocomplete hints for the
-            common activity heads at Amanvana. The site team can still
-            type anything else; datalist just speeds up the 80% case. */}
-        <datalist id="permit-activity-head-suggestions">
-          <option value="Reinforcement" />
-          <option value="Shuttering" />
-          <option value="Concrete Pour" />
-          <option value="Masonry" />
-          <option value="Plastering" />
-          <option value="Painting" />
-          <option value="Waterproofing" />
-          <option value="Flooring" />
-          <option value="Electrical" />
-          <option value="Plumbing" />
-          <option value="Surface Finishing" />
-          <option value="Excavation" />
-          <option value="Anti-Termite" />
-          <option value="PCC" />
-          <option value="Hacking" />
-        </datalist>
-      </label>
+      {/* Step 1: Select Activity Head · Colab-parity bottom-sheet picker
+          with a search field (video frame 11, mid-walkthrough feedback
+          Oct 14). Replaces the previous free-text input with datalist
+          hints. Underlying model still a string, so no payload change. */}
+      <div className={`block ${step === 1 ? "" : "hidden"}`}>
+        <FieldLabel optional>Select Activity Head</FieldLabel>
+        <button
+          type="button"
+          onClick={() => {
+            setActivityPickerOpen(true);
+            setActivitySearch("");
+          }}
+          className={`${inputCls} text-left flex items-center justify-between`}
+        >
+          <span className={activityHead ? "text-ink" : "text-ink-4"}>
+            {activityHead || "Choose Activity Head"}
+          </span>
+          <span className="text-ink-4 ml-2">▾</span>
+        </button>
+      </div>
 
       {/* Step 2: Contractor. Colab requires it — enforced client-side
           in canAdvance. */}
@@ -1361,6 +1357,98 @@ export default function WorkPermitForm({
           greyed-out with a green ✓; the rest get a + button that
           adds them and keeps the sheet open so the user can pick
           multiple without a round-trip. Close on tap-outside or Done. */}
+      {/* Colab-parity activity-head bottom sheet · opens from the Step 1
+          "Select Activity Head" button (video frame 11). Search filters
+          the canonical head list; a user can also commit free-text when
+          nothing matches ("Use '<text>' as the head"). */}
+      {activityPickerOpen && (() => {
+        const s = activitySearch.trim().toLowerCase();
+        const matches = s
+          ? ACTIVITY_HEADS.filter((h) => h.toLowerCase().includes(s))
+          : ACTIVITY_HEADS;
+        const canUseCustom =
+          s.length >= 2 &&
+          !ACTIVITY_HEADS.some((h) => h.toLowerCase() === s);
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/50"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setActivityPickerOpen(false)}
+          >
+            <div
+              className="w-full max-w-md max-h-[80vh] rounded-t-2xl bg-white p-5 pb-6 space-y-3 flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div>
+                <p className="text-base font-semibold text-stone-900">Select Activity</p>
+                <p className="text-[12px] text-stone-500 mt-0.5">
+                  Pick the activity head this permit covers.
+                </p>
+              </div>
+              <input
+                type="search"
+                value={activitySearch}
+                onChange={(e) => setActivitySearch(e.target.value)}
+                placeholder="Search Activity"
+                autoFocus
+                className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+              />
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
+                {matches.length === 0 && !canUseCustom && (
+                  <p className="text-[13px] text-stone-500 px-1 py-2 italic">
+                    No matches.
+                  </p>
+                )}
+                {matches.map((h) => {
+                  const picked = h === activityHead;
+                  return (
+                    <button
+                      key={h}
+                      type="button"
+                      onClick={() => {
+                        setActivityHead(h);
+                        setActivityPickerOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 rounded-md border px-3 py-2.5 text-left ${
+                        picked
+                          ? "border-ferrous-300 bg-sandstone-50"
+                          : "border-stone-200 bg-white hover:bg-sandstone-50"
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1 text-[14px] text-ink">{h}</div>
+                      {picked && <span className="text-emerald-500 text-base shrink-0">✓</span>}
+                    </button>
+                  );
+                })}
+                {canUseCustom && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivityHead(activitySearch.trim());
+                      setActivityPickerOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 rounded-md border border-dashed border-ink px-3 py-2.5 text-left bg-white"
+                  >
+                    <div className="min-w-0 flex-1 text-[14px] text-ink">
+                      Use &ldquo;{activitySearch.trim()}&rdquo; as the head
+                    </div>
+                    <span className="text-ink text-base shrink-0">+</span>
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setActivityPickerOpen(false)}
+                className="w-full rounded-xl border border-stone-300 bg-white text-stone-700 text-sm font-semibold py-2.5"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {approverSheetPos !== null && (() => {
         const level = approverLevels[approverSheetPos];
         if (!level) return null;
