@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import PhotoPicker from "./PhotoPicker";
 import SaveSuccessCard from "./SaveSuccessCard";
@@ -83,6 +83,24 @@ export default function WorkPermitForm({
     () => approverCandidates.filter((u) => u.id !== currentUserId),
     [approverCandidates, currentUserId],
   );
+
+  // Colab "Default" prefill · Vandana 2026-10-14 mid-walkthrough: for
+  // EHS today Girish is the only canApproveWorkPermits user on the
+  // project, and asking the raiser to tap through a bottom sheet to
+  // pick him every time is friction with no choice. If there's exactly
+  // one approver candidate AND the current Level 1 is empty, drop them
+  // in automatically. Multi-approver projects (future QAQC, future
+  // multiple HSE approvers) still see an empty picker and have to
+  // choose explicitly, which is correct.
+  useEffect(() => {
+    if (approverOptions.length !== 1) return;
+    setApproverLevels((prev) => {
+      if (prev.length !== 1) return prev;
+      if (prev[0].userIds.size !== 0) return prev;
+      const only = approverOptions[0];
+      return [{ ...prev[0], userIds: new Set([only.id]) }];
+    });
+  }, [approverOptions]);
 
   const [type, setType] = useState<WorkPermitType>("GENERAL");
 

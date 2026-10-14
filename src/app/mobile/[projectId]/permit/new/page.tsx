@@ -52,9 +52,24 @@ export default async function NewWorkPermitPage({
     orderBy: { name: "asc" },
   });
 
-  // Contractors on the project (for the optional contractor picker).
+  // Contractors on the project — filtered two ways:
+  //  1. showInPickers=true (hides the Oct 1 labour-supply auto-created
+  //     vendors Achyutananda / Nilakar / Sanjay Das).
+  //  2. If the signed-in user is tagged to a specific contractor
+  //     (Rohan/Abhishek on Abraham, Asif on Elegant), narrow further
+  //     to just that contractor so they can't pick a peer org by
+  //     mistake. In-house users (no contractorId → Girish, Shraddha,
+  //     Vandana) still see every active contractor.
+  // Vandana 2026-10-14 mid-walkthrough: both filters were missing on
+  // this specific route (yesterday's showInPickers sweep hit the API +
+  // two sibling pages but not permit/new).
   const contractors = await prisma.contractor.findMany({
-    where: { projectId, active: true },
+    where: {
+      projectId,
+      active: true,
+      showInPickers: true,
+      ...(session.user.contractorId ? { id: session.user.contractorId } : {}),
+    },
     select: { id: true, name: true, category: true },
     orderBy: { name: "asc" },
   });
