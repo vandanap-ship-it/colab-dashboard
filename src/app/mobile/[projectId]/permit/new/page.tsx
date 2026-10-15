@@ -29,14 +29,14 @@ export default async function NewWorkPermitPage({
   });
   if (!project) notFound();
 
-  // Approvers = active users with canApproveWorkPermits=true. The flag
-  // is the admin's explicit statement of "this user is authorised" and
-  // supersedes the older `modules: null` filter (which incorrectly
-  // excluded WL staff who happen to be scoped — e.g. Girish R,
-  // SITE_MANAGER, SAFETY-scoped, marked canApprove but hidden from
-  // the picker until this widening). The server-side approve/reject
-  // gate accepts the same flag so a scoped-but-authorised approver
-  // can actually complete the action too.
+  // Approvers = active users with canApproveWorkPermits=true, further
+  // narrowed to safety-scope users (Vandana 2026-10-15 post-walkthrough:
+  // the safety team saw non-safety approvers in the picker and asked
+  // that only safety approvers show). "Safety-scope" = user has no
+  // modules JSON (full access) OR the modules string contains SAFETY.
+  // Today that resolves to Girish R only; when Rohan/Abhishek/Asif
+  // are eventually marked canApproveWorkPermits for safety, they light
+  // up automatically — no code change.
   //
   // The migration 20260930170000_deactivate_permit_test_user
   // deactivates the leftover `test` user. The explicit NOT filter here
@@ -47,6 +47,10 @@ export default async function NewWorkPermitPage({
       active: true,
       canApproveWorkPermits: true,
       NOT: { username: "test" },
+      OR: [
+        { modules: null },
+        { modules: { contains: "SAFETY" } },
+      ],
     },
     select: { id: true, name: true, username: true, role: true },
     orderBy: { name: "asc" },

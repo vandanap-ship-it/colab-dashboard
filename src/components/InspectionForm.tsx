@@ -580,12 +580,10 @@ export default function InspectionForm({
   function updateItem(i: number, patch: Partial<ChecklistItem>) {
     setItems((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
-  function addItem() {
-    setItems((rows) => [...rows, { label: "", section: null, passed: null, notApplicable: false, notes: "", photo: null, photoUrl: null }]);
-  }
-  function removeItem(i: number) {
-    setItems((rows) => rows.filter((_, idx) => idx !== i));
-  }
+  // addItem / removeItem were dropped 2026-10-15 (Vandana
+  // post-walkthrough): HSE checklist questions must come from the
+  // template, be read-only, and not deletable. Nothing on the site
+  // team's side needs ad-hoc rows.
 
   function toggleReviewer(id: string) {
     setSelectedReviewerIds((cur) => {
@@ -596,12 +594,24 @@ export default function InspectionForm({
     });
   }
 
+  // Minimum photo count required to Send For Review / Reschedule.
+  // Vandana 2026-10-15 post-walkthrough: the mandatory-image behaviour
+  // was replaced with a floor of 3 total photos per checklist. Counts
+  // per-row photos + whole-strip photos + anything already saved on
+  // a resumed draft.
+  const MIN_PHOTOS = 3;
+  const totalAttachedPhotos =
+    photos.length +
+    existingWholePhotos.length +
+    items.filter((i) => i.photo).length +
+    items.filter((i) => i.photoUrl).length;
+
   // Shared validation: enforces the same rule for both Send For Review and
   // Reschedule — a WIR must have a real title, at least one non-empty row,
-  // and every non-empty row must be answered Yes / No / NA. Reschedule
-  // deliberately does NOT relax this: an inspection you park should still
-  // reflect the state of what you saw on site today. Save-as-Draft uses a
-  // separate looser validation below.
+  // every non-empty row must be answered Yes / No / NA, and ≥3 photos
+  // must be attached. Reschedule deliberately does NOT relax this: an
+  // inspection you park should still reflect the state of what you saw
+  // on site today. Save-as-Draft uses a separate looser validation below.
   function validate(): { ok: true; usable: ChecklistItem[] } | { ok: false; error: string } {
     if (title.trim().length < 3) return { ok: false, error: "Title too short" };
     const usable = items.filter((i) => i.label.trim().length > 0);
@@ -611,6 +621,13 @@ export default function InspectionForm({
       const first = untouched[0].label.trim();
       const more = untouched.length > 1 ? ` (+${untouched.length - 1} more)` : "";
       return { ok: false, error: `Tick Yes, No or N/A for "${first}"${more}.` };
+    }
+    if (totalAttachedPhotos < MIN_PHOTOS) {
+      const missing = MIN_PHOTOS - totalAttachedPhotos;
+      return {
+        ok: false,
+        error: `Attach at least ${MIN_PHOTOS} photos — ${totalAttachedPhotos} attached, ${missing} more to go.`,
+      };
     }
     return { ok: true, usable };
   }
@@ -1320,9 +1337,9 @@ export default function InspectionForm({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-stone-700">Checklist items</span>
-          <button type="button" onClick={addItem} className="text-xs text-amber-600 font-medium">
-            + Add item
-          </button>
+          {/* "+ Add item" removed 2026-10-15 (Vandana post-walkthrough).
+              Site team should not improvise checkpoints — the template
+              is the source of truth. */}
         </div>
         <ul className="space-y-2">
           {items.map((it, i) => {
@@ -1355,16 +1372,16 @@ export default function InspectionForm({
                 }`}
               >
                 <div className="flex gap-2 items-start">
-                  {/* Textarea instead of single-line input so long HSE
-                      checkpoint questions (some run 25-30 words) wrap and
-                      are fully readable without horizontal scrolling.
-                      Vandana 2026-10-12. Auto-resize on both mount and
-                      every input event so the field matches content
-                      height. `resize-none` hides the drag-handle. */}
+                  {/* Question text is read-only (Vandana 2026-10-15
+                      post-walkthrough) — the template is the source of
+                      truth, the site team must not edit checkpoints
+                      mid-fill. Kept as a textarea (not a plain <p>) so
+                      long HSE questions still wrap and resize naturally;
+                      the auto-grow ref/onInput logic is kept because
+                      template content changes height per row. */}
                   <textarea
                     value={it.label}
-                    onChange={(e) => updateItem(i, { label: e.target.value })}
-                    placeholder="Item label"
+                    readOnly
                     rows={1}
                     ref={(el) => {
                       if (!el) return;
@@ -1376,18 +1393,8 @@ export default function InspectionForm({
                       t.style.height = "auto";
                       t.style.height = `${t.scrollHeight}px`;
                     }}
-                    className="flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm resize-none leading-snug overflow-hidden"
+                    className="flex-1 rounded-md border border-stone-200 bg-stone-50 text-stone-800 px-3 py-2 text-sm resize-none leading-snug overflow-hidden cursor-default focus:outline-none"
                   />
-                  {items.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeItem(i)}
-                      className="text-stone-400 hover:text-red-500 text-sm min-h-11 min-w-11 flex items-center justify-center"
-                      aria-label="Remove"
-                    >
-                      🗑
-                    </button>
-                  )}
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <button
@@ -1571,6 +1578,22 @@ export default function InspectionForm({
 
       {error && <p className="text-[13px] text-ferrous-600">{error}</p>}
 
+      {/* 3-photo minimum counter (Vandana 2026-10-15). Shows green once
+          the floor is met so the raiser knows the gate is cleared. */}
+      <div
+        className={`rounded-md border px-3 py-2 text-[12px] flex items-center justify-between ${
+          totalAttachedPhotos >= MIN_PHOTOS
+            ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+            : "bg-amber-50 border-amber-200 text-amber-800"
+        }`}
+      >
+        <span>Photos attached</span>
+        <span className="font-semibold tabular-nums">
+          {totalAttachedPhotos} / {MIN_PHOTOS}
+          {totalAttachedPhotos >= MIN_PHOTOS ? " ✓" : ""}
+        </span>
+      </div>
+
       {/* Action row. Fresh WIRs get the full three-button hierarchy
           (Save Draft / Reschedule / Send For Review). Resume-editing a
           draft hides Reschedule — a rescheduled WIR is a distinct
@@ -1606,7 +1629,7 @@ export default function InspectionForm({
           )}
           <button
             type="submit"
-            disabled={pending || untouchedCount > 0}
+            disabled={pending || untouchedCount > 0 || totalAttachedPhotos < MIN_PHOTOS}
             className="w-full rounded-full bg-ink text-cream py-4 text-[15px] font-semibold shadow-card disabled:opacity-60 active:scale-[0.99]"
           >
             {pending ? "Sending…" : "Send For Review"}

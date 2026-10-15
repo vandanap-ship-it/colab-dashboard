@@ -209,6 +209,23 @@ export default function WorkPermitForm({
   // Back doesn't lose entered data.
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
+  // Guard against the iOS "ghost tap" where tapping Continue on Step 3
+  // flips the sticky-footer slot to Submit, and a lingering synthetic
+  // click lands on the newly-rendered Submit button — the permit then
+  // "submits by itself" without the raiser ever reading the Review
+  // card. Fix (Vandana 2026-10-15 post-walkthrough): keep Submit
+  // disabled for 600 ms after Step 4 renders, so by the time it's
+  // clickable the pointer sequence from the Continue tap is done.
+  const [submitReady, setSubmitReady] = useState(false);
+  useEffect(() => {
+    if (step !== 4) {
+      setSubmitReady(false);
+      return;
+    }
+    const t = setTimeout(() => setSubmitReady(true), 600);
+    return () => clearTimeout(t);
+  }, [step]);
+
   // Colab-parity Step 2 additions.
   type LabourEntry = { workerName: string; role: string; count: string };
   const [labourEntries, setLabourEntries] = useState<LabourEntry[]>([]);
@@ -821,6 +838,12 @@ export default function WorkPermitForm({
                       <input
                         type="file"
                         accept="image/*"
+                        // Permits are camera-only (Vandana 2026-10-15
+                        // post-walkthrough). Checkpoint evidence should
+                        // be shot on the spot, not pulled from a
+                        // pre-existing album — defeats the point of a
+                        // safety verification photo.
+                        capture="environment"
                         className="hidden"
                         disabled={uploadingCheckpointIdx === idx}
                         onChange={(e) => {
@@ -869,7 +892,7 @@ export default function WorkPermitForm({
         <FieldLabel hint="A photo tells the approver the story faster than words." optional>
           Photos (up to 6)
         </FieldLabel>
-        <PhotoPicker photos={photos} setPhotos={setPhotos} max={6} />
+        <PhotoPicker photos={photos} setPhotos={setPhotos} max={6} cameraOnly />
       </div>
 
       {/* Permit Date on top, Valid From (time) + Valid To (time) in the
@@ -1326,6 +1349,7 @@ export default function WorkPermitForm({
           </button>
           {step < 4 ? (
             <button
+              key="permit-wizard-continue"
               type="button"
               onClick={goNext}
               disabled={!canAdvance}
@@ -1334,12 +1358,16 @@ export default function WorkPermitForm({
               → Continue
             </button>
           ) : (
+            // Distinct key from Continue so React tears down the old
+            // button and mounts a fresh one — belt-and-braces with
+            // submitReady to shut down the Step 3 → Step 4 ghost tap.
             <button
+              key="permit-wizard-submit"
               type="submit"
-              disabled={pending || totalUniqueApprovers(approverLevels) === 0}
+              disabled={!submitReady || pending || totalUniqueApprovers(approverLevels) === 0}
               className="inline-flex items-center justify-center gap-1 rounded-xl bg-ferrous-500 text-white text-sm font-semibold py-2 disabled:opacity-40"
             >
-              {pending ? "Submitting…" : "✓ Submit Permit"}
+              {pending ? "Submitting…" : submitReady ? "✓ Submit Permit" : "Review the summary…"}
             </button>
           )}
         </div>

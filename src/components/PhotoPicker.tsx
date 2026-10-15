@@ -77,11 +77,17 @@ export default function PhotoPicker({
   setPhotos,
   max = 4,
   label = "Photos",
+  cameraOnly = false,
 }: {
   photos: File[];
   setPhotos: (next: File[]) => void;
   max?: number;
   label?: string;
+  // Opt-in override to the 2026-10-07 "always show gallery" rule. Used
+  // by Permits only (Vandana 2026-10-15 post-walkthrough) — the safety
+  // team wants evidence photos captured on the spot, not pulled from a
+  // gallery. HSE Checklists + every other caller keep the Gallery tile.
+  cameraOnly?: boolean;
 }) {
   const previewUrls = useMemo(() => photos.map((f) => URL.createObjectURL(f)), [photos]);
 
@@ -164,23 +170,25 @@ export default function PhotoPicker({
                 }}
               />
             </label>
-            <label className="aspect-square rounded-lg border-2 border-dashed border-stone-300 flex flex-col items-center justify-center text-stone-500 hover:border-stone-500 hover:text-stone-700 active:bg-stone-50 cursor-pointer transition-colors min-h-11">
-              <ImageIcon className="w-6 h-6" />
-              <span className="text-[11px] mt-1.5 font-medium">
-                {compressing ? "Working…" : "Gallery"}
-              </span>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="sr-only"
-                onChange={(e) => {
-                  add(e.target.files);
-                  // Reset so the same file can be re-picked next time after a remove.
-                  e.target.value = "";
-                }}
-              />
-            </label>
+            {!cameraOnly && (
+              <label className="aspect-square rounded-lg border-2 border-dashed border-stone-300 flex flex-col items-center justify-center text-stone-500 hover:border-stone-500 hover:text-stone-700 active:bg-stone-50 cursor-pointer transition-colors min-h-11">
+                <ImageIcon className="w-6 h-6" />
+                <span className="text-[11px] mt-1.5 font-medium">
+                  {compressing ? "Working…" : "Gallery"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="sr-only"
+                  onChange={(e) => {
+                    add(e.target.files);
+                    // Reset so the same file can be re-picked next time after a remove.
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            )}
           </>
         )}
       </div>
