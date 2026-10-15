@@ -39,6 +39,21 @@ type ApproverLevel = { levelIndex: number; levelName: string; userIds: Set<strin
 /** Maximum approval levels supported — Colab parity. */
 const MAX_APPROVER_LEVELS = 5;
 
+/** Canonical labour roles for the Step 2 Labour section.
+ *  Vandana 2026-10-15 post-walkthrough: safety team requested a fixed
+ *  dropdown instead of free-text so the dataset is clean for reports.
+ *  "Others" at the end flips the row into a free-text mode for the
+ *  rare role that doesn't fit a preset (e.g. a specialist welder on a
+ *  one-off Hot Work permit). */
+const LABOUR_ROLES: readonly string[] = [
+  "Masonry",
+  "Masonry Helpers",
+  "Scaffolders",
+  "Scaffolder Helpers",
+  "Fabricator",
+  "Fabricator Helpers",
+];
+
 /** Canonical activity heads for the Select Activity Head bottom sheet.
  *  Mirrors the previous datalist contents + Colab's screenshot examples
  *  (Earthwork, Waterproofing). Sorted alphabetically for predictable
@@ -227,8 +242,28 @@ export default function WorkPermitForm({
   }, [step]);
 
   // Colab-parity Step 2 additions.
-  type LabourEntry = { workerName: string; role: string; count: string };
+  //
+  // Vandana 2026-10-15: Labour row shape was reduced to Role + # Workers
+  // for permits (Worker Name UI dropped). workerName stays on the type
+  // for compatibility with the Night Work "Personnel in Attendance"
+  // section which still uses the same row interface; for permit labour
+  // it always ships empty.
+  //
+  // `othersMode` is a per-row UI flag: true when the raiser picked the
+  // "Others" option in the role dropdown, which reveals a text input
+  // and lets them type a custom role. We keep it on the row state so
+  // the input stays revealed after the raiser types; deriving from
+  // role alone would lose the state while the field is empty.
+  type LabourEntry = { workerName: string; role: string; count: string; othersMode?: boolean };
   const [labourEntries, setLabourEntries] = useState<LabourEntry[]>([]);
+
+  // A labour row counts as "filled" when it has both a non-empty role
+  // and a positive worker count. Used to gate Step 2 Continue (at
+  // least one filled row required) and to filter rows at submit.
+  function isLabourRowFilled(r: LabourEntry): boolean {
+    const count = Number(r.count);
+    return r.role.trim().length > 0 && Number.isFinite(count) && count > 0;
+  }
   // Colab-parity approver bottom sheet · 2026-10-13 (Vandana): "Select
   // Approver — Level N" (video frame 20). Opens on tap of "Add
   // Approver to Level N"; closes on tap-outside or Done. Already-picked
@@ -377,14 +412,21 @@ export default function WorkPermitForm({
     //   The existing approverIds[] payload key stays for the current
     //   API contract; approvers[] rides alongside so the new endpoint
     //   can persist capabilities.
+    // Permit labour rows (Vandana 2026-10-15) ship with role + count
+    // only — Worker Name was dropped from the UI. Rows that aren't
+    // fully filled are discarded, which can't actually happen because
+    // Step 2 Continue blocks on labourFilledCount, but the server
+    // should also reject malformed rows if a stale client ever posts
+    // one. workerName stays on the row interface because Night Work's
+    // "Personnel in Attendance" (cleanAttendance below) still uses it.
     const cleanLabour = labourEntries
+      .filter(isLabourRowFilled)
       .map((r) => ({
         kind: "LABOUR" as const,
-        workerName: r.workerName.trim() || undefined,
-        role: r.role.trim() || undefined,
-        count: r.count.trim() ? Number(r.count) : undefined,
-      }))
-      .filter((r) => r.workerName || r.role || (typeof r.count === "number" && Number.isFinite(r.count)));
+        workerName: undefined,
+        role: r.role.trim(),
+        count: Number(r.count),
+      }));
 
     const cleanAttendance = personnelEntries
       .map((r) => ({
@@ -619,11 +661,17 @@ export default function WorkPermitForm({
   const checklistAllAnswered =
     activeChecklist.length === 0 ||
     activeChecklist.every((a) => a.passed !== null);
+  // Step 2 now also requires at least one filled Labour row — Vandana
+  // 2026-10-15: Role + # Workers are mandatory per permit, so an empty
+  // Labour section blocks Continue.
+  const labourFilledCount = labourEntries.filter(isLabourRowFilled).length;
   const canAdvance =
     step === 1
       ? title.trim().length >= 3 && dateOkForStep1 && timeOkForStep1
       : step === 2
-        ? contractorId.length > 0 && totalUniqueApprovers(approverLevels) > 0
+        ? contractorId.length > 0 &&
+          totalUniqueApprovers(approverLevels) > 0 &&
+          labourFilledCount > 0
         : step === 3
           ? checklistAllAnswered
           : true;
@@ -991,59 +1039,94 @@ export default function WorkPermitForm({
         </select>
       </label>
 
-      {/* Step 2: Labour Entries (Colab's "+ Add Labour Entry"). */}
+      {/* Step 2: Labour Entries. Vandana 2026-10-15 post-walkthrough:
+          per row = Role (dropdown, 6 presets + Others→free text) and
+          # Workers. Both mandatory to count the row as filled; Step 2
+          Continue blocks until at least one row is filled. Worker Name
+          input removed per the safety team's ask; the role dropdown
+          keeps the dataset clean for reports. */}
       <div className={step === 2 ? "" : "hidden"}>
-        <FieldLabel hint="Workers involved in this permit" optional>
-          Labour
+        <FieldLabel hint="Role + number of workers for each team on this permit">
+          Labour <span className="text-red-500">*</span>
         </FieldLabel>
         <div className="space-y-2">
-          {labourEntries.map((row, idx) => (
-            <div key={idx} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-center">
-              <input
-                className={inputCls}
-                value={row.workerName}
-                onChange={(e) => {
-                  const next = labourEntries.slice();
-                  next[idx] = { ...next[idx], workerName: e.target.value };
-                  setLabourEntries(next);
-                }}
-                placeholder="Worker name"
-                maxLength={120}
-              />
-              <input
-                className={inputCls}
-                value={row.role}
-                onChange={(e) => {
-                  const next = labourEntries.slice();
-                  next[idx] = { ...next[idx], role: e.target.value };
-                  setLabourEntries(next);
-                }}
-                placeholder="Role (Welder, Rigger…)"
-                maxLength={80}
-              />
-              <input
-                className={`${inputCls} w-16`}
-                value={row.count}
-                onChange={(e) => {
-                  const next = labourEntries.slice();
-                  next[idx] = { ...next[idx], count: e.target.value.replace(/[^0-9]/g, "") };
-                  setLabourEntries(next);
-                }}
-                placeholder="#"
-                maxLength={4}
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  setLabourEntries(labourEntries.filter((_, i) => i !== idx))
-                }
-                aria-label="Remove labour row"
-                className="text-stone-400 hover:text-stone-600 text-xl leading-none px-1"
-              >
-                ×
-              </button>
-            </div>
-          ))}
+          {labourEntries.map((row, idx) => {
+            const updateRow = (patch: Partial<LabourEntry>) => {
+              const next = labourEntries.slice();
+              next[idx] = { ...next[idx], ...patch };
+              setLabourEntries(next);
+            };
+            // Dropdown value: preset name if role matches a preset,
+            // "__OTHERS__" sentinel if othersMode is on (even with
+            // empty custom text), empty string otherwise. Legacy rows
+            // where role is a non-preset string also render as Others.
+            const isPreset = LABOUR_ROLES.includes(row.role);
+            const selectValue = row.othersMode || (!isPreset && row.role.length > 0)
+              ? "__OTHERS__"
+              : row.role;
+            const showCustomInput = selectValue === "__OTHERS__";
+            return (
+              <div key={idx} className="rounded-lg border border-sandstone-100 bg-cream p-2 space-y-2">
+                <div className="grid grid-cols-[1fr_72px_auto] gap-2 items-center">
+                  <select
+                    className={inputCls}
+                    value={selectValue}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "__OTHERS__") {
+                        // Keep any existing custom text if the user
+                        // flips back to Others after a brief detour.
+                        updateRow({
+                          role: isPreset ? "" : row.role,
+                          othersMode: true,
+                        });
+                      } else {
+                        updateRow({ role: v, othersMode: false });
+                      }
+                    }}
+                  >
+                    <option value="">Choose role…</option>
+                    {LABOUR_ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                    <option value="__OTHERS__">Others</option>
+                  </select>
+                  <input
+                    className={inputCls}
+                    inputMode="numeric"
+                    value={row.count}
+                    onChange={(e) =>
+                      updateRow({ count: e.target.value.replace(/[^0-9]/g, "") })
+                    }
+                    placeholder="# workers"
+                    maxLength={4}
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setLabourEntries(labourEntries.filter((_, i) => i !== idx))
+                    }
+                    aria-label="Remove labour row"
+                    className="text-stone-400 hover:text-stone-600 text-xl leading-none px-1"
+                  >
+                    ×
+                  </button>
+                </div>
+                {showCustomInput && (
+                  <input
+                    className={inputCls}
+                    value={row.role}
+                    onChange={(e) => updateRow({ role: e.target.value })}
+                    placeholder="Type the role"
+                    maxLength={80}
+                    autoFocus
+                  />
+                )}
+              </div>
+            );
+          })}
           <button
             type="button"
             onClick={() =>
@@ -1054,8 +1137,13 @@ export default function WorkPermitForm({
             }
             className="w-full rounded-lg border border-ink text-ink text-sm font-semibold py-2 hover:bg-sandstone-50"
           >
-            + Add Labour Entry
+            + Add Labour Row
           </button>
+          {labourFilledCount === 0 && labourEntries.length > 0 && (
+            <p className="text-[11px] text-ferrous-600 px-1 italic">
+              Fill role and worker count on at least one row.
+            </p>
+          )}
         </div>
       </div>
 
@@ -1233,17 +1321,19 @@ export default function WorkPermitForm({
                 return `${nL} level${nL === 1 ? "" : "s"} · ${nA} approver${nA === 1 ? "" : "s"}`;
               })()}
             />
-            {/* Show the count that will ACTUALLY submit — empty rows
-                (no name / role / count) are filtered on the payload
-                clean step and shouldn't show up in the review. */}
+            {/* Show the count + worker total that will ACTUALLY submit
+                — half-filled rows are discarded on the payload clean
+                step and shouldn't show up in the review. */}
             <ReviewRow
-              label="Labour entries"
+              label="Labour"
               value={
                 (() => {
-                  const n = labourEntries.filter(
-                    (r) => r.workerName.trim() || r.role.trim() || r.count.trim(),
-                  ).length;
-                  return n === 0 ? "None" : String(n);
+                  const filled = labourEntries.filter(isLabourRowFilled);
+                  if (filled.length === 0) return "None";
+                  const workers = filled.reduce((sum, r) => sum + Number(r.count), 0);
+                  const rowWord = filled.length === 1 ? "row" : "rows";
+                  const workerWord = workers === 1 ? "worker" : "workers";
+                  return `${filled.length} ${rowWord} · ${workers} ${workerWord}`;
                 })()
               }
             />
@@ -1332,7 +1422,9 @@ export default function WorkPermitForm({
               : step === 2
                 ? contractorId.length === 0
                   ? "Pick a contractor before continuing."
-                  : "Add at least one approver before continuing."
+                  : totalUniqueApprovers(approverLevels) === 0
+                    ? "Add at least one approver before continuing."
+                    : "Add at least one labour row (role + # workers) before continuing."
                 : step === 3
                   ? `Answer all ${activeChecklist.length} checkpoints (Yes / No) before continuing — ${activeChecklist.filter((a) => a.passed !== null).length} answered so far.`
                   : ""}
