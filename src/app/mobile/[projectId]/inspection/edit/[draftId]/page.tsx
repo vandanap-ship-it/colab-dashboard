@@ -60,9 +60,45 @@ export default async function EditDraftPage({
     redirect(`/mobile/${projectId}/qaqc/${draft.id}`);
   }
 
+  // Mirror the new-inspection page's HSE approver lookup so a resumed
+  // safety draft shows the same static "Reviewer: Asif / Girish" card
+  // and ships the same assignedReviewerIds on Send For Review.
+  const safetyApproverModuleFilter = {
+    OR: [
+      { modules: null },
+      { modules: { contains: "SAFETY" } },
+    ],
+  };
+  let hseApprover: { id: string; name: string } | null = null;
+  if (session.user.contractorId) {
+    hseApprover = await prisma.user.findFirst({
+      where: {
+        active: true,
+        canApproveWorkPermits: true,
+        contractorId: session.user.contractorId,
+        ...safetyApproverModuleFilter,
+      },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    });
+  }
+  if (!hseApprover) {
+    hseApprover = await prisma.user.findFirst({
+      where: {
+        active: true,
+        canApproveWorkPermits: true,
+        contractorId: null,
+        ...safetyApproverModuleFilter,
+      },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    });
+  }
+
   return (
     <InspectionForm
       projectId={projectId}
+      hseApprover={hseApprover}
       editDraft={{
         id: draft.id,
         expectedUpdatedAt: draft.updatedAt.toISOString(),

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canAccessTool, TOOL_MODULES } from "@/lib/modules";
+import { prisma } from "@/lib/prisma";
 import InspectionForm from "@/components/InspectionForm";
 import WIRTemplatePickerScreen from "@/components/WIRTemplatePickerScreen";
 
@@ -70,6 +71,53 @@ export default async function NewInspectionPage({
     );
   }
 
+  // HSE Checklist approver routing (Vandana 2026-10-15):
+  //   - Elegant's safety team (raiser.contractorId = Elegant) → their
+  //     own safety approver (Asif today).
+  //   - Any other contractor-scoped raiser whose contractor has its
+  //     own tagged safety approver → that approver.
+  //   - Everyone else (White Lotus staff, contractors without a
+  //     dedicated safety approver) → the unscoped head of safety
+  //     (Girish R today).
+  //
+  // We resolve this server-side so a single DB row (an in-house
+  // promotion, a contractor hire, a safety approver stepping away)
+  // reroutes the whole flow — no code change. The resolution runs on
+  // every template-picked page load because the raiser's own
+  // contractor can't change mid-session but the approver roster can,
+  // and the fetch is a single indexed row.
+  const safetyApproverModuleFilter = {
+    OR: [
+      { modules: null },
+      { modules: { contains: "SAFETY" } },
+    ],
+  };
+  let hseApprover: { id: string; name: string } | null = null;
+  if (session.user.contractorId) {
+    hseApprover = await prisma.user.findFirst({
+      where: {
+        active: true,
+        canApproveWorkPermits: true,
+        contractorId: session.user.contractorId,
+        ...safetyApproverModuleFilter,
+      },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    });
+  }
+  if (!hseApprover) {
+    hseApprover = await prisma.user.findFirst({
+      where: {
+        active: true,
+        canApproveWorkPermits: true,
+        contractorId: null,
+        ...safetyApproverModuleFilter,
+      },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    });
+  }
+
   // Template picked → render the form with it applied.
   return (
     <InspectionForm
@@ -79,6 +127,7 @@ export default async function NewInspectionPage({
       initialRegisterRowId={registerRowId ?? null}
       initialVillaId={villaId ?? null}
       initialActivityHead={activityHead ?? null}
+      hseApprover={hseApprover}
     />
   );
 }

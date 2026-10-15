@@ -173,6 +173,7 @@ export default function InspectionForm({
   initialRegisterRowId,
   initialVillaId,
   initialActivityHead,
+  hseApprover,
 }: {
   projectId: string;
   // `redirectTo` was accepted in an earlier iteration but never wired up.
@@ -204,6 +205,13 @@ export default function InspectionForm({
   // doesn't re-pick the location inside the form.
   initialVillaId?: string | null;
   initialActivityHead?: string | null;
+  // Vandana 2026-10-15: HSE Checklist approver, resolved server-side
+  // from the raiser's contractor (Elegant → Asif, else Girish R). The
+  // form uses this to render the static reviewer card and preselect
+  // the submit payload. If omitted (desktop QA/QC page, legacy
+  // callers), the form falls back to finding Girish by name in the
+  // reviewer pool so nothing stops routing.
+  hseApprover?: { id: string; name: string } | null;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -508,27 +516,32 @@ export default function InspectionForm({
   }, []);
 
   // HSE Checklist auto-pin: when the applied template is a safety one,
-  // force the reviewer set to just Girish R. The raiser doesn't see or
-  // touch a picker in that case, so this is the single source of truth
-  // for the assignment. Matches the permit flow's "safety → Girish"
-  // routing. If Girish can't be found in the reviewer pool (fresh
-  // install, data migration mid-flight), we leave the set empty and
-  // the server's SAFETY module-scoped broadcast catches him.
-  useEffect(() => {
-    if (!isHseChecklist) return;
-    if (reviewers.length === 0) return;
-    const girish = reviewers.find(
+  // force the reviewer set to the resolved HSE approver — Asif for
+  // Elegant raisers, Girish R for everyone else — resolved
+  // server-side in inspection/new/page.tsx. If the prop isn't piped
+  // through (desktop QA/QC path, legacy caller), fall back to finding
+  // Girish by name in the reviewer pool so routing never breaks. If
+  // neither works (fresh install, mid-migration), we leave the set
+  // empty and the server's SAFETY module-scoped broadcast catches
+  // the head of safety.
+  const resolvedHseApprover = useMemo(() => {
+    if (hseApprover) return hseApprover;
+    const fallbackGirish = reviewers.find(
       (r) =>
         r.role === "SITE_MANAGER" &&
         ((r.name ?? "").toLowerCase().includes("girish") ||
           r.username.toLowerCase().startsWith("girish")),
     );
-    if (!girish) return;
+    return fallbackGirish ? { id: fallbackGirish.id, name: fallbackGirish.name ?? fallbackGirish.username } : null;
+  }, [hseApprover, reviewers]);
+  useEffect(() => {
+    if (!isHseChecklist) return;
+    if (!resolvedHseApprover) return;
     setSelectedReviewerIds((cur) => {
-      if (cur.size === 1 && cur.has(girish.id)) return cur;
-      return new Set([girish.id]);
+      if (cur.size === 1 && cur.has(resolvedHseApprover.id)) return cur;
+      return new Set([resolvedHseApprover.id]);
     });
-  }, [isHseChecklist, reviewers]);
+  }, [isHseChecklist, resolvedHseApprover]);
 
   function applyTemplate(id: string) {
     setTemplateId(id);
@@ -1481,6 +1494,7 @@ export default function InspectionForm({
                     existingUrl={it.photoUrl}
                     onPick={(f) => updateItem(i, { photo: f })}
                     onClear={() => updateItem(i, { photo: null, photoUrl: null })}
+                    cameraOnly={isHseChecklist}
                   />
                 </div>
               </li>
@@ -1555,32 +1569,34 @@ export default function InspectionForm({
         </div>
       )}
 
-      <PhotoPicker photos={photos} setPhotos={setPhotos} max={8} label="Extra photos (context / evidence)" />
+      <PhotoPicker
+        photos={photos}
+        setPhotos={setPhotos}
+        max={8}
+        label="Extra photos (context / evidence)"
+        // Vandana 2026-10-15: HSE Checklist photos are camera-only
+        // (shot on the spot, not pulled from a gallery). QA/QC WIR
+        // and other inspection flows keep the Camera + Gallery pair.
+        cameraOnly={isHseChecklist}
+      />
 
-      {/* HSE Checklist: no picker. The reviewer is pinned to Girish R
-          and shown as a static card so the raiser knows where this is
-          going. (Vandana 2026-10-15 post-walkthrough.) */}
-      {isHseChecklist && (() => {
-        const girish = reviewers.find(
-          (r) =>
-            r.role === "SITE_MANAGER" &&
-            ((r.name ?? "").toLowerCase().includes("girish") ||
-              r.username.toLowerCase().startsWith("girish")),
-        );
-        return (
-          <div className="rounded-lg border border-sandstone-200 bg-sandstone-50 px-3 py-3">
-            <p className="text-[10px] uppercase tracking-widest text-stone-500">
-              Reviewer
-            </p>
-            <p className="mt-0.5 text-[14px] font-semibold text-ink">
-              {girish?.name || "Girish R"}
-            </p>
-            <p className="text-[11px] text-stone-500 mt-0.5">
-              Every HSE Checklist goes to the head of safety for sign-off.
-            </p>
-          </div>
-        );
-      })()}
+      {/* HSE Checklist: no picker. The reviewer is pinned server-side
+          to the raiser's contractor-scoped safety approver — Asif for
+          Elegant, Girish R otherwise. Static card so the raiser
+          knows where this is going. (Vandana 2026-10-15.) */}
+      {isHseChecklist && (
+        <div className="rounded-lg border border-sandstone-200 bg-sandstone-50 px-3 py-3">
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">
+            Reviewer
+          </p>
+          <p className="mt-0.5 text-[14px] font-semibold text-ink">
+            {resolvedHseApprover?.name || "Head of safety"}
+          </p>
+          <p className="text-[11px] text-stone-500 mt-0.5">
+            HSE Checklists route to the safety approver for your team.
+          </p>
+        </div>
+      )}
 
       {/* Reviewers picker — Colab step 7. Checkbox list of active users
           who can review WIRs. Hidden for HSE Checklists (above). When
@@ -2023,6 +2039,7 @@ function ItemPhotoButton({
   existingUrl,
   onPick,
   onClear,
+  cameraOnly = false,
 }: {
   photo: File | null;
   // A saved URL carried through from a draft. When a new `photo` isn't
@@ -2031,6 +2048,10 @@ function ItemPhotoButton({
   existingUrl?: string | null;
   onPick: (file: File) => void;
   onClear: () => void;
+  // Vandana 2026-10-15: HSE rows pass this true so the per-row
+  // camera opens the OS camera directly (capture="environment")
+  // instead of the gallery/camera chooser.
+  cameraOnly?: boolean;
 }) {
   const previewUrl = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
   useEffect(() => {
@@ -2066,6 +2087,7 @@ function ItemPhotoButton({
       <input
         type="file"
         accept="image/*"
+        {...(cameraOnly ? { capture: "environment" as const } : {})}
         className="sr-only"
         onChange={async (e) => {
           const f = e.target.files?.[0];
