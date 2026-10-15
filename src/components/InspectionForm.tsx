@@ -330,7 +330,15 @@ export default function InspectionForm({
     };
   }, [projectId]);
 
-  const appliedTemplateCode = templates.find((t) => t.id === templateId)?.code ?? null;
+  const appliedTemplate = templates.find((t) => t.id === templateId);
+  const appliedTemplateCode = appliedTemplate?.code ?? null;
+  // HSE Checklist mode (Vandana 2026-10-15 post-walkthrough): when the
+  // applied template is a safety one, the raiser doesn't pick
+  // reviewers — the checklist is pinned to Girish R, the HSE head.
+  // The picker is hidden and a static card tells the raiser who the
+  // approver will be. If the applied template isn't safety (QA/QC
+  // WIR flow), the picker renders as before.
+  const isHseChecklist = (appliedTemplate?.module ?? "").toUpperCase() === "SAFETY";
   const draftRegisterRowId = editDraft?.registerRowId ?? null;
   const linkedKey = appliedTemplateCode
     ? `templateCode=${encodeURIComponent(appliedTemplateCode)}`
@@ -498,6 +506,29 @@ export default function InspectionForm({
       cancelled = true;
     };
   }, []);
+
+  // HSE Checklist auto-pin: when the applied template is a safety one,
+  // force the reviewer set to just Girish R. The raiser doesn't see or
+  // touch a picker in that case, so this is the single source of truth
+  // for the assignment. Matches the permit flow's "safety → Girish"
+  // routing. If Girish can't be found in the reviewer pool (fresh
+  // install, data migration mid-flight), we leave the set empty and
+  // the server's SAFETY module-scoped broadcast catches him.
+  useEffect(() => {
+    if (!isHseChecklist) return;
+    if (reviewers.length === 0) return;
+    const girish = reviewers.find(
+      (r) =>
+        r.role === "SITE_MANAGER" &&
+        ((r.name ?? "").toLowerCase().includes("girish") ||
+          r.username.toLowerCase().startsWith("girish")),
+    );
+    if (!girish) return;
+    setSelectedReviewerIds((cur) => {
+      if (cur.size === 1 && cur.has(girish.id)) return cur;
+      return new Set([girish.id]);
+    });
+  }, [isHseChecklist, reviewers]);
 
   function applyTemplate(id: string) {
     setTemplateId(id);
@@ -1526,10 +1557,36 @@ export default function InspectionForm({
 
       <PhotoPicker photos={photos} setPhotos={setPhotos} max={8} label="Extra photos (context / evidence)" />
 
+      {/* HSE Checklist: no picker. The reviewer is pinned to Girish R
+          and shown as a static card so the raiser knows where this is
+          going. (Vandana 2026-10-15 post-walkthrough.) */}
+      {isHseChecklist && (() => {
+        const girish = reviewers.find(
+          (r) =>
+            r.role === "SITE_MANAGER" &&
+            ((r.name ?? "").toLowerCase().includes("girish") ||
+              r.username.toLowerCase().startsWith("girish")),
+        );
+        return (
+          <div className="rounded-lg border border-sandstone-200 bg-sandstone-50 px-3 py-3">
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">
+              Reviewer
+            </p>
+            <p className="mt-0.5 text-[14px] font-semibold text-ink">
+              {girish?.name || "Girish R"}
+            </p>
+            <p className="text-[11px] text-stone-500 mt-0.5">
+              Every HSE Checklist goes to the head of safety for sign-off.
+            </p>
+          </div>
+        );
+      })()}
+
       {/* Reviewers picker — Colab step 7. Checkbox list of active users
-          who can review WIRs. When left empty, the server falls back to
-          the role-based broadcast so nothing sits unnoticed. */}
-      {reviewers.length > 0 && (
+          who can review WIRs. Hidden for HSE Checklists (above). When
+          left empty for QA/QC WIRs, the server falls back to the
+          role-based broadcast so nothing sits unnoticed. */}
+      {!isHseChecklist && reviewers.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-stone-700">
