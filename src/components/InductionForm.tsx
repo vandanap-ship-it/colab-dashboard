@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Camera, X, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Camera, X, Loader2, ShieldCheck, PenLine } from "lucide-react";
 import { istDayString } from "@/lib/istDay";
 
 /**
@@ -344,19 +344,31 @@ export default function InductionForm({
           maxLength={12}
         />
 
-        {/* Supporting photos — Aadhaar front, Aadhaar back, signature.
-            Optional at the DB level but Shraddha wants them captured
+        {/* Supporting photos — Aadhaar front, Aadhaar back.
+            Optional at the DB level but Vandana wants them captured
             during the induction visit; the UI treats them as expected
             but doesn't block save. */}
         <section>
           <label className="block text-[13px] font-semibold text-ink mb-2">
             Supporting photos
           </label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <PhotoCapture photo={aadhaarFront} setPhoto={setAadhaarFront} shape="square" size="sm" caption="Aadhaar front" />
             <PhotoCapture photo={aadhaarBack} setPhoto={setAadhaarBack} shape="square" size="sm" caption="Aadhaar back" />
-            <PhotoCapture photo={signature} setPhoto={setSignature} shape="square" size="sm" caption="Signature" />
           </div>
+        </section>
+
+        {/* Signature — Vandana 2026-10-15: Colab lets the worker sign
+            on-screen. Primary input is the pad below; a fallback
+            "Upload photo of signed paper" tile handles the case where
+            an older worker can't sign on the device. Both paths write
+            to the same `signature` Photo state, uploaded with the
+            induction-signature scope. */}
+        <section>
+          <label className="block text-[13px] font-semibold text-ink mb-2">
+            Signature
+          </label>
+          <SignatureCapture photo={signature} setPhoto={setSignature} />
         </section>
 
         <section>
@@ -505,5 +517,205 @@ function PhotoCapture({
         }}
       />
     </label>
+  );
+}
+
+/**
+ * On-screen signature pad (Vandana 2026-10-15, Colab parity). The
+ * worker signs with a finger or stylus directly on the device; on
+ * Save, the canvas is rendered to a PNG File and dropped into the
+ * same `signature` Photo state the paper-photo flow used, so the
+ * upload path on submit is unchanged.
+ *
+ * A fallback "Upload a photo of a signed paper" tile sits below the
+ * pad for workers who can't sign on-screen (older phones, big thumbs,
+ * accessibility). Either path overwrites the same state — last one
+ * saved wins. Once the signature exists, we render the preview with
+ * a remove X and the capture area collapses.
+ */
+function SignatureCapture({
+  photo,
+  setPhoto,
+}: {
+  photo: Photo;
+  setPhoto: (p: Photo) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawingRef = useRef(false);
+  const [hasInk, setHasInk] = useState(false);
+
+  // Set canvas backing-store resolution to match its CSS size * DPR
+  // so strokes stay crisp on retina phones. Runs on mount; no
+  // dependency on content so it won't re-run and wipe strokes.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx.scale(dpr, dpr);
+    ctx.strokeStyle = "#161926";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+  }, []);
+
+  function pointerPos(e: React.PointerEvent<HTMLCanvasElement>): { x: number; y: number } {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function handlePointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
+    e.preventDefault();
+    const canvas = e.currentTarget;
+    canvas.setPointerCapture(e.pointerId);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const p = pointerPos(e);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    drawingRef.current = true;
+  }
+  function handlePointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawingRef.current) return;
+    const ctx = e.currentTarget.getContext("2d");
+    if (!ctx) return;
+    const p = pointerPos(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    if (!hasInk) setHasInk(true);
+  }
+  function handlePointerUp() {
+    drawingRef.current = false;
+  }
+
+  function clearPad() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    setHasInk(false);
+  }
+
+  function saveSignature() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    // Flatten the transparent stroke onto a white background so the
+    // uploaded PNG renders well on light + dark previews later. Copy
+    // via an offscreen canvas at the backing resolution.
+    const tmp = document.createElement("canvas");
+    tmp.width = canvas.width;
+    tmp.height = canvas.height;
+    const tctx = tmp.getContext("2d");
+    if (!tctx) return;
+    tctx.fillStyle = "#ffffff";
+    tctx.fillRect(0, 0, tmp.width, tmp.height);
+    tctx.drawImage(canvas, 0, 0);
+    tmp.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], `signature-${Date.now()}.png`, { type: "image/png" });
+      const previewUrl = URL.createObjectURL(blob);
+      if (photo.previewUrl) URL.revokeObjectURL(photo.previewUrl);
+      setPhoto({ file, previewUrl, uploadedUrl: null });
+    }, "image/png");
+  }
+
+  // Already captured → preview card with remove X and a "Re-sign" link.
+  if (photo.previewUrl) {
+    return (
+      <div className="rounded-lg border border-sandstone-200 bg-white p-3 flex items-center gap-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={photo.previewUrl}
+          alt="Signature"
+          className="w-28 h-16 object-contain border border-stone-200 rounded bg-white"
+        />
+        <div className="flex-1 min-w-0">
+          <p className="text-[12px] text-ink">Signature captured.</p>
+          <button
+            type="button"
+            onClick={() => {
+              URL.revokeObjectURL(photo.previewUrl!);
+              setPhoto(emptyPhoto());
+            }}
+            className="text-[11px] text-ferrous-600 hover:text-ferrous-700 font-medium"
+          >
+            Clear and re-sign
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-sandstone-200 bg-white p-3 space-y-2">
+      <div className="flex items-center gap-1.5 text-[12px] text-ink-3">
+        <PenLine className="w-3.5 h-3.5" />
+        <span>Sign with finger or stylus below.</span>
+      </div>
+      <canvas
+        ref={canvasRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        className="w-full h-32 bg-sandstone-50 border border-dashed border-stone-300 rounded cursor-crosshair"
+        // touchAction:none → canvas never scrolls while signing.
+        style={{ touchAction: "none" }}
+        aria-label="Signature canvas"
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={clearPad}
+          disabled={!hasInk}
+          className="rounded-md border border-stone-300 bg-white text-ink text-sm font-semibold py-2 disabled:opacity-50"
+        >
+          Clear
+        </button>
+        <button
+          type="button"
+          onClick={saveSignature}
+          disabled={!hasInk}
+          className="rounded-md bg-ink text-white text-sm font-semibold py-2 disabled:opacity-50"
+        >
+          Save signature
+        </button>
+      </div>
+      {/* Paper fallback — same uploader as every other photo. For an
+          older worker who can't sign on-screen, the raiser takes a
+          photo of a signed sheet instead. */}
+      <label className="block w-full rounded-md border border-dashed border-stone-300 bg-white text-ink-3 text-[12px] font-medium py-2 text-center cursor-pointer hover:bg-sandstone-50">
+        <span className="inline-flex items-center gap-1.5">
+          <Camera className="w-3.5 h-3.5" />
+          Or upload a photo of a signed paper
+        </span>
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) {
+              if (photo.previewUrl) URL.revokeObjectURL(photo.previewUrl);
+              setPhoto({
+                file: f,
+                previewUrl: URL.createObjectURL(f),
+                uploadedUrl: null,
+              });
+            }
+            e.currentTarget.value = "";
+          }}
+        />
+      </label>
+    </div>
   );
 }
