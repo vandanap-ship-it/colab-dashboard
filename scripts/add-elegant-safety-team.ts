@@ -4,7 +4,7 @@
  *
  *   1. Create user "gladson" (Gladson, Elegant safety team, NOT an
  *      approver). Idempotent — skipped if already exists.
- *   2. Promote user "mohd.a" (Mohd Asif) to canApproveWorkPermits=true
+ *   2. Promote user "mohd.asif" (Mohd Asif) to canApproveWorkPermits=true
  *      so he can approve HSE Checklists and Work Permits raised by
  *      Elegant's team. Idempotent — skipped if the flag is already on.
  *
@@ -86,9 +86,9 @@ async function main() {
     console.log(`+ ${created.username} (Gladson) created on Elegant · id=${created.id}${gladsonEmail ? "" : " · no email set"}`);
   }
 
-  // 2 ─ Promote Mohd Asif (mohd.a) to safety approver.
+  // 2 ─ Promote Mohd Asif (mohd.asif) to safety approver.
   const asif = await prisma.user.findUnique({
-    where: { username: "mohd.a" },
+    where: { username: "mohd.asif" },
     select: {
       id: true,
       name: true,
@@ -99,21 +99,21 @@ async function main() {
     },
   });
   if (!asif) {
-    console.error('! User "mohd.a" (Mohd Asif) not found — can\'t promote. Run create-missing-colab-users.ts first.');
+    console.error('! User "mohd.asif" (Mohd Asif) not found — can\'t promote.');
     process.exit(1);
   }
   if (!asif.active) {
-    console.error('! "mohd.a" is deactivated — cannot promote an inactive user. Fix the account first.');
+    console.error('! "mohd.asif" is deactivated — cannot promote an inactive user. Fix the account first.');
     process.exit(1);
   }
   if (asif.canApproveWorkPermits) {
-    console.log(`= mohd.a (${asif.name}) is already a safety approver — leaving alone`);
+    console.log(`= mohd.asif (${asif.name}) is already a safety approver — leaving alone`);
   } else {
     await prisma.user.update({
       where: { id: asif.id },
       data: { canApproveWorkPermits: true },
     });
-    console.log(`+ mohd.a (${asif.name}) promoted · canApproveWorkPermits=true · contractor=${asif.contractor?.name ?? "none"}`);
+    console.log(`+ mohd.asif (${asif.name}) promoted · canApproveWorkPermits=true · contractor=${asif.contractor?.name ?? "none"}`);
   }
 
   console.log("");
