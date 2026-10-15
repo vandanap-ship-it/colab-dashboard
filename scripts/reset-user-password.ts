@@ -1,11 +1,16 @@
 /**
- * One-off: set a single named user's password from an env var.
+ * One-off: set a single named user's password from env vars.
  *
  *   DATABASE_URL="postgresql://..." \
  *   ALLOW_PASSWORD_RESET=1 \
- *   USERNAME="gladson" \
+ *   TARGET_USERNAME="gladson" \
  *   NEW_PASSWORD="<the real password>" \
  *   npx tsx scripts/reset-user-password.ts
+ *
+ * NOTE: `TARGET_USERNAME`, not `USERNAME`. `USERNAME` is a zsh
+ * special variable tied to the OS user; assigning to it attempts
+ * to setuid, which silently fails for a normal user and leaves the
+ * subprocess inheriting the shell's real username.
  *
  * Why this exists next to reset-named-user-passwords.ts: that script
  * holds the full named-user roster with each user's canonical
@@ -26,9 +31,9 @@ if (/neon\.tech/i.test(url) && process.env.ALLOW_PASSWORD_RESET !== "1") {
   process.exit(1);
 }
 
-const username = process.env.USERNAME?.trim();
+const username = process.env.TARGET_USERNAME?.trim();
 if (!username) {
-  console.error("USERNAME env var required.");
+  console.error("TARGET_USERNAME env var required (note: TARGET_USERNAME, not USERNAME — the latter is reserved by zsh).");
   process.exit(1);
 }
 
