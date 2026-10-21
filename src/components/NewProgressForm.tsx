@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Lock } from "lucide-react";
+import { Lock, MapPin } from "lucide-react";
 import VoiceTextarea from "./VoiceTextarea";
 import { useToast } from "./Toast";
 import PhotoPicker from "./PhotoPicker";
@@ -655,6 +655,38 @@ export default function NewProgressForm({
 
   return (
     <form onSubmit={handleSubmit} className="px-5 py-5 space-y-6">
+      {/* Sticky villa + activity banner (Vandana 2026-10-21). Progress
+          team reported losing track of which villa they were logging to
+          mid-entry: by the time they're deep in % / notes / labour /
+          photos, the Step 1 "Activity" card has scrolled off-screen,
+          and they'd been typing a progress note against what they
+          thought was Villa 15 when they were actually on Villa 7. This
+          strip pins to the top of the scroll container as soon as an
+          activity is picked and stays there for the rest of the form.
+          Edge-to-edge via -mx-5 so it reads as a bar, not another
+          card. Hidden until `selected` is set; when editing a resumed
+          draft the selection fills in on the first render so this is
+          visible from the start. */}
+      {selected && (
+        <div
+          className="sticky top-0 z-20 -mx-5 -mt-5 mb-1 border-b border-sandstone-200 bg-ivory/95 backdrop-blur-sm px-5 py-2"
+          aria-label="Current villa and activity"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="shrink-0 inline-flex items-center gap-1 rounded-md bg-ferrous-500 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
+              <MapPin className="w-3 h-3" />
+              {selected.path.villaLabel || `Block ${selected.path.blockCode}`}
+            </span>
+            <span className="truncate text-[13px] font-medium text-ink">
+              {selected.name}
+            </span>
+          </div>
+          <p className="mt-0.5 truncate text-[11px] text-ink-3">
+            Block {selected.path.blockCode} · {selected.path.sectionName}
+          </p>
+        </div>
+      )}
+
       {/* Editorial heading — matches the Amanvana-native language from the
           home. Kept the H1 here so the page title stays with the form and
           readers land on the right heading level. */}
