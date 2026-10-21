@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { canSeeDesktop } from "@/lib/roles";
+import { canSeeDesktop, isAdmin } from "@/lib/roles";
 import { isScopedUser } from "@/lib/modules";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
@@ -42,7 +42,12 @@ export default async function AdoptionPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeDesktop(session.user.role)) redirect("/mobile");
-  if (isScopedUser(session.user.modules)) redirect("/mobile");
+  // Admins see Adoption even if their user row carries a modules
+  // scope (Vandana 2026-10-21); planners / product-team / site-manager
+  // accounts still bounce back to mobile when they're module-scoped.
+  if (!isAdmin(session.user.role) && isScopedUser(session.user.modules)) {
+    redirect("/mobile");
+  }
 
   const { id } = await params;
   const { range: rangeParam } = await searchParams;
