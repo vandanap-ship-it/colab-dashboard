@@ -9,6 +9,7 @@ import {
   FileText,
   HardHat,
   Search,
+  TrendingUp,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -45,6 +46,15 @@ export default async function ReportsLandingPage({
   if (!project) notFound();
 
   const reports: Report[] = [
+    {
+      key: "adoption",
+      title: "Adoption",
+      description:
+        "Who's using Siddhi and how often — daily active users, rows raised per module per week, per-user leaderboard, and contractor-side rollup. Pick 14 days, 30 days, or since handover.",
+      href: `/projects/${id}/adoption`,
+      icon: TrendingUp,
+      cadence: "On demand",
+    },
     {
       key: "scorecard",
       title: "Site Progress Scorecard",
