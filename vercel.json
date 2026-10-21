@@ -33,6 +33,10 @@
     {
       "path": "/api/cron/register-due",
       "schedule": "45 0 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-stragglers",
+      "schedule": "0 4 * * 1"
     }
   ]
 }
