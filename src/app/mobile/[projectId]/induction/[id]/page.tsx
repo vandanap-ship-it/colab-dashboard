@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Clock, CheckCircle2, X, CalendarClock, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Clock, CheckCircle2, X, CalendarClock, ShieldCheck, IdCard } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule, MODULES } from "@/lib/modules";
@@ -198,9 +198,21 @@ export default async function MobileInductionDetailPage({
       )}
       {induction.status !== "PENDING" && (
         <div
-          className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3"
+          className="border-t border-stone-200 bg-white/95 backdrop-blur-md p-3 space-y-2"
           style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
         >
+          {/* Print ID card — APPROVED only. Vandana 2026-10-21: a card
+              for a worker who hasn't been signed off would mis-state
+              their induction status. REJECTED/EXPIRED also skip. */}
+          {induction.status === "APPROVED" && (
+            <Link
+              href={`/mobile/${projectId}/induction/${induction.id}/id-card`}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-ink text-cream text-sm font-semibold py-2.5 hover:bg-ink/90"
+            >
+              <IdCard className="w-4 h-4" />
+              Print ID card
+            </Link>
+          )}
           <TerminalCallout status={induction.status} expiryDate={induction.expiryDate} nowMs={nowMs} />
         </div>
       )}
