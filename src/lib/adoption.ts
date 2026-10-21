@@ -32,6 +32,18 @@ export function rangeStart(range: AdoptionRange, now: Date = new Date()): Date {
   return d;
 }
 
+/** Start of the window that sits immediately before `start` and has
+ *  the same length. For range="handover" the semantics are off — the
+ *  "prior equivalent" would reach back into trial-period weeks where
+ *  Siddhi was barely used, so loadAdoption() returns previous=null
+ *  for that range and we don't render deltas. */
+export function previousRangeStart(start: Date, now: Date = new Date()): Date {
+  const spanMs = now.getTime() - start.getTime();
+  const prior = new Date(start.getTime() - spanMs);
+  prior.setUTCHours(0, 0, 0, 0);
+  return prior;
+}
+
 export function rangeLabel(range: AdoptionRange): string {
   if (range === "14d") return "Last 14 days";
   if (range === "30d") return "Last 30 days";
@@ -67,11 +79,17 @@ type RowSignal = {
 };
 
 /** Fetch every activity row (just id + user + created-at + module tag)
- *  across all surfaces for a project within [start, now]. One trip per
- *  model so Prisma can plan each one properly; still a handful of
- *  indexed count-style queries, fine for the planner-side dashboard. */
-async function fetchSignals(projectId: string, start: Date): Promise<RowSignal[]> {
-  const where = { projectId, deletedAt: null, createdAt: { gte: start } };
+ *  across all surfaces for a project within [start, end). end defaults
+ *  to open-ended so loadAdoption() can reuse this for the current
+ *  window AND the prior-equivalent window. One trip per model so
+ *  Prisma can plan each one properly; still a handful of indexed
+ *  count-style queries, fine for the planner-side dashboard. */
+async function fetchSignals(projectId: string, start: Date, end?: Date): Promise<RowSignal[]> {
+  const where = {
+    projectId,
+    deletedAt: null,
+    createdAt: end ? { gte: start, lt: end } : { gte: start },
+  };
 
   const [
     progress,
@@ -307,6 +325,19 @@ export async function rollupContractors(
   return rows;
 }
 
+/** Prior-window counts, keyed for a fast delta render on the page.
+ *  Null when the current range is "handover" — the "equivalent prior"
+ *  would reach back into Siddhi's trial weeks where almost nothing
+ *  was raised and the delta reads as misleadingly huge. */
+export type PreviousWindow = {
+  start: Date;
+  end: Date;
+  totalRows: number;
+  totalActiveUsers: number;
+  rowsByUser: Record<string, number>; // keyed by userId
+  rowsByContractor: Record<string, number>; // keyed by contractorId
+};
+
 export type AdoptionData = {
   range: AdoptionRange;
   start: Date;
@@ -317,12 +348,55 @@ export type AdoptionData = {
   contractors: ContractorRow[];
   totalRows: number;
   totalActiveUsers: number;
+  previous: PreviousWindow | null;
 };
+
+async function buildPreviousWindow(
+  projectId: string,
+  start: Date,
+  end: Date,
+): Promise<PreviousWindow> {
+  const signals = await fetchSignals(projectId, start, end);
+  const rowsByUser: Record<string, number> = {};
+  for (const s of signals) rowsByUser[s.userId] = (rowsByUser[s.userId] ?? 0) + 1;
+
+  // Resolve each active user's contractor so prior-window contractor
+  // totals line up with the current-window table even when a user
+  // was tagged to a different contractor at the time (we take
+  // today's tag — close enough; retagging mid-window is rare).
+  const rowsByContractor: Record<string, number> = {};
+  const userIds = Object.keys(rowsByUser);
+  if (userIds.length > 0) {
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, contractorId: true },
+    });
+    for (const u of users) {
+      if (!u.contractorId) continue;
+      rowsByContractor[u.contractorId] =
+        (rowsByContractor[u.contractorId] ?? 0) + (rowsByUser[u.id] ?? 0);
+    }
+  }
+
+  return {
+    start,
+    end,
+    totalRows: signals.length,
+    totalActiveUsers: new Set(signals.map((s) => s.userId)).size,
+    rowsByUser,
+    rowsByContractor,
+  };
+}
 
 export async function loadAdoption(projectId: string, range: AdoptionRange): Promise<AdoptionData> {
   const now = new Date();
   const start = rangeStart(range, now);
-  const signals = await fetchSignals(projectId, start);
+  const [signals, previous] = await Promise.all([
+    fetchSignals(projectId, start),
+    range === "handover"
+      ? Promise.resolve(null as PreviousWindow | null)
+      : buildPreviousWindow(projectId, previousRangeStart(start, now), start),
+  ]);
   const [users, contractors] = await Promise.all([
     rollupUsers(signals, now),
     rollupContractors(signals, projectId),
@@ -337,5 +411,6 @@ export async function loadAdoption(projectId: string, range: AdoptionRange): Pro
     contractors,
     totalRows: signals.length,
     totalActiveUsers: new Set(signals.map((s) => s.userId)).size,
+    previous,
   };
 }

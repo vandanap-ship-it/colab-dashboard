@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, TrendingDown, TrendingUp, Minus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canSeeDesktop, isAdmin } from "@/lib/roles";
 import { isScopedUser } from "@/lib/modules";
@@ -81,8 +81,27 @@ export default async function AdoptionPage({
               Adoption
             </h1>
             <p className="text-[13px] text-ink-3 mt-1">
-              {project.name} · {rangeLabel(range)} · {data.totalActiveUsers} active user{data.totalActiveUsers === 1 ? "" : "s"} · {data.totalRows} rows raised
+              {project.name} · {rangeLabel(range)}
             </p>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-ink">
+              <span className="inline-flex items-center gap-2">
+                <span className="font-semibold tabular-nums">{data.totalActiveUsers}</span>
+                <span className="text-ink-3">active user{data.totalActiveUsers === 1 ? "" : "s"}</span>
+                {data.previous && (
+                  <Delta
+                    current={data.totalActiveUsers}
+                    previous={data.previous.totalActiveUsers}
+                  />
+                )}
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span className="font-semibold tabular-nums">{data.totalRows}</span>
+                <span className="text-ink-3">rows raised</span>
+                {data.previous && (
+                  <Delta current={data.totalRows} previous={data.previous.totalRows} />
+                )}
+              </span>
+            </div>
           </div>
 
           <nav className="inline-flex rounded-xl border border-sandstone-200 bg-white p-0.5" aria-label="Time range">
@@ -189,31 +208,44 @@ export default async function AdoptionPage({
                     <th className="text-right px-3 py-2 font-semibold whitespace-nowrap">
                       In window
                     </th>
+                    {data.previous && (
+                      <th className="text-right px-3 py-2 font-semibold whitespace-nowrap">
+                        Δ vs prior
+                      </th>
+                    )}
                     <th className="text-left px-4 py-2 font-semibold whitespace-nowrap">
                       Last seen
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.users.map((u) => (
-                    <tr key={u.userId} className="border-t border-sandstone-100">
-                      <td className="px-4 py-2">
-                        <div className="font-medium text-ink">{u.name}</div>
-                        <div className="text-[10px] text-ink-3">@{u.username}</div>
-                      </td>
-                      <td className="px-3 py-2 text-ink-3">{u.role.replace(/_/g, " ").toLowerCase()}</td>
-                      <td className="px-3 py-2 text-ink-3">
-                        {u.contractorName || <span className="text-ink-4 italic">in-house</span>}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-ink">{u.rowsLast7d || "—"}</td>
-                      <td className="px-3 py-2 text-right font-semibold tabular-nums text-ink">
-                        {u.rowsInWindow}
-                      </td>
-                      <td className="px-4 py-2 text-ink-3 whitespace-nowrap">
-                        {u.lastSeen ? fmtRelative(u.lastSeen, data.now) : "—"}
-                      </td>
-                    </tr>
-                  ))}
+                  {data.users.map((u) => {
+                    const prior = data.previous?.rowsByUser[u.userId] ?? 0;
+                    return (
+                      <tr key={u.userId} className="border-t border-sandstone-100">
+                        <td className="px-4 py-2">
+                          <div className="font-medium text-ink">{u.name}</div>
+                          <div className="text-[10px] text-ink-3">@{u.username}</div>
+                        </td>
+                        <td className="px-3 py-2 text-ink-3">{u.role.replace(/_/g, " ").toLowerCase()}</td>
+                        <td className="px-3 py-2 text-ink-3">
+                          {u.contractorName || <span className="text-ink-4 italic">in-house</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-ink">{u.rowsLast7d || "—"}</td>
+                        <td className="px-3 py-2 text-right font-semibold tabular-nums text-ink">
+                          {u.rowsInWindow}
+                        </td>
+                        {data.previous && (
+                          <td className="px-3 py-2 text-right">
+                            <Delta current={u.rowsInWindow} previous={prior} compact />
+                          </td>
+                        )}
+                        <td className="px-4 py-2 text-ink-3 whitespace-nowrap">
+                          {u.lastSeen ? fmtRelative(u.lastSeen, data.now) : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -241,19 +273,32 @@ export default async function AdoptionPage({
                   <tr>
                     <th className="text-left px-4 py-2 font-semibold">Contractor</th>
                     <th className="text-right px-3 py-2 font-semibold">Active users</th>
-                    <th className="text-right px-4 py-2 font-semibold">Rows in window</th>
+                    <th className="text-right px-3 py-2 font-semibold">Rows in window</th>
+                    {data.previous && (
+                      <th className="text-right px-4 py-2 font-semibold whitespace-nowrap">
+                        Δ vs prior
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {data.contractors.map((c) => (
-                    <tr key={c.contractorId} className="border-t border-sandstone-100">
-                      <td className="px-4 py-2 font-medium text-ink">{c.name}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-ink-3">{c.userCount}</td>
-                      <td className="px-4 py-2 text-right font-semibold tabular-nums text-ink">
-                        {c.rowsInWindow}
-                      </td>
-                    </tr>
-                  ))}
+                  {data.contractors.map((c) => {
+                    const prior = data.previous?.rowsByContractor[c.contractorId] ?? 0;
+                    return (
+                      <tr key={c.contractorId} className="border-t border-sandstone-100">
+                        <td className="px-4 py-2 font-medium text-ink">{c.name}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-ink-3">{c.userCount}</td>
+                        <td className="px-3 py-2 text-right font-semibold tabular-nums text-ink">
+                          {c.rowsInWindow}
+                        </td>
+                        {data.previous && (
+                          <td className="px-4 py-2 text-right">
+                            <Delta current={c.rowsInWindow} previous={prior} compact />
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -261,6 +306,45 @@ export default async function AdoptionPage({
         </section>
       </main>
     </div>
+  );
+}
+
+/** Compact delta badge: green up-arrow for positive change, red down-
+ *  arrow for negative, cement dash for no change. `compact` makes it
+ *  fit cleanly in a table cell (icon + number, no "vs prior" tail). */
+function Delta({
+  current,
+  previous,
+  compact,
+}: {
+  current: number;
+  previous: number;
+  compact?: boolean;
+}) {
+  const diff = current - previous;
+  if (diff === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] text-ink-3">
+        <Minus className="w-3 h-3" />
+        {compact ? "0" : "no change"}
+      </span>
+    );
+  }
+  if (diff > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 tabular-nums">
+        <TrendingUp className="w-3 h-3" />
+        +{diff}
+        {!compact && <span className="text-ink-3 font-normal">vs prior</span>}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ferrous-700 tabular-nums">
+      <TrendingDown className="w-3 h-3" />
+      {diff}
+      {!compact && <span className="text-ink-3 font-normal">vs prior</span>}
+    </span>
   );
 }
 
