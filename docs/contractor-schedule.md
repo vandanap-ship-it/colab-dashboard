@@ -1,4 +1,11 @@
-# Contractor Schedule — Planning Doc
+# Contractor Schedule — Plan A · Activity-Level
+
+> **One of two active plans.** Companion plan at
+> [`contractor-schedule-milestone.md`](contractor-schedule-milestone.md),
+> drafted 2026-10-26 against the real Elegant + A&T master trackers.
+> Vandana picks between the two after the team review on 2026-10-27;
+> until then both are preserved for comparison. See the "Plan A vs
+> Plan B" note at the end of the milestone doc for a side-by-side.
 
 Source of truth for the dual-schedule rework. Everything below was agreed
 by Vandana between 2026-10-22 and the kickoff of this doc. The doc lives
