@@ -8,6 +8,7 @@ import {
   getLabourSupplyReport,
   getProjectMeta,
   rangeFromSearchParams,
+  type LabourSupplyBreakdown,
 } from "@/lib/reports";
 import ReportShell, { ReportSection } from "@/components/ReportShell";
 
@@ -33,6 +34,17 @@ export default async function LabourSupplyReportPage({
   const report = await getLabourSupplyReport(id, range.from, range.to);
   const periodLabel = `${fmtDateLong(range.from)} – ${fmtDateLong(range.to)}`;
 
+  // Count distinct contractors across all three sources — one contractor
+  // appearing in two sources still counts once.
+  const contractorNames = new Set<string>();
+  for (const b of [report.progressLabour, report.manpowerLog, report.permitLabour]) {
+    for (const c of b.contractors) contractorNames.add(c.contractorName);
+  }
+  const combinedGrandTotal =
+    report.progressLabour.grandTotal +
+    report.manpowerLog.grandTotal +
+    report.permitLabour.grandTotal;
+
   return (
     <ReportShell
       projectId={id}
@@ -45,21 +57,75 @@ export default async function LabourSupplyReportPage({
       endDate={range.to}
     >
       <ReportSection index={1} title="Summary">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 print:grid-cols-3">
-          <Stat label="Total labour" value={report.grandTotal} />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 print:grid-cols-4">
           <Stat label="Days in range" value={report.days.length} />
-          <Stat label="Contractors" value={report.contractors.length} />
+          <Stat label="Distinct contractors" value={contractorNames.size} />
+          <Stat label="Total (all sources)" value={combinedGrandTotal} />
+          <Stat label="Sources counted" value={3} />
         </div>
+        <p className="text-xs text-stone-500 italic mt-3 leading-relaxed">
+          Labour data lives in three places in Siddhi: inside progress
+          entries, inside the standalone manpower log, and inside work
+          permits. Each is counted separately below so a day's number is
+          traceable to its source. Totals above are the simple sum across
+          all three (no de-dup).
+        </p>
       </ReportSection>
 
-      {report.contractors.length === 0 ? (
+      <BreakdownSection
+        index={2}
+        title="Progress labour"
+        subtitle="Per-activity labour counts logged inside each progress entry."
+        breakdown={report.progressLabour}
+        days={report.days}
+      />
+
+      <BreakdownSection
+        index={3}
+        title="Manpower log (standalone)"
+        subtitle="Daily headcount entered via the mobile Manpower tile."
+        breakdown={report.manpowerLog}
+        days={report.days}
+      />
+
+      <BreakdownSection
+        index={4}
+        title="Permit labour"
+        subtitle="Role + # Workers listed on each Work Permit, grouped by the permit's creation day."
+        breakdown={report.permitLabour}
+        days={report.days}
+      />
+    </ReportShell>
+  );
+}
+
+function BreakdownSection({
+  index,
+  title,
+  subtitle,
+  breakdown,
+  days,
+}: {
+  index: number;
+  title: string;
+  subtitle: string;
+  breakdown: LabourSupplyBreakdown;
+  days: string[];
+}) {
+  return (
+    <ReportSection index={index} title={title}>
+      <p className="text-xs text-stone-500 italic -mt-1 mb-3 leading-relaxed">
+        {subtitle}
+      </p>
+
+      {breakdown.contractors.length === 0 ? (
         <p className="text-sm text-stone-500 italic">
-          No labour entries in this date range.
+          No entries from this source in the selected date range.
         </p>
       ) : (
-        <ReportSection index={2} title="Per-contractor breakdown">
+        <>
           <div className="space-y-8">
-            {report.contractors.map((c) => (
+            {breakdown.contractors.map((c) => (
               <div key={c.contractorName} className="break-inside-avoid">
                 <div className="flex items-baseline justify-between gap-2 flex-wrap mb-2">
                   <h3 className="text-sm font-semibold text-stone-900">
@@ -76,7 +142,7 @@ export default async function LabourSupplyReportPage({
                         <th className="text-left font-medium py-1.5 px-3 w-32">
                           Category
                         </th>
-                        {report.days.map((d) => (
+                        {days.map((d) => (
                           <th
                             key={d}
                             className="text-right font-medium py-1.5 px-2 whitespace-nowrap"
@@ -131,16 +197,15 @@ export default async function LabourSupplyReportPage({
               </div>
             ))}
           </div>
-        </ReportSection>
-      )}
 
-      {report.contractors.length > 0 && (
-        <ReportSection index={3} title="Project totals per day">
-          <div className="rounded-lg border border-stone-200 overflow-x-auto">
+          <div className="mt-6 rounded-lg border border-stone-200 overflow-x-auto">
             <table className="w-full text-xs border-collapse min-w-[560px]">
               <thead className="bg-stone-50">
                 <tr className="text-[10px] uppercase tracking-wider text-stone-500">
-                  {report.days.map((d) => (
+                  <th className="text-left font-medium py-1.5 px-3 w-32">
+                    All contractors
+                  </th>
+                  {days.map((d) => (
                     <th
                       key={d}
                       className="text-right font-medium py-1.5 px-2 whitespace-nowrap"
@@ -155,7 +220,10 @@ export default async function LabourSupplyReportPage({
               </thead>
               <tbody>
                 <tr>
-                  {report.grandTotalPerDay.map((v, i) => (
+                  <td className="py-1.5 px-3 font-semibold text-stone-900">
+                    Daily total
+                  </td>
+                  {breakdown.grandTotalPerDay.map((v, i) => (
                     <td
                       key={i}
                       className="py-1.5 px-2 text-right tabular-nums font-semibold text-stone-900"
@@ -164,15 +232,15 @@ export default async function LabourSupplyReportPage({
                     </td>
                   ))}
                   <td className="py-1.5 px-3 text-right tabular-nums font-bold text-stone-900 border-l border-stone-200">
-                    {report.grandTotal}
+                    {breakdown.grandTotal}
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </ReportSection>
+        </>
       )}
-    </ReportShell>
+    </ReportSection>
   );
 }
 

@@ -86,9 +86,16 @@ export async function getProjectMeta(projectId: string) {
 }
 
 // ----- Labour Supply Report -----
+//
+// Siddhi stores labour across THREE separate surfaces. Previous versions of
+// this report only read ProgressLabour, which showed zero on days when the
+// site team logged labour in a permit or in the standalone manpower tile
+// instead. Now reads all three and renders them as separate sub-sections —
+// no de-dup, each source is labelled distinctly so the reader can tell
+// where a number came from.
 
-export type LabourSupplyReport = {
-  days: string[]; // YYYY-MM-DD
+/** One contractor's labour breakdown over the day range for ONE source. */
+export type LabourSupplyBreakdown = {
   contractors: Array<{
     contractorId: string | null;
     contractorName: string;
@@ -104,67 +111,52 @@ export type LabourSupplyReport = {
   grandTotal: number;
 };
 
-export async function getLabourSupplyReport(
-  projectId: string,
-  fromIso: string,
-  toIso: string,
-): Promise<LabourSupplyReport> {
-  const days = buildDayList(fromIso, toIso);
-  const start = new Date(fromIso + "T00:00:00Z");
-  const endExclusive = new Date(toIso + "T00:00:00Z");
-  endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+export type LabourSupplyReport = {
+  days: string[]; // YYYY-MM-DD
+  // Daily per-activity labour counts entered inside a Progress entry.
+  progressLabour: LabourSupplyBreakdown;
+  // Standalone daily manpower log (the "Log manpower" mobile tile).
+  manpowerLog: LabourSupplyBreakdown;
+  // Role + # Workers rows entered on each Work Permit.
+  permitLabour: LabourSupplyBreakdown;
+};
 
-  const entries = await prisma.progressEntry.findMany({
-    where: { projectId, date: { gte: start, lt: endExclusive } },
-    select: {
-      id: true,
-      date: true,
-      contractor: { select: { id: true, name: true } },
-    },
-  });
-
-  const ids = entries.map((e) => e.id);
-  const labourRows = ids.length
-    ? await prisma.progressLabour.findMany({
-        where: { progressEntryId: { in: ids } },
-        select: { progressEntryId: true, category: true, count: true },
-      })
-    : [];
-
-  const labourByEntry = new Map<string, { category: string; count: number }[]>();
-  for (const l of labourRows) {
-    const arr = labourByEntry.get(l.progressEntryId) ?? [];
-    arr.push({ category: l.category, count: l.count });
-    labourByEntry.set(l.progressEntryId, arr);
-  }
-
+/**
+ * Group a flat list of (day, contractor, category, count) rows into the
+ * per-contractor breakdown shape the report page renders. Shared across
+ * the three source queries so the output layout stays identical.
+ */
+function buildBreakdown(
+  days: string[],
+  rows: Array<{
+    date: string; // YYYY-MM-DD
+    contractorId: string | null;
+    contractorName: string;
+    category: string;
+    count: number;
+  }>,
+): LabourSupplyBreakdown {
   type Cell = Map<string, number>; // category -> count
   type Group = { contractorId: string | null; name: string; perDayCategory: Map<string, Cell> };
   const groups = new Map<string, Group>();
 
-  for (const e of entries) {
-    const key = dayKey(e.date);
-    if (!days.includes(key)) continue;
-    const cName = e.contractor?.name ?? "(unassigned)";
-    const cId = e.contractor?.id ?? null;
-    const groupKey = cId ?? `__unassigned__::${cName}`;
+  for (const r of rows) {
+    if (!days.includes(r.date)) continue;
+    const groupKey = r.contractorId ?? `__unassigned__::${r.contractorName}`;
     let g = groups.get(groupKey);
     if (!g) {
-      g = { contractorId: cId, name: cName, perDayCategory: new Map() };
+      g = { contractorId: r.contractorId, name: r.contractorName, perDayCategory: new Map() };
       groups.set(groupKey, g);
     }
-    const labours = labourByEntry.get(e.id) ?? [];
-    let cell = g.perDayCategory.get(key);
+    let cell = g.perDayCategory.get(r.date);
     if (!cell) {
       cell = new Map();
-      g.perDayCategory.set(key, cell);
+      g.perDayCategory.set(r.date, cell);
     }
-    for (const l of labours) {
-      cell.set(l.category, (cell.get(l.category) ?? 0) + l.count);
-    }
+    cell.set(r.category, (cell.get(r.category) ?? 0) + r.count);
   }
 
-  const contractors: LabourSupplyReport["contractors"] = [];
+  const contractors: LabourSupplyBreakdown["contractors"] = [];
   const grandTotalPerDay = days.map(() => 0);
   let grandTotal = 0;
 
@@ -175,35 +167,114 @@ export async function getLabourSupplyReport(
     }
     const sortedCategories = Array.from(categories).sort();
 
-    const rows = sortedCategories.map((cat) => {
-      const perDay = days.map((d) => {
-        const cell = g.perDayCategory.get(d);
-        return cell?.get(cat) ?? 0;
-      });
+    const builtRows = sortedCategories.map((cat) => {
+      const perDay = days.map((d) => g.perDayCategory.get(d)?.get(cat) ?? 0);
       const total = perDay.reduce((s, n) => s + n, 0);
       return { category: cat, perDay, total };
     });
 
     const totalsPerDay = days.map((_, i) =>
-      rows.reduce((s, r) => s + r.perDay[i], 0),
+      builtRows.reduce((s, r) => s + r.perDay[i], 0),
     );
     const groupGrand = totalsPerDay.reduce((s, n) => s + n, 0);
 
-    for (let i = 0; i < days.length; i++) {
-      grandTotalPerDay[i] += totalsPerDay[i];
-    }
+    for (let i = 0; i < days.length; i++) grandTotalPerDay[i] += totalsPerDay[i];
     grandTotal += groupGrand;
 
     contractors.push({
       contractorId: g.contractorId,
       contractorName: g.name,
-      rows,
+      rows: builtRows,
       totalsPerDay,
       grandTotal: groupGrand,
     });
   }
 
-  return { days, contractors, grandTotalPerDay, grandTotal };
+  return { contractors, grandTotalPerDay, grandTotal };
+}
+
+export async function getLabourSupplyReport(
+  projectId: string,
+  fromIso: string,
+  toIso: string,
+): Promise<LabourSupplyReport> {
+  const days = buildDayList(fromIso, toIso);
+  const start = new Date(fromIso + "T00:00:00Z");
+  const endExclusive = new Date(toIso + "T00:00:00Z");
+  endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+
+  // ----- Source 1: Progress labour (ProgressLabour on ProgressEntry) -----
+  const progressEntries = await prisma.progressEntry.findMany({
+    where: { projectId, date: { gte: start, lt: endExclusive }, deletedAt: null },
+    select: {
+      id: true,
+      date: true,
+      contractor: { select: { id: true, name: true } },
+      labour: { select: { category: true, count: true } },
+    },
+  });
+  const progressRows: Parameters<typeof buildBreakdown>[1] = [];
+  for (const e of progressEntries) {
+    const date = dayKey(e.date);
+    const contractorId = e.contractor?.id ?? null;
+    const contractorName = e.contractor?.name ?? "(unassigned)";
+    for (const l of e.labour) {
+      progressRows.push({ date, contractorId, contractorName, category: l.category, count: l.count });
+    }
+  }
+
+  // ----- Source 2: Standalone manpower log (ManpowerEntry) -----
+  const manpowerEntries = await prisma.manpowerEntry.findMany({
+    where: { projectId, entryDate: { gte: start, lt: endExclusive }, deletedAt: null },
+    select: {
+      entryDate: true,
+      trade: true,
+      actualCount: true,
+      contractor: { select: { id: true, name: true } },
+    },
+  });
+  const manpowerRows = manpowerEntries.map((m) => ({
+    date: dayKey(m.entryDate),
+    contractorId: m.contractor?.id ?? null,
+    contractorName: m.contractor?.name ?? "(unassigned)",
+    category: m.trade,
+    count: m.actualCount,
+  }));
+
+  // ----- Source 3: Permit labour (PermitLabourEntry on WorkPermit) -----
+  // WorkPermit.contractorId is optional (null for permits that don't name
+  // one). We anchor the row to the permit's createdAt day — the permit's
+  // start date is a loose window, createdAt is the moment the labour list
+  // was committed.
+  const permits = await prisma.workPermit.findMany({
+    where: { projectId, createdAt: { gte: start, lt: endExclusive }, deletedAt: null },
+    select: {
+      createdAt: true,
+      contractor: { select: { id: true, name: true } },
+      labourEntries: { select: { role: true, count: true, kind: true } },
+    },
+  });
+  const permitRows: Parameters<typeof buildBreakdown>[1] = [];
+  for (const p of permits) {
+    const date = dayKey(p.createdAt);
+    const contractorId = p.contractor?.id ?? null;
+    const contractorName = p.contractor?.name ?? "(unassigned)";
+    for (const l of p.labourEntries) {
+      // Only the LABOUR kind — ATTENDANCE rows are named supervisors
+      // (count=1 placeholder), not labour supply.
+      if (l.kind !== "LABOUR") continue;
+      if (!l.count || l.count <= 0) continue;
+      const category = (l.role ?? "").trim() || "(role unspecified)";
+      permitRows.push({ date, contractorId, contractorName, category, count: l.count });
+    }
+  }
+
+  return {
+    days,
+    progressLabour: buildBreakdown(days, progressRows),
+    manpowerLog: buildBreakdown(days, manpowerRows),
+    permitLabour: buildBreakdown(days, permitRows),
+  };
 }
 
 // ----- Master Observation Report -----
