@@ -21,7 +21,17 @@ import { prisma } from "@/lib/prisma";
 
 export type AdoptionRange = "14d" | "30d" | "handover";
 
+/** Which rows to count. "real" strips Colab-imported rows (idempotency
+ *  key starts with "colab") and rows created by any ADMIN account — the
+ *  numbers that reflect genuine site-team activity. "all" is every row
+ *  including seeded/test data. Default on the page is "real" so the
+ *  dashboard tells the honest story at first glance. */
+export type AdoptionMode = "real" | "all";
+
 export const HANDOVER_START_ISO = "2026-09-30T00:00:00.000Z";
+
+/** Window used by the dormant-surface callout, in milliseconds. */
+const DORMANT_WINDOW_MS = 7 * 86400000;
 
 export function rangeStart(range: AdoptionRange, now: Date = new Date()): Date {
   if (range === "handover") return new Date(HANDOVER_START_ISO);
@@ -76,7 +86,13 @@ type RowSignal = {
   module: ModuleKey;
   userId: string;
   createdAt: Date;
+  /** True when the row came in via the 1-Oct Colab import (its
+   *  idempotencyKey starts with "colab"). Used by the "real" filter
+   *  so a healthy import doesn't masquerade as adoption. */
+  isImport: boolean;
 };
+
+const isColabKey = (k: string | null | undefined) => !!k && k.startsWith("colab");
 
 /** Fetch every activity row (just id + user + created-at + module tag)
  *  across all surfaces for a project within [start, end). end defaults
@@ -101,44 +117,65 @@ async function fetchSignals(projectId: string, start: Date, end?: Date): Promise
   ] = await Promise.all([
     prisma.progressEntry.findMany({
       where,
-      select: { createdById: true, createdAt: true },
+      select: { createdById: true, createdAt: true, idempotencyKey: true },
     }),
     prisma.manpowerEntry.findMany({
       where,
-      select: { createdById: true, createdAt: true },
+      select: { createdById: true, createdAt: true, idempotencyKey: true },
     }),
     prisma.inspection.findMany({
       where,
-      select: { filledById: true, module: true, createdAt: true },
+      select: { filledById: true, module: true, createdAt: true, idempotencyKey: true },
     }),
     prisma.workPermit.findMany({
       where,
-      select: { requesterId: true, createdAt: true },
+      select: { requesterId: true, createdAt: true, idempotencyKey: true },
     }),
     prisma.safetyInduction.findMany({
       where,
-      select: { createdById: true, createdAt: true },
+      select: { createdById: true, createdAt: true, idempotencyKey: true },
     }),
     prisma.issue.findMany({
       where,
-      select: { createdById: true, module: true, createdAt: true },
+      select: { createdById: true, module: true, createdAt: true, idempotencyKey: true },
     }),
   ]);
 
   const signals: RowSignal[] = [];
-  for (const p of progress) signals.push({ module: "progress", userId: p.createdById, createdAt: p.createdAt });
-  for (const m of manpower) signals.push({ module: "manpower", userId: m.createdById, createdAt: m.createdAt });
+  for (const p of progress) {
+    signals.push({ module: "progress", userId: p.createdById, createdAt: p.createdAt, isImport: isColabKey(p.idempotencyKey) });
+  }
+  for (const m of manpower) {
+    signals.push({ module: "manpower", userId: m.createdById, createdAt: m.createdAt, isImport: isColabKey(m.idempotencyKey) });
+  }
   for (const i of inspections) {
     // SAFETY-tagged inspections are HSE Checklists; QAQC-tagged ones
     // are WIRs; untagged defaults to QAQC per the module convention.
     const mod: ModuleKey = i.module === "SAFETY" ? "hse" : "qaqc";
-    signals.push({ module: mod, userId: i.filledById, createdAt: i.createdAt });
+    signals.push({ module: mod, userId: i.filledById, createdAt: i.createdAt, isImport: isColabKey(i.idempotencyKey) });
   }
-  for (const p of permits) signals.push({ module: "permits", userId: p.requesterId, createdAt: p.createdAt });
-  for (const ind of inductions) signals.push({ module: "inductions", userId: ind.createdById, createdAt: ind.createdAt });
-  for (const ob of observations) signals.push({ module: "observations", userId: ob.createdById, createdAt: ob.createdAt });
+  for (const p of permits) {
+    signals.push({ module: "permits", userId: p.requesterId, createdAt: p.createdAt, isImport: isColabKey(p.idempotencyKey) });
+  }
+  for (const ind of inductions) {
+    signals.push({ module: "inductions", userId: ind.createdById, createdAt: ind.createdAt, isImport: isColabKey(ind.idempotencyKey) });
+  }
+  for (const ob of observations) {
+    signals.push({ module: "observations", userId: ob.createdById, createdAt: ob.createdAt, isImport: isColabKey(ob.idempotencyKey) });
+  }
 
   return signals;
+}
+
+/** Resolve every ADMIN user's id. Used by the "real" filter so test
+ *  rows raised from an admin account don't inflate adoption numbers. */
+async function fetchAdminIds(): Promise<Set<string>> {
+  const admins = await prisma.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
+  return new Set(admins.map((u) => u.id));
+}
+
+function applyRealFilter(signals: RowSignal[], adminIds: Set<string>): RowSignal[] {
+  return signals.filter((s) => !s.isImport && !adminIds.has(s.userId));
 }
 
 /** YYYY-MM-DD in IST so the day-buckets match what engineers see.
@@ -340,6 +377,7 @@ export type PreviousWindow = {
 
 export type AdoptionData = {
   range: AdoptionRange;
+  mode: AdoptionMode;
   start: Date;
   now: Date;
   dau: DauPoint[];
@@ -349,14 +387,29 @@ export type AdoptionData = {
   totalRows: number;
   totalActiveUsers: number;
   previous: PreviousWindow | null;
+  /** How many rows were discarded by the "real" filter (Colab import
+   *  or admin-created). Shown as a one-line hint so Shraddha knows the
+   *  honest number is lower than the raw one for a reason. Zero when
+   *  mode = "all". */
+  excludedRows: number;
+  /** Modules with 0 "real" rows in the last 7 days. Rendered as a red
+   *  alert band at the top of the dashboard so dormant surfaces don't
+   *  stay invisible until the next meeting. */
+  dormantModules: ModuleKey[];
+  /** Modules with 1-2 "real" rows in the last 7 days — one tier below
+   *  dormant. Rendered amber. */
+  slowModules: ModuleKey[];
 };
 
 async function buildPreviousWindow(
   projectId: string,
   start: Date,
   end: Date,
+  adminIds: Set<string>,
+  mode: AdoptionMode,
 ): Promise<PreviousWindow> {
-  const signals = await fetchSignals(projectId, start, end);
+  const raw = await fetchSignals(projectId, start, end);
+  const signals = mode === "real" ? applyRealFilter(raw, adminIds) : raw;
   const rowsByUser: Record<string, number> = {};
   for (const s of signals) rowsByUser[s.userId] = (rowsByUser[s.userId] ?? 0) + 1;
 
@@ -388,21 +441,44 @@ async function buildPreviousWindow(
   };
 }
 
-export async function loadAdoption(projectId: string, range: AdoptionRange): Promise<AdoptionData> {
+export async function loadAdoption(
+  projectId: string,
+  range: AdoptionRange,
+  mode: AdoptionMode = "real",
+): Promise<AdoptionData> {
   const now = new Date();
   const start = rangeStart(range, now);
-  const [signals, previous] = await Promise.all([
+  const adminIds = await fetchAdminIds();
+
+  const [rawSignals, previous] = await Promise.all([
     fetchSignals(projectId, start),
     range === "handover"
       ? Promise.resolve(null as PreviousWindow | null)
-      : buildPreviousWindow(projectId, previousRangeStart(start, now), start),
+      : buildPreviousWindow(projectId, previousRangeStart(start, now), start, adminIds, mode),
   ]);
+  const signals = mode === "real" ? applyRealFilter(rawSignals, adminIds) : rawSignals;
+  const excludedRows = rawSignals.length - signals.length;
+
+  // Dormant surface detection: real rows per module in the last 7
+  // days from now. Uses the mode-filtered signals so the "all" view
+  // doesn't surface a false alarm driven by missing imports.
+  const dormantCutoffMs = now.getTime() - DORMANT_WINDOW_MS;
+  const perModuleLast7d = Object.fromEntries(
+    MODULE_KEYS.map((m) => [m, 0]),
+  ) as Record<ModuleKey, number>;
+  for (const s of signals) {
+    if (s.createdAt.getTime() >= dormantCutoffMs) perModuleLast7d[s.module] += 1;
+  }
+  const dormantModules = MODULE_KEYS.filter((m) => perModuleLast7d[m] === 0);
+  const slowModules = MODULE_KEYS.filter((m) => perModuleLast7d[m] >= 1 && perModuleLast7d[m] <= 2);
+
   const [users, contractors] = await Promise.all([
     rollupUsers(signals, now),
     rollupContractors(signals, projectId),
   ]);
   return {
     range,
+    mode,
     start,
     now,
     dau: rollupDau(signals, start, now),
@@ -412,5 +488,8 @@ export async function loadAdoption(projectId: string, range: AdoptionRange): Pro
     totalRows: signals.length,
     totalActiveUsers: new Set(signals.map((s) => s.userId)).size,
     previous,
+    excludedRows,
+    dormantModules,
+    slowModules,
   };
 }

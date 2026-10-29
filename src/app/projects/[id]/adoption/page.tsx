@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, TrendingDown, TrendingUp, Minus } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canSeeDesktop, isAdmin } from "@/lib/roles";
 import { isScopedUser } from "@/lib/modules";
@@ -12,12 +12,14 @@ import {
   rangeLabel,
   MODULE_KEYS,
   MODULE_LABELS,
+  type AdoptionMode,
   type AdoptionRange,
 } from "@/lib/adoption";
 
 export const dynamic = "force-dynamic";
 
 const RANGES: AdoptionRange[] = ["14d", "30d", "handover"];
+const MODES: AdoptionMode[] = ["real", "all"];
 
 /**
  * /projects/[id]/adoption — planner-side dashboard answering "is the
@@ -37,7 +39,7 @@ export default async function AdoptionPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ range?: string }>;
+  searchParams: Promise<{ range?: string; mode?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -50,10 +52,13 @@ export default async function AdoptionPage({
   }
 
   const { id } = await params;
-  const { range: rangeParam } = await searchParams;
+  const { range: rangeParam, mode: modeParam } = await searchParams;
   const range: AdoptionRange = (RANGES as string[]).includes(rangeParam ?? "")
     ? (rangeParam as AdoptionRange)
     : "30d";
+  const mode: AdoptionMode = (MODES as string[]).includes(modeParam ?? "")
+    ? (modeParam as AdoptionMode)
+    : "real";
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -61,14 +66,21 @@ export default async function AdoptionPage({
   });
   if (!project) notFound();
 
-  const data = await loadAdoption(project.id, range);
+  const data = await loadAdoption(project.id, range, mode);
+  const basePath = `/projects/${project.id}/adoption`;
+  const linkFor = (nextRange: AdoptionRange, nextMode: AdoptionMode) => {
+    const parts: string[] = [];
+    if (nextRange !== "30d") parts.push(`range=${nextRange}`);
+    if (nextMode !== "real") parts.push(`mode=${nextMode}`);
+    return parts.length ? `${basePath}?${parts.join("&")}` : basePath;
+  };
 
   return (
     <div className="min-h-screen bg-ivory">
       <Navbar />
 
       <main className="mx-auto max-w-5xl px-6 py-8 space-y-6">
-        <header className="flex items-start justify-between gap-4">
+        <header className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <Link
               href={`/projects/${project.id}/reports`}
@@ -81,7 +93,8 @@ export default async function AdoptionPage({
               Adoption
             </h1>
             <p className="text-[13px] text-ink-3 mt-1">
-              {project.name} · {rangeLabel(range)}
+              {project.name} · {rangeLabel(range)} ·{" "}
+              {mode === "real" ? "real site team only" : "all rows (incl. import)"}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-ink">
               <span className="inline-flex items-center gap-2">
@@ -102,27 +115,102 @@ export default async function AdoptionPage({
                 )}
               </span>
             </div>
+            {mode === "real" && data.excludedRows > 0 && (
+              <p className="text-[11px] text-ink-4 italic mt-1">
+                Hiding {data.excludedRows} row{data.excludedRows === 1 ? "" : "s"} from Colab
+                import or admin accounts. Flip to &ldquo;All rows&rdquo; to see them.
+              </p>
+            )}
           </div>
 
-          <nav className="inline-flex rounded-xl border border-sandstone-200 bg-white p-0.5" aria-label="Time range">
-            {RANGES.map((r) => {
-              const isActive = r === range;
-              return (
-                <Link
-                  key={r}
-                  href={`/projects/${project.id}/adoption?range=${r}`}
-                  className={`inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-[12px] font-semibold ${
-                    isActive
-                      ? "bg-ink text-cream"
-                      : "text-ink-3 hover:text-ink"
-                  }`}
-                >
-                  {r === "14d" ? "14 days" : r === "30d" ? "30 days" : "Since handover"}
-                </Link>
-              );
-            })}
-          </nav>
+          <div className="flex flex-col items-end gap-2">
+            <nav className="inline-flex rounded-xl border border-sandstone-200 bg-white p-0.5" aria-label="Time range">
+              {RANGES.map((r) => {
+                const isActive = r === range;
+                return (
+                  <Link
+                    key={r}
+                    href={linkFor(r, mode)}
+                    className={`inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-[12px] font-semibold ${
+                      isActive
+                        ? "bg-ink text-cream"
+                        : "text-ink-3 hover:text-ink"
+                    }`}
+                  >
+                    {r === "14d" ? "14 days" : r === "30d" ? "30 days" : "Since handover"}
+                  </Link>
+                );
+              })}
+            </nav>
+            <nav
+              className="inline-flex rounded-xl border border-sandstone-200 bg-white p-0.5"
+              aria-label="Which rows to count"
+            >
+              {MODES.map((m) => {
+                const isActive = m === mode;
+                return (
+                  <Link
+                    key={m}
+                    href={linkFor(range, m)}
+                    className={`inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-[12px] font-semibold ${
+                      isActive ? "bg-ink text-cream" : "text-ink-3 hover:text-ink"
+                    }`}
+                    title={
+                      m === "real"
+                        ? "Hide Colab-imported rows and admin test rows"
+                        : "Show every row, including import and admin"
+                    }
+                  >
+                    {m === "real" ? "Real site team" : "All rows"}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
         </header>
+
+        {/* ─── Dormant / slow alert band ─────────────────────────── */}
+        {(data.dormantModules.length > 0 || data.slowModules.length > 0) && (
+          <section
+            className={`rounded-xl border px-4 py-3 ${
+              data.dormantModules.length > 0
+                ? "border-ferrous-200 bg-ferrous-50/60"
+                : "border-brand-200 bg-brand-50/60"
+            }`}
+            aria-label="Dormant surfaces"
+          >
+            <div className="flex items-start gap-3">
+              <AlertTriangle
+                className={`w-4 h-4 shrink-0 mt-0.5 ${
+                  data.dormantModules.length > 0 ? "text-ferrous-700" : "text-brand-700"
+                }`}
+              />
+              <div className="text-[13px] text-ink space-y-1">
+                {data.dormantModules.length > 0 && (
+                  <p>
+                    <span className="font-semibold text-ferrous-700">
+                      Dormant · 0 entries in the last 7 days:
+                    </span>{" "}
+                    {data.dormantModules.map((m) => MODULE_LABELS[m]).join(" · ")}
+                  </p>
+                )}
+                {data.slowModules.length > 0 && (
+                  <p>
+                    <span className="font-semibold text-brand-700">
+                      Slow · 1-2 entries in the last 7 days:
+                    </span>{" "}
+                    {data.slowModules.map((m) => MODULE_LABELS[m]).join(" · ")}
+                  </p>
+                )}
+                <p className="text-[11px] text-ink-3">
+                  Based on {mode === "real" ? "real site-team" : "all"} rows. If a surface
+                  belongs to a team not live on Siddhi yet, note it when planning the next
+                  rollout.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* ─── 1. DAU chart ─────────────────────────────────────── */}
         <AdoptionDauChart points={data.dau} />
