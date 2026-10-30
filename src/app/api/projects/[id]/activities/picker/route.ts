@@ -151,5 +151,18 @@ export async function GET(
     if (recent.length >= 10) break;
   }
 
-  return NextResponse.json({ blocks: compactBlocks, recent, recentVillaLabel });
+  // Cache-Control: no-store on the response so no layer (Safari HTTP cache,
+  // iOS back-forward cache, Vercel edge, any proxy) holds onto a stale
+  // picker snapshot. The client already passes cache:"no-store" on the
+  // request side, but the response header is what the browser and the
+  // edge use to decide whether to STORE a copy. Without this header, a
+  // picker response captured right before an admin backfill can linger
+  // on-device for hours, so engineers see "0% not started" even when
+  // the DB is already at 100%. Not a performance issue — the picker is
+  // only called when a site engineer opens Log Progress, a few times
+  // per shift.
+  return NextResponse.json(
+    { blocks: compactBlocks, recent, recentVillaLabel },
+    { headers: { "Cache-Control": "no-store, max-age=0" } },
+  );
 }

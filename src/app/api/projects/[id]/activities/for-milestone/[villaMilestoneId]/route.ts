@@ -63,5 +63,11 @@ export async function GET(
     contractor: n.contractor,
   }));
 
-  return NextResponse.json({ activities });
+  // See the sibling /activities/picker route for the rationale on no-store.
+  // Same shape, same reason: the leaf-activity list must reflect the DB
+  // the moment it's queried, with no browser or edge caching between.
+  return NextResponse.json(
+    { activities },
+    { headers: { "Cache-Control": "no-store, max-age=0" } },
+  );
 }
