@@ -13,6 +13,7 @@ import ReportShell, { ReportSection } from "@/components/ReportShell";
 import ProbabilityBadge from "@/components/ProbabilityBadge";
 import PhotoStrip from "@/components/PhotoStrip";
 import MasterReportCsvButton from "@/components/MasterReportCsvButton";
+import { pctFromCumulative } from "@/lib/progress";
 
 function fmt(d: Date | null | undefined): string {
   if (!d) return "—";
@@ -418,10 +419,9 @@ export default async function MasterReportPage({
                           : null) ?? locationFor(e.wbsNode.id),
                       activity: e.wbsNode.name,
                       date: e.date.toISOString().slice(0, 10),
-                      percent:
-                        e.wbsNode.totalQuantity && e.wbsNode.totalQuantity > 0
-                          ? Math.round((e.cumulativeQuantity / e.wbsNode.totalQuantity) * 100)
-                          : undefined,
+                      percent: Math.round(
+                        pctFromCumulative(e.cumulativeQuantity, e.wbsNode.totalQuantity),
+                      ),
                     },
                   }))}
                   size="lg"
@@ -433,11 +433,7 @@ export default async function MasterReportPage({
                   <KV label="Contractor" value={e.contractor?.name ?? "—"} />
                   <KV
                     label="Activity %"
-                    value={
-                      e.wbsNode.totalQuantity && e.wbsNode.totalQuantity > 0
-                        ? `${Math.round((e.cumulativeQuantity / e.wbsNode.totalQuantity) * 100)}%`
-                        : "—"
-                    }
+                    value={`${Math.round(pctFromCumulative(e.cumulativeQuantity, e.wbsNode.totalQuantity))}%`}
                   />
                 </dl>
                 {e.notes && (
