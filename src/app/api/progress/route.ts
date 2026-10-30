@@ -11,7 +11,7 @@ import { isValidReasonCode } from "@/lib/hindranceReasons";
 import { sanitizeUploadUrls } from "@/lib/upload";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { checkPrecheck } from "@/lib/progressGates";
-import { generateProgressDisplayId } from "@/lib/progress";
+import { generateProgressDisplayId, pctFromCumulative } from "@/lib/progress";
 
 const SIDDHI_BASE_URL = process.env.SIDDHI_BASE_URL || "https://siddhi-whitelotus.vercel.app";
 
@@ -338,11 +338,18 @@ export async function POST(req: Request) {
       include: entryInclude,
     });
 
-    // Update activity % complete from cumulative if total quantity known.
-    // Skipped for drafts — a stashed unfinished entry shouldn't move the
-    // dashboard's percent-complete or trigger a milestone-completion email.
-    if (!isDraft && node.totalQuantity && node.totalQuantity > 0 && isFinite(cumulative)) {
-      const pct = Math.max(0, Math.min(100, (cumulative / node.totalQuantity) * 100));
+    // Update activity % complete from cumulative. Skipped for drafts — a
+    // stashed unfinished entry shouldn't move the dashboard's percent-
+    // complete or trigger a milestone-completion email.
+    //
+    // pctFromCumulative handles BOTH shapes the mobile form sends:
+    //   - totalQuantity > 0 → cumulative is in units (m³, kg, …)
+    //   - totalQuantity null/0 → cumulative IS the slider value (0-100)
+    // Earlier this branch was gated on `totalQuantity > 0` only, which
+    // silently dropped every un-quantified activity's percent update,
+    // leaving the activity picker showing "0% not started" forever.
+    if (!isDraft && isFinite(cumulative)) {
+      const pct = pctFromCumulative(cumulative, node.totalQuantity);
       const current = await tx.wBSNode.findUnique({
         where: { id: wbsNodeId },
         select: { actualStart: true, actualFinish: true, villaMilestoneId: true },

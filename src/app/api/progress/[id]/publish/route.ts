@@ -10,7 +10,7 @@ import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { maybeSendMilestoneCompletionEmail } from "@/lib/progressPublish";
 import { sanitizeUploadUrls } from "@/lib/upload";
-import { generateProgressDisplayId } from "@/lib/progress";
+import { generateProgressDisplayId, pctFromCumulative } from "@/lib/progress";
 
 /**
  * POST /api/progress/[id]/publish
@@ -185,9 +185,11 @@ export async function POST(req: Request, ctx: RouteContext<"/api/progress/[id]/p
     });
 
     // Rollup + villa milestone sync — same math the fresh POST runs.
+    // pctFromCumulative honours both shapes the client sends (unit-scaled
+    // when totalQuantity > 0, raw 0-100 slider value when it's null/0).
     let closed: Date | undefined;
-    if (node.totalQuantity && node.totalQuantity > 0 && isFinite(cumulative)) {
-      const pct = Math.max(0, Math.min(100, (cumulative / node.totalQuantity) * 100));
+    if (isFinite(cumulative)) {
+      const pct = pctFromCumulative(cumulative, node.totalQuantity);
       const current = await tx.wBSNode.findUnique({
         where: { id: draft.wbsNodeId },
         select: { actualStart: true, actualFinish: true, villaMilestoneId: true },

@@ -10,6 +10,7 @@ import { syncVillaMilestoneFromChildren } from "@/lib/milestoneRollup";
 import { parseBody, zDateString } from "@/lib/parseBody";
 import { checkConflict } from "@/lib/optimisticLock";
 import { sanitizeUploadUrls } from "@/lib/upload";
+import { pctFromCumulative } from "@/lib/progress";
 import {
   badRequest,
   forbidden,
@@ -236,17 +237,17 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/progress/[id]"
       // Those fire when the draft publishes (see /publish route).
       if (isDraft) return u;
 
-      // Recompute activity % if cumulative changed
+      // Recompute activity % if cumulative changed. pctFromCumulative handles
+      // both totalQuantity > 0 (unit-scaled) and null/0 (raw 0-100 slider)
+      // so an edit on an un-quantified activity now moves the picker's
+      // "% complete" badge instead of silently no-op'ing.
       if (data.cumulativeQuantity !== undefined) {
         const node = await tx.wBSNode.findUnique({
           where: { id: u.wbsNodeId },
           select: { totalQuantity: true, actualStart: true, actualFinish: true },
         });
-        if (node?.totalQuantity && node.totalQuantity > 0) {
-          const pct = Math.max(
-            0,
-            Math.min(100, (data.cumulativeQuantity / node.totalQuantity) * 100),
-          );
+        if (node) {
+          const pct = pctFromCumulative(data.cumulativeQuantity, node.totalQuantity);
           // Use the edited date if supplied, else the entry's existing date, so
           // start/finish stamps land correctly even when the date isn't changed.
           const stamp = data.date ?? entry.date;

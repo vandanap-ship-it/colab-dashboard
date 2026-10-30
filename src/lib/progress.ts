@@ -25,3 +25,25 @@ export function generateProgressDisplayId(): string {
 // one spells out the user-facing message inline (short enough that
 // a shared helper buys nothing). Historical commits show the old
 // shape if ever needed back.
+
+/**
+ * Convert a saved `cumulativeQuantity` to WBSNode.percentComplete.
+ *
+ * The mobile picker + slider always shows a single 0-100 value regardless of
+ * whether the activity has a scheduled `totalQuantity`:
+ *   - totalQuantity > 0 → client sends cumulative = (totalQty * pct) / 100,
+ *     so pct = (cumulative / totalQty) * 100
+ *   - totalQuantity null/0 → client sends cumulative = pct directly (0-100)
+ *
+ * Earlier server versions had `if (totalQuantity > 0)` as a guard and
+ * silently skipped the rollup in the null/0 branch, so the picker's
+ * "0% not started" badge never moved for un-quantified activities even
+ * when entries were being saved. This helper collapses both branches so
+ * every call site stays in sync.
+ */
+export function pctFromCumulative(cumulative: number, totalQuantity: number | null | undefined): number {
+  if (!Number.isFinite(cumulative)) return 0;
+  const hasTotal = typeof totalQuantity === "number" && Number.isFinite(totalQuantity) && totalQuantity > 0;
+  const raw = hasTotal ? (cumulative / (totalQuantity as number)) * 100 : cumulative;
+  return Math.max(0, Math.min(100, raw));
+}
