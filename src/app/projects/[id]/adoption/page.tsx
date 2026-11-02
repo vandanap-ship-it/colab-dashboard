@@ -254,7 +254,7 @@ export default async function AdoptionPage({
                 <tbody>
                   {data.weeks.map((row) => (
                     <tr key={row.week} className="border-t border-sandstone-100">
-                      <td className="px-4 py-2 font-medium text-ink">{row.week}</td>
+                      <td className="px-4 py-2 font-medium text-ink whitespace-nowrap">{fmtWeekLabel(row.week)}</td>
                       {MODULE_KEYS.map((m) => (
                         <td
                           key={m}
@@ -611,6 +611,30 @@ const MONTH_SHORT = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
+
+/** Turn an ISO-week string like "2026-W40" into "29 Sep – 5 Oct" so the
+ *  Rows-per-module-per-week table reads like a date range to a human,
+ *  not a calendar tool's internal id. ISO weeks start on Monday. */
+function fmtWeekLabel(isoWeek: string): string {
+  const match = isoWeek.match(/^(\d{4})-W(\d{2})$/);
+  if (!match) return isoWeek;
+  const year = parseInt(match[1], 10);
+  const week = parseInt(match[2], 10);
+  // ISO week: week 1 contains the first Thursday of the year. Jan 4 is
+  // always in week 1; back up to its Monday to anchor the year, then
+  // step forward by (week - 1) * 7 days.
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Dow = jan4.getUTCDay() || 7; // Mon=1..Sun=7
+  const week1Mon = new Date(jan4);
+  week1Mon.setUTCDate(jan4.getUTCDate() - (jan4Dow - 1));
+  const start = new Date(week1Mon);
+  start.setUTCDate(week1Mon.getUTCDate() + (week - 1) * 7);
+  const end = new Date(start);
+  end.setUTCDate(start.getUTCDate() + 6);
+  const fmt = (d: Date) =>
+    `${d.getUTCDate()} ${MONTH_SHORT[d.getUTCMonth()]}`;
+  return `${fmt(start)} – ${fmt(end)}`;
+}
 
 /** Background tint scaled by activity count. 0 = faint, 1-2 = brand-50,
  *  3-5 = brand-100, 6-10 = brand-200, 11+ = ferrous (saturated). Kept
