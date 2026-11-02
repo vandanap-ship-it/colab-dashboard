@@ -10,10 +10,12 @@ import AdoptionDauChart from "@/components/AdoptionDauChart";
 import {
   loadAdoption,
   rangeLabel,
+  istDayKey,
   MODULE_KEYS,
   MODULE_LABELS,
   type AdoptionMode,
   type AdoptionRange,
+  type DayModuleRow,
 } from "@/lib/adoption";
 
 export const dynamic = "force-dynamic";
@@ -215,7 +217,13 @@ export default async function AdoptionPage({
         {/* ─── 1. DAU chart ─────────────────────────────────────── */}
         <AdoptionDauChart points={data.dau} />
 
-        {/* ─── 2. Module × week table ───────────────────────────── */}
+        {/* ─── 2. Day × module grid ─────────────────────────────── */}
+        {/* "Was manpower entered Nov 1? Nov 2? ..." — at-a-glance
+            heatmap, one row per surface, one column per day in the
+            window. Respects the active mode (real vs all). */}
+        <DayByModuleGrid rows={data.dayByModule} nowKey={istDayKey(data.now)} mode={data.mode} />
+
+        {/* ─── 3. Module × week table ───────────────────────────── */}
         <section className="rounded-xl border border-sandstone-200 bg-white">
           <header className="px-4 py-3 border-b border-sandstone-100 flex items-baseline justify-between gap-3">
             <h3 className="text-[13px] font-semibold uppercase tracking-wider text-ink-3">
@@ -450,4 +458,167 @@ function fmtRelative(d: Date, now: Date): string {
     month: "short",
     timeZone: "Asia/Kolkata",
   });
+}
+
+/**
+ * Day × module heatmap. One row per surface (Progress, Manpower, HSE,
+ * Permits, Inductions, QA/QC WIRs, Observations), one column per day
+ * in the active window. Each cell shows that surface's row-count for
+ * that day; empty cells render as a faint dash so a blank Sunday is
+ * visibly different from "today, no entries yet". Weekend columns get
+ * a subtle sandstone tint; today's column header lights ferrous so the
+ * eye can find "now" without counting back from the right edge.
+ *
+ * The grid honours whatever mode the page is in — "real" strips
+ * import rows and admin-created rows. All counts come from the
+ * server-side rollupDayByModule().
+ */
+function DayByModuleGrid({
+  rows,
+  nowKey,
+  mode,
+}: {
+  rows: DayModuleRow[];
+  nowKey: string;
+  mode: AdoptionMode;
+}) {
+  if (rows.length === 0) {
+    return null;
+  }
+  return (
+    <section className="rounded-xl border border-sandstone-200 bg-white">
+      <header className="px-4 py-3 border-b border-sandstone-100 flex items-baseline justify-between gap-3">
+        <h3 className="text-[13px] font-semibold uppercase tracking-wider text-ink-3">
+          Day-by-day activity
+        </h3>
+        <p className="text-[11px] text-ink-3">
+          {rows.length} day{rows.length === 1 ? "" : "s"}
+          {mode === "real" ? " · real site team" : " · all rows"}
+        </p>
+      </header>
+      <div className="overflow-x-auto">
+        <table className="text-[11px] border-separate border-spacing-0">
+          <thead>
+            <tr>
+              <th className="sticky left-0 z-10 bg-sandstone-50 text-left px-3 py-2 font-semibold uppercase tracking-wider text-[10px] text-ink-3 border-b border-sandstone-100 min-w-[140px]">
+                Surface
+              </th>
+              {rows.map((r) => {
+                const [, mm, dd] = r.day.split("-");
+                const date = new Date(`${r.day}T00:00:00+05:30`);
+                const weekday = date.getUTCDay(); // 0=Sun 6=Sat in UTC after +5:30 shift keeps weekday
+                const isWeekend = weekday === 0;
+                const isFirstOfMonth = dd === "01";
+                const isToday = r.day === nowKey;
+                return (
+                  <th
+                    key={r.day}
+                    className={`px-1.5 py-1.5 font-medium tabular-nums text-center border-b border-sandstone-100 ${
+                      isToday
+                        ? "bg-ferrous-500 text-white"
+                        : isWeekend
+                        ? "bg-sandstone-50 text-ink-3"
+                        : "bg-sandstone-50 text-ink-3"
+                    }`}
+                    title={date.toLocaleDateString("en-GB", {
+                      weekday: "short",
+                      day: "2-digit",
+                      month: "short",
+                      timeZone: "Asia/Kolkata",
+                    })}
+                  >
+                    <div
+                      className={`text-[9px] uppercase tracking-wider ${
+                        isToday ? "text-sandstone-50" : "text-ink-4"
+                      }`}
+                    >
+                      {isFirstOfMonth
+                        ? MONTH_SHORT[parseInt(mm, 10) - 1]
+                        : " "}
+                    </div>
+                    <div className="font-semibold text-[11px]">{dd}</div>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {MODULE_KEYS.map((m) => (
+              <tr key={m}>
+                <th
+                  scope="row"
+                  className="sticky left-0 z-10 bg-white text-left px-3 py-1.5 font-medium text-ink border-b border-sandstone-100 whitespace-nowrap"
+                >
+                  {MODULE_LABELS[m]}
+                </th>
+                {rows.map((r) => {
+                  const n = r.counts[m];
+                  const [, , dd] = r.day.split("-");
+                  const date = new Date(`${r.day}T00:00:00+05:30`);
+                  const isWeekend = date.getUTCDay() === 0;
+                  const isToday = r.day === nowKey;
+                  return (
+                    <td
+                      key={r.day}
+                      className={`text-center tabular-nums border-b border-sandstone-100 ${cellTone(
+                        n,
+                      )} ${isWeekend ? "bg-opacity-70" : ""} ${
+                        isToday ? "ring-1 ring-inset ring-ferrous-500" : ""
+                      }`}
+                      style={{ width: 28, minWidth: 28, maxWidth: 28, height: 24 }}
+                      title={`${MODULE_LABELS[m]} · ${dd}: ${n} ${n === 1 ? "row" : "rows"}`}
+                    >
+                      {n > 0 ? n : <span className="text-ink-4">·</span>}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            {/* Totals row — a quick "was ANYTHING entered today" summary */}
+            <tr>
+              <th
+                scope="row"
+                className="sticky left-0 z-10 bg-sandstone-50 text-left px-3 py-1.5 font-semibold text-ink border-t border-sandstone-200 whitespace-nowrap"
+              >
+                All surfaces
+              </th>
+              {rows.map((r) => {
+                const isToday = r.day === nowKey;
+                return (
+                  <td
+                    key={r.day}
+                    className={`text-center tabular-nums font-semibold border-t border-sandstone-200 ${cellTone(
+                      r.total,
+                    )} ${isToday ? "ring-1 ring-inset ring-ferrous-500" : ""}`}
+                    style={{ width: 28, minWidth: 28, maxWidth: 28, height: 26 }}
+                  >
+                    {r.total > 0 ? r.total : <span className="text-ink-4">·</span>}
+                  </td>
+                );
+              })}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p className="px-4 py-2 text-[10px] text-ink-4 border-t border-sandstone-100">
+        Each cell is one day&apos;s row-count on that surface. Hover a cell for the exact day. Today&apos;s column is outlined.
+      </p>
+    </section>
+  );
+}
+
+const MONTH_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/** Background tint scaled by activity count. 0 = faint, 1-2 = brand-50,
+ *  3-5 = brand-100, 6-10 = brand-200, 11+ = ferrous (saturated). Kept
+ *  deliberately coarse — the exact numbers in-cell carry the fine detail. */
+function cellTone(n: number): string {
+  if (n <= 0) return "bg-white";
+  if (n <= 2) return "bg-brand-50 text-brand-700";
+  if (n <= 5) return "bg-brand-100 text-brand-700";
+  if (n <= 10) return "bg-brand-200 text-ink";
+  return "bg-ferrous-500 text-white";
 }

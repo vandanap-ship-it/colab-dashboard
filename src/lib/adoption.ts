@@ -206,6 +206,42 @@ export function istWeekKey(d: Date): string {
 
 export type DauPoint = { day: string; users: number };
 
+/** One row per day in the current window, with the per-module row-count
+ *  for that day. Powers the day-by-module grid Vandana asked for
+ *  (2026-11-02) — "is manpower entered, is progress entered, HSE /
+ *  permits / inductions / observations / QAQC, day by day". */
+export type DayModuleRow = { day: string; counts: Record<ModuleKey, number>; total: number };
+
+export function rollupDayByModule(signals: RowSignal[], start: Date, now: Date): DayModuleRow[] {
+  const perDay = new Map<string, Record<ModuleKey, number>>();
+  for (const s of signals) {
+    const k = istDayKey(s.createdAt);
+    if (!perDay.has(k)) {
+      perDay.set(
+        k,
+        Object.fromEntries(MODULE_KEYS.map((m) => [m, 0])) as Record<ModuleKey, number>,
+      );
+    }
+    perDay.get(k)![s.module] += 1;
+  }
+  // Fill every day in the window so blank days render as 0 cells, not gaps.
+  const out: DayModuleRow[] = [];
+  const d = new Date(start);
+  d.setUTCHours(0, 0, 0, 0);
+  const stop = new Date(now);
+  stop.setUTCHours(0, 0, 0, 0);
+  while (d.getTime() <= stop.getTime()) {
+    const k = istDayKey(d);
+    const counts =
+      perDay.get(k) ??
+      (Object.fromEntries(MODULE_KEYS.map((m) => [m, 0])) as Record<ModuleKey, number>);
+    const total = MODULE_KEYS.reduce((n, m) => n + counts[m], 0);
+    out.push({ day: k, counts, total });
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out;
+}
+
 export function rollupDau(signals: RowSignal[], start: Date, now: Date): DauPoint[] {
   const perDay = new Map<string, Set<string>>();
   for (const s of signals) {
@@ -382,6 +418,7 @@ export type AdoptionData = {
   now: Date;
   dau: DauPoint[];
   weeks: WeekRow[];
+  dayByModule: DayModuleRow[];
   users: UserRow[];
   contractors: ContractorRow[];
   totalRows: number;
@@ -483,6 +520,7 @@ export async function loadAdoption(
     now,
     dau: rollupDau(signals, start, now),
     weeks: rollupWeekByModule(signals),
+    dayByModule: rollupDayByModule(signals, start, now),
     users,
     contractors,
     totalRows: signals.length,
