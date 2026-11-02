@@ -110,6 +110,13 @@ export default function NewProgressForm({
   // shows slider min-locked to current value). Server-enforced too;
   // this just prevents the invalid-slide-then-submit dance.
   const [priorMaxCumulative, setPriorMaxCumulative] = useState(0);
+  // Soft gate · when the engineer hits Save on a publish AND the slider
+  // hasn't moved since the last published entry AND no delay reason is
+  // picked, we show a one-tap sheet asking why — makes the reason field
+  // start collecting again (it had gone silent since handover; see the
+  // adoption / delay-reason diagnostic, 2026-11-02). The sheet lets them
+  // either pick a reason inline or skip it; it never hard-blocks the save.
+  const [showDelayPrompt, setShowDelayPrompt] = useState(false);
   // Formerly collapsed the notes/photos/labour section behind a toggle —
   // Shraddha flagged that as reading "optional" when it isn't. All fields
   // now expand inline; Save moves to the very bottom.
@@ -369,7 +376,7 @@ export default function NewProgressForm({
     await submitEntry("draft");
   }
 
-  async function submitEntry(mode: "publish" | "draft") {
+  async function submitEntry(mode: "publish" | "draft", bypassDelayPrompt = false) {
     if (mode === "publish") {
       if (!activityId) {
         setError("Pick an activity first");
@@ -387,6 +394,18 @@ export default function NewProgressForm({
       // downstream reports.
       if (!(pctState > 0)) {
         setError("Drag the % slider — how much is done?");
+        return;
+      }
+      // Delay-reason soft gate · when the slider hasn't moved since the
+      // last published entry and the engineer hasn't picked a reason,
+      // ask once. Skipped when the activity is already at 100% (nothing
+      // left to delay). Can be bypassed from the modal's "Save without
+      // a reason" button, which re-enters this function with the flag.
+      const isAtCeiling = pctState >= 100;
+      const noDelta = cumulative <= priorMaxCumulative;
+      const noReasonPicked = !reasonCode && reasonNote.trim().length === 0;
+      if (!bypassDelayPrompt && !isAtCeiling && noDelta && noReasonPicked) {
+        setShowDelayPrompt(true);
         return;
       }
     }
@@ -1082,6 +1101,98 @@ export default function NewProgressForm({
       )}
 
       {error && <p className="text-sm text-ferrous-600">{error}</p>}
+
+      {/* Delay-reason soft prompt — fires only when the slider hasn't
+          moved since the last published entry AND no reason is picked.
+          Never hard-blocks: the "Save without a reason" link always
+          lets the engineer through. See submitEntry() for the trigger. */}
+      {showDelayPrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink/40"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delay-prompt-title"
+        >
+          <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-white p-5 pb-6 shadow-card space-y-4">
+            <div>
+              <h2
+                id="delay-prompt-title"
+                className="text-[16px] font-semibold text-ink"
+              >
+                No progress since last entry
+              </h2>
+              <p className="text-[13px] text-ink-3 mt-1">
+                Pick a delay reason so the team knows why work didn&apos;t move
+                today — or save this entry as-is.
+              </p>
+            </div>
+
+            <label className="block">
+              <span className="text-[13px] font-semibold text-ink">Delay reason</span>
+              <select
+                value={reasonCode}
+                onChange={(e) => setReasonCode(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
+                autoFocus
+              >
+                <option value="">— Choose a reason</option>
+                {HINDRANCE_REASONS.map((r) => (
+                  <option key={r.code} value={r.code}>{r.label}</option>
+                ))}
+              </select>
+            </label>
+
+            {reasonCode && (
+              <label className="block">
+                <span className="text-[13px] font-semibold text-ink">
+                  More detail <span className="text-ink-3 font-normal">(optional)</span>
+                </span>
+                <input
+                  type="text"
+                  value={reasonNote}
+                  onChange={(e) => setReasonNote(e.target.value)}
+                  maxLength={500}
+                  placeholder="e.g. cement delivery skipped for the day"
+                  className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
+                />
+              </label>
+            )}
+
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                disabled={!reasonCode}
+                onClick={() => {
+                  setShowDelayPrompt(false);
+                  // Pass bypass so the gate doesn't re-fire — the user
+                  // did pick a reason, we're honouring their choice.
+                  void submitEntry("publish", true);
+                }}
+                className="w-full rounded-full bg-ink text-cream py-3 text-[15px] font-semibold disabled:opacity-50"
+              >
+                Save with reason
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDelayPrompt(false);
+                  void submitEntry("publish", true);
+                }}
+                className="w-full py-2 text-[13px] text-ink-3 underline"
+              >
+                Save without a reason
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDelayPrompt(false)}
+                className="w-full py-2 text-[12px] text-ink-4"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
