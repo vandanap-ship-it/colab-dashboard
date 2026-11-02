@@ -90,7 +90,46 @@ type RowSignal = {
    *  idempotencyKey starts with "colab"). Used by the "real" filter
    *  so a healthy import doesn't masquerade as adoption. */
   isImport: boolean;
+  /** For Observations only: the Issue's module tag ("SAFETY" / "QAQC"
+   *  / null). Used by rollupTeams() to attribute an observation to the
+   *  right team, since the Observations surface itself is cross-cutting. */
+  obsTag?: "SAFETY" | "QAQC" | null;
 };
+
+/** Site-team buckets Shraddha asks about ("which team is cold?"). The
+ *  mapping from surface → team is fixed per the roles_by_module memory:
+ *    Progress team → progress + manpower
+ *    Safety team   → hse + permits + inductions (+ SAFETY-tagged obs)
+ *    QA/QC team    → qaqc WIRs (+ QAQC-tagged obs)
+ *  Untagged observations are shown separately in the Observations grid
+ *  row and don't count toward any one team. */
+export const TEAM_KEYS = ["progress", "safety", "qaqc"] as const;
+export type TeamKey = (typeof TEAM_KEYS)[number];
+export const TEAM_LABELS: Record<TeamKey, string> = {
+  progress: "Progress team",
+  safety: "Safety team",
+  qaqc: "QA/QC team",
+};
+
+/** Which team "owns" a given signal; null when ambiguous (an untagged
+ *  Observation). */
+function teamForSignal(s: RowSignal): TeamKey | null {
+  switch (s.module) {
+    case "progress":
+    case "manpower":
+      return "progress";
+    case "hse":
+    case "permits":
+    case "inductions":
+      return "safety";
+    case "qaqc":
+      return "qaqc";
+    case "observations":
+      if (s.obsTag === "SAFETY") return "safety";
+      if (s.obsTag === "QAQC") return "qaqc";
+      return null;
+  }
+}
 
 const isColabKey = (k: string | null | undefined) => !!k && k.startsWith("colab");
 
@@ -161,7 +200,18 @@ async function fetchSignals(projectId: string, start: Date, end?: Date): Promise
     signals.push({ module: "inductions", userId: ind.createdById, createdAt: ind.createdAt, isImport: isColabKey(ind.idempotencyKey) });
   }
   for (const ob of observations) {
-    signals.push({ module: "observations", userId: ob.createdById, createdAt: ob.createdAt, isImport: isColabKey(ob.idempotencyKey) });
+    // Carry the Issue's module tag so teamForSignal() can attribute an
+    // Observation to Safety vs QA/QC. Untagged observations show up on
+    // the Observations grid row but don't count toward any team.
+    const obsTag: "SAFETY" | "QAQC" | null =
+      ob.module === "SAFETY" ? "SAFETY" : ob.module === "QAQC" ? "QAQC" : null;
+    signals.push({
+      module: "observations",
+      userId: ob.createdById,
+      createdAt: ob.createdAt,
+      isImport: isColabKey(ob.idempotencyKey),
+      obsTag,
+    });
   }
 
   return signals;
@@ -350,6 +400,49 @@ export async function rollupUsers(
   return rows;
 }
 
+export type TeamRow = {
+  team: TeamKey;
+  rowsLast7d: number;
+  rowsInWindow: number;
+  activeUsers: number;
+  lastEntry: Date | null;
+};
+
+/** Roll signals up by team ownership so the "which team is cold?"
+ *  question is answered at a glance without squinting at the per-surface
+ *  grid. See teamForSignal() for the surface→team mapping. */
+export function rollupTeams(signals: RowSignal[], now: Date = new Date()): TeamRow[] {
+  const agg = new Map<
+    TeamKey,
+    { rowsLast7d: number; rowsInWindow: number; users: Set<string>; lastEntry: Date | null }
+  >();
+  for (const k of TEAM_KEYS) {
+    agg.set(k, { rowsLast7d: 0, rowsInWindow: 0, users: new Set<string>(), lastEntry: null });
+  }
+  const sevenDaysAgoMs = now.getTime() - 7 * 86400000;
+
+  for (const s of signals) {
+    const team = teamForSignal(s);
+    if (!team) continue; // untagged observations
+    const entry = agg.get(team)!;
+    entry.rowsInWindow += 1;
+    if (s.createdAt.getTime() >= sevenDaysAgoMs) entry.rowsLast7d += 1;
+    entry.users.add(s.userId);
+    if (!entry.lastEntry || s.createdAt > entry.lastEntry) entry.lastEntry = s.createdAt;
+  }
+
+  return TEAM_KEYS.map((team) => {
+    const a = agg.get(team)!;
+    return {
+      team,
+      rowsLast7d: a.rowsLast7d,
+      rowsInWindow: a.rowsInWindow,
+      activeUsers: a.users.size,
+      lastEntry: a.lastEntry,
+    };
+  });
+}
+
 export type ContractorRow = {
   contractorId: string;
   name: string;
@@ -419,6 +512,7 @@ export type AdoptionData = {
   dau: DauPoint[];
   weeks: WeekRow[];
   dayByModule: DayModuleRow[];
+  teams: TeamRow[];
   users: UserRow[];
   contractors: ContractorRow[];
   totalRows: number;
@@ -521,6 +615,7 @@ export async function loadAdoption(
     dau: rollupDau(signals, start, now),
     weeks: rollupWeekByModule(signals),
     dayByModule: rollupDayByModule(signals, start, now),
+    teams: rollupTeams(signals, now),
     users,
     contractors,
     totalRows: signals.length,

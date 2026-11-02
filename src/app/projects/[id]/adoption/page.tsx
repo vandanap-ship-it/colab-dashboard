@@ -13,9 +13,11 @@ import {
   istDayKey,
   MODULE_KEYS,
   MODULE_LABELS,
+  TEAM_LABELS,
   type AdoptionMode,
   type AdoptionRange,
   type DayModuleRow,
+  type TeamRow,
 } from "@/lib/adoption";
 
 export const dynamic = "force-dynamic";
@@ -101,7 +103,9 @@ export default async function AdoptionPage({
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-ink">
               <span className="inline-flex items-center gap-2">
                 <span className="font-semibold tabular-nums">{data.totalActiveUsers}</span>
-                <span className="text-ink-3">active user{data.totalActiveUsers === 1 ? "" : "s"}</span>
+                <span className="text-ink-3">
+                  {data.totalActiveUsers === 1 ? "person logging" : "people logging"}
+                </span>
                 {data.previous && (
                   <Delta
                     current={data.totalActiveUsers}
@@ -111,7 +115,7 @@ export default async function AdoptionPage({
               </span>
               <span className="inline-flex items-center gap-2">
                 <span className="font-semibold tabular-nums">{data.totalRows}</span>
-                <span className="text-ink-3">rows raised</span>
+                <span className="text-ink-3">entries logged</span>
                 {data.previous && (
                   <Delta current={data.totalRows} previous={data.previous.totalRows} />
                 )}
@@ -191,7 +195,7 @@ export default async function AdoptionPage({
                 {data.dormantModules.length > 0 && (
                   <p>
                     <span className="font-semibold text-ferrous-700">
-                      Dormant · 0 entries in the last 7 days:
+                      Nobody used this in the last 7 days:
                     </span>{" "}
                     {data.dormantModules.map((m) => MODULE_LABELS[m]).join(" · ")}
                   </p>
@@ -199,91 +203,45 @@ export default async function AdoptionPage({
                 {data.slowModules.length > 0 && (
                   <p>
                     <span className="font-semibold text-brand-700">
-                      Slow · 1-2 entries in the last 7 days:
+                      Only used 1–2 times in the last 7 days:
                     </span>{" "}
                     {data.slowModules.map((m) => MODULE_LABELS[m]).join(" · ")}
                   </p>
                 )}
                 <p className="text-[11px] text-ink-3">
-                  Based on {mode === "real" ? "real site-team" : "all"} rows. If a surface
-                  belongs to a team not live on Siddhi yet, note it when planning the next
-                  rollout.
+                  Counting {mode === "real" ? "real site-team" : "all"} entries. If a
+                  surface belongs to a team not live on Siddhi yet, note it before
+                  the next rollout.
                 </p>
               </div>
             </div>
           </section>
         )}
 
-        {/* ─── 1. DAU chart ─────────────────────────────────────── */}
+        {/* ─── 1. Team cards ────────────────────────────────────── */}
+        {/* The question Vandana keeps asking: "which team is heavy, which
+            team is cold?" One card per team, rolled up by surface
+            ownership (progress+manpower = Progress team, hse+permits+
+            inductions = Safety team, qaqc = QA/QC team). */}
+        <TeamCards teams={data.teams} now={data.now} />
+
+        {/* ─── 2. People logging each day ───────────────────────── */}
         <AdoptionDauChart points={data.dau} />
 
-        {/* ─── 2. Day × module grid ─────────────────────────────── */}
+        {/* ─── 3. Day × surface grid ────────────────────────────── */}
         {/* "Was manpower entered Nov 1? Nov 2? ..." — at-a-glance
             heatmap, one row per surface, one column per day in the
             window. Respects the active mode (real vs all). */}
         <DayByModuleGrid rows={data.dayByModule} nowKey={istDayKey(data.now)} mode={data.mode} />
 
-        {/* ─── 3. Module × week table ───────────────────────────── */}
-        <section className="rounded-xl border border-sandstone-200 bg-white">
-          <header className="px-4 py-3 border-b border-sandstone-100 flex items-baseline justify-between gap-3">
-            <h3 className="text-[13px] font-semibold uppercase tracking-wider text-ink-3">
-              Rows per module per week
-            </h3>
-            <p className="text-[11px] text-ink-3">
-              {data.weeks.length} week{data.weeks.length === 1 ? "" : "s"}
-            </p>
-          </header>
-          {data.weeks.length === 0 ? (
-            <p className="px-4 py-6 text-[13px] text-ink-3 italic text-center">
-              No rows in this window.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
-                <thead className="bg-sandstone-50 text-[10px] uppercase tracking-wider text-ink-3">
-                  <tr>
-                    <th className="text-left px-4 py-2 font-semibold">Week</th>
-                    {MODULE_KEYS.map((m) => (
-                      <th key={m} className="text-right px-3 py-2 font-semibold whitespace-nowrap">
-                        {MODULE_LABELS[m]}
-                      </th>
-                    ))}
-                    <th className="text-right px-4 py-2 font-semibold">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.weeks.map((row) => (
-                    <tr key={row.week} className="border-t border-sandstone-100">
-                      <td className="px-4 py-2 font-medium text-ink whitespace-nowrap">{fmtWeekLabel(row.week)}</td>
-                      {MODULE_KEYS.map((m) => (
-                        <td
-                          key={m}
-                          className={`text-right px-3 py-2 tabular-nums ${
-                            row.counts[m] === 0 ? "text-ink-4" : "text-ink"
-                          }`}
-                        >
-                          {row.counts[m] || "—"}
-                        </td>
-                      ))}
-                      <td className="text-right px-4 py-2 font-semibold tabular-nums text-ink">
-                        {row.total}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        {/* ─── 3. Per-user leaderboard ──────────────────────────── */}
+        {/* ─── 4. Per-user leaderboard ──────────────────────────── */}
         <section className="rounded-xl border border-sandstone-200 bg-white">
           <header className="px-4 py-3 border-b border-sandstone-100 flex items-baseline justify-between gap-3">
             <h3 className="text-[13px] font-semibold uppercase tracking-wider text-ink-3">
               Who&apos;s using Siddhi
             </h3>
             <p className="text-[11px] text-ink-3">
-              {data.users.length} user{data.users.length === 1 ? "" : "s"} active in window
+              {data.users.length} {data.users.length === 1 ? "person" : "people"} active in this range
             </p>
           </header>
           {data.users.length === 0 ? (
@@ -299,18 +257,18 @@ export default async function AdoptionPage({
                     <th className="text-left px-3 py-2 font-semibold">Role</th>
                     <th className="text-left px-3 py-2 font-semibold">Contractor</th>
                     <th className="text-right px-3 py-2 font-semibold whitespace-nowrap">
-                      Last 7d
+                      Last 7 days
                     </th>
                     <th className="text-right px-3 py-2 font-semibold whitespace-nowrap">
-                      In window
+                      This range
                     </th>
                     {data.previous && (
                       <th className="text-right px-3 py-2 font-semibold whitespace-nowrap">
-                        Δ vs prior
+                        vs prior
                       </th>
                     )}
                     <th className="text-left px-4 py-2 font-semibold whitespace-nowrap">
-                      Last seen
+                      Last entry
                     </th>
                   </tr>
                 </thead>
@@ -368,11 +326,11 @@ export default async function AdoptionPage({
                 <thead className="bg-sandstone-50 text-[10px] uppercase tracking-wider text-ink-3">
                   <tr>
                     <th className="text-left px-4 py-2 font-semibold">Contractor</th>
-                    <th className="text-right px-3 py-2 font-semibold">Active users</th>
-                    <th className="text-right px-3 py-2 font-semibold">Rows in window</th>
+                    <th className="text-right px-3 py-2 font-semibold">People logging</th>
+                    <th className="text-right px-3 py-2 font-semibold">Entries this range</th>
                     {data.previous && (
                       <th className="text-right px-4 py-2 font-semibold whitespace-nowrap">
-                        Δ vs prior
+                        vs prior
                       </th>
                     )}
                   </tr>
@@ -612,30 +570,6 @@ const MONTH_SHORT = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-/** Turn an ISO-week string like "2026-W40" into "29 Sep – 5 Oct" so the
- *  Rows-per-module-per-week table reads like a date range to a human,
- *  not a calendar tool's internal id. ISO weeks start on Monday. */
-function fmtWeekLabel(isoWeek: string): string {
-  const match = isoWeek.match(/^(\d{4})-W(\d{2})$/);
-  if (!match) return isoWeek;
-  const year = parseInt(match[1], 10);
-  const week = parseInt(match[2], 10);
-  // ISO week: week 1 contains the first Thursday of the year. Jan 4 is
-  // always in week 1; back up to its Monday to anchor the year, then
-  // step forward by (week - 1) * 7 days.
-  const jan4 = new Date(Date.UTC(year, 0, 4));
-  const jan4Dow = jan4.getUTCDay() || 7; // Mon=1..Sun=7
-  const week1Mon = new Date(jan4);
-  week1Mon.setUTCDate(jan4.getUTCDate() - (jan4Dow - 1));
-  const start = new Date(week1Mon);
-  start.setUTCDate(week1Mon.getUTCDate() + (week - 1) * 7);
-  const end = new Date(start);
-  end.setUTCDate(start.getUTCDate() + 6);
-  const fmt = (d: Date) =>
-    `${d.getUTCDate()} ${MONTH_SHORT[d.getUTCMonth()]}`;
-  return `${fmt(start)} – ${fmt(end)}`;
-}
-
 /** Background tint scaled by activity count. 0 = faint, 1-2 = brand-50,
  *  3-5 = brand-100, 6-10 = brand-200, 11+ = ferrous (saturated). Kept
  *  deliberately coarse — the exact numbers in-cell carry the fine detail. */
@@ -645,4 +579,62 @@ function cellTone(n: number): string {
   if (n <= 5) return "bg-brand-100 text-brand-700";
   if (n <= 10) return "bg-brand-200 text-ink";
   return "bg-ferrous-500 text-white";
+}
+
+/**
+ * Three cards side-by-side, one per site team (Progress / Safety / QA/QC).
+ * Each card shows the headline number — rows logged in the last 7 days —
+ * and the full-range total + the last-entry recency underneath. The 7-day
+ * number is tinted so a cold team reads red before the eye even parses
+ * the digit. Clicking a card could later deep-link into a per-team user
+ * list; for now it's a read-only summary.
+ */
+function TeamCards({ teams, now }: { teams: TeamRow[]; now: Date }) {
+  return (
+    <section
+      className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+      aria-label="Activity by team"
+    >
+      {teams.map((t) => {
+        const tone = teamTone(t.rowsLast7d);
+        return (
+          <div
+            key={t.team}
+            className="rounded-xl border border-sandstone-200 bg-white p-4 flex flex-col gap-2"
+          >
+            <div className="flex items-baseline justify-between">
+              <h4 className="text-[13px] font-semibold uppercase tracking-wider text-ink-3">
+                {TEAM_LABELS[t.team]}
+              </h4>
+              <span className="text-[10px] text-ink-4">
+                {t.activeUsers} {t.activeUsers === 1 ? "person" : "people"}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className={`text-[32px] font-serif leading-none tabular-nums ${tone.text}`}>
+                {t.rowsLast7d}
+              </span>
+              <span className={`text-[11px] ${tone.text}`}>
+                {t.rowsLast7d === 1 ? "entry" : "entries"} this week
+              </span>
+            </div>
+            <div className="text-[11px] text-ink-3">
+              <span className="font-semibold text-ink tabular-nums">{t.rowsInWindow}</span>{" "}
+              in this range · last entry {t.lastEntry ? fmtRelative(t.lastEntry, now) : "never"}
+            </div>
+            <div className={`h-1 rounded-full ${tone.bar}`} />
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+/** Colour signal for a team card based on last-7-day row count. The
+ *  bar underneath each card doubles as the warning signal — a cold
+ *  team reads red before the eye even parses the digit. */
+function teamTone(rowsLast7d: number): { text: string; bar: string } {
+  if (rowsLast7d === 0) return { text: "text-ferrous-700", bar: "bg-ferrous-500" };
+  if (rowsLast7d <= 10) return { text: "text-brand-700", bar: "bg-brand-500" };
+  return { text: "text-ink", bar: "bg-emerald-500" };
 }

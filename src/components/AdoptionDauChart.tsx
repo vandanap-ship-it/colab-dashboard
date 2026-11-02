@@ -29,7 +29,7 @@ export default function AdoptionDauChart({ points }: { points: DauPoint[] }) {
     <div className="rounded-xl border border-sandstone-200 bg-white p-4">
       <div className="flex items-baseline justify-between gap-3 mb-3">
         <h3 className="text-[13px] font-semibold uppercase tracking-wider text-ink-3">
-          Daily active users
+          People logging each day
         </h3>
         <p className="text-[11px] text-ink-3">
           Peak <span className="font-semibold text-ink">{peak}</span>
