@@ -37,6 +37,10 @@
     {
       "path": "/api/cron/weekly-stragglers",
       "schedule": "0 4 * * 1"
+    },
+    {
+      "path": "/api/cron/eod-progress-reminder",
+      "schedule": "50 11 * * 1-6"
     }
   ]
 }
