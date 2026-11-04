@@ -51,15 +51,16 @@ export const AMANVANA_VILLA_NUMBER_TO_BLOCK: Record<number, string> = (() => {
  *  authoritative source for the "villas in scope" tile even when the DB has
  *  fewer wbsNodes tagged (transitional state during onboarding). */
 export const AMANVANA_CONTRACTOR_SCOPE: Record<string, number> = {
-  "abraham thomas":     41,
-  "elegant construction": 52,
+  "abraham thomas":       41,
+  "elegant constructions": 52,
 };
 
 /** Contractor canonical names. Use these anywhere the code needs to compare
- *  a contractor string, so a typo in one place doesn't drift from another. */
+ *  a contractor string, so a typo in one place doesn't drift from another.
+ *  "Elegant Constructions" is spelt as the DB row holds it (plural s). */
 export const AMANVANA_CONTRACTORS = {
   abraham: "Abraham Thomas",
-  elegant: "Elegant Construction",
+  elegant: "Elegant Constructions",
 } as const;
 
 // ---------------------------------------------------------------------------

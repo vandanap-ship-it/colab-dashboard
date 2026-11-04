@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ROLES } from "@/lib/roles";
@@ -24,8 +24,13 @@ export default async function MyActionsTabPage({
 }) {
   const session = await auth();
   if (!session?.user) return null;
-
+  // Admin-only surface (Shraddha, 2026-11-04 management-review pass).
+  // Non-admins land back on the Dashboard rather than hitting this page.
   const { id: projectId } = await params;
+  if (session.user.role !== ROLES.ADMIN) {
+    redirect(`/projects/${projectId}/overview`);
+  }
+
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: { id: true },
@@ -33,9 +38,9 @@ export default async function MyActionsTabPage({
   if (!project) notFound();
 
   const userId = session.user.id;
-  const role = session.user.role;
-  const canReviewInspections =
-    role === ROLES.PLANNER || role === ROLES.PRODUCT_TEAM || role === ROLES.ADMIN;
+  // Admins always have inspection-review authority. Non-admins can't reach
+  // this page (they got redirected above), so the flag is unconditionally true.
+  const canReviewInspections = true;
 
   // ---- My Task: concerns escalated to TASK_ASSIGNED ----
   const [tasksAssignedToMe, tasksAssignedByMe] = await Promise.all([

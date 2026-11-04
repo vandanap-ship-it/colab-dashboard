@@ -106,11 +106,19 @@
 /* §1 Overview */
 .ovGrid {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 1fr;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr;
   gap: 12px;
   padding: 14px 16px;
 }
-@media (max-width: 900px) { .ovGrid { grid-template-columns: 1fr; } }
+@media (max-width: 1200px) { .ovGrid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 800px)  { .ovGrid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 500px)  { .ovGrid { grid-template-columns: 1fr; } }
+.ovLink {
+  text-decoration: none;
+  cursor: pointer;
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+.ovLink:hover { box-shadow: 0 4px 10px rgba(22, 32, 47, 0.1); transform: translateY(-1px); }
 .ovTile {
   padding: 14px 16px;
   border-radius: 6px;
@@ -214,6 +222,13 @@
 }
 .cmTbl tbody tr:last-child td { border-bottom: 0; }
 .cmName { text-align: left !important; font-weight: 700; color: var(--sf-ink); }
+.cmNoData {
+  text-align: left !important;
+  color: var(--sf-ink-3);
+  font-style: italic;
+  font-size: 12px;
+  background: var(--sf-rule-soft);
+}
 .cmClosed { color: var(--sf-good); font-weight: 600; }
 .cmReview { color: var(--sf-warn); font-weight: 600; }
 .cmObs { color: var(--sf-blue); font-weight: 600; }
@@ -341,3 +356,44 @@
 }
 .subBarCell { display: flex; align-items: flex-end; height: 100%; }
 .subBar { width: 100%; min-height: 3px; background: linear-gradient(180deg, #4C7FB0, var(--sf-blue)); border-radius: 2px 2px 0 0; }
+
+/* Click-through list tables added 2026-11-04 management review. */
+.cardMetaSmall {
+  font-size: 11px;
+  color: var(--sf-ink-3);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 12px;
+}
+.listTblWrap { overflow-x: auto; }
+.listTbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  min-width: 720px;
+}
+.listTbl thead th {
+  text-align: left;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--sf-ink-3);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--sf-rule);
+  background: var(--sf-rule-soft);
+  white-space: nowrap;
+}
+.listTbl tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--sf-rule-soft);
+  vertical-align: top;
+}
+.listTbl tbody tr:last-child td { border-bottom: 0; }
+.listDesc {
+  max-width: 420px;
+  min-width: 180px;
+  white-space: normal;
+  overflow-wrap: break-word;
+}

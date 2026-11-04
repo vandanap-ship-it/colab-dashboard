@@ -46,11 +46,175 @@ export default function SafetyTabView({ projectId, bundle, registers = [] }: Saf
         window={submissionsWindow}
         onChange={setSubmissionsWindow}
       />
-      <p className={styles.footer}>
-        Labour induction submissions will populate as the Induction module comes online.
-      </p>
+      <InductionsListCard rows={bundle.inductionRows} />
+      <HseChecklistsListCard rows={bundle.hseChecklistRows} />
+      <PermitsListCard rows={bundle.permitRows} />
+      <ObservationsListCard rows={bundle.observationRows} />
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Click-through row lists (added 2026-11-04 management review)
+// ---------------------------------------------------------------------------
+
+function InductionsListCard({ rows }: { rows: SafetyBundle["inductionRows"] }) {
+  return (
+    <div id="inductions-list" className={styles.card}>
+      <div className={styles.cardHd}>
+        Safety Inductions · all rows
+        <span className={styles.cardMetaSmall}>{rows.length} rows · newest first</span>
+      </div>
+      <div className={styles.cardBd}>
+        {rows.length === 0 ? (
+          <div className={styles.empty}>No inductions submitted yet.</div>
+        ) : (
+          <div className={styles.listTblWrap}>
+            <table className={styles.listTbl}>
+              <thead>
+                <tr>
+                  <th>ID</th><th>Date</th><th>Worker</th><th>Trade</th><th>Contractor</th><th>Status</th><th>Expires</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.displayId}</td>
+                    <td>{fmtShortDate(r.inductionDate)}</td>
+                    <td>{r.workerName}</td>
+                    <td>{r.trade}</td>
+                    <td>{r.contractorName ?? "-"}</td>
+                    <td>{r.status}</td>
+                    <td>{fmtShortDate(r.expiryDate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HseChecklistsListCard({ rows }: { rows: SafetyBundle["hseChecklistRows"] }) {
+  return (
+    <div id="hse-checklist-list" className={styles.card}>
+      <div className={styles.cardHd}>
+        HSE Checklists · all rows
+        <span className={styles.cardMetaSmall}>{rows.length} rows · includes Colab-imported checklists</span>
+      </div>
+      <div className={styles.cardBd}>
+        {rows.length === 0 ? (
+          <div className={styles.empty}>No HSE checklists submitted yet.</div>
+        ) : (
+          <div className={styles.listTblWrap}>
+            <table className={styles.listTbl}>
+              <thead>
+                <tr>
+                  <th>Date</th><th>Title</th><th>Where</th><th>Contractor</th><th>Filled by</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>{fmtShortDate(r.createdAt)}</td>
+                    <td className={styles.listDesc}>{r.title}</td>
+                    <td>{r.wbsName ?? "-"}</td>
+                    <td>{r.contractorName ?? "-"}</td>
+                    <td>{r.filledByName}</td>
+                    <td>{r.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PermitsListCard({ rows }: { rows: SafetyBundle["permitRows"] }) {
+  const TYPE_LABELS: Record<string, string> = {
+    HOT_WORK: "Hot Work",
+    NIGHT_WORK: "Night Work",
+    DESHUTTERING: "De-shuttering",
+  };
+  return (
+    <div id="permits-list" className={styles.card}>
+      <div className={styles.cardHd}>
+        Safety Permits · all rows
+        <span className={styles.cardMetaSmall}>{rows.length} rows · Hot Work, Night Work, De-shuttering</span>
+      </div>
+      <div className={styles.cardBd}>
+        {rows.length === 0 ? (
+          <div className={styles.empty}>No safety permits raised yet.</div>
+        ) : (
+          <div className={styles.listTblWrap}>
+            <table className={styles.listTbl}>
+              <thead>
+                <tr>
+                  <th>Work date</th><th>Type</th><th>Title</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>{fmtShortDate(r.workDate)}</td>
+                    <td>{TYPE_LABELS[r.type] ?? r.type}</td>
+                    <td className={styles.listDesc}>{r.title}</td>
+                    <td>{r.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ObservationsListCard({ rows }: { rows: SafetyBundle["observationRows"] }) {
+  return (
+    <div id="observations-list" className={styles.card}>
+      <div className={styles.cardHd}>
+        Safety Observations · all rows
+        <span className={styles.cardMetaSmall}>{rows.length} rows · newest first</span>
+      </div>
+      <div className={styles.cardBd}>
+        {rows.length === 0 ? (
+          <div className={styles.empty}>No safety observations recorded.</div>
+        ) : (
+          <div className={styles.listTblWrap}>
+            <table className={styles.listTbl}>
+              <thead>
+                <tr>
+                  <th>Date</th><th>Category</th><th>Severity</th><th>Status</th><th>Contractor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>{fmtShortDate(r.createdAt)}</td>
+                    <td>{r.category ?? "-"}</td>
+                    <td>{r.severity ?? "-"}</td>
+                    <td>{r.status}</td>
+                    <td>{r.contractorName ?? "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function fmtShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" });
 }
 
 // ---------------------------------------------------------------------------
@@ -62,24 +226,36 @@ function OverviewCard({ overview }: { overview: SafetyBundle["overview"] }) {
     <div className={styles.card}>
       <div className={styles.cardHd}>Safety Overview</div>
       <div className={styles.ovGrid}>
-        <div className={`${styles.ovTile} ${styles.ovBig}`}>
-          <div className={styles.ovVal}>{overview.daysSinceLastIncident}</div>
-          <div className={styles.ovLbl}>Days since last incident</div>
+        <a href="#inductions-list" className={`${styles.ovTile} ${styles.ovBig} ${styles.ovLink}`}>
+          <div className={styles.ovVal}>{overview.totalInductions.toLocaleString("en-IN")}</div>
+          <div className={styles.ovLbl}>Safety Inductions</div>
           <div className={styles.ovSub}>
-            {overview.lastIncidentDate
-              ? "last: " + new Date(overview.lastIncidentDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-              : "no incidents recorded"}
+            {overview.inductionsApproved} approved · {overview.inductionsPending} pending · {overview.inductionsRejected} rejected
           </div>
-        </div>
-        <div className={styles.ovTile}>
-          <div className={styles.ovVal}>{overview.ltiFreeDays}</div>
-          <div className={styles.ovLbl}>LTI-free days</div>
-          <div className={styles.ovSub}>{overview.safeSincePreset}</div>
-        </div>
+        </a>
+        <a href="#hse-checklist-list" className={`${styles.ovTile} ${styles.ovLink}`}>
+          <div className={styles.ovVal}>{overview.totalHseChecklists.toLocaleString("en-IN")}</div>
+          <div className={styles.ovLbl}>HSE Checklists</div>
+          <div className={styles.ovSub}>
+            {overview.hseChecklistsPassed} passed · {overview.hseChecklistsPending} pending review
+          </div>
+        </a>
+        <a href="#permits-list" className={`${styles.ovTile} ${styles.ovLink}`}>
+          <div className={styles.ovVal}>{overview.totalSafetyPermits.toLocaleString("en-IN")}</div>
+          <div className={styles.ovLbl}>Safety Permits</div>
+          <div className={styles.ovSub}>
+            {overview.permitsApproved} approved · {overview.permitsPending} pending · {overview.permitsClosedOrRejected} closed or rejected
+          </div>
+        </a>
+        <a href="#observations-list" className={`${styles.ovTile} ${styles.ovLink}`}>
+          <div className={styles.ovVal}>{overview.totalSafetyObservations.toLocaleString("en-IN")}</div>
+          <div className={styles.ovLbl}>Safety Observations</div>
+          <div className={styles.ovSub}>raised to date</div>
+        </a>
         <div className={styles.ovTile}>
           <div className={styles.ovVal}>{overview.safeManHours.toLocaleString()}</div>
           <div className={styles.ovLbl}>Safe man-hours</div>
-          <div className={styles.ovSub}>{overview.safeSincePreset} · 8h/day baseline</div>
+          <div className={styles.ovSub}>{overview.safeSincePreset} · 8 hours per worker day</div>
         </div>
       </div>
     </div>
@@ -160,16 +336,29 @@ function ComplianceMatrixCard({ rows }: { rows: SafetyBundle["compliance"] }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.contractorId}>
-                    <td className={styles.cmName}>{r.contractorName}</td>
-                    <td>{r.inspections.total || "—"}</td>
-                    <td className={styles.cmClosed}>{r.inspections.closed || "—"}</td>
-                    <td className={styles.cmReview}>{r.inspections.inReview || "—"}</td>
-                    <td className={styles.cmObs}>{r.inspections.obs || "—"}</td>
-                    <td>{r.inspections.avgTatDays == null ? "—" : `${r.inspections.avgTatDays}d`}</td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const noData = r.inspections.total === 0 && r.inspections.obs === 0 && r.inspections.ncr === 0;
+                  if (noData) {
+                    return (
+                      <tr key={r.contractorId}>
+                        <td className={styles.cmName}>{r.contractorName}</td>
+                        <td colSpan={5} className={styles.cmNoData}>
+                          Data not updated · nothing logged by this contractor's team yet
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return (
+                    <tr key={r.contractorId}>
+                      <td className={styles.cmName}>{r.contractorName}</td>
+                      <td>{r.inspections.total || "-"}</td>
+                      <td className={styles.cmClosed}>{r.inspections.closed || "-"}</td>
+                      <td className={styles.cmReview}>{r.inspections.inReview || "-"}</td>
+                      <td className={styles.cmObs}>{r.inspections.obs || "-"}</td>
+                      <td>{r.inspections.avgTatDays == null ? "-" : `${r.inspections.avgTatDays}d`}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -210,7 +399,7 @@ function SafetyDetailsCard({ inductions }: { inductions: SafetyBundle["induction
               <div key={c.contractorId} className={styles.sdContractorRow}>
                 <span className={styles.sdContractorName}>{c.contractorName}</span>
                 <span className={styles.sdContractorPct}>
-                  {c.approvedPct == null ? "—" : `${c.approvedPct}%`}
+                  {c.approvedPct == null ? "Data not updated" : `${c.approvedPct}%`}
                 </span>
               </div>
             ))}

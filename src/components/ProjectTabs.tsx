@@ -17,16 +17,23 @@ type Tab = {
 export default function ProjectTabs({
   projectId,
   myActionsCount,
+  showMyActions = false,
 }: {
   projectId: string;
   myActionsCount?: number;
+  /** My Actions is an admin-only working surface — hidden from everyone
+   *  else so the management dashboard view stays clean. Set from the
+   *  server layout based on the signed-in role. */
+  showMyActions?: boolean;
 }) {
   const pathname = usePathname();
 
-  // Five tabs matching the Colab-Tools layout the team is used to: Dashboard,
-  // Progress, QA/QC, EHS, My Actions. EHS is the display label for the SAFETY
-  // module (matches the team's vocabulary — Environment, Health & Safety).
-  // Insights is deferred to V2 (Shraddha, 09 Sep 2026).
+  // Four management-view tabs: Dashboard, Progress, QA/QC, EHS. A fifth
+  // "My Actions" tab surfaces only for admin credentials — it is a working
+  // inbox, not a dashboard surface, so Shraddha asked to hide it from
+  // everyone else for the Nov-5 management review. EHS is the display
+  // label for the SAFETY module (Environment, Health & Safety — the
+  // vocabulary the site team already uses).
   const tabs: Tab[] = [
     {
       key: "overview",
@@ -52,13 +59,15 @@ export default function ProjectTabs({
       href: `/projects/${projectId}/safety`,
       icon: HardHat,
     },
-    {
-      key: "my-actions",
-      label: "My Actions",
-      href: `/projects/${projectId}/my-actions`,
-      icon: Sparkles,
-      badge: myActionsCount,
-    },
+    ...(showMyActions
+      ? [{
+          key: "my-actions",
+          label: "My Actions",
+          href: `/projects/${projectId}/my-actions`,
+          icon: Sparkles,
+          badge: myActionsCount,
+        } as Tab]
+      : []),
   ];
 
   // Match by leading segment so nested URLs still highlight the parent tab.

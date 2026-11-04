@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import styles from "./qaqc-tab.module.css";
-import type { QaqcBundle } from "@/lib/qaqcServer";
+import type { InspectionRow, IssueRow, QaqcBundle } from "@/lib/qaqcServer";
 
 export interface QaqcTabViewProps {
   projectId: string;
@@ -14,7 +14,7 @@ export default function QaqcTabView({ projectId, bundle }: QaqcTabViewProps) {
     <div className={styles.wrap}>
       {/* Top row: WIR + Issues+Defects + Material */}
       <div className={styles.topRow}>
-        <WirCard counts={bundle.wir} />
+        <WirCard counts={bundle.wir} total={bundle.inspectionRows.length} />
         <IssuesDefectsCard issues={bundle.issues} />
         <MaterialCard counts={bundle.material} />
       </div>
@@ -35,6 +35,9 @@ export default function QaqcTabView({ projectId, bundle }: QaqcTabViewProps) {
         <RecentPhotoFeedCard photos={bundle.recentPhotos} />
       </div>
 
+      <IssuesListCard rows={bundle.issueRows} />
+      <InspectionsListCard rows={bundle.inspectionRows} />
+
       <p className={styles.footer}>
         Material inspections and material delivery log will appear here once
         those modules are wired.
@@ -50,24 +53,27 @@ export default function QaqcTabView({ projectId, bundle }: QaqcTabViewProps) {
 // §1 Work Inspection Request
 // ---------------------------------------------------------------------------
 
-function WirCard({ counts }: { counts: QaqcBundle["wir"] }) {
+function WirCard({ counts, total }: { counts: QaqcBundle["wir"]; total: number }) {
   const successRate = counts.successRate;
   return (
-    <div className={`${styles.card} ${styles.cardWir}`}>
-      <div className={styles.cardHd}>Work Inspection Request</div>
+    <a href="#inspections-list" className={`${styles.card} ${styles.cardWir} ${styles.cardClickable}`}>
+      <div className={styles.cardHd}>Work Inspection Requests</div>
       <div className={styles.wirBody}>
         <div className={styles.wirBig}>
-          <div className={styles.wirBigNum}>{successRate == null ? "—" : `${successRate}%`}</div>
-          <div className={styles.wirBigLbl}>Success rate</div>
+          <div className={styles.wirBigNum}>{total.toLocaleString("en-IN")}</div>
+          <div className={styles.wirBigLbl}>
+            Total inspections
+            {successRate != null ? ` · ${successRate}% success` : ""}
+          </div>
         </div>
         <div className={styles.wirGrid}>
-          <StatCell label="Total inspections" value={counts.total} />
           <StatCell label="Passed" value={counts.passed} tone="good" />
           <StatCell label="Rejected" value={counts.rejected} tone="bad" />
           <StatCell label="In review" value={counts.inReview} tone="warn" />
+          <StatCell label="Click to see rows" value="↓" />
         </div>
       </div>
-    </div>
+    </a>
   );
 }
 
@@ -76,28 +82,31 @@ function WirCard({ counts }: { counts: QaqcBundle["wir"] }) {
 // ---------------------------------------------------------------------------
 
 function IssuesDefectsCard({ issues }: { issues: QaqcBundle["issues"] }) {
+  const totalIssues = issues.obs.total + issues.ncs.total;
   return (
-    <div className={`${styles.card} ${styles.cardIssues}`}>
+    <a href="#issues-list" className={`${styles.card} ${styles.cardIssues} ${styles.cardClickable}`}>
       <div className={styles.cardHd}>Issues & Defects</div>
       <div className={styles.issuesTop}>
         <div>
-          <div className={styles.issuesPct}>{issues.completedPct}%</div>
-          <div className={styles.issuesPctLbl}>Completed</div>
+          <div className={styles.issuesPct}>{totalIssues}</div>
+          <div className={styles.issuesPctLbl}>
+            Total · {issues.completedPct}% closed
+          </div>
         </div>
         <div className={styles.issuesTat}>
           <div className={styles.issuesTatCell}>
-            <div className={styles.issuesTatVal}>{issues.submissionTATDays == null ? "—" : `${issues.submissionTATDays}d`}</div>
-            <div className={styles.issuesTatLbl}>Submission TAT</div>
+            <div className={styles.issuesTatVal}>{issues.submissionTATDays == null ? "-" : `${issues.submissionTATDays}d`}</div>
+            <div className={styles.issuesTatLbl}>Avg close TAT</div>
           </div>
           <div className={styles.issuesTatCell}>
-            <div className={styles.issuesTatVal}>{issues.approvalTATDays == null ? "—" : `${issues.approvalTATDays}d`}</div>
-            <div className={styles.issuesTatLbl}>Approval TAT</div>
+            <div className={styles.issuesTatVal}>↓</div>
+            <div className={styles.issuesTatLbl}>Click to see rows</div>
           </div>
         </div>
       </div>
       <BucketRow label={`OBS (${issues.obs.total})`} bucket={issues.obs} />
       <BucketRow label={`NCS (${issues.ncs.total})`} bucket={issues.ncs} />
-    </div>
+    </a>
   );
 }
 
@@ -268,19 +277,34 @@ function ContractorPerformanceCard({ rows }: { rows: QaqcBundle["contractors"] }
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.contractorId}>
-                    <td className={styles.cpName}>{r.contractorName}</td>
-                    <td>{r.wir.new || "—"}</td>
-                    <td>{r.wir.inReview || "—"}</td>
-                    <td>{r.wir.closed || "—"}</td>
-                    <td>{r.wir.tatDays == null ? "—" : `${r.wir.tatDays}d`}</td>
-                    <td>{r.issues.new || "—"}</td>
-                    <td>{r.issues.inReview || "—"}</td>
-                    <td>{r.issues.closed || "—"}</td>
-                    <td>{r.issues.tatDays == null ? "—" : `${r.issues.tatDays}d`}</td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const wirTotal = r.wir.new + r.wir.inReview + r.wir.closed;
+                  const issuesTotal = r.issues.new + r.issues.inReview + r.issues.closed;
+                  const noData = wirTotal === 0 && issuesTotal === 0;
+                  if (noData) {
+                    return (
+                      <tr key={r.contractorId}>
+                        <td className={styles.cpName}>{r.contractorName}</td>
+                        <td colSpan={8} className={styles.cpNoData}>
+                          Data not updated · nothing logged by this contractor's team yet
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return (
+                    <tr key={r.contractorId}>
+                      <td className={styles.cpName}>{r.contractorName}</td>
+                      <td>{r.wir.new || "-"}</td>
+                      <td>{r.wir.inReview || "-"}</td>
+                      <td>{r.wir.closed || "-"}</td>
+                      <td>{r.wir.tatDays == null ? "-" : `${r.wir.tatDays}d`}</td>
+                      <td>{r.issues.new || "-"}</td>
+                      <td>{r.issues.inReview || "-"}</td>
+                      <td>{r.issues.closed || "-"}</td>
+                      <td>{r.issues.tatDays == null ? "-" : `${r.issues.tatDays}d`}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -371,6 +395,110 @@ function RecentPhotoFeedCard({ photos }: { photos: QaqcBundle["recentPhotos"] })
       </div>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// §10 Issues list (click-through target)
+// ---------------------------------------------------------------------------
+
+function IssuesListCard({ rows }: { rows: IssueRow[] }) {
+  return (
+    <div id="issues-list" className={styles.card}>
+      <div className={styles.cardHd}>
+        Issues &amp; Defects · all rows
+        <span className={styles.cardMeta}>{rows.length} rows · newest first</span>
+      </div>
+      <div className={styles.cardBd}>
+        {rows.length === 0 ? (
+          <div className={styles.empty}>No issues raised on this project yet.</div>
+        ) : (
+          <div className={styles.listTblWrap}>
+            <table className={styles.listTbl}>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Category</th>
+                  <th>Severity</th>
+                  <th>Description</th>
+                  <th>Where</th>
+                  <th>Contractor</th>
+                  <th>Raised by</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>{fmtShortDate(r.createdAt)}</td>
+                    <td>{r.category ?? "-"}</td>
+                    <td>{r.severity ?? "-"}</td>
+                    <td className={styles.listDesc}>{r.description}</td>
+                    <td>{r.wbsName ?? "-"}</td>
+                    <td>{r.contractorName ?? "-"}</td>
+                    <td>{r.createdByName}</td>
+                    <td>{r.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// §11 Inspections list (click-through target for WIR tile)
+// ---------------------------------------------------------------------------
+
+function InspectionsListCard({ rows }: { rows: InspectionRow[] }) {
+  return (
+    <div id="inspections-list" className={styles.card}>
+      <div className={styles.cardHd}>
+        Inspection submissions · all rows
+        <span className={styles.cardMeta}>{rows.length} rows · includes Colab-imported inspections</span>
+      </div>
+      <div className={styles.cardBd}>
+        {rows.length === 0 ? (
+          <div className={styles.empty}>No inspections submitted on this project yet.</div>
+        ) : (
+          <div className={styles.listTblWrap}>
+            <table className={styles.listTbl}>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Module</th>
+                  <th>Title</th>
+                  <th>Where</th>
+                  <th>Contractor</th>
+                  <th>Filled by</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>{fmtShortDate(r.createdAt)}</td>
+                    <td>{r.module ?? "-"}</td>
+                    <td className={styles.listDesc}>{r.title}</td>
+                    <td>{r.wbsName ?? "-"}</td>
+                    <td>{r.contractorName ?? "-"}</td>
+                    <td>{r.filledByName}</td>
+                    <td>{r.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function fmtShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" });
 }
 
 // ---------------------------------------------------------------------------

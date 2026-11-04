@@ -289,6 +289,13 @@
 }
 .cpTbl tbody tr:last-child td { border-bottom: 0; }
 .cpName { text-align: left !important; font-weight: 700; color: var(--qa-ink); }
+.cpNoData {
+  text-align: left !important;
+  color: var(--qa-ink-3);
+  font-style: italic;
+  font-size: 12px;
+  background: var(--qa-rule-soft);
+}
 
 /* -------- Bottom row -------- */
 .bottomRow {
@@ -354,3 +361,57 @@
 .photoCaption { padding: 8px 10px; }
 .photoLabel { font-size: 11px; font-weight: 700; color: var(--qa-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .photoMeta { font-size: 10px; color: var(--qa-ink-3); margin-top: 2px; }
+
+/* --------------------------------------------------------------------
+ * Click-through list cards added 2026-11-04 (Vandana management review)
+ * ------------------------------------------------------------------ */
+.cardClickable {
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+.cardClickable:hover {
+  box-shadow: 0 4px 10px rgba(22, 32, 47, 0.08);
+  transform: translateY(-1px);
+}
+.cardMeta {
+  font-size: 11px;
+  color: var(--qa-ink-3);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 12px;
+}
+.listTblWrap { overflow-x: auto; }
+.listTbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  min-width: 920px;
+}
+.listTbl thead th {
+  text-align: left;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--qa-ink-3);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--qa-rule);
+  background: var(--qa-rule-soft);
+  white-space: nowrap;
+}
+.listTbl tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--qa-rule-soft);
+  vertical-align: top;
+}
+.listTbl tbody tr:last-child td { border-bottom: 0; }
+.listDesc {
+  max-width: 420px;
+  min-width: 200px;
+  white-space: normal;
+  overflow-wrap: break-word;
+}

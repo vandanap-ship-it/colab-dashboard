@@ -85,37 +85,35 @@ export default function ExecutiveOverview({
           native browser tooltip — no new deps, works on desktop, and screen
           readers pick it up as an accessible name. */}
       <div className={styles.scopeStrip}>
-        <div className={`${styles.scopeCell} ${styles.hi}`} title="Total villas across all phases of this project. 'In scope' is how many are currently being tracked here; model villas are the display / sample units.">
+        <div className={`${styles.scopeCell} ${styles.hi}`} title="Total villas in scope on this project. In scope means tracked in the schedule and rolling up into these numbers.">
           <div className={styles.lb}>Total Project</div>
           <div className={styles.vl}>
-            {h.totalPlots} <span className={styles.sm}>plots · {h.inScope} in scope · {h.modelVillas} model villas</span>
+            {h.inScope}
+            <span className={styles.sm}>
+              villas in scope
+              {h.modelVillas > 0 ? ` · ${h.modelVillas} model villas` : ""}
+            </span>
           </div>
         </div>
-        <div className={styles.scopeCell} title="Primary contractor executing the current phase, plus the villas and blocks they're responsible for.">
-          <div className={styles.lb}>Contractor · Abraham Thomas</div>
+        <div className={styles.scopeCell} title="Contractor 1, executing Phase 1. Villas and blocks they are responsible for.">
+          <div className={styles.lb}>Contractor 1 · Abraham Thomas</div>
           <div className={styles.vl}>
             {h.atVillas} <span className={styles.sm}>villas · {h.atBlocks} blocks</span>
           </div>
         </div>
-        {h.elegantVillas > 0 ? (
-          <div className={styles.scopeCell} title="Second contractor executing the project, plus the villas and blocks they're responsible for.">
-            <div className={styles.lb}>Contractor · Elegant Construction</div>
-            <div className={styles.vl}>
-              {h.elegantVillas} <span className={styles.sm}>villas · {h.elegantBlocks} blocks</span>
-            </div>
+        <div className={styles.scopeCell} title="Contractor 2 on this project. Villas and blocks allocated to them even if they have not yet mobilised.">
+          <div className={styles.lb}>Contractor 2 · Elegant Constructions</div>
+          <div className={styles.vl}>
+            {h.elegantVillas}
+            <span className={styles.sm}>
+              villas · {h.elegantBlocks} blocks
+            </span>
           </div>
-        ) : (
-          <div className={styles.scopeCell} title="Villas currently under construction in Phase 1 and how many of their blocks are actively being worked on.">
-            <div className={styles.lb}>Phase 1 · In Execution</div>
-            <div className={styles.vl}>
-              {h.phase1Villas} <span className={styles.sm}>villas · {h.phase1BlocksActive} blocks active</span>
-            </div>
-          </div>
-        )}
-        <div className={styles.scopeCell} title="Earliest planned start and latest planned finish across BOTH contractors' schedules. This is the reference the 'Total Delay' KPI is measured against.">
+        </div>
+        <div className={styles.scopeCell} title="Earliest planned start and latest planned finish across BOTH contractors' schedules. The Total Delay KPI is measured against this window.">
           <div className={styles.lb}>Baseline Window</div>
           <div className={styles.vl}>
-            {fmtDate(h.baselineStart)} <span className={styles.sm}>→ {fmtDate(h.baselineEnd)}</span>
+            {fmtDate(h.baselineStart)} <span className={styles.sm}>to {fmtDate(h.baselineEnd)}</span>
           </div>
         </div>
       </div>
@@ -198,7 +196,7 @@ export default function ExecutiveOverview({
             </span>
           </h3>
           <span className={styles.meta}>
-            As of {fmtDate(h.asOf)} · Phase 1 · Contractor: Abraham Thomas
+            As of {fmtDate(h.asOf)} · Phase 1 · Contractors: Abraham Thomas, Elegant Constructions
           </span>
         </div>
 
@@ -335,12 +333,12 @@ export default function ExecutiveOverview({
               </div>
               <div className={styles.metric}>
                 <span className={styles.lb}>Active</span>
-                <span className={styles.vl}>{c.activeVillas || "—"}</span>
+                <span className={styles.vl}>{c.activeVillas || "not entered"}</span>
               </div>
               <div className={styles.metric}>
                 <span className={styles.lb}>Complete</span>
                 <span className={styles.vl}>
-                  {c.activeVillas > 0 ? `${c.completePct}%` : "—"}
+                  {c.activeVillas > 0 ? `${c.completePct}%` : "not entered"}
                 </span>
               </div>
               <div className={styles.metric}>
@@ -356,12 +354,12 @@ export default function ExecutiveOverview({
                       : ""
                   }`}
                 >
-                  {c.activeVillas > 0 ? `+${c.avgDelayDays}d` : "—"}
+                  {c.activeVillas > 0 ? `+${c.avgDelayDays}d` : "not entered"}
                 </span>
               </div>
               <div className={styles.healthPill}>
                 {c.health === "tbd"
-                  ? "TBD"
+                  ? "Data not updated"
                   : c.health === "healthy"
                   ? "On-track"
                   : c.health === "ok"
@@ -381,8 +379,8 @@ export default function ExecutiveOverview({
       {/* Block Buckets */}
       <div className={styles.card}>
         <div className={styles.cardHd}>
-          <h3>Blocks · Green / Orange / Red</h3>
-          <span className={styles.meta}>grouped by current delay · click any block to drill in</span>
+          <h3>Blocks · Healthy / Warning / Critical</h3>
+          <span className={styles.meta}>grouped by how far the current stage is behind its baseline · click any block to drill in</span>
         </div>
         <div className={styles.cardBd}>
           <BlockBuckets blocks={blocks} />
@@ -392,8 +390,8 @@ export default function ExecutiveOverview({
       {/* Villa Buckets */}
       <div className={styles.card}>
         <div className={styles.cardHd}>
-          <h3>Villas · Green / Orange / Red</h3>
-          <span className={styles.meta}>grouped by current delay · click any villa to drill in</span>
+          <h3>Villas · Healthy / Warning / Critical</h3>
+          <span className={styles.meta}>grouped by how far the current stage is behind its baseline · click any villa to drill in</span>
         </div>
         <div className={styles.cardBd}>
           <VillaBuckets villas={villas} />
@@ -447,7 +445,7 @@ function TimelineRow({
           {slipDays > 0 && <span className={styles.slipTag}>+{slipDays}d</span>}
         </span>
         <span className={styles.dates}>
-          <strong>{fmtDate(plannedStart)}</strong> → <strong>{fmtDate(plannedEnd)}</strong>
+          <strong>{fmtDate(plannedStart)}</strong> to <strong>{fmtDate(plannedEnd)}</strong>
           {slipDays > 0 && (
             <> · projected <strong>{fmtDate(projectedEnd)}</strong></>
           )}
@@ -474,9 +472,9 @@ function BlockBuckets({ blocks }: { blocks: BlockRollup[] }) {
 
   return (
     <div className={styles.bucketGrid}>
-      <BlockBucket kind="healthy" title="Healthy" subtitle="≤ 0d slip" blocks={healthy} />
-      <BlockBucket kind="warning" title="Warning" subtitle="1–15d slip" blocks={warning} />
-      <BlockBucket kind="critical" title="Critical" subtitle="&gt; 15d slip" blocks={critical} />
+      <BlockBucket kind="healthy" title="Healthy" subtitle="on time or ahead" blocks={healthy} />
+      <BlockBucket kind="warning" title="Warning" subtitle="1 to 15 days behind" blocks={warning} />
+      <BlockBucket kind="critical" title="Critical" subtitle="more than 15 days behind" blocks={critical} />
     </div>
   );
 }
@@ -549,9 +547,9 @@ function VillaBuckets({ villas }: { villas: VillaRollup[] }) {
 
   return (
     <div className={styles.bucketGrid}>
-      <VillaBucket kind="healthy" title="Healthy" subtitle="≤ 0d slip" villas={healthy} />
-      <VillaBucket kind="warning" title="Warning" subtitle="1–15d slip" villas={warning} />
-      <VillaBucket kind="critical" title="Critical" subtitle="&gt; 15d slip" villas={critical} />
+      <VillaBucket kind="healthy" title="Healthy" subtitle="on time or ahead" villas={healthy} />
+      <VillaBucket kind="warning" title="Warning" subtitle="1 to 15 days behind" villas={warning} />
+      <VillaBucket kind="critical" title="Critical" subtitle="more than 15 days behind" villas={critical} />
     </div>
   );
 }
@@ -627,31 +625,30 @@ function ManpowerKpiCard({ strip }: { strip: ManpowerStrip }) {
             : "info";
   const toneClass =
     tone === "good" ? styles.good : tone === "warn" ? styles.warn : styles.info;
+  // "no plan" means the planner hasn't set a target for today - which is
+  // fine. We still show the actual headcount so the tile carries a real
+  // number instead of a dash (Vandana, 2026-11-04 management-review pass).
   const bigNumber =
-    strip.status === "no-plan"
-      ? "—"
-      : strip.status === "not-logged"
-        ? "—"
-        : String(strip.actual);
+    strip.status === "not-logged" ? "0" : String(strip.actual);
   const sub =
     strip.status === "no-plan"
-      ? "No plan set today"
+      ? `No plan set · ${strip.actual} on site today`
       : strip.status === "not-logged"
-        ? `Plan ${strip.planned} · not logged yet`
+        ? `Plan ${strip.planned} · nothing logged yet`
         : strip.status === "above"
-          ? `+${strip.variance} above ${strip.planned}`
+          ? `+${strip.variance} above plan of ${strip.planned}`
           : strip.status === "on-plan"
-            ? `On ${strip.planned} plan`
-            : `${strip.variance} below ${strip.planned}`;
+            ? `On plan of ${strip.planned}`
+            : `${strip.variance} below plan of ${strip.planned}`;
   return (
     <div
       className={`${styles.kpiSmall} ${styles.kpiManpower} ${toneClass}`}
-      title="Today's site headcount vs the planned target. Green = on/above plan, amber = below or not logged."
+      title="Today's site headcount. Measured against the planner's target when one is set; otherwise just the actual headcount on site."
     >
       <div className={styles.kpiLbl}>Daily Manpower</div>
       <div className={`${styles.kpiSmallVal} ${toneClass}`}>
         {bigNumber}
-        {bigNumber !== "—" && <span className={styles.unit}>workers</span>}
+        <span className={styles.unit}>workers</span>
       </div>
       <div className={styles.kpiSub}>{sub}</div>
     </div>
@@ -682,9 +679,9 @@ function MilestoneProgressTable({ rows }: { rows: MilestoneProgressRow[] }) {
           {rows.map((r) => (
             <tr key={r.code}>
               <td className={styles.mpTblName}>{r.name}</td>
-              <td className={styles.mpTblNum}>{r.due === 0 ? "—" : r.due}</td>
-              <td className={styles.mpTblNum}>{r.due === 0 ? "—" : r.done}</td>
-              <td className={styles.mpTblNum}>{r.due === 0 ? "—" : r.pending}</td>
+              <td className={styles.mpTblNum}>{r.due === 0 ? "-" : r.due}</td>
+              <td className={styles.mpTblNum}>{r.due === 0 ? "-" : r.done}</td>
+              <td className={styles.mpTblNum}>{r.due === 0 ? "-" : r.pending}</td>
               <td className={styles.mpTblStatus}>
                 <MilestoneStatusPill row={r} />
               </td>

@@ -89,16 +89,48 @@ export interface RecentPhoto {
   contractorName: string | null;
 }
 
+export interface IssueRow {
+  id: string;
+  description: string;
+  status: string;
+  severity: string | null;
+  category: string | null;
+  createdAt: string;
+  createdByName: string;
+  wbsName: string | null;
+  contractorName: string | null;
+}
+
+export interface InspectionRow {
+  id: string;
+  title: string;
+  status: string;
+  module: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+  filledByName: string;
+  wbsName: string | null;
+  contractorName: string | null;
+}
+
 export interface QaqcBundle {
   wir: InspectionCounts;
   issues: IssuesSummary;
-  material: InspectionCounts; // placeholder — always zeros until material inspections modeled
+  material: InspectionCounts; // placeholder - always zeros until material inspections modeled
   defectsByCategory: DefectCategoryRow[];
   latestDay: LatestDaySnapshot;
   last7Days: TrendBundle;
   contractors: ContractorRow[];
   tatTrend: TATPoint[]; // last 30 days
   recentPhotos: RecentPhoto[];
+  /** Flat list of every QA/QC Issue (OBS + NCS, open + closed) so the
+   *  Issues-&-Defects tile can click through to the actual rows below the
+   *  summary. Sorted newest first. */
+  issueRows: IssueRow[];
+  /** Flat list of every Inspection record on the project (regardless of
+   *  module - see the module-filter note in getQaqcBundle). Sorted newest
+   *  first. Powers the "all inspections" expander below the WIR tile. */
+  inspectionRows: InspectionRow[];
 }
 
 // ---------------------------------------------------------------------------
@@ -130,18 +162,28 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
   const weekAgo = new Date(todayStart.getTime() - 7 * 86400000);
   const monthAgo = new Date(todayStart.getTime() - 30 * 86400000);
 
+  // Vandana 2026-11-04 management-review pass:
+  //   Colab-imported inspections land as module="SAFETY" even though many are
+  //   QA checklists (see memory: weekly_report_1_7_oct.md - "QA/QC
+  //   checklists mislabelled SAFETY"). Filtering to module="QAQC" made the
+  //   WIR tile read 0 while the DB holds 194 Siddhi/Colab inspection
+  //   records. For now the QA/QC tab counts EVERY inspection on the project
+  //   so management sees the real number; the EHS tab shows the same
+  //   records under its own lens. Once a reclassification pass lands we
+  //   can narrow this back.
   const [inspections, issues, contractors] = await Promise.all([
     prisma.inspection.findMany({
-      where: { projectId, deletedAt: null, module: "QAQC" },
+      where: { projectId, deletedAt: null },
       select: {
         id: true,
         title: true,
         status: true,
+        module: true,
         createdAt: true,
         reviewedAt: true,
-        wbsNode: { select: { contractorId: true } },
+        wbsNode: { select: { contractorId: true, name: true } },
         // Fallback contractor signal for inspections imported without a
-        // WBS attachment (all 111 Colab-imported inspections on Amanvana
+        // WBS attachment (all Colab-imported inspections on Amanvana
         // hit this path). Set User.contractorId in Admin > Users.
         filledBy: { select: { name: true, contractorId: true } },
         photos: { select: { url: true }, take: 1 },
@@ -157,13 +199,16 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
         category: true,
         createdAt: true,
         updatedAt: true,
-        wbsNode: { select: { contractorId: true } },
+        wbsNode: { select: { contractorId: true, name: true } },
         createdBy: { select: { name: true, contractorId: true } },
         photos: { select: { url: true }, take: 1 },
       },
     }),
+    // Filter to visible-only contractors - the Contractor Performance table
+    // only needs to show Abraham + Elegant (the two execution contractors
+    // showInPickers). The hidden ones were showing as zero-row noise.
     prisma.contractor.findMany({
-      where: { projectId, active: true },
+      where: { projectId, active: true, showInPickers: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
@@ -388,6 +433,41 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
   // Suppress unused variable warning
   void weekAgo;
 
+  // Flat row lists for the click-through sections below the summary tiles.
+  const contractorNameById = new Map(contractors.map((c) => [c.id, c.name]));
+  const issueRows: IssueRow[] = issues
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .map((it) => {
+      const cid = it.wbsNode?.contractorId ?? it.createdBy?.contractorId ?? null;
+      return {
+        id: it.id,
+        description: it.description,
+        status: it.status,
+        severity: it.severity ?? null,
+        category: it.category ?? null,
+        createdAt: it.createdAt.toISOString(),
+        createdByName: it.createdBy?.name ?? "Unknown",
+        wbsName: it.wbsNode?.name ?? null,
+        contractorName: cid ? contractorNameById.get(cid) ?? null : null,
+      };
+    });
+  const inspectionRows: InspectionRow[] = inspections
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .map((i) => {
+      const cid = i.wbsNode?.contractorId ?? i.filledBy?.contractorId ?? null;
+      return {
+        id: i.id,
+        title: i.title,
+        status: i.status,
+        module: i.module ?? null,
+        createdAt: i.createdAt.toISOString(),
+        reviewedAt: i.reviewedAt?.toISOString() ?? null,
+        filledByName: i.filledBy?.name ?? "Unknown",
+        wbsName: i.wbsNode?.name ?? null,
+        contractorName: cid ? contractorNameById.get(cid) ?? null : null,
+      };
+    });
+
   return {
     wir,
     issues: issuesSummary,
@@ -398,5 +478,7 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
     contractors: contractorsOut,
     tatTrend,
     recentPhotos,
+    issueRows,
+    inspectionRows,
   };
 }

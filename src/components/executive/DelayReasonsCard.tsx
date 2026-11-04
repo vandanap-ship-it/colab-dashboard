@@ -30,7 +30,7 @@ export default function DelayReasonsCard({ overall, byContractor }: DelayReasons
         <h3>Delay Reason Clusters</h3>
         <div className={styles.drToggle}>
           <span className={styles.meta}>
-            open hindrances · site team tags at log-time
+            every delay tagged by the site team · Siddhi + Colab combined · {totalOpen.toLocaleString("en-IN")} total
           </span>
           <div className={styles.drToggleGroup}>
             <button
@@ -53,8 +53,9 @@ export default function DelayReasonsCard({ overall, byContractor }: DelayReasons
       <div className={styles.cardBd}>
         {totalOpen === 0 ? (
           <div className={styles.drEmpty}>
-            No open hindrances. Site team logs blockers with a reason tag —
-            once any are open, they cluster here by root cause.
+            No delay reasons logged yet. The site team tags each delayed
+            progress entry with a reason (change order, material, labour,
+            weather...); once any are logged, they cluster here by root cause.
           </div>
         ) : view === "overall" ? (
           <ReasonList clusters={overall} />
@@ -81,8 +82,8 @@ function ContractorGroupList({ groups }: { groups: ContractorDelayReasonGroup[] 
   if (groups.length === 0) {
     return (
       <div className={styles.drEmpty}>
-        Open hindrances aren&apos;t linked to any contractor yet. Log with a WBS
-        activity attached so this breakdown lights up.
+        No delays are tagged to a contractor yet. Log delayed progress with a
+        contractor attached so this breakdown lights up.
       </div>
     );
   }
@@ -95,7 +96,7 @@ function ContractorGroupList({ groups }: { groups: ContractorDelayReasonGroup[] 
             <div className={styles.drContractorHd}>
               <span className={styles.drContractorName}>{g.contractorName}</span>
               <span className={styles.drContractorMeta}>
-                {g.totalCount} hindrance{g.totalCount === 1 ? "" : "s"}
+                {g.totalCount} tagged delay{g.totalCount === 1 ? "" : "s"}
                 {g.totalDaysImpact > 0 && (
                   <> · <span className={styles.drImpact}>+{g.totalDaysImpact}d</span></>
                 )}

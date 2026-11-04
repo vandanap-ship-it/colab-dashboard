@@ -415,3 +415,60 @@
 }
 .mpRemoveBtn:hover { border-color: var(--pt-bad); }
 .mpRemoveBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* --------------------------------------------------------------------
+ * §0 - Overall-picture hero (added 2026-11-04 for the management review)
+ * Four tiles, side by side on desktop, stacking on narrow screens.
+ * ------------------------------------------------------------------ */
+.hero { }
+.heroGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--pt-rule);
+  padding: 0;
+}
+@media (max-width: 760px) {
+  .heroGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.heroTile {
+  background: var(--pt-paper);
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.heroLbl {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--pt-ink-3);
+  font-weight: 600;
+}
+.heroVal {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--pt-ink);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.heroUnit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--pt-ink-3);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.heroSub {
+  font-size: 11.5px;
+  color: var(--pt-ink-2);
+  margin-top: 2px;
+}
+.phGood { color: var(--pt-good); }
+.phWarn { color: var(--pt-warn); }
+.phBad  { color: var(--pt-bad); }

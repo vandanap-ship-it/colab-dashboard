@@ -1,12 +1,74 @@
 // Aggregations that power the Progress top tab:
-//   §1 Planned vs Actual — per milestone-section, planned vs actual completion.
-//   §2 Villa-wise physical progress — one row per villa with status + slip.
-//   §3 Interactive drawing data — per-section villa status (Completed /
-//      Ongoing / Delayed / Not started) so the drawing can filter and colour.
+//   §0 Headline card - how far behind baseline we actually are today.
+//   §1 Planned vs Actual - per milestone-section, planned vs actual completion.
+//   §2 Villa-wise physical progress - one row per villa with status + slip.
+//   §3 Section filter - per-section villa status (Completed / Ongoing /
+//      Delayed / Not started) so the view can filter and colour.
 //
 // All server-only; UI components take these shapes and stay Prisma-free.
 
 import { prisma } from "@/lib/prisma";
+
+// ---------------------------------------------------------------------------
+// §0 - overall honest delay picture
+// ---------------------------------------------------------------------------
+
+export interface ProgressHeroStats {
+  /** Milestones whose baselineFinish has already passed. */
+  dueByToday: number;
+  /** Of those, how many have an actualFinish set. */
+  closedByToday: number;
+  /** dueByToday - closedByToday. */
+  openPastDue: number;
+  /** Mean (today - baselineFinish) across the open-past-due set. 0 if none. */
+  meanDaysBehind: number;
+  /** Max (today - baselineFinish) across the open-past-due set. 0 if none. */
+  maxDaysBehind: number;
+}
+
+export async function getProgressHeroStats(
+  projectId: string,
+  asOf: Date = new Date(),
+): Promise<ProgressHeroStats> {
+  const [dueByToday, closedByToday, overdue] = await Promise.all([
+    prisma.villaMilestone.count({
+      where: { villa: { projectId, inScope: true }, baselineFinish: { lte: asOf } },
+    }),
+    prisma.villaMilestone.count({
+      where: {
+        villa: { projectId, inScope: true },
+        baselineFinish: { lte: asOf },
+        actualFinish: { not: null },
+      },
+    }),
+    prisma.villaMilestone.findMany({
+      where: {
+        villa: { projectId, inScope: true },
+        baselineFinish: { lte: asOf },
+        actualFinish: null,
+      },
+      select: { baselineFinish: true },
+    }),
+  ]);
+
+  let totalDays = 0;
+  let maxDays = 0;
+  for (const m of overdue) {
+    if (!m.baselineFinish) continue;
+    const d = Math.max(0, Math.round((asOf.getTime() - m.baselineFinish.getTime()) / 86400000));
+    totalDays += d;
+    if (d > maxDays) maxDays = d;
+  }
+  const meanDaysBehind = overdue.length === 0 ? 0 : Math.round(totalDays / overdue.length);
+
+  return {
+    dueByToday,
+    closedByToday,
+    openPastDue: overdue.length,
+    meanDaysBehind,
+    maxDaysBehind: maxDays,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // §1 — planned vs actual per milestone section
