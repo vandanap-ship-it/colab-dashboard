@@ -28,6 +28,41 @@ export interface DelayReasonCluster {
    *  site team actually wrote under the catch-all label. undefined for
    *  the typed reason codes. */
   subPhrases?: Array<{ phrase: string; count: number }>;
+  /** Which of the raw reason codes were folded into this bucket - shown
+   *  in the dashboard tooltip so the merge is transparent to viewers. */
+  mergedFrom?: string[];
+}
+
+// ─── Consolidation map (Vandana 2026-11-05) ─────────────────────────────
+//
+// Site team's raw reason codes are too granular for a management report.
+// This maps each raw code to a management-level bucket. CHANGE_ORDER,
+// PRIORITY_CHANGE and MEP_DRAWING are all the same root cause (the drawing
+// or priority shifted), so they roll up together as "Design-driven".
+// DELAYED_ENTRY is an admin lag (someone logged yesterday's progress
+// today), not a real cause of site slip, so it folds into OTHER rather
+// than standing on its own.
+
+interface Group {
+  code: string;
+  label: string;
+  members: string[];
+}
+
+const GROUPS: Group[] = [
+  { code: "DESIGN_DRIVEN", label: "Design-driven", members: ["CHANGE_ORDER", "PRIORITY_CHANGE", "MEP_DRAWING"] },
+  { code: "MATERIAL",      label: "Material",      members: ["MATERIAL"] },
+  { code: "LABOUR",        label: "Manpower / labour", members: ["LABOUR"] },
+  { code: "WEATHER",       label: "Weather",       members: ["WEATHER"] },
+  { code: "OTHER",         label: "Other",         members: ["OTHER", "DELAYED_ENTRY", "UNSPECIFIED"] },
+];
+
+const CODE_TO_GROUP = new Map<string, Group>();
+for (const g of GROUPS) {
+  for (const m of g.members) CODE_TO_GROUP.set(m, g);
+}
+function groupFor(code: string | null): Group {
+  return CODE_TO_GROUP.get((code ?? "UNSPECIFIED").toUpperCase()) ?? GROUPS[GROUPS.length - 1];
 }
 
 export interface ContractorDelayReasonGroup {
@@ -68,38 +103,49 @@ export async function getDelayReasonClusters(projectId: string): Promise<DelayRe
     }),
   ]);
 
-  const byCode = new Map<string, DelayReasonCluster>();
-  for (const p of progress) {
-    const code = p.reasonCode ?? "UNSPECIFIED";
-    upsertCluster(byCode, code, {
-      reasonCode: p.reasonCode,
-      reasonNote: p.reasonNote,
-      daysImpact: null,
-      at: p.date,
-    });
-  }
-  for (const h of hindrances) {
-    const code = h.reasonCode ?? "UNSPECIFIED";
-    upsertCluster(byCode, code, {
-      reasonCode: h.reasonCode,
-      reasonNote: h.reasonNote,
-      daysImpact: h.daysImpact,
-      at: h.startDate,
-    });
-  }
+  // Bucket by GROUP (consolidated), not raw code. Each group tracks the
+  // list of raw codes folded in so the UI can show the merge transparently.
+  const byGroup = new Map<string, DelayReasonCluster & { mergedCodes: Set<string> }>();
+  const addToGroup = (code: string | null, note: string | null, daysImpact: number | null, at: Date) => {
+    const g = groupFor(code);
+    const existing = byGroup.get(g.code);
+    const rawCode = (code ?? "UNSPECIFIED").toUpperCase();
+    if (existing) {
+      existing.count += 1;
+      existing.daysImpact += daysImpact ?? 0;
+      const ts = at.toISOString();
+      if (!existing.latestAt || ts > existing.latestAt) existing.latestAt = ts;
+      if (!existing.sampleNote && note) existing.sampleNote = note;
+      existing.mergedCodes.add(rawCode);
+    } else {
+      byGroup.set(g.code, {
+        code: g.code,
+        label: g.label,
+        count: 1,
+        daysImpact: daysImpact ?? 0,
+        latestAt: at.toISOString(),
+        sampleNote: note ?? null,
+        mergedCodes: new Set([rawCode]),
+      });
+    }
+  };
+  for (const p of progress) addToGroup(p.reasonCode, p.reasonNote, null, p.date);
+  for (const h of hindrances) addToGroup(h.reasonCode, h.reasonNote, h.daysImpact, h.startDate);
 
-  // Attach sub-phrase breakdown for the catch-all buckets so "Other · 111"
-  // isn't opaque in the dashboard - management clicks and sees the actual
-  // phrases the site team typed.
-  for (const cluster of byCode.values()) {
-    if (cluster.code === "OTHER" || cluster.code === "UNSPECIFIED") {
-      cluster.subPhrases = buildSubPhrases(
-        progress.filter((p) => (p.reasonCode ?? "UNSPECIFIED") === cluster.code).map((p) => p.reasonNote),
-      );
+  // Attach sub-phrase breakdown for the "Other" catch-all so management can
+  // click and see WHAT the site team wrote under it.
+  for (const cluster of byGroup.values()) {
+    if (cluster.code === "OTHER") {
+      const notes = progress
+        .filter((p) => groupFor(p.reasonCode).code === "OTHER")
+        .map((p) => p.reasonNote);
+      cluster.subPhrases = buildSubPhrases(notes);
     }
   }
 
-  return [...byCode.values()].sort((a, b) => b.count - a.count || b.daysImpact - a.daysImpact);
+  return [...byGroup.values()]
+    .map(({ mergedCodes, ...rest }) => ({ ...rest, mergedFrom: [...mergedCodes].sort() }))
+    .sort((a, b) => b.count - a.count || b.daysImpact - a.daysImpact);
 }
 
 /** Case-fold + trim + collapse whitespace on reasonNote; take the first chunk

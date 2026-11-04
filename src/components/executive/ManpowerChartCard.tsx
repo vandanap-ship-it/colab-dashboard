@@ -72,6 +72,9 @@ export default function ManpowerChartCard({ range }: ManpowerChartCardProps) {
                   className={styles.manpowerBarCell}
                   title={`${fmtShort(d.date)} · actual ${d.actual}${d.planned > 0 ? ` / plan ${d.planned}` : ""}`}
                 >
+                  <div className={styles.manpowerBarValue}>
+                    {d.actual > 0 ? d.actual.toLocaleString("en-IN") : ""}
+                  </div>
                   <div className={styles.manpowerBarStack}>
                     {d.planned > 0 && (
                       <div className={styles.manpowerPlanBar} style={{ height: `${plannedH}%` }} />

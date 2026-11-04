@@ -58,13 +58,20 @@ function ReasonList({ clusters }: { clusters: DelayReasonCluster[] }) {
 }
 
 function ReasonRow({ c, maxCount }: { c: DelayReasonCluster; maxCount: number }) {
-  // "Other" and "Unspecified" rows get an expander that breaks down the
-  // underlying reasonNote text into its most-repeated phrases. Everything
-  // else renders as the compact row with a representative sample note.
-  const isCatchAll = c.code === "OTHER" || c.code === "UNSPECIFIED";
+  // "Other" rows get an expander that breaks down the underlying
+  // reasonNote text into its most-repeated phrases. Everything else
+  // renders as the compact row with a representative sample note.
+  const isCatchAll = c.code === "OTHER";
   const hasNotes = c.subPhrases && c.subPhrases.length > 0;
   const expandable = isCatchAll && hasNotes;
   const [open, setOpen] = useState(false);
+
+  // Merged-from codes appear as a small badge next to the label so viewers
+  // see which raw reason codes were folded into this group.
+  const mergedFrom = (c.mergedFrom ?? []).filter((raw) => raw !== c.code);
+  const mergedTooltip = mergedFrom.length > 0
+    ? `Includes: ${mergedFrom.join(", ")}`
+    : undefined;
 
   const bar = (
     <div className={styles.drBar}>
@@ -77,6 +84,11 @@ function ReasonRow({ c, maxCount }: { c: DelayReasonCluster; maxCount: number })
       <div className={styles.drHd}>
         <span className={styles.drLabel}>
           {c.label}
+          {mergedFrom.length > 0 && (
+            <span className={styles.drMergeBadge} title={mergedTooltip}>
+              {mergedFrom.length === 1 ? "merged · 1 code" : `merged · ${mergedFrom.length + 1} codes`}
+            </span>
+          )}
           {expandable && (
             <button
               type="button"

@@ -1700,6 +1700,15 @@
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+.manpowerBarValue {
+  font-size: 10px;
+  color: var(--ex-ink);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-height: 12px;
+  line-height: 12px;
+}
 
 /* Delay-reason sub-phrase breakdown ("see breakdown" on OTHER / UNSPECIFIED) */
 .drExpandBtn {
@@ -1715,6 +1724,20 @@
   letter-spacing: 0.08em;
 }
 .drExpandBtn:hover { color: var(--ex-ink); border-color: var(--ex-ink-3); }
+.drMergeBadge {
+  margin-left: 8px;
+  padding: 1px 7px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ex-ink-3);
+  background: var(--ex-rule-soft, #F7F4EC);
+  border: 1px dashed var(--ex-rule, #EDE9DD);
+  border-radius: 10px;
+  cursor: help;
+  white-space: nowrap;
+}
 .drSubList {
   margin-top: 10px;
   padding: 10px 12px 12px;
