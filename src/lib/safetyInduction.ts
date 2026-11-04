@@ -23,17 +23,20 @@ export function generateInductionDisplayId(): string {
 }
 
 /**
- * 12 months (365 days) after the induction date. Shraddha 2026-10-01
- * confirmed the window; matches BOCW norms. Returns a Date so the caller
- * can store it directly as a Prisma DateTime.
+ * Six months after the induction date. Vandana 2026-11-04 management
+ * review: reduced the window from 12 months to 6 months so site teams
+ * re-verify workers twice a year instead of once. Returns a Date so the
+ * caller can store it directly as a Prisma DateTime.
  *
  * Takes a Date rather than ISO string so callers don't have to re-parse
- * what they just serialized. Pure function — no clock dependency — so the
+ * what they just serialized. Pure function - no clock dependency - so the
  * nightly expiry cron can trust it even when the server timezone drifts.
  */
+export const INDUCTION_VALIDITY_MONTHS = 6;
+
 export function computeInductionExpiry(inductionDate: Date): Date {
   const d = new Date(inductionDate);
-  d.setFullYear(d.getFullYear() + 1);
+  d.setMonth(d.getMonth() + INDUCTION_VALIDITY_MONTHS);
   return d;
 }
 

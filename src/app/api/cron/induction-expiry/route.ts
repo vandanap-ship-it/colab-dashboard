@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
     expired.map((e) =>
       sendPushToUser(e.createdById, {
         title: `Induction expired · ${e.workerName}`,
-        body: `${e.displayId} is past its 12-month validity. Raise a fresh induction before the worker returns on site.`,
+        body: `${e.displayId} is past its 6-month validity. Raise a fresh induction before the worker returns on site.`,
         url: `/mobile/${e.projectId}/induction/${e.id}`,
         tag: `induction-expired-${e.id}`,
       }),
@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
       );
       return sendPushToUser(e.createdById, {
         title: `Induction expires in ${daysLeft} days · ${e.workerName}`,
-        body: `${e.displayId} is approaching its 12-month renewal. Plan a re-induction visit this week.`,
+        body: `${e.displayId} is approaching its 6-month renewal. Plan a re-induction visit this week.`,
         url: `/mobile/${e.projectId}/induction/${e.id}`,
         tag: `induction-expiry-warn-${e.id}`,
       });

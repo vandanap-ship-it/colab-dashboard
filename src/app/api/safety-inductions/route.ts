@@ -52,7 +52,7 @@ const PostInductionSchema = z.object({
   aadhaarBackUrl: z.string().url().nullable().optional(),
   signatureUrl: z.string().url().nullable().optional(),
   // inductionDate defaults to today when omitted. The server owns
-  // expiryDate (= +12mo); clients can't override.
+  // expiryDate (= +6mo); clients can't override.
   inductionDate: z.string().optional(),
   idempotencyKey: z.string().max(120).optional(),
 });
