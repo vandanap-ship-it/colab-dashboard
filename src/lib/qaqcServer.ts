@@ -14,6 +14,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { isQaqcTeamName, isTestUserName } from "@/lib/dashboardExclusions";
+import { AMANVANA_ABRAHAM_BLOCK_CODES, AMANVANA_CONTRACTORS } from "@/lib/projects/amanvana";
 
 // ---------------------------------------------------------------------------
 // Shape types
@@ -99,6 +100,7 @@ export interface IssueRow {
   createdAt: string;
   createdByName: string;
   wbsName: string | null;
+  villaLabel: string | null;
   contractorName: string | null;
 }
 
@@ -111,6 +113,8 @@ export interface InspectionRow {
   reviewedAt: string | null;
   filledByName: string;
   wbsName: string | null;
+  villaLabel: string | null;
+  exactLocation: string | null;
   contractorName: string | null;
 }
 
@@ -184,10 +188,18 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
         module: true,
         createdAt: true,
         reviewedAt: true,
-        wbsNode: { select: { contractorId: true, name: true } },
-        // Fallback contractor signal for inspections imported without a
-        // WBS attachment (all Colab-imported inspections on Amanvana
-        // hit this path). Set User.contractorId in Admin > Users.
+        contractorId: true,
+        exactLocation: true,
+        wbsNode: {
+          select: {
+            contractorId: true, name: true,
+            villaMilestone: {
+              select: {
+                villa: { select: { number: true, label: true, block: { select: { code: true } } } },
+              },
+            },
+          },
+        },
         filledBy: { select: { name: true, contractorId: true } },
         photos: { select: { url: true }, take: 1 },
       },
@@ -202,7 +214,16 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
         category: true,
         createdAt: true,
         updatedAt: true,
-        wbsNode: { select: { contractorId: true, name: true } },
+        wbsNode: {
+          select: {
+            contractorId: true, name: true,
+            villaMilestone: {
+              select: {
+                villa: { select: { number: true, label: true, block: { select: { code: true } } } },
+              },
+            },
+          },
+        },
         createdBy: { select: { name: true, contractorId: true } },
         photos: { select: { url: true }, take: 1 },
       },
@@ -447,7 +468,22 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
   const issueRows: IssueRow[] = issues
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .map((it) => {
-      const cid = it.wbsNode?.contractorId ?? it.createdBy?.contractorId ?? null;
+      let cid = it.wbsNode?.contractorId ?? null;
+      let inferred: string | null = null;
+      const villa = it.wbsNode?.villaMilestone?.villa ?? null;
+      if (!cid) {
+        const blockCode = villa?.block?.code;
+        if (blockCode) {
+          inferred = AMANVANA_ABRAHAM_BLOCK_CODES.has(blockCode)
+            ? AMANVANA_CONTRACTORS.abraham
+            : AMANVANA_CONTRACTORS.elegant;
+        } else {
+          cid = it.createdBy?.contractorId ?? null;
+        }
+      }
+      const villaLabel = villa
+        ? (villa.label ?? `Villa ${villa.number}`)
+        : null;
       return {
         id: it.id,
         description: it.description,
@@ -457,13 +493,29 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
         createdAt: it.createdAt.toISOString(),
         createdByName: it.createdBy?.name ?? "Unknown",
         wbsName: it.wbsNode?.name ?? null,
-        contractorName: cid ? contractorNameById.get(cid) ?? null : null,
+        villaLabel,
+        contractorName: inferred ?? (cid ? contractorNameById.get(cid) ?? null : null),
       };
     });
   const inspectionRows: InspectionRow[] = inspections
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .map((i) => {
-      const cid = i.wbsNode?.contractorId ?? i.filledBy?.contractorId ?? null;
+      let cid = i.contractorId ?? i.wbsNode?.contractorId ?? null;
+      let inferred: string | null = null;
+      const villa = i.wbsNode?.villaMilestone?.villa ?? null;
+      if (!cid) {
+        const blockCode = villa?.block?.code;
+        if (blockCode) {
+          inferred = AMANVANA_ABRAHAM_BLOCK_CODES.has(blockCode)
+            ? AMANVANA_CONTRACTORS.abraham
+            : AMANVANA_CONTRACTORS.elegant;
+        } else {
+          cid = i.filledBy?.contractorId ?? null;
+        }
+      }
+      const villaLabel = villa
+        ? (villa.label ?? `Villa ${villa.number}`)
+        : null;
       return {
         id: i.id,
         title: i.title,
@@ -473,7 +525,9 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
         reviewedAt: i.reviewedAt?.toISOString() ?? null,
         filledByName: i.filledBy?.name ?? "Unknown",
         wbsName: i.wbsNode?.name ?? null,
-        contractorName: cid ? contractorNameById.get(cid) ?? null : null,
+        villaLabel,
+        exactLocation: i.exactLocation ?? null,
+        contractorName: inferred ?? (cid ? contractorNameById.get(cid) ?? null : null),
       };
     });
 

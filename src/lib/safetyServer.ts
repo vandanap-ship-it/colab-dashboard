@@ -9,6 +9,7 @@
 import { prisma } from "@/lib/prisma";
 import { SAFETY_CATEGORIES } from "@/lib/safetyCategories";
 import { isQaqcTeamName, isTestUserName } from "@/lib/dashboardExclusions";
+import { AMANVANA_ABRAHAM_BLOCK_CODES, AMANVANA_CONTRACTORS } from "@/lib/projects/amanvana";
 
 // ---------------------------------------------------------------------------
 // Shape types
@@ -97,6 +98,8 @@ export interface HseChecklistRow {
   reviewedAt: string | null;
   filledByName: string;
   wbsName: string | null;
+  villaLabel: string | null;
+  exactLocation: string | null;
   contractorName: string | null;
 }
 export interface SafetyPermitRow {
@@ -183,7 +186,18 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
         status: true,
         createdAt: true,
         reviewedAt: true,
-        wbsNode: { select: { contractorId: true, name: true } },
+        contractorId: true,
+        exactLocation: true,
+        wbsNode: {
+          select: {
+            contractorId: true, name: true,
+            villaMilestone: {
+              select: {
+                villa: { select: { number: true, label: true, block: { select: { code: true } } } },
+              },
+            },
+          },
+        },
         filledBy: { select: { name: true, contractorId: true } },
       },
     }).then((rows) =>
@@ -426,7 +440,31 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
     contractorName: i.contractorId ? contractorNameById.get(i.contractorId) ?? null : null,
   }));
   const hseChecklistRows: HseChecklistRow[] = safetyInspections.map((i) => {
-    const cid = i.wbsNode?.contractorId ?? i.filledBy?.contractorId ?? null;
+    // Contractor resolution order:
+    //   1. Inspection.contractorId (the picker chose one at raise-time)
+    //   2. WBSNode.contractorId (the activity carries one)
+    //   3. Villa → block code mapped to Abraham / Elegant via amanvana.ts
+    //   4. Filler's own User.contractorId
+    // Vandana 2026-11-05: we're never left with "Not tagged" when the
+    // villa location is known, because Abraham owns blocks 2-13 and
+    // Elegant owns the rest. Nagarjuna (QA/QC) inspects on Abraham villas
+    // so his checklists now show "Abraham Thomas" instead of blank.
+    let cid = i.contractorId ?? i.wbsNode?.contractorId ?? null;
+    let inferredContractor: string | null = null;
+    const villa = i.wbsNode?.villaMilestone?.villa ?? null;
+    if (!cid) {
+      const blockCode = villa?.block?.code;
+      if (blockCode) {
+        inferredContractor = AMANVANA_ABRAHAM_BLOCK_CODES.has(blockCode)
+          ? AMANVANA_CONTRACTORS.abraham
+          : AMANVANA_CONTRACTORS.elegant;
+      } else {
+        cid = i.filledBy?.contractorId ?? null;
+      }
+    }
+    const villaLabel = villa
+      ? (villa.label ?? `Villa ${villa.number}`)
+      : null;
     return {
       id: i.id,
       title: i.title,
@@ -435,7 +473,11 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
       reviewedAt: i.reviewedAt?.toISOString() ?? null,
       filledByName: i.filledBy?.name ?? "Unknown",
       wbsName: i.wbsNode?.name ?? null,
-      contractorName: cid ? contractorNameById.get(cid) ?? null : null,
+      villaLabel,
+      exactLocation: i.exactLocation ?? null,
+      contractorName:
+        inferredContractor ??
+        (cid ? contractorNameById.get(cid) ?? null : null),
     };
   });
   const permitRows: SafetyPermitRow[] = permits.map((p) => ({

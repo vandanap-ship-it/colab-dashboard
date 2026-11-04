@@ -298,11 +298,14 @@ function RecentPhotoFeedCard({ photos }: { photos: QaqcBundle["recentPhotos"] })
 // ---------------------------------------------------------------------------
 
 function IssuesListCard({ rows }: { rows: IssueRow[] }) {
-  if (rows.length === 0) return null; // Hide section when empty (Vandana 2026-11-05).
-  // Drop columns that are empty for every row so the table doesn't carry
-  // dead space. Where (wbsName), Category, Severity all behave this way on
-  // the current dataset.
-  const hasWhere = rows.some((r) => !!r.wbsName);
+  if (rows.length === 0) return null;
+  const locFor = (r: IssueRow): string | null => {
+    const parts: string[] = [];
+    if (r.villaLabel) parts.push(r.villaLabel);
+    if (r.wbsName && !parts.some((p) => p.toLowerCase().includes(r.wbsName!.toLowerCase()))) parts.push(r.wbsName);
+    return parts.length === 0 ? null : parts.join(" · ");
+  };
+  const hasLocation = rows.some((r) => !!locFor(r));
   const hasCategory = rows.some((r) => !!r.category);
   const hasSeverity = rows.some((r) => !!r.severity);
   return (
@@ -320,7 +323,7 @@ function IssuesListCard({ rows }: { rows: IssueRow[] }) {
                 {hasCategory && <th>Category</th>}
                 {hasSeverity && <th>Severity</th>}
                 <th>Description</th>
-                {hasWhere && <th>Where</th>}
+                {hasLocation && <th>Location</th>}
                 <th>Contractor</th>
                 <th>Raised by</th>
                 <th>Status</th>
@@ -333,7 +336,7 @@ function IssuesListCard({ rows }: { rows: IssueRow[] }) {
                   {hasCategory && <td>{r.category ?? "-"}</td>}
                   {hasSeverity && <td>{r.severity ?? "-"}</td>}
                   <td className={styles.listDesc}>{r.description}</td>
-                  {hasWhere && <td>{r.wbsName ?? "-"}</td>}
+                  {hasLocation && <td>{locFor(r) ?? "-"}</td>}
                   <td>{r.contractorName ?? "Not tagged"}</td>
                   <td>{r.createdByName}</td>
                   <td>{r.status}</td>
@@ -352,9 +355,16 @@ function IssuesListCard({ rows }: { rows: IssueRow[] }) {
 // ---------------------------------------------------------------------------
 
 function InspectionsListCard({ rows }: { rows: InspectionRow[] }) {
-  if (rows.length === 0) return null; // Hide section when empty.
+  if (rows.length === 0) return null;
   const sorted = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const hasWhere = sorted.some((r) => !!r.wbsName);
+  const locFor = (r: InspectionRow): string | null => {
+    const parts: string[] = [];
+    if (r.villaLabel) parts.push(r.villaLabel);
+    if (r.exactLocation && r.exactLocation !== r.villaLabel) parts.push(r.exactLocation);
+    if (r.wbsName && !parts.some((p) => p.toLowerCase().includes(r.wbsName!.toLowerCase()))) parts.push(r.wbsName);
+    return parts.length === 0 ? null : parts.join(" · ");
+  };
+  const hasLocation = sorted.some((r) => !!locFor(r));
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? sorted : sorted.slice(0, 10);
   return (
@@ -369,8 +379,8 @@ function InspectionsListCard({ rows }: { rows: InspectionRow[] }) {
             <thead>
               <tr>
                 <th>Date</th>
-                <th>Title</th>
-                {hasWhere && <th>Where</th>}
+                <th>Checklist</th>
+                {hasLocation && <th>Location</th>}
                 <th>Contractor</th>
                 <th>Filled by</th>
                 <th>Status</th>
@@ -381,7 +391,7 @@ function InspectionsListCard({ rows }: { rows: InspectionRow[] }) {
                 <tr key={r.id}>
                   <td>{fmtShortDate(r.createdAt)}</td>
                   <td className={styles.listDesc}>{r.title}</td>
-                  {hasWhere && <td>{r.wbsName ?? "-"}</td>}
+                  {hasLocation && <td>{locFor(r) ?? "-"}</td>}
                   <td>{r.contractorName ?? "Not tagged"}</td>
                   <td>{r.filledByName}</td>
                   <td>{r.status}</td>

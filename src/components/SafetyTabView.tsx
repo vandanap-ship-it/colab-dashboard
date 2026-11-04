@@ -97,7 +97,16 @@ function InductionsListCard({ rows }: { rows: SafetyBundle["inductionRows"] }) {
 function HseChecklistsListCard({ rows }: { rows: SafetyBundle["hseChecklistRows"] }) {
   if (rows.length === 0) return null;
   const sorted = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const hasWhere = sorted.some((r) => !!r.wbsName);
+  // Compose a single "Location" column from villa + exact-location so the
+  // table shows a useful place for each checklist. Empty column if none.
+  const locFor = (r: SafetyBundle["hseChecklistRows"][number]): string | null => {
+    const parts: string[] = [];
+    if (r.villaLabel) parts.push(r.villaLabel);
+    if (r.exactLocation && r.exactLocation !== r.villaLabel) parts.push(r.exactLocation);
+    if (r.wbsName && !parts.some((p) => p.toLowerCase().includes(r.wbsName!.toLowerCase()))) parts.push(r.wbsName);
+    return parts.length === 0 ? null : parts.join(" · ");
+  };
+  const hasLocation = sorted.some((r) => !!locFor(r));
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? sorted : sorted.slice(0, 10);
   return (
@@ -111,7 +120,12 @@ function HseChecklistsListCard({ rows }: { rows: SafetyBundle["hseChecklistRows"
           <table className={styles.listTbl}>
             <thead>
               <tr>
-                <th>Date</th><th>Title</th>{hasWhere && <th>Where</th>}<th>Contractor</th><th>Filled by</th><th>Status</th>
+                <th>Date</th>
+                <th>Checklist</th>
+                {hasLocation && <th>Location</th>}
+                <th>Contractor</th>
+                <th>Filled by</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -119,7 +133,7 @@ function HseChecklistsListCard({ rows }: { rows: SafetyBundle["hseChecklistRows"
                 <tr key={r.id}>
                   <td>{fmtShortDate(r.createdAt)}</td>
                   <td className={styles.listDesc}>{r.title}</td>
-                  {hasWhere && <td>{r.wbsName ?? "-"}</td>}
+                  {hasLocation && <td>{locFor(r) ?? "-"}</td>}
                   <td>{r.contractorName ?? "Not tagged"}</td>
                   <td>{r.filledByName}</td>
                   <td>{r.status}</td>
