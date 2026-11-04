@@ -92,6 +92,18 @@ export interface ExecutiveExtras {
     baselineFinish: string;
     daysBehind: number;
   }>;
+  /** Parallel list for milestones closed BEFORE their baseline date -
+   *  the good-news side of the net. Lets the Total Delay drill-down show
+   *  BOTH tracks (behind + ahead) in one place. Vandana 2026-11-04. */
+  aheadList: Array<{
+    villaNumber: number;
+    villaLabel: string;
+    blockCode: string;
+    sectionName: string;
+    baselineFinish: string;
+    actualFinish: string;
+    daysAhead: number;
+  }>;
 }
 
 export async function getExecutiveExtras(projectId: string): Promise<ExecutiveExtras> {
@@ -151,13 +163,25 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     }),
     // Milestones closed before their baseline - work completed ahead of
     // plan. The positive counterpart to the Total Delay number so
-    // management sees both sides, not only slippage.
+    // management sees both sides, not only slippage. Now carries villa +
+    // section context so the drill-down under Total Delay can show the
+    // ahead-of-plan list next to the overdue list.
     prisma.villaMilestone.findMany({
       where: {
         villa: { projectId, inScope: true },
         actualFinish: { not: null },
       },
-      select: { baselineFinish: true, actualFinish: true },
+      select: {
+        baselineFinish: true,
+        actualFinish: true,
+        section: { select: { name: true } },
+        villa: {
+          select: {
+            number: true, label: true,
+            block: { select: { code: true } },
+          },
+        },
+      },
     }),
   ]);
   // Behind side - two contributors:
@@ -219,6 +243,26 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     .sort((a, b) => b.daysBehind - a.daysBehind)
     .slice(0, 50);
 
+  const aheadList = aheadOfPlan
+    .map((m) => {
+      if (!m.baselineFinish || !m.actualFinish) return null;
+      const diffDays = Math.round((m.actualFinish.getTime() - m.baselineFinish.getTime()) / 86_400_000);
+      if (diffDays >= 0) return null; // only ahead-of-plan rows
+      const v = m.villa;
+      return {
+        villaNumber: v?.number ?? 0,
+        villaLabel: v?.label ?? (v?.number ? `Villa ${v.number}` : "Villa"),
+        blockCode: v?.block?.code ?? "-",
+        sectionName: m.section?.name ?? "-",
+        baselineFinish: m.baselineFinish.toISOString(),
+        actualFinish: m.actualFinish.toISOString(),
+        daysAhead: -diffDays,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .sort((a, b) => b.daysAhead - a.daysAhead)
+    .slice(0, 50);
+
   return {
     hindranceCount,
     plannedPct: stats.plannedPercent,
@@ -236,6 +280,7 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     evaluatedCount,
     behindCount,
     overdueList,
+    aheadList,
   };
 }
 
@@ -455,6 +500,7 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
     milestonesAheadOfPlan: extras?.milestonesAheadOfPlan,
     meanAheadDays: extras?.meanAheadDays,
     overdueList: extras?.overdueList,
+    aheadList: extras?.aheadList,
   };
 
   return { health, villas, blocks, contractors, sections };

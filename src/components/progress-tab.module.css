@@ -500,3 +500,98 @@
 .phGood { color: var(--pt-good); }
 .phWarn { color: var(--pt-warn); }
 .phBad  { color: var(--pt-bad); }
+
+/* Section-row click → task breakdown expander (2026-11-04). */
+.spRowWrap { display: flex; flex-direction: column; }
+.spRowBtn {
+  background: none;
+  border: 0;
+  padding: 10px 0;
+  display: grid;
+  grid-template-columns: 1fr 2fr auto;
+  gap: 16px;
+  align-items: center;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  border-bottom: 1px solid var(--pt-rule-soft);
+  transition: background 100ms ease;
+}
+.spRowBtn:hover { background: var(--pt-rule-soft); }
+.spRowOpen { background: var(--pt-rule-soft); }
+.spChev {
+  display: inline-block;
+  width: 14px;
+  color: var(--pt-ink-3);
+  margin-right: 4px;
+}
+.spBreakdown {
+  padding: 14px 8px 18px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  background: var(--pt-rule-soft);
+  border-bottom: 1px solid var(--pt-rule);
+}
+@media (max-width: 760px) {
+  .spBreakdown { grid-template-columns: 1fr; }
+}
+.spBucket {
+  background: var(--pt-paper);
+  border: 1px solid var(--pt-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.spBucketHd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--pt-rule);
+}
+.spBkBad  { color: var(--pt-bad);  background: var(--pt-bad-tint); }
+.spBkWarn { color: var(--pt-warn); background: var(--pt-warn-tint); }
+.spBkGood { color: var(--pt-good); background: var(--pt-good-tint); }
+.spBucketCount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.spBucketEmpty {
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--pt-ink-3);
+  font-style: italic;
+}
+.spBucketMore {
+  padding: 6px 12px 10px;
+  font-size: 11px;
+  color: var(--pt-ink-3);
+}
+.spTaskTbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.spTaskTbl thead th {
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--pt-ink-3);
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--pt-rule-soft);
+}
+.spTaskTbl tbody td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--pt-rule-soft);
+}
+.spTaskTbl tbody tr:last-child td { border-bottom: 0; }
+.spTaskVilla { font-weight: 700; color: var(--pt-ink); }
+.tRight { text-align: right; font-variant-numeric: tabular-nums; }

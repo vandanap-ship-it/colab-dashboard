@@ -1598,6 +1598,33 @@
 .overdueVilla { font-weight: 700; color: var(--ex-ink); }
 .tRight { text-align: right; font-variant-numeric: tabular-nums; }
 
+/* Two-sided drill-down under Total Delay (overdue + ahead-of-plan). */
+.schedVarBlock { margin-top: 0; }
+.schedVarSplit {
+  height: 1px;
+  background: var(--ex-rule);
+  margin: 18px 0;
+}
+.schedVarHd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0 2px 10px;
+}
+.schedVarHdBad { color: var(--ex-st-critical); }
+.schedVarHdGood { color: var(--ex-st-healthy); }
+.schedVarMore { font-size: 10.5px; color: var(--ex-ink-3); font-weight: 500; letter-spacing: 0.05em; text-transform: none; }
+.schedVarEmpty {
+  padding: 16px 0;
+  color: var(--ex-ink-3);
+  font-style: italic;
+  font-size: 13px;
+}
+
 /* Manpower chart with 7d/30d toggle */
 .manpowerCtrls {
   display: flex;

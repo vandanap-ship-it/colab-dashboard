@@ -116,32 +116,48 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
 
 function SectionProgressCard({ rows }: { rows: SectionProgressRow[] }) {
   const maxPct = Math.max(100, ...rows.map((r) => Math.max(r.plannedPct, r.actualPct)));
+  const [expanded, setExpanded] = useState<string | null>(null);
   return (
     <section className={styles.card}>
       <div className={styles.cardHd}>
         <h3>Planned vs Actual · per milestone section</h3>
-        <span className={styles.meta}>% of villas that reached each section</span>
+        <span className={styles.meta}>% of villas that reached each section · click a row for the task breakdown</span>
       </div>
       <div className={styles.cardBd}>
         {rows.length === 0 ? (
           <div className={styles.empty}>No milestone sections defined yet.</div>
         ) : (
           <div className={styles.spList}>
-            {rows.map((r) => (
-              <div key={r.code} className={styles.spRow}>
-                <div className={styles.spLbl}>
-                  <div className={styles.spName}>{r.name}</div>
-                  <div className={styles.spMeta}>{r.totalVillas} villas total</div>
+            {rows.map((r) => {
+              const isOpen = expanded === r.code;
+              const toggle = () => setExpanded(isOpen ? null : r.code);
+              return (
+                <div key={r.code} className={styles.spRowWrap}>
+                  <button
+                    type="button"
+                    onClick={toggle}
+                    className={`${styles.spRow} ${styles.spRowBtn} ${isOpen ? styles.spRowOpen : ""}`}
+                    aria-expanded={isOpen}
+                  >
+                    <div className={styles.spLbl}>
+                      <div className={styles.spName}>
+                        <span className={styles.spChev}>{isOpen ? "▾" : "▸"}</span>
+                        {r.name}
+                      </div>
+                      <div className={styles.spMeta}>{r.totalVillas} villas total</div>
+                    </div>
+                    <div className={styles.spBars}>
+                      <BarRow name="Planned" pct={r.plannedPct} maxPct={maxPct} tone="planned" />
+                      <BarRow name="Actual" pct={r.actualPct} maxPct={maxPct} tone="actual" />
+                    </div>
+                    <div className={`${styles.spVariance} ${r.variancePct >= 0 ? styles.spVarGood : styles.spVarBad}`}>
+                      {r.variancePct >= 0 ? "+" : ""}{r.variancePct.toFixed(1)}%
+                    </div>
+                  </button>
+                  {isOpen && <SectionTaskBreakdown tasks={r.tasks} />}
                 </div>
-                <div className={styles.spBars}>
-                  <BarRow name="Planned" pct={r.plannedPct} maxPct={maxPct} tone="planned" />
-                  <BarRow name="Actual" pct={r.actualPct} maxPct={maxPct} tone="actual" />
-                </div>
-                <div className={`${styles.spVariance} ${r.variancePct >= 0 ? styles.spVarGood : styles.spVarBad}`}>
-                  {r.variancePct >= 0 ? "+" : ""}{r.variancePct.toFixed(1)}%
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -158,6 +174,88 @@ function BarRow({ name, pct, maxPct, tone }: { name: string; pct: number; maxPct
         <div className={`${styles.barFill} ${tone === "planned" ? styles.barFillPlanned : styles.barFillActual}`} style={{ width: `${width}%` }} />
       </div>
       <span className={styles.barVal}>{pct.toFixed(2)}%</span>
+    </div>
+  );
+}
+
+function SectionTaskBreakdown({ tasks }: { tasks: SectionProgressRow["tasks"] }) {
+  return (
+    <div className={styles.spBreakdown}>
+      <TaskBucket
+        title="Delayed · still open past baseline"
+        tone="bad"
+        rows={tasks.delayedOpen}
+        valueCol="Days behind"
+        valueFmt={(d) => `+${d}d`}
+      />
+      <TaskBucket
+        title="Closed late · completed after baseline"
+        tone="warn"
+        rows={tasks.closedLate}
+        valueCol="Days late"
+        valueFmt={(d) => `+${d}d`}
+      />
+      <TaskBucket
+        title="Closed early · completed before baseline"
+        tone="good"
+        rows={tasks.closedEarly}
+        valueCol="Days early"
+        valueFmt={(d) => `${d}d`}
+      />
+      <TaskBucket
+        title="Closed off-plan · done before baseline was due"
+        tone="good"
+        rows={tasks.closedOffPlan}
+        valueCol="Days early"
+        valueFmt={(d) => `${d}d`}
+      />
+    </div>
+  );
+}
+
+function TaskBucket({
+  title,
+  tone,
+  rows,
+  valueCol,
+  valueFmt,
+}: {
+  title: string;
+  tone: "bad" | "warn" | "good";
+  rows: SectionProgressRow["tasks"]["delayedOpen"];
+  valueCol: string;
+  valueFmt: (d: number) => string;
+}) {
+  const toneCls = tone === "bad" ? styles.spBkBad : tone === "warn" ? styles.spBkWarn : styles.spBkGood;
+  return (
+    <div className={styles.spBucket}>
+      <div className={`${styles.spBucketHd} ${toneCls}`}>
+        <span>{title}</span>
+        <span className={styles.spBucketCount}>{rows.length}</span>
+      </div>
+      {rows.length === 0 ? (
+        <div className={styles.spBucketEmpty}>Nothing here.</div>
+      ) : (
+        <table className={styles.spTaskTbl}>
+          <thead>
+            <tr>
+              <th>Villa</th>
+              <th>Block</th>
+              <th className={styles.tRight}>{valueCol}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 20).map((r, i) => (
+              <tr key={`${r.villaNumber}-${i}`}>
+                <td className={styles.spTaskVilla}>{r.villaLabel}</td>
+                <td>Block {r.blockCode}</td>
+                <td className={styles.tRight}>{valueFmt(Math.abs(r.daysDiff))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {rows.length > 20 && <div className={styles.spBucketMore}>+ {rows.length - 20} more</div>}
     </div>
   );
 }

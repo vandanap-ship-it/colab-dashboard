@@ -364,6 +364,16 @@ export interface ProjectHealthSummary {
     baselineFinish: string;
     daysBehind: number;
   }>;
+  /** Parallel list for the ahead-of-plan drill-down. */
+  aheadList?: Array<{
+    villaNumber: number;
+    villaLabel: string;
+    blockCode: string;
+    sectionName: string;
+    baselineFinish: string;
+    actualFinish: string;
+    daysAhead: number;
+  }>;
 }
 
 export function healthSummary(): ProjectHealthSummary {

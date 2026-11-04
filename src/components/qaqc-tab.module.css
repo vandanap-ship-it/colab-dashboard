@@ -499,3 +499,60 @@ a.heroSupport:hover { background: var(--qa-rule-soft); }
 .heroGood { color: var(--qa-good); }
 .heroWarn { color: var(--qa-warn); }
 .heroBad  { color: var(--qa-bad); }
+
+/* Observations status breakdown (Vandana 2026-11-04 design) */
+.obsTbl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.obsTblRow {
+  display: grid;
+  grid-template-columns: 110px 1fr 70px 70px;
+  gap: 16px;
+  align-items: center;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--qa-rule-soft);
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.obsTblRow:last-child { border-bottom: 0; }
+a.obsTblRow:hover { background: var(--qa-rule-soft); }
+.obsTblHd {
+  cursor: default;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--qa-rule);
+}
+.obsTblHd > div {
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--qa-ink-3);
+  font-weight: 600;
+}
+.obsLbl { font-size: 14px; font-weight: 500; color: var(--qa-ink); }
+.obsBarWrap {
+  height: 10px;
+  background: var(--qa-rule-soft);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.obsBar {
+  height: 100%;
+  border-radius: 5px;
+  background: var(--qa-ink-4);
+  transition: width 200ms ease;
+}
+.obsBarOpen   { background: linear-gradient(90deg, #D18A3A, var(--qa-bad)); }
+.obsBarReview { background: linear-gradient(90deg, #4C7FB0, #2F5D8A); }
+.obsBarClosed { background: linear-gradient(90deg, #369669, var(--qa-good)); }
+.obsShare, .obsCount {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--qa-ink-2);
+  font-size: 13px;
+}
+.obsCount { font-weight: 700; color: var(--qa-ink); }
+.obsShareHd, .obsCountHd { text-align: right; }

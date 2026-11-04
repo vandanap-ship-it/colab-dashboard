@@ -137,6 +137,32 @@ export interface SectionProgressRow {
   plannedPct: number;   // % of villas that SHOULD have completed this milestone by asOf
   actualPct: number;    // % that HAVE completed
   variancePct: number;  // actual − planned
+  /** Tasks under this section bucketed for the drill-down. Each villa
+   *  milestone contributes one entry; the bucket depends on its baseline
+   *  / actual / today relationship. Vandana 2026-11-04 management
+   *  review: clicking a section row expands this so management sees the
+   *  specific villas driving the variance. */
+  tasks: {
+    /** Open and past baseline - current slippage. */
+    delayedOpen: Array<SectionTaskRow>;
+    /** Closed AFTER baseline - we did it, just late. */
+    closedLate: Array<SectionTaskRow>;
+    /** Closed BEFORE baseline - done ahead of plan. */
+    closedEarly: Array<SectionTaskRow>;
+    /** Closed with actualFinish set but baseline was NOT yet past. In
+     *  other words: completed off-plan (the "not planned but done" bucket
+     *  Vandana asked about). */
+    closedOffPlan: Array<SectionTaskRow>;
+  };
+}
+
+export interface SectionTaskRow {
+  villaNumber: number;
+  villaLabel: string;
+  blockCode: string;
+  baselineFinish: string | null; // ISO
+  actualFinish: string | null;   // ISO
+  daysDiff: number;              // +days late, -days early, 0 if neither applies
 }
 
 export async function getSectionProgress(
@@ -149,17 +175,91 @@ export async function getSectionProgress(
     select: { id: true, code: true, name: true, orderIndex: true },
   });
 
+  // One wide fetch instead of 3 counts per section - cheaper, and we need
+  // the villa+block context anyway for the drill-down tasks list below.
+  const sectionIds = sections.map((s) => s.id);
+  const allMilestones = await prisma.villaMilestone.findMany({
+    where: {
+      sectionId: { in: sectionIds },
+      villa: { projectId, inScope: true },
+    },
+    select: {
+      sectionId: true,
+      baselineFinish: true,
+      actualFinish: true,
+      villa: {
+        select: {
+          number: true, label: true,
+          block: { select: { code: true } },
+        },
+      },
+    },
+  });
+
+  const bySection = new Map<string, typeof allMilestones>();
+  for (const m of allMilestones) {
+    const arr = bySection.get(m.sectionId) ?? [];
+    arr.push(m);
+    bySection.set(m.sectionId, arr);
+  }
+
   const rows: SectionProgressRow[] = [];
   for (const section of sections) {
-    const [total, planned, actual] = await Promise.all([
-      prisma.villaMilestone.count({ where: { sectionId: section.id } }),
-      prisma.villaMilestone.count({
-        where: { sectionId: section.id, baselineFinish: { lte: asOf } },
-      }),
-      prisma.villaMilestone.count({
-        where: { sectionId: section.id, actualFinish: { not: null, lte: asOf } },
-      }),
-    ]);
+    const mine = bySection.get(section.id) ?? [];
+    const total = mine.length;
+    let planned = 0;
+    let actual = 0;
+    const delayedOpen: SectionTaskRow[] = [];
+    const closedLate: SectionTaskRow[] = [];
+    const closedEarly: SectionTaskRow[] = [];
+    const closedOffPlan: SectionTaskRow[] = [];
+
+    for (const m of mine) {
+      const baseline = m.baselineFinish;
+      const actualF = m.actualFinish;
+      const baselinePast = !!baseline && baseline <= asOf;
+      const closed = !!actualF && actualF <= asOf;
+      if (baselinePast) planned++;
+      if (closed) actual++;
+
+      const row: SectionTaskRow = {
+        villaNumber: m.villa?.number ?? 0,
+        villaLabel: m.villa?.label ?? (m.villa?.number ? `Villa ${m.villa.number}` : "Villa"),
+        blockCode: m.villa?.block?.code ?? "-",
+        baselineFinish: baseline?.toISOString() ?? null,
+        actualFinish: actualF?.toISOString() ?? null,
+        daysDiff: baseline && actualF
+          ? Math.round((actualF.getTime() - baseline.getTime()) / 86400000)
+          : baseline && !actualF && baselinePast
+            ? Math.round((asOf.getTime() - baseline.getTime()) / 86400000)
+            : 0,
+      };
+
+      if (closed && baseline) {
+        if (actualF! < baseline) {
+          if (baselinePast) {
+            closedEarly.push(row); // done early AND baseline already passed - the usual "early"
+          } else {
+            closedOffPlan.push(row); // baseline not yet due but we did it anyway
+          }
+        } else if (actualF! > baseline) {
+          closedLate.push(row);
+        } else {
+          // exactly on baseline - count as closedEarly (a win)
+          closedEarly.push(row);
+        }
+      } else if (baselinePast && !closed) {
+        delayedOpen.push(row);
+      }
+      // (not past baseline AND not closed = normal in-progress, no bucket)
+    }
+
+    // Sort each bucket worst-first for delayed, best-first for ahead.
+    delayedOpen.sort((a, b) => b.daysDiff - a.daysDiff);
+    closedLate.sort((a, b) => b.daysDiff - a.daysDiff);
+    closedEarly.sort((a, b) => a.daysDiff - b.daysDiff);
+    closedOffPlan.sort((a, b) => a.daysDiff - b.daysDiff);
+
     const plannedPct = total > 0 ? Math.round((planned / total) * 10000) / 100 : 0;
     const actualPct = total > 0 ? Math.round((actual / total) * 10000) / 100 : 0;
     rows.push({
@@ -170,6 +270,7 @@ export async function getSectionProgress(
       plannedPct,
       actualPct,
       variancePct: Math.round((actualPct - plannedPct) * 100) / 100,
+      tasks: { delayedOpen, closedLate, closedEarly, closedOffPlan },
     });
   }
   return rows;

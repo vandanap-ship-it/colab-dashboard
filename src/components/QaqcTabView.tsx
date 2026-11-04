@@ -42,6 +42,7 @@ export default function QaqcTabView({ projectId, bundle }: QaqcTabViewProps) {
         openNcrs={openNcrs}
         avgCloseTatDays={bundle.issues.submissionTATDays}
       />
+      <ObservationsBreakdownCard rows={bundle.issueRows} />
       <ContractorPerformanceCard rows={bundle.contractors} />
       <RecentPhotoFeedCard photos={bundle.recentPhotos} />
       <IssuesListCard rows={bundle.issueRows} />
@@ -109,6 +110,81 @@ function QaqcHero({
           </div>
           <div className={styles.heroSupportSub}>days from open to closed</div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Observations status breakdown - the design Vandana sketched 2026-11-04:
+// OBSERVATIONS · N RAISED, one row per status (Open / In review / Closed),
+// each row a bar + share % + absolute count. Clicking a row scrolls down
+// to the matching issue rows below.
+//
+// "Observations" here = every QA/QC Issue on the project, regardless of
+// severity. OBS + NCS both fold in because management asks about the
+// combined headcount. The data source is the same issueRows the hero
+// uses, so the two can't disagree.
+// ---------------------------------------------------------------------------
+
+function ObservationsBreakdownCard({ rows }: { rows: IssueRow[] }) {
+  // Map DB statuses onto the three buckets management thinks in.
+  //   - Open      = OPEN (new/unassigned/in-rework)
+  //   - In review = IN_REVIEW, IN_REINSPECTION
+  //   - Closed    = RESOLVED, CLOSED, REJECTED
+  const buckets = { open: 0, inReview: 0, closed: 0 };
+  for (const r of rows) {
+    const s = (r.status ?? "").toUpperCase();
+    if (s === "OPEN") buckets.open++;
+    else if (s === "IN_REVIEW" || s === "IN_REINSPECTION") buckets.inReview++;
+    else buckets.closed++; // RESOLVED, CLOSED, REJECTED, unknown all fold here
+  }
+  const total = rows.length;
+  const pct = (n: number) => (total === 0 ? 0 : Math.round((n / total) * 1000) / 10);
+  const bars: Array<{ key: string; label: string; count: number; share: number; tone: "open" | "review" | "closed" }> = [
+    { key: "open",    label: "Open",      count: buckets.open,     share: pct(buckets.open),     tone: "open" },
+    { key: "review",  label: "In review", count: buckets.inReview, share: pct(buckets.inReview), tone: "review" },
+    { key: "closed",  label: "Closed",    count: buckets.closed,   share: pct(buckets.closed),   tone: "closed" },
+  ];
+
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardHd}>
+        Observations · {total.toLocaleString("en-IN")} raised
+        <span className={styles.cardMeta}>
+          every QA/QC observation on the project · click a status to see the rows
+        </span>
+      </div>
+      <div className={styles.cardBd}>
+        {total === 0 ? (
+          <div className={styles.empty}>No observations raised yet.</div>
+        ) : (
+          <div className={styles.obsTbl}>
+            <div className={`${styles.obsTblRow} ${styles.obsTblHd}`}>
+              <div>Status</div>
+              <div />
+              <div className={styles.obsShareHd}>Share</div>
+              <div className={styles.obsCountHd}>Count</div>
+            </div>
+            {bars.map((b) => (
+              <a key={b.key} href="#issues-list" className={styles.obsTblRow}>
+                <div className={styles.obsLbl}>{b.label}</div>
+                <div className={styles.obsBarWrap}>
+                  <div
+                    className={`${styles.obsBar} ${
+                      b.tone === "open" ? styles.obsBarOpen
+                      : b.tone === "review" ? styles.obsBarReview
+                      : styles.obsBarClosed
+                    }`}
+                    style={{ width: `${total === 0 ? 0 : (b.count / total) * 100}%` }}
+                  />
+                </div>
+                <div className={styles.obsShare}>{total === 0 ? "-" : `${b.share}%`}</div>
+                <div className={styles.obsCount}>{b.count}</div>
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

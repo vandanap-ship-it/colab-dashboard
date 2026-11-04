@@ -237,10 +237,14 @@ export default function ExecutiveOverview({
         </div>
       </div>
 
-      {/* Where is the delay? — drill-down beneath the Total Delay KPI */}
-      <OverdueListCard
-        rows={h.overdueList ?? []}
+      {/* Where is the delay? — drill-down beneath the Total Delay KPI.
+          Shows BOTH sides: what's overdue AND what was finished ahead
+          of plan, so the net math has receipts in one place. */}
+      <ScheduleVarianceDrillCard
+        overdueRows={h.overdueList ?? []}
         totalOverdue={(h.milestonesDueByToday ?? 0) - (h.milestonesClosedByToday ?? 0)}
+        aheadRows={h.aheadList ?? []}
+        totalAhead={h.milestonesAheadOfPlan ?? 0}
       />
 
       {/* Daily manpower — 7d / 30d bar chart */}
@@ -382,51 +386,123 @@ export default function ExecutiveOverview({
   );
 }
 
-function OverdueListCard({
-  rows,
+function ScheduleVarianceDrillCard({
+  overdueRows,
   totalOverdue,
+  aheadRows,
+  totalAhead,
 }: {
-  rows: NonNullable<ProjectHealthSummary["overdueList"]>;
+  overdueRows: NonNullable<ProjectHealthSummary["overdueList"]>;
   totalOverdue: number;
+  aheadRows: NonNullable<ProjectHealthSummary["aheadList"]>;
+  totalAhead: number;
 }) {
-  if (totalOverdue === 0 || rows.length === 0) return null;
+  if (totalOverdue === 0 && totalAhead === 0) return null;
   return (
     <div className={styles.card}>
       <div className={styles.cardHd}>
-        <h3>Where is the delay?</h3>
+        <h3>Where is the schedule variance?</h3>
         <span className={styles.meta}>
-          {totalOverdue} milestones past baseline today
-          {rows.length < totalOverdue ? ` · showing the top ${rows.length} by days overdue` : ""}
+          both sides of the Net Delay: {totalOverdue} behind baseline, {totalAhead} completed ahead of plan
         </span>
       </div>
       <div className={styles.cardBd}>
+        <SchedVarTable
+          title={`Behind baseline · ${totalOverdue}`}
+          tone="bad"
+          showing={overdueRows.length}
+          total={totalOverdue}
+          empty="Nothing is overdue."
+          headers={["Villa", "Block", "Section", "Activity", "Baseline finish", "Days behind"]}
+          rows={overdueRows.map((r) => ({
+            key: `b-${r.villaNumber}-${r.sectionName}`,
+            cells: [
+              r.villaLabel,
+              `Block ${r.blockCode}`,
+              r.sectionName,
+              r.activityName ?? "-",
+              fmtDate(new Date(r.baselineFinish)),
+              `+${r.daysBehind}d`,
+            ],
+          }))}
+        />
+        <div className={styles.schedVarSplit} />
+        <SchedVarTable
+          title={`Completed ahead of plan · ${totalAhead}`}
+          tone="good"
+          showing={aheadRows.length}
+          total={totalAhead}
+          empty="Nothing closed ahead of plan yet."
+          headers={["Villa", "Block", "Section", "Baseline finish", "Closed on", "Days ahead"]}
+          rows={aheadRows.map((r) => ({
+            key: `a-${r.villaNumber}-${r.sectionName}`,
+            cells: [
+              r.villaLabel,
+              `Block ${r.blockCode}`,
+              r.sectionName,
+              fmtDate(new Date(r.baselineFinish)),
+              fmtDate(new Date(r.actualFinish)),
+              `-${r.daysAhead}d`,
+            ],
+          }))}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SchedVarTable({
+  title,
+  tone,
+  showing,
+  total,
+  empty,
+  headers,
+  rows,
+}: {
+  title: string;
+  tone: "bad" | "good";
+  showing: number;
+  total: number;
+  empty: string;
+  headers: string[];
+  rows: Array<{ key: string; cells: string[] }>;
+}) {
+  return (
+    <div className={styles.schedVarBlock}>
+      <div className={`${styles.schedVarHd} ${tone === "bad" ? styles.schedVarHdBad : styles.schedVarHdGood}`}>
+        <span>{title}</span>
+        {showing < total && <span className={styles.schedVarMore}>top {showing} by magnitude</span>}
+      </div>
+      {rows.length === 0 ? (
+        <div className={styles.schedVarEmpty}>{empty}</div>
+      ) : (
         <div className={styles.overdueTblWrap}>
           <table className={styles.overdueTbl}>
             <thead>
               <tr>
-                <th>Villa</th>
-                <th>Block</th>
-                <th>Section</th>
-                <th>Activity</th>
-                <th>Baseline finish</th>
-                <th className={styles.tRight}>Days behind</th>
+                {headers.map((h, i) => (
+                  <th key={h} className={i === headers.length - 1 ? styles.tRight : ""}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
-                <tr key={`${r.villaNumber}-${r.sectionName}-${i}`}>
-                  <td className={styles.overdueVilla}>{r.villaLabel}</td>
-                  <td>Block {r.blockCode}</td>
-                  <td>{r.sectionName}</td>
-                  <td>{r.activityName ?? "-"}</td>
-                  <td>{fmtDate(new Date(r.baselineFinish))}</td>
-                  <td className={styles.tRight}>+{r.daysBehind}d</td>
+              {rows.map((r) => (
+                <tr key={r.key}>
+                  {r.cells.map((c, i) => (
+                    <td
+                      key={i}
+                      className={`${i === 0 ? styles.overdueVilla : ""} ${i === r.cells.length - 1 ? styles.tRight : ""}`}
+                    >
+                      {c}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      )}
     </div>
   );
 }
