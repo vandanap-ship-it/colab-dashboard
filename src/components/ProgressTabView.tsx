@@ -31,48 +31,79 @@ export default function ProgressTabView({
     <div className={styles.wrap}>
       <ProgressHero stats={hero} />
       <SectionProgressCard rows={sectionProgress} />
-      <VillaProgressCard projectId={projectId} rows={villaRows} />
+      {/* Section filter (scannable bucket view) before the detailed villa
+          table - top-down dissection per Vandana 2026-11-04. */}
       <SectionFilterCard projectId={projectId} data={drawingData} />
+      <VillaProgressCard projectId={projectId} rows={villaRows} />
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// §0 - Overall picture (hero)
+// §0 - Progress hero (pyramid shape)
 //
-// Four tiles, left to right: milestones that should have closed by today,
-// how many actually closed, how many are open past due, and the mean days
-// behind across the open-past-due set. This is the honest headline the
-// management view was missing on 2026-11-04 (the Overview was showing
-// "1.1% ahead" while 47 of 60 planned-due milestones were overdue).
+// One headline metric at the top: Net schedule variance in days. Positive
+// = net behind, negative = net ahead. The headline dissects into three
+// smaller supporting tiles so management sees how we got to the net
+// number: behind count × mean days, ahead count × mean days, completion
+// rate of what was planned to close by today.
+//
+// Vandana + boss, 2026-11-04 pyramid pass + net-delay request: a schedule
+// metric that only counts slippage reads unfair - work completed ahead of
+// plan should offset it. This metric nets both sides.
 // ---------------------------------------------------------------------------
 
 function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
   const closedPct = stats.dueByToday === 0
     ? 0
     : Math.round((stats.closedByToday / stats.dueByToday) * 100);
+  const behindCount = stats.openPastDue + Math.max(0, stats.closedByToday - stats.aheadCount);
+  // Visual tone on the net number: bad if net-behind, good if net-ahead.
+  const net = stats.netDaysVariance;
+  const netTone = net > 15 ? styles.phBad : net > 0 ? styles.phWarn : styles.phGood;
+  const netLabel = net === 0
+    ? "On schedule"
+    : net > 0
+      ? `${net} days behind`
+      : `${Math.abs(net)} days ahead`;
 
   return (
     <section className={`${styles.card} ${styles.hero}`}>
       <div className={styles.cardHd}>
         <h3>Overall picture · today</h3>
         <span className={styles.meta}>
-          what the baseline said should be done by now, versus what actually is
+          net schedule variance across every milestone that has already hit its baseline
         </span>
       </div>
-      <div className={styles.heroGrid}>
-        <div className={styles.heroTile}>
-          <div className={styles.heroLbl}>Milestones due by today</div>
-          <div className={styles.heroVal}>{stats.dueByToday}</div>
-          <div className={styles.heroSub}>planned to close by this date</div>
-        </div>
-        <div className={styles.heroTile}>
-          <div className={styles.heroLbl}>Closed</div>
-          <div className={`${styles.heroVal} ${styles.phGood}`}>
-            {stats.closedByToday}
-            <span className={styles.heroUnit}>of {stats.dueByToday}</span>
+      <div className={styles.heroMainRow}>
+        <div className={styles.heroMain}>
+          <div className={styles.heroLbl}>Net schedule variance</div>
+          <div className={`${styles.heroMainVal} ${netTone}`}>
+            {net > 0 ? "+" : net < 0 ? "-" : ""}{Math.abs(net)}
+            <span className={styles.heroMainUnit}>{Math.abs(net) === 1 ? "day" : "days"}</span>
           </div>
-          <div className={styles.heroSub}>{closedPct}% of what was planned</div>
+          <div className={styles.heroSub}>{netLabel} · {stats.evaluatedCount} milestones evaluated</div>
+        </div>
+        <div className={styles.heroSupport}>
+          <div className={styles.heroSupportLbl}>Behind</div>
+          <div className={`${styles.heroSupportVal} ${styles.phBad}`}>+{stats.meanDaysBehind}d</div>
+          <div className={styles.heroSupportSub}>
+            mean across {behindCount || stats.openPastDue} overdue milestones
+          </div>
+        </div>
+        <div className={styles.heroSupport}>
+          <div className={styles.heroSupportLbl}>Ahead</div>
+          <div className={`${styles.heroSupportVal} ${styles.phGood}`}>-{stats.meanDaysAhead}d</div>
+          <div className={styles.heroSupportSub}>
+            mean across {stats.aheadCount} early-finish milestones
+          </div>
+        </div>
+        <div className={styles.heroSupport}>
+          <div className={styles.heroSupportLbl}>Completion rate</div>
+          <div className={styles.heroSupportVal}>{closedPct}%</div>
+          <div className={styles.heroSupportSub}>
+            {stats.closedByToday} of {stats.dueByToday} due by today
+          </div>
         </div>
       </div>
     </section>

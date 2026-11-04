@@ -24,13 +24,25 @@ export interface ProgressHeroStats {
   meanDaysBehind: number;
   /** Max (today - baselineFinish) across the open-past-due set. 0 if none. */
   maxDaysBehind: number;
+  /** Count of milestones closed BEFORE baseline (good side). */
+  aheadCount: number;
+  /** Mean (baselineFinish - actualFinish) across the ahead-of-plan set. 0 if none. */
+  meanDaysAhead: number;
+  /** Net schedule variance in days across everything evaluated:
+   *    sum of (behind days) - sum of (ahead days), divided by (behind + ahead counts).
+   *  Positive = net behind, negative = net ahead. The single-number headline
+   *  Vandana + boss asked for (2026-11-04, pyramid / net-delay thinking).
+   *  Falls back to 0 when nothing's been evaluated yet. */
+  netDaysVariance: number;
+  /** Total milestones that fed the net calculation (behind + ahead counts). */
+  evaluatedCount: number;
 }
 
 export async function getProgressHeroStats(
   projectId: string,
   asOf: Date = new Date(),
 ): Promise<ProgressHeroStats> {
-  const [dueByToday, closedByToday, overdue] = await Promise.all([
+  const [dueByToday, closedByToday, overdue, closedRows] = await Promise.all([
     prisma.villaMilestone.count({
       where: { villa: { projectId, inScope: true }, baselineFinish: { lte: asOf } },
     }),
@@ -49,17 +61,56 @@ export async function getProgressHeroStats(
       },
       select: { baselineFinish: true },
     }),
+    // Every closed milestone - need both the baseline and the actualFinish
+    // to compute the ahead-or-behind day diff per row.
+    prisma.villaMilestone.findMany({
+      where: {
+        villa: { projectId, inScope: true },
+        actualFinish: { not: null },
+      },
+      select: { baselineFinish: true, actualFinish: true },
+    }),
   ]);
 
-  let totalDays = 0;
+  // Behind side: open past-due milestones. Each contributes (today - baseline).
+  let behindDaysSum = 0;
   let maxDays = 0;
   for (const m of overdue) {
     if (!m.baselineFinish) continue;
     const d = Math.max(0, Math.round((asOf.getTime() - m.baselineFinish.getTime()) / 86400000));
-    totalDays += d;
+    behindDaysSum += d;
     if (d > maxDays) maxDays = d;
   }
-  const meanDaysBehind = overdue.length === 0 ? 0 : Math.round(totalDays / overdue.length);
+  const meanDaysBehind = overdue.length === 0 ? 0 : Math.round(behindDaysSum / overdue.length);
+
+  // Ahead side: closed milestones whose actualFinish beat the baseline.
+  // Rows where actualFinish is AFTER baselineFinish (closed-but-late) also
+  // belong on the behind side of the net, so we fold them in there.
+  let aheadDaysSum = 0;
+  let aheadCount = 0;
+  let closedLateDaysSum = 0;
+  let closedLateCount = 0;
+  for (const m of closedRows) {
+    if (!m.baselineFinish || !m.actualFinish) continue;
+    const diffDays = Math.round((m.actualFinish.getTime() - m.baselineFinish.getTime()) / 86400000);
+    if (diffDays < 0) {
+      aheadDaysSum += -diffDays; // store ahead as positive magnitude
+      aheadCount++;
+    } else if (diffDays > 0) {
+      closedLateDaysSum += diffDays;
+      closedLateCount++;
+    }
+  }
+  const meanDaysAhead = aheadCount === 0 ? 0 : Math.round(aheadDaysSum / aheadCount);
+
+  // Net variance = (all behind days - all ahead days) / (behind + ahead).
+  // "Behind" here means open-past-due AND closed-but-late (both are slippage).
+  const totalBehindDays = behindDaysSum + closedLateDaysSum;
+  const totalBehindCount = overdue.length + closedLateCount;
+  const evaluatedCount = totalBehindCount + aheadCount;
+  const netDaysVariance = evaluatedCount === 0
+    ? 0
+    : Math.round((totalBehindDays - aheadDaysSum) / evaluatedCount);
 
   return {
     dueByToday,
@@ -67,6 +118,10 @@ export async function getProgressHeroStats(
     openPastDue: overdue.length,
     meanDaysBehind,
     maxDaysBehind: maxDays,
+    aheadCount,
+    meanDaysAhead,
+    netDaysVariance,
+    evaluatedCount,
   };
 }
 
