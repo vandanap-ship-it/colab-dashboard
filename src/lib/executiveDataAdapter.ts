@@ -72,6 +72,14 @@ export interface ExecutiveExtras {
   milestonesAheadOfPlan: number;
   /** Mean days-ahead across the ahead-of-plan set. 0 when none. */
   meanAheadDays: number;
+  /** Net schedule variance in days: behind - ahead, averaged across all
+   *  milestones that have hit baseline or closed. Positive = net behind,
+   *  negative = net ahead. The new Total Delay KPI (iteration 4). */
+  netDaysVariance: number;
+  /** Total milestones feeding the net calc (behind + ahead). */
+  evaluatedCount: number;
+  /** Total behind-count feeding the net: open past-due + closed late. */
+  behindCount: number;
   /** Rows for the "Where is the delay?" drill-down below the Total Delay
    *  tile. Newest-slipped-first; capped at 50 entries so a single pass
    *  gives management the shape without scrolling forever. */
@@ -152,26 +160,47 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
       select: { baselineFinish: true, actualFinish: true },
     }),
   ]);
+  // Behind side - two contributors:
+  //   1. Open past-due milestones: (today - baselineFinish) each.
+  //   2. Closed-but-late milestones: (actualFinish - baselineFinish) each.
+  // Both are legitimate slippage and both belong in the net calculation.
+  let behindDaysSum = 0;
+  for (const m of overdueMilestones) {
+    if (!m.baselineFinish) continue;
+    behindDaysSum += Math.max(0, Math.round((now.getTime() - m.baselineFinish.getTime()) / 86_400_000));
+  }
+  let closedLateCount = 0;
+  let closedLateDaysSum = 0;
+  let aheadCount = 0;
+  let aheadDaysSum = 0;
+  for (const m of aheadOfPlan) {
+    if (!m.baselineFinish || !m.actualFinish) continue;
+    const diffDays = Math.round((m.actualFinish.getTime() - m.baselineFinish.getTime()) / 86_400_000);
+    if (diffDays < 0) {
+      aheadCount++;
+      aheadDaysSum += -diffDays;
+    } else if (diffDays > 0) {
+      closedLateCount++;
+      closedLateDaysSum += diffDays;
+    }
+  }
+  const behindCount = overdueMilestones.length + closedLateCount;
+  const behindTotal = behindDaysSum + closedLateDaysSum;
+
+  // Legacy mean-behind on the open-past-due set only, kept for the old
+  // Total Delay fallback and the Progress-tab subtitles.
   const meanOpenSlipDays = overdueMilestones.length === 0
     ? 0
-    : Math.round(
-        overdueMilestones.reduce((s, m) => {
-          if (!m.baselineFinish) return s;
-          return s + Math.max(0, Math.round((now.getTime() - m.baselineFinish.getTime()) / 86_400_000));
-        }, 0) / overdueMilestones.length,
-      );
+    : Math.round(behindDaysSum / overdueMilestones.length);
+  const meanAheadDays = aheadCount === 0 ? 0 : Math.round(aheadDaysSum / aheadCount);
 
-  const aheadRows = aheadOfPlan.filter(
-    (m) => m.baselineFinish && m.actualFinish && m.actualFinish < m.baselineFinish,
-  );
-  const meanAheadDays = aheadRows.length === 0
+  // Net schedule variance (Vandana + boss, 2026-11-04 pyramid pass +
+  // net-delay request): one number that captures both slippage AND work
+  // done ahead of plan. Positive = net behind, negative = net ahead.
+  const evaluatedCount = behindCount + aheadCount;
+  const netDaysVariance = evaluatedCount === 0
     ? 0
-    : Math.round(
-        aheadRows.reduce((s, m) => {
-          const d = Math.round((m.baselineFinish!.getTime() - m.actualFinish!.getTime()) / 86_400_000);
-          return s + Math.max(0, d);
-        }, 0) / aheadRows.length,
-      );
+    : Math.round((behindTotal - aheadDaysSum) / evaluatedCount);
 
   const overdueList = overdueMilestones
     .map((m) => {
@@ -201,8 +230,11 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     meanOpenSlipDays,
     milestonesDueByToday: dueByToday,
     milestonesClosedByToday: closedByToday,
-    milestonesAheadOfPlan: aheadRows.length,
+    milestonesAheadOfPlan: aheadCount,
     meanAheadDays,
+    netDaysVariance,
+    evaluatedCount,
+    behindCount,
     overdueList,
   };
 }
@@ -375,17 +407,15 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
   const baselineStart = extras?.scheduleStart ?? project.startDate ?? new Date();
   const baselineEnd = extras?.scheduleEnd ?? declaredEnd;
 
-  // Total Delay (2026-11-04 Vandana management-review pass):
-  // Use the MEAN DAYS OVERDUE across milestones whose baseline passed and
-  // which aren't closed yet. This is the honest headline number - the site
-  // team's projectedFinish column is stale on most villas, so the previous
-  // "projectedEnd - declaredEnd" math swung wildly (e.g. "658 days ahead"
-  // when dozens of foundation milestones were weeks overdue).
+  // Total Delay (2026-11-04 iteration 4, Vandana + boss pyramid pass):
+  // Switched to NET schedule variance - (behind - ahead) / count. This
+  // credits work done ahead of plan, not only the slippage side. Positive
+  // = net behind, negative = net ahead, 0 = on schedule.
   //
-  // When no milestones are overdue at all, fall back to 0 (the old math
-  // would have produced a negative-days "ahead" number that read as a win
-  // but was actually stale-data noise).
-  const totalDelayDays = extras?.meanOpenSlipDays ?? 0;
+  // Previously we only counted the open-past-due side (meanOpenSlipDays),
+  // which was honest but incomplete - 13 milestones closed ahead of plan
+  // on Amanvana and that work was invisible on the dashboard.
+  const totalDelayDays = extras?.netDaysVariance ?? 0;
 
   // Projected handover for the hero card and Projected timeline track:
   // baselineEnd shifted by the same mean-days-overdue number so the visual

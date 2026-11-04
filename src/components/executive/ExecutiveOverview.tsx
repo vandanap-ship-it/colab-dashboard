@@ -144,16 +144,11 @@ export default function ExecutiveOverview({
               <span className={styles.unit}>{Math.abs(h.totalDelayDays) === 1 ? "day" : "days"}</span>
             </div>
             <div className={styles.kpiSub}>
-              {h.milestonesDueByToday != null && h.milestonesClosedByToday != null
-                ? `Mean days overdue across ${h.milestonesDueByToday - h.milestonesClosedByToday} open milestones past baseline`
-                : h.totalDelayDays === 0
-                  ? `On track vs declared end ${fmtDate(h.baselineEnd)}`
-                  : h.totalDelayDays > 0
-                    ? `Past declared end ${fmtDate(h.baselineEnd)}`
-                    : `Ahead of declared end ${fmtDate(h.baselineEnd)}`}
               {h.milestonesAheadOfPlan && h.milestonesAheadOfPlan > 0
-                ? ` · also ${h.milestonesAheadOfPlan} milestones completed ahead of plan`
-                : ""}
+                ? `Net of behind and ahead work · ${h.milestonesAheadOfPlan} milestones finished early offset the overdue side`
+                : h.totalDelayDays === 0
+                  ? `On schedule - nothing overdue, nothing early`
+                  : `Mean days overdue across open milestones past baseline`}
             </div>
           </div>
           <div className={styles.kpiHeroDiv} aria-hidden />
@@ -191,12 +186,16 @@ export default function ExecutiveOverview({
         <ManpowerKpiCard strip={manpowerStrip} />
       </div>
 
-      {/* Health Snapshot */}
+      {/* Health Snapshot replaced with a lean one-line timeline strip
+          (iteration 4, 2026-11-04 pyramid pass). Total delay numbers
+          were previously repeated three times - KPI hero, Schedule
+          Summary left, Timeline right. The hero carries the headline;
+          this strip only adds planned-start, projected-finish and a
+          "Probability of timely completion" readout. */}
       <div className={`${styles.card} ${styles.hs}`}>
         <div className={styles.hsHd}>
           <h3>
-            <span className={styles.viewPill}>Block wise</span>
-            <span>Overall Project Health Snapshot</span>
+            <span>Schedule window</span>
             <span className={`${styles.projectHealthPill} ${styles[h.probability]}`}>
               {healthLabel}
             </span>
@@ -205,92 +204,38 @@ export default function ExecutiveOverview({
             As of {fmtDate(h.asOf)} · Phase 1 · Contractors: Abraham Thomas, Elegant Constructions
           </span>
         </div>
-
-        <div className={styles.hsGrid}>
-          {/* LEFT — Schedule Summary in 2-col grid (Planned | Projected) */}
-          <div className={styles.hsCell}>
-            <div className={styles.hsLbl}>Schedule Summary</div>
-            <div className={styles.ssGrid}>
-              <div className={styles.ssCol}>
-                <div className={styles.ssColHd}>Planned</div>
-                <div className={styles.ssRow}>
-                  <span className={styles.ssLb}>Start</span>
-                  <span className={styles.ssVl}>{fmtDate(h.baselineStart)}</span>
-                </div>
-                <div className={styles.ssRow}>
-                  <span className={styles.ssLb}>Finish</span>
-                  <span className={styles.ssVl}>{fmtDate(h.baselineEnd)}</span>
-                </div>
-                <div className={styles.ssRow}>
-                  <span className={styles.ssLb}>Duration</span>
-                  <span className={styles.ssVl}>{plannedDays} d</span>
-                </div>
-              </div>
-              <div className={styles.ssCol}>
-                <div className={`${styles.ssColHd} ${styles.projected}`}>Projected</div>
-                <div className={styles.ssRow}>
-                  <span className={styles.ssLb}>Start</span>
-                  <span className={styles.ssVl}>{fmtDate(h.baselineStart)}</span>
-                </div>
-                <div className={styles.ssRow}>
-                  <span className={styles.ssLb}>Finish</span>
-                  <span className={`${styles.ssVl} ${h.totalDelayDays > 0 ? styles.projected : ""}`}>
-                    {fmtDate(h.projectedEnd)}
-                  </span>
-                </div>
-                <div className={styles.ssRow}>
-                  <span className={styles.ssLb}>Duration</span>
-                  <span className={`${styles.ssVl} ${h.totalDelayDays > 0 ? styles.projected : ""}`}>
-                    {plannedDays + h.totalDelayDays} d
-                  </span>
-                </div>
-                <div className={styles.ssRow}>
-                  <span className={styles.ssLb}>Total delay</span>
-                  <span className={`${styles.ssVl} ${h.totalDelayDays > 0 ? styles.projected : ""}`}>
-                    {h.totalDelayDays} d
-                  </span>
-                </div>
-              </div>
-              <div className={styles.ssProbRow}>
-                <span className={styles.lb}>Probability of timely completion</span>
-                <span className={`${styles.probPill} ${styles[h.probability]}`}>{probLabel}</span>
-              </div>
-            </div>
+        <div className={styles.hsStrip}>
+          <div className={styles.hsStripCell}>
+            <span className={styles.hsStripLb}>Planned finish</span>
+            <span className={styles.hsStripVl}>{fmtDate(h.baselineEnd)}</span>
           </div>
-
-          {/* RIGHT — Timeline: two clean bars (Planned + Projected) */}
-          <div className={styles.hsCell}>
-            <div className={styles.hsLbl}>Timeline</div>
-            <div className={styles.ptTimeline}>
-              <TimelineRow
-                name="Planned"
-                plannedStart={h.baselineStart}
-                plannedEnd={h.baselineEnd}
-                projectedEnd={h.baselineEnd}
-                slipDays={0}
-                plannedPct={100}
-                overshootPct={0}
-              />
-              <TimelineRow
-                name="Projected"
-                plannedStart={h.baselineStart}
-                plannedEnd={h.baselineEnd}
-                projectedEnd={h.projectedEnd}
-                slipDays={h.totalDelayDays}
-                plannedPct={plannedPct}
-                overshootPct={overshootPct}
-              />
-              <div className={styles.timelineFoot}>
-                <div><span className={styles.tfLb}>Villas delayed</span><span className={styles.tfVl}>{villasDelayed} / {activeVillas.length}</span></div>
-                <div><span className={styles.tfLb}>Blocks in red</span><span className={styles.tfVl}>{h.criticalBlocks} / {activeBlocks.length}</span></div>
-              </div>
-            </div>
+          <div className={styles.hsStripCell}>
+            <span className={styles.hsStripLb}>Projected finish</span>
+            <span className={`${styles.hsStripVl} ${h.totalDelayDays > 0 ? styles.projected : ""}`}>
+              {fmtDate(h.projectedEnd)}
+            </span>
+          </div>
+          <div className={styles.hsStripCell}>
+            <span className={styles.hsStripLb}>Villas delayed</span>
+            <span className={styles.hsStripVl}>{villasDelayed} / {activeVillas.length}</span>
+          </div>
+          <div className={styles.hsStripCell}>
+            <span className={styles.hsStripLb}>Probability of on-time completion</span>
+            <span className={`${styles.probPill} ${styles[h.probability]}`}>{probLabel}</span>
           </div>
         </div>
+        <div className={styles.ptTimelineLean}>
+          <TimelineRow
+            name="Schedule"
+            plannedStart={h.baselineStart}
+            plannedEnd={h.baselineEnd}
+            projectedEnd={h.projectedEnd}
+            slipDays={h.totalDelayDays}
+            plannedPct={plannedPct}
+            overshootPct={overshootPct}
+          />
+        </div>
       </div>
-
-      {/* Daily Manpower moved into the KPI row above so it stays on the
-          initial fold as a headline metric instead of a full-width strip. */}
 
       {/* Where is the delay? — drill-down beneath the Total Delay KPI */}
       <OverdueListCard
