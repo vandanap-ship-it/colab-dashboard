@@ -23,6 +23,11 @@ export interface DelayReasonCluster {
   daysImpact: number;        // sum of days-impact (0 if none carried)
   latestAt: string | null;   // ISO date of most recent tagged entry
   sampleNote: string | null; // one representative reasonNote, for context
+  /** For the OTHER / UNSPECIFIED buckets: the reasonNote verbatim text
+   *  bucketed by case-folded phrase so the dashboard can show WHAT the
+   *  site team actually wrote under the catch-all label. undefined for
+   *  the typed reason codes. */
+  subPhrases?: Array<{ phrase: string; count: number }>;
 }
 
 export interface ContractorDelayReasonGroup {
@@ -83,7 +88,36 @@ export async function getDelayReasonClusters(projectId: string): Promise<DelayRe
     });
   }
 
+  // Attach sub-phrase breakdown for the catch-all buckets so "Other · 111"
+  // isn't opaque in the dashboard - management clicks and sees the actual
+  // phrases the site team typed.
+  for (const cluster of byCode.values()) {
+    if (cluster.code === "OTHER" || cluster.code === "UNSPECIFIED") {
+      cluster.subPhrases = buildSubPhrases(
+        progress.filter((p) => (p.reasonCode ?? "UNSPECIFIED") === cluster.code).map((p) => p.reasonNote),
+      );
+    }
+  }
+
   return [...byCode.values()].sort((a, b) => b.count - a.count || b.daysImpact - a.daysImpact);
+}
+
+/** Case-fold + trim + collapse whitespace on reasonNote; take the first chunk
+ *  before " · " (the site team usually writes "<reason tag> · <status>").
+ *  Returns at most 20 phrases, newest-count first. */
+function buildSubPhrases(notes: Array<string | null>): Array<{ phrase: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const raw of notes) {
+    const trimmed = (raw ?? "").trim();
+    if (!trimmed) continue;
+    const head = trimmed.split(" · ")[0].trim().toLowerCase().replace(/\s+/g, " ");
+    if (!head) continue;
+    counts.set(head, (counts.get(head) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([phrase, count]) => ({ phrase, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20);
 }
 
 /**

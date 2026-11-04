@@ -9,9 +9,9 @@ import {
   type ProjectHealthSummary,
   type VillaRollup,
 } from "@/lib/executiveMockData";
-import type { ContractorDelayReasonGroup, DelayReasonCluster } from "@/lib/delayReasons";
+import type { DelayReasonCluster } from "@/lib/delayReasons";
 import DelayReasonsCard from "./DelayReasonsCard";
-import DashboardLegend from "./DashboardLegend";
+import ManpowerChartCard from "./ManpowerChartCard";
 import SiteActivityGallery from "./SiteActivityGallery";
 import type { GalleryDateGroup, MilestoneProgressRow } from "@/lib/dashboardSectionsServer";
 
@@ -23,14 +23,23 @@ export interface ManpowerStrip {
   status: "no-plan" | "above" | "on-plan" | "below" | "not-logged";
 }
 
+/** One day on the manpower line chart. ISO date, planned + actual headcount. */
+export interface ManpowerDay {
+  date: string;
+  planned: number;
+  actual: number;
+}
+
 export interface ExecutiveOverviewProps {
   health: ProjectHealthSummary;
   villas: VillaRollup[];
   blocks: BlockRollup[];
   contractors: ContractorRollup[];
   reasonClusters: DelayReasonCluster[];
-  reasonClustersByContractor: ContractorDelayReasonGroup[];
   manpowerStrip: ManpowerStrip;
+  /** Last 30 days of per-day manpower (planned + actual). The dashboard
+   *  renders a line chart with a 7d/30d toggle instead of a single tile. */
+  manpowerRange: ManpowerDay[];
   milestoneProgress: MilestoneProgressRow[];
   /** Every uploaded photo on the project, grouped date > block. Replaces
    *  the "today only" highlights, per Shraddha's Sep 17 note. */
@@ -50,8 +59,8 @@ export default function ExecutiveOverview({
   blocks,
   contractors,
   reasonClusters,
-  reasonClustersByContractor,
   manpowerStrip,
+  manpowerRange,
   milestoneProgress,
   siteActivity,
   projectName,
@@ -70,14 +79,6 @@ export default function ExecutiveOverview({
 
   return (
     <div className={styles.wrap}>
-      {/* Collapsible one-line-per-metric glossary at the top. Answers
-          Shraddha's "how do I explain this to someone" directly — she
-          (or the person she's walking through the tool) can open this
-          and read the vocabulary before scanning the numbers below. */}
-      <div className={styles.legendWrap}>
-        <DashboardLegend />
-      </div>
-
       {/* Scope strip — context. Each cell carries a title tooltip so someone
           hovering the label sees a one-sentence explanation of what it means
           — Shraddha's Sep 9 note: "how do I understand the dashboard? Even
@@ -143,11 +144,16 @@ export default function ExecutiveOverview({
               <span className={styles.unit}>{Math.abs(h.totalDelayDays) === 1 ? "day" : "days"}</span>
             </div>
             <div className={styles.kpiSub}>
-              {h.totalDelayDays === 0
-                ? `On track vs declared end ${fmtDate(h.baselineEnd)}`
-                : h.totalDelayDays > 0
-                  ? `Past declared end ${fmtDate(h.baselineEnd)}`
-                  : `Ahead of declared end ${fmtDate(h.baselineEnd)}`}
+              {h.milestonesDueByToday != null && h.milestonesClosedByToday != null
+                ? `Mean days overdue across ${h.milestonesDueByToday - h.milestonesClosedByToday} open milestones past baseline`
+                : h.totalDelayDays === 0
+                  ? `On track vs declared end ${fmtDate(h.baselineEnd)}`
+                  : h.totalDelayDays > 0
+                    ? `Past declared end ${fmtDate(h.baselineEnd)}`
+                    : `Ahead of declared end ${fmtDate(h.baselineEnd)}`}
+              {h.milestonesAheadOfPlan && h.milestonesAheadOfPlan > 0
+                ? ` · also ${h.milestonesAheadOfPlan} milestones completed ahead of plan`
+                : ""}
             </div>
           </div>
           <div className={styles.kpiHeroDiv} aria-hidden />
@@ -171,14 +177,14 @@ export default function ExecutiveOverview({
           </div>
           <div
             className={`${styles.kpiSmall} ${h.criticalBlocks > 0 ? styles.bad : styles.neutral}`}
-            title="Blocks running more than 15 days behind baseline."
+            title="A block is Critical when its current in-progress stage is more than 15 days past baseline. Zero means no active block has slipped past that threshold today."
           >
             <div className={styles.kpiLbl}>Critical Blocks</div>
             <div className={`${styles.kpiSmallVal} ${h.criticalBlocks > 0 ? styles.bad : styles.neutral}`}>
               {h.criticalBlocks}
               <span className={styles.unit}>/ {activeBlocks.length}</span>
             </div>
-            <div className={styles.kpiSub}>Slip &gt; 15 days</div>
+            <div className={styles.kpiSub}>Blocks more than 15 days behind on current stage</div>
           </div>
         </div>
 
@@ -286,6 +292,15 @@ export default function ExecutiveOverview({
       {/* Daily Manpower moved into the KPI row above so it stays on the
           initial fold as a headline metric instead of a full-width strip. */}
 
+      {/* Where is the delay? — drill-down beneath the Total Delay KPI */}
+      <OverdueListCard
+        rows={h.overdueList ?? []}
+        totalOverdue={(h.milestonesDueByToday ?? 0) - (h.milestonesClosedByToday ?? 0)}
+      />
+
+      {/* Daily manpower — 7d / 30d bar chart */}
+      <ManpowerChartCard range={manpowerRange} />
+
       {/* Milestone Progress */}
       <div className={styles.card}>
         <div className={styles.cardHd}>
@@ -373,8 +388,10 @@ export default function ExecutiveOverview({
         </div>
       </div>
 
-      {/* Delay Reason Clusters — with Overall / By-contractor toggle */}
-      <DelayReasonsCard overall={reasonClusters} byContractor={reasonClustersByContractor} />
+      {/* Delay Reason Clusters — overall only (the By-contractor view was
+          dropped 2026-11-04 per Vandana; contractor attribution is covered
+          by the Contractor Scope Health table above). */}
+      <DelayReasonsCard overall={reasonClusters} />
 
       {/* Block Buckets */}
       <div className={styles.card}>
@@ -414,6 +431,55 @@ export default function ExecutiveOverview({
             groups={siteActivity}
             projectName={projectName ?? "Project"}
           />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OverdueListCard({
+  rows,
+  totalOverdue,
+}: {
+  rows: NonNullable<ProjectHealthSummary["overdueList"]>;
+  totalOverdue: number;
+}) {
+  if (totalOverdue === 0 || rows.length === 0) return null;
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardHd}>
+        <h3>Where is the delay?</h3>
+        <span className={styles.meta}>
+          {totalOverdue} milestones past baseline today
+          {rows.length < totalOverdue ? ` · showing the top ${rows.length} by days overdue` : ""}
+        </span>
+      </div>
+      <div className={styles.cardBd}>
+        <div className={styles.overdueTblWrap}>
+          <table className={styles.overdueTbl}>
+            <thead>
+              <tr>
+                <th>Villa</th>
+                <th>Block</th>
+                <th>Section</th>
+                <th>Activity</th>
+                <th>Baseline finish</th>
+                <th className={styles.tRight}>Days behind</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={`${r.villaNumber}-${r.sectionName}-${i}`}>
+                  <td className={styles.overdueVilla}>{r.villaLabel}</td>
+                  <td>Block {r.blockCode}</td>
+                  <td>{r.sectionName}</td>
+                  <td>{r.activityName ?? "-"}</td>
+                  <td>{fmtDate(new Date(r.baselineFinish))}</td>
+                  <td className={styles.tRight}>+{r.daysBehind}d</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

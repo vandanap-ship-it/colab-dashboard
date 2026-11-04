@@ -103,10 +103,35 @@ function detectFromBlockShape(blockCodes: string[]): boolean {
   return overlap >= Math.min(3, registered.size);
 }
 
+/** Block codes (as stored in Block.code on the DB) that belong to Abraham
+ *  Thomas's execution scope on Amanvana Phase 1. Everything else in the
+ *  project's block list belongs to Elegant Constructions. Used by the
+ *  dashboard adapter to split the rollup per contractor instead of lumping
+ *  everything under Abraham. Kept as a Set for O(1) lookup. */
+export const AMANVANA_ABRAHAM_BLOCK_CODES: ReadonlySet<string> = new Set([
+  "2", "3A", "3B", "4", "5", "6", "7", "8", "9", "10", "12", "13",
+]);
+
+/** Given a project's observed block codes, split them into Abraham vs
+ *  Elegant for the dashboard contractor rollup. Codes that match Abraham
+ *  by name go to abraham; everything else goes to elegant. */
+export function splitBlocksByContractor<B extends { code: string }>(
+  blocks: readonly B[],
+): { abraham: B[]; elegant: B[] } {
+  const abraham: B[] = [];
+  const elegant: B[] = [];
+  for (const b of blocks) {
+    if (AMANVANA_ABRAHAM_BLOCK_CODES.has(b.code)) abraham.push(b);
+    else elegant.push(b);
+  }
+  return { abraham, elegant };
+}
+
 /** Amanvana's project override, registered from src/lib/projects/index.ts. */
 export const amanvanaProjectOverride = {
   name: "Amanvana" as const,
   detectFromBlockShape,
   abrahamScopeOverride,
   elegantScopeOverride,
+  splitBlocksByContractor,
 };

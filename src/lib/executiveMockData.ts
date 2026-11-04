@@ -347,6 +347,23 @@ export interface ProjectHealthSummary {
   plannedPct: number;
   achievedPct: number;
   asOf: Date;
+  /** Added 2026-11-04 management-review pass: honest headline-delay
+   *  context that lets the Overview answer "where is the delay?" and
+   *  "what are we ahead on?" in one card instead of making management
+   *  guess at the single Total Delay number. */
+  milestonesDueByToday?: number;
+  milestonesClosedByToday?: number;
+  milestonesAheadOfPlan?: number;
+  meanAheadDays?: number;
+  overdueList?: Array<{
+    villaNumber: number;
+    villaLabel: string;
+    blockCode: string;
+    sectionName: string;
+    activityName: string | null;
+    baselineFinish: string;
+    daysBehind: number;
+  }>;
 }
 
 export function healthSummary(): ProjectHealthSummary {

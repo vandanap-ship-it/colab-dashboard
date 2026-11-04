@@ -67,11 +67,28 @@ export interface ExecutiveExtras {
   milestonesDueByToday: number;
   /** Of those, how many are closed (actualFinish not null). */
   milestonesClosedByToday: number;
+  /** Milestones that closed BEFORE their baseline date - work done ahead
+   *  of plan. The positive counterpart to the Total Delay number. */
+  milestonesAheadOfPlan: number;
+  /** Mean days-ahead across the ahead-of-plan set. 0 when none. */
+  meanAheadDays: number;
+  /** Rows for the "Where is the delay?" drill-down below the Total Delay
+   *  tile. Newest-slipped-first; capped at 50 entries so a single pass
+   *  gives management the shape without scrolling forever. */
+  overdueList: Array<{
+    villaNumber: number;
+    villaLabel: string;
+    blockCode: string;
+    sectionName: string;
+    activityName: string | null;
+    baselineFinish: string;
+    daysBehind: number;
+  }>;
 }
 
 export async function getExecutiveExtras(projectId: string): Promise<ExecutiveExtras> {
   const now = new Date();
-  const [hindranceCount, stats, sumUnits, rowCount, milestoneWindow, overdueMilestones, dueByToday, closedByToday] = await Promise.all([
+  const [hindranceCount, stats, sumUnits, rowCount, milestoneWindow, overdueMilestones, dueByToday, closedByToday, aheadOfPlan] = await Promise.all([
     prisma.hindrance.count({ where: { projectId, status: "OPEN" } }),
     getProjectStats(projectId),
     prisma.villa.aggregate({
@@ -86,13 +103,33 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     }),
     // Rows past their baseline that aren't closed yet - the mean of
     // (today - baselineFinish) across these is the honest headline delay.
+    // Pulled WITH enough context to render the "Where is the delay?"
+    // drill-down list below the Total Delay tile.
     prisma.villaMilestone.findMany({
       where: {
         villa: { projectId, inScope: true },
         baselineFinish: { lte: now },
         actualFinish: null,
       },
-      select: { baselineFinish: true },
+      select: {
+        baselineFinish: true,
+        section: { select: { name: true } },
+        villa: {
+          select: {
+            number: true, label: true,
+            block: { select: { code: true } },
+          },
+        },
+        // The first not-yet-closed activity under this milestone - gives the
+        // overdue-list a concrete line-item for each row ("Footing
+        // Reinforcement", "Plinth Beam Shuttering", ...).
+        wbsNodes: {
+          where: { actualFinish: null },
+          orderBy: { orderIndex: "asc" },
+          take: 1,
+          select: { name: true },
+        },
+      },
     }),
     prisma.villaMilestone.count({
       where: { villa: { projectId, inScope: true }, baselineFinish: { lte: now } },
@@ -104,6 +141,16 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
         actualFinish: { not: null },
       },
     }),
+    // Milestones closed before their baseline - work completed ahead of
+    // plan. The positive counterpart to the Total Delay number so
+    // management sees both sides, not only slippage.
+    prisma.villaMilestone.findMany({
+      where: {
+        villa: { projectId, inScope: true },
+        actualFinish: { not: null },
+      },
+      select: { baselineFinish: true, actualFinish: true },
+    }),
   ]);
   const meanOpenSlipDays = overdueMilestones.length === 0
     ? 0
@@ -113,6 +160,36 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
           return s + Math.max(0, Math.round((now.getTime() - m.baselineFinish.getTime()) / 86_400_000));
         }, 0) / overdueMilestones.length,
       );
+
+  const aheadRows = aheadOfPlan.filter(
+    (m) => m.baselineFinish && m.actualFinish && m.actualFinish < m.baselineFinish,
+  );
+  const meanAheadDays = aheadRows.length === 0
+    ? 0
+    : Math.round(
+        aheadRows.reduce((s, m) => {
+          const d = Math.round((m.baselineFinish!.getTime() - m.actualFinish!.getTime()) / 86_400_000);
+          return s + Math.max(0, d);
+        }, 0) / aheadRows.length,
+      );
+
+  const overdueList = overdueMilestones
+    .map((m) => {
+      const v = m.villa;
+      const daysBehind = Math.max(0, Math.round((now.getTime() - (m.baselineFinish?.getTime() ?? now.getTime())) / 86_400_000));
+      return {
+        villaNumber: v?.number ?? 0,
+        villaLabel: v?.label ?? (v?.number ? `Villa ${v.number}` : "Villa"),
+        blockCode: v?.block?.code ?? "-",
+        sectionName: m.section?.name ?? "-",
+        activityName: m.wbsNodes?.[0]?.name ?? null,
+        baselineFinish: m.baselineFinish?.toISOString() ?? new Date(0).toISOString(),
+        daysBehind,
+      };
+    })
+    .sort((a, b) => b.daysBehind - a.daysBehind)
+    .slice(0, 50);
+
   return {
     hindranceCount,
     plannedPct: stats.plannedPercent,
@@ -124,6 +201,9 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     meanOpenSlipDays,
     milestonesDueByToday: dueByToday,
     milestonesClosedByToday: closedByToday,
+    milestonesAheadOfPlan: aheadRows.length,
+    meanAheadDays,
+    overdueList,
   };
 }
 
@@ -205,39 +285,66 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
   const elegantVillaCount = elegantScope?.villaCount ?? 0;
   const elegantBlockCount = elegantScope?.blockCount ?? 0;
 
-  const avgSlip = activeVillas.length === 0
-    ? 0
-    : Math.round(activeVillas.reduce((s, v) => s + v.handoverSlipDays, 0) / activeVillas.length);
+  // Split the rollup's blocks by contractor so each contractor's row on
+  // Contractor Scope Health uses the villas they actually own. Previously
+  // Abraham was given the whole-project rollup and Elegant was hardcoded
+  // to zero / "tbd", which was wrong (Harish is updating Elegant villas
+  // every day). Vandana 2026-11-04: fix this for the Nov-5 review.
+  const { abraham: abrahamBlocks, elegant: elegantBlocks } =
+    projectOverride?.splitBlocksByContractor(rollup.blocks) ?? { abraham: rollup.blocks, elegant: [] };
+
+  const rollupFor = (blks: typeof rollup.blocks) => {
+    const villas = blks.flatMap((b) => b.villas);
+    const active = villas.filter((v) => v.currentSection >= 0);
+    const avgPct = villas.length === 0
+      ? 0
+      : Math.round(villas.reduce((s, v) => s + v.percentComplete, 0) / villas.length);
+    const avgCurrentSlip = active.length === 0
+      ? 0
+      : Math.round(active.reduce((s, v) => s + v.currentSlipDays, 0) / active.length);
+    const criticalBlocks = blks.filter((b) => b.currentSlipDays > 15).length;
+    const criticalVillas = active.filter((v) => v.currentSlipDays > 15).length;
+    const handoverSlip = Math.max(0, ...active.map((v) => v.handoverSlipDays));
+    return { activeCount: active.length, avgPct, avgCurrentSlip, criticalBlocks, criticalVillas, handoverSlip };
+  };
+  const abrahamR = rollupFor(abrahamBlocks);
+  const elegantR = rollupFor(elegantBlocks);
+
+  const healthFor = (r: ReturnType<typeof rollupFor>): ContractorRollup["health"] => {
+    if (r.activeCount === 0) return "tbd";
+    if (r.criticalBlocks > 0) return "critical";
+    if (r.handoverSlip > 14) return "warning";
+    if (r.handoverSlip > 0) return "ok";
+    return "healthy";
+  };
+
   const contractors: ContractorRollup[] = [
     {
       name: AMANVANA_CONTRACTORS.abraham,
-      category: "Civil / Structural - Phase 1 Lead",
+      category: "Civil / Structural - Phase 1",
       scopeVillas: atVillaCount,
-      activeVillas: activeVillas.length,
-      completePct: Math.round(rollup.percentComplete),
-      avgDelayDays: avgSlip,
-      criticalRisks: rollup.criticalVillas,
-      health: rollup.criticalBlocks > 0 ? "critical"
-        : rollup.handoverSlipDays > 14 ? "warning"
-        : rollup.handoverSlipDays > 0 ? "ok"
-        : "healthy",
+      activeVillas: abrahamR.activeCount,
+      completePct: abrahamR.avgPct,
+      avgDelayDays: abrahamR.avgCurrentSlip,
+      criticalRisks: abrahamR.criticalVillas,
+      health: healthFor(abrahamR),
     },
   ];
-  // Add the second contractor (Elegant Constructions on Amanvana) to the
-  // Contractor Scope Health table so the management view shows BOTH
-  // contractors - Vandana 2026-11-04 management review.
   if (elegantScope && elegantVillaCount > 0) {
     contractors.push({
       name: AMANVANA_CONTRACTORS.elegant,
-      category: "Civil / Structural - Phase 2 (yet to mobilise)",
+      category: "Civil / Structural - Phase 2",
       scopeVillas: elegantVillaCount,
-      activeVillas: 0,
-      completePct: 0,
-      avgDelayDays: 0,
-      criticalRisks: 0,
-      health: "tbd",
+      activeVillas: elegantR.activeCount,
+      completePct: elegantR.avgPct,
+      avgDelayDays: elegantR.avgCurrentSlip,
+      criticalRisks: elegantR.criticalVillas,
+      health: healthFor(elegantR),
     });
   }
+  // Legacy name kept for the KPI cards below (hero slip / rail critical).
+  const avgSlip = abrahamR.avgCurrentSlip;
+  void avgSlip;
 
   // Build the top-of-page ProjectHealthSummary from real project metadata + rollup numbers.
   // Total Delay definition: signed days between the schedule's latest
@@ -313,6 +420,11 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
     plannedPct: extras?.plannedPct ?? 0,
     achievedPct: extras?.achievedPct ?? Math.round(rollup.percentComplete * 100) / 100,
     asOf: new Date(),
+    milestonesDueByToday: extras?.milestonesDueByToday,
+    milestonesClosedByToday: extras?.milestonesClosedByToday,
+    milestonesAheadOfPlan: extras?.milestonesAheadOfPlan,
+    meanAheadDays: extras?.meanAheadDays,
+    overdueList: extras?.overdueList,
   };
 
   return { health, villas, blocks, contractors, sections };

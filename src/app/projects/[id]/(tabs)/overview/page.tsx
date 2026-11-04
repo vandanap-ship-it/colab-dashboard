@@ -6,8 +6,8 @@ import BlockDetailContent from "@/components/executive/BlockDetailContent";
 import { getDashboardBag } from "@/lib/rollupServer";
 import { adaptDashboardBag, getExecutiveExtras } from "@/lib/executiveDataAdapter";
 import { getBlockDetail, getVillaDetailByNumber } from "@/lib/detailServer";
-import { getContractorDelayReasonGroups, getDelayReasonClusters } from "@/lib/delayReasons";
-import { getDashboardManpowerStrip } from "@/lib/manpowerServer";
+import { getDelayReasonClusters } from "@/lib/delayReasons";
+import { getDashboardManpowerStrip, getRangeSummary } from "@/lib/manpowerServer";
 import { getMilestoneProgress, getSiteActivityGalleryGrouped } from "@/lib/dashboardSectionsServer";
 import {
   BLOCKS,
@@ -36,12 +36,15 @@ export default async function OverviewPage({
   // Drawer detail data + delay-reason aggregation + manpower strip — fetched
   // in parallel with the main bag so opening a drawer costs at most one extra
   // round-trip.
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 29 * 86400000);
+
   const [
     villaDetail,
     blockDetail,
     reasonClusters,
-    reasonClustersByContractor,
     manpowerStrip,
+    manpowerRange,
     milestoneProgress,
     siteActivity,
   ] = await Promise.all([
@@ -50,8 +53,8 @@ export default async function OverviewPage({
       : Promise.resolve(null),
     bd ? getBlockDetail(id, bd).catch(() => null) : Promise.resolve(null),
     getDelayReasonClusters(id).catch(() => []),
-    getContractorDelayReasonGroups(id).catch(() => []),
     getDashboardManpowerStrip(id),
+    getRangeSummary(id, thirtyDaysAgo, now).catch(() => [] as Awaited<ReturnType<typeof getRangeSummary>>),
     getMilestoneProgress(id).catch(() => []),
     getSiteActivityGalleryGrouped(id).catch(() => []),
   ]);
@@ -66,8 +69,12 @@ export default async function OverviewPage({
             blocks={adapted.blocks}
             contractors={adapted.contractors}
             reasonClusters={reasonClusters}
-            reasonClustersByContractor={reasonClustersByContractor}
             manpowerStrip={manpowerStrip}
+            manpowerRange={manpowerRange.map((d) => ({
+              date: d.date.toISOString(),
+              planned: d.plannedTotal,
+              actual: d.actualTotal,
+            }))}
             milestoneProgress={milestoneProgress}
             siteActivity={siteActivity}
             projectName={bag.project.name}
@@ -83,8 +90,12 @@ export default async function OverviewPage({
           blocks={BLOCKS}
           contractors={CONTRACTORS}
           reasonClusters={reasonClusters}
-          reasonClustersByContractor={reasonClustersByContractor}
           manpowerStrip={manpowerStrip}
+          manpowerRange={manpowerRange.map((d) => ({
+            date: d.date.toISOString(),
+            planned: d.plannedTotal,
+            actual: d.actualTotal,
+          }))}
           milestoneProgress={milestoneProgress}
           siteActivity={siteActivity}
         />
