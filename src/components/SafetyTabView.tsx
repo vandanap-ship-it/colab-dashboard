@@ -219,41 +219,47 @@ function fmtShortDate(iso: string): string {
 // ---------------------------------------------------------------------------
 
 function OverviewCard({ overview }: { overview: SafetyBundle["overview"] }) {
+  // Pyramid-shaped. One governing question: "Is the site safe?" The lead
+  // metric is Safe man-hours (hours of work done without an LTI). The
+  // four activity tiles below are the dissection - how we got there.
+  // Vandana + boss, 2026-11-04 pyramid pass.
   return (
     <div className={styles.card}>
       <div className={styles.cardHd}>Safety Overview</div>
-      <div className={styles.ovGrid}>
-        <a href="#inductions-list" className={`${styles.ovTile} ${styles.ovBig} ${styles.ovLink}`}>
-          <div className={styles.ovVal}>{overview.totalInductions.toLocaleString("en-IN")}</div>
-          <div className={styles.ovLbl}>Safety Inductions</div>
-          <div className={styles.ovSub}>
+      <div className={styles.ovHero}>
+        <div className={styles.ovHeroLbl}>Safe man-hours</div>
+        <div className={styles.ovHeroVal}>{overview.safeManHours.toLocaleString("en-IN")}</div>
+        <div className={styles.ovHeroSub}>
+          {overview.safeSincePreset} · counted at 8 hours per worker per day on site
+        </div>
+      </div>
+      <div className={styles.ovSupportGrid}>
+        <a href="#inductions-list" className={`${styles.ovSupportTile} ${styles.ovLink}`}>
+          <div className={styles.ovSupportLbl}>Safety Inductions</div>
+          <div className={styles.ovSupportVal}>{overview.totalInductions.toLocaleString("en-IN")}</div>
+          <div className={styles.ovSupportSub}>
             {overview.inductionsApproved} approved · {overview.inductionsPending} pending · {overview.inductionsRejected} rejected
           </div>
         </a>
-        <a href="#hse-checklist-list" className={`${styles.ovTile} ${styles.ovLink}`}>
-          <div className={styles.ovVal}>{overview.totalHseChecklists.toLocaleString("en-IN")}</div>
-          <div className={styles.ovLbl}>HSE Checklists</div>
-          <div className={styles.ovSub}>
+        <a href="#hse-checklist-list" className={`${styles.ovSupportTile} ${styles.ovLink}`}>
+          <div className={styles.ovSupportLbl}>HSE Checklists</div>
+          <div className={styles.ovSupportVal}>{overview.totalHseChecklists.toLocaleString("en-IN")}</div>
+          <div className={styles.ovSupportSub}>
             {overview.hseChecklistsPassed} passed · {overview.hseChecklistsPending} pending review
           </div>
         </a>
-        <a href="#permits-list" className={`${styles.ovTile} ${styles.ovLink}`}>
-          <div className={styles.ovVal}>{overview.totalSafetyPermits.toLocaleString("en-IN")}</div>
-          <div className={styles.ovLbl}>Safety Permits</div>
-          <div className={styles.ovSub}>
+        <a href="#permits-list" className={`${styles.ovSupportTile} ${styles.ovLink}`}>
+          <div className={styles.ovSupportLbl}>Safety Permits</div>
+          <div className={styles.ovSupportVal}>{overview.totalSafetyPermits.toLocaleString("en-IN")}</div>
+          <div className={styles.ovSupportSub}>
             {overview.permitsApproved} approved · {overview.permitsPending} pending · {overview.permitsClosedOrRejected} closed or rejected
           </div>
         </a>
-        <a href="#observations-list" className={`${styles.ovTile} ${styles.ovLink}`}>
-          <div className={styles.ovVal}>{overview.totalSafetyObservations.toLocaleString("en-IN")}</div>
-          <div className={styles.ovLbl}>Safety Observations</div>
-          <div className={styles.ovSub}>raised to date</div>
+        <a href="#observations-list" className={`${styles.ovSupportTile} ${styles.ovLink}`}>
+          <div className={styles.ovSupportLbl}>Safety Observations</div>
+          <div className={styles.ovSupportVal}>{overview.totalSafetyObservations.toLocaleString("en-IN")}</div>
+          <div className={styles.ovSupportSub}>raised on this project</div>
         </a>
-        <div className={styles.ovTile}>
-          <div className={styles.ovVal}>{overview.safeManHours.toLocaleString()}</div>
-          <div className={styles.ovLbl}>Safe man-hours</div>
-          <div className={styles.ovSub}>{overview.safeSincePreset} · 8 hours per worker day</div>
-        </div>
       </div>
     </div>
   );
