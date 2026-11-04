@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import styles from "./qaqc-tab.module.css";
 import type { InspectionRow, IssueRow, QaqcBundle } from "@/lib/qaqcServer";
 
@@ -9,40 +8,44 @@ export interface QaqcTabViewProps {
   bundle: QaqcBundle;
 }
 
+/**
+ * QA/QC tab, pyramid-structured (Vandana 2026-11-04 management-review pass,
+ * iteration 4). One governing question per tab: "Is what we built good?"
+ * Top number dissects downward:
+ *
+ *   1. First-pass pass rate  — the single lead metric (big hero)
+ *   2. Supporting tiles      — open issues, open NCRs, avg close TAT
+ *   3. By contractor         — Contractor Performance Master
+ *   4. Photo wall            — the one piece of thin-data content that
+ *                              still reads compellingly
+ *   5. Row-level detail      — Issues list, Inspections list
+ *
+ * Removed in this pass (noise cards that competed with the headline):
+ *   - Material Inspection Request placeholder (no data yet)
+ *   - Defects by Category     (all "Uncategorised" on Amanvana today)
+ *   - Latest Day Snapshot     (near-zero every day)
+ *   - Last 7 days mini-trend  (dataset too thin to tell a story)
+ *   - TAT trend 30-day chart  (same reason; avg sits in the hero now)
+ */
 export default function QaqcTabView({ projectId, bundle }: QaqcTabViewProps) {
+  const openIssues = bundle.issues.obs.new + bundle.issues.obs.inReview;
+  const openNcrs = bundle.issues.ncs.new + bundle.issues.ncs.inReview;
   return (
     <div className={styles.wrap}>
-      {/* Top row: WIR + Issues+Defects + Material */}
-      <div className={styles.topRow}>
-        <WirCard counts={bundle.wir} total={bundle.inspectionRows.length} />
-        <IssuesDefectsCard issues={bundle.issues} />
-        <MaterialCard counts={bundle.material} />
-      </div>
-
-      {/* Latest day + trend + defects by category */}
-      <div className={styles.midRow}>
-        <DefectsByCategoryCard rows={bundle.defectsByCategory} />
-        <div className={styles.midRight}>
-          <LatestDayCard snapshot={bundle.latestDay} />
-          <TrendCard bundle={bundle.last7Days} />
-        </div>
-      </div>
-
+      <QaqcHero
+        passRate={bundle.wir.successRate}
+        totalInspections={bundle.inspectionRows.length}
+        passed={bundle.wir.passed}
+        inReview={bundle.wir.inReview}
+        rejected={bundle.wir.rejected}
+        openIssues={openIssues}
+        openNcrs={openNcrs}
+        avgCloseTatDays={bundle.issues.submissionTATDays}
+      />
       <ContractorPerformanceCard rows={bundle.contractors} />
-
-      <div className={styles.bottomRow}>
-        <TatTrendCard points={bundle.tatTrend} />
-        <RecentPhotoFeedCard photos={bundle.recentPhotos} />
-      </div>
-
+      <RecentPhotoFeedCard photos={bundle.recentPhotos} />
       <IssuesListCard rows={bundle.issueRows} />
       <InspectionsListCard rows={bundle.inspectionRows} />
-
-      <p className={styles.footer}>
-        Material inspections and material delivery log will appear here once
-        those modules are wired.
-      </p>
-
       {/* Suppress unused warning */}
       <input type="hidden" value={projectId} />
     </div>
@@ -50,103 +53,61 @@ export default function QaqcTabView({ projectId, bundle }: QaqcTabViewProps) {
 }
 
 // ---------------------------------------------------------------------------
-// §1 Work Inspection Request
+// Pyramid hero: one headline + supporting tiles
 // ---------------------------------------------------------------------------
 
-function WirCard({ counts, total }: { counts: QaqcBundle["wir"]; total: number }) {
-  const successRate = counts.successRate;
+function QaqcHero({
+  passRate,
+  totalInspections,
+  passed,
+  inReview,
+  rejected,
+  openIssues,
+  openNcrs,
+  avgCloseTatDays,
+}: {
+  passRate: number | null;
+  totalInspections: number;
+  passed: number;
+  inReview: number;
+  rejected: number;
+  openIssues: number;
+  openNcrs: number;
+  avgCloseTatDays: number | null;
+}) {
+  const passRateTone =
+    passRate == null ? "" :
+    passRate >= 90 ? styles.heroGood :
+    passRate >= 75 ? styles.heroWarn :
+    styles.heroBad;
   return (
-    <a href="#inspections-list" className={`${styles.card} ${styles.cardWir} ${styles.cardClickable}`}>
-      <div className={styles.cardHd}>Work Inspection Requests</div>
-      <div className={styles.wirBody}>
-        <div className={styles.wirBig}>
-          <div className={styles.wirBigNum}>{total.toLocaleString("en-IN")}</div>
-          <div className={styles.wirBigLbl}>
-            Total inspections
-            {successRate != null ? ` · ${successRate}% success` : ""}
+    <div className={styles.heroCard}>
+      <div className={styles.heroMainRow}>
+        <div className={styles.heroMain}>
+          <div className={styles.heroLbl}>First-pass inspection pass rate</div>
+          <div className={`${styles.heroMainVal} ${passRateTone}`}>
+            {passRate == null ? "-" : `${passRate}%`}
+          </div>
+          <div className={styles.heroSub}>
+            {passed} passed · {rejected} rejected · {inReview} in review · {totalInspections} inspections submitted
           </div>
         </div>
-        <div className={styles.wirGrid}>
-          <StatCell label="Passed" value={counts.passed} tone="good" />
-          <StatCell label="Rejected" value={counts.rejected} tone="bad" />
-          <StatCell label="In review" value={counts.inReview} tone="warn" />
-          <StatCell label="Click to see rows" value="↓" />
-        </div>
-      </div>
-    </a>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// §2 Issues & Defects
-// ---------------------------------------------------------------------------
-
-function IssuesDefectsCard({ issues }: { issues: QaqcBundle["issues"] }) {
-  const totalIssues = issues.obs.total + issues.ncs.total;
-  return (
-    <a href="#issues-list" className={`${styles.card} ${styles.cardIssues} ${styles.cardClickable}`}>
-      <div className={styles.cardHd}>Issues & Defects</div>
-      <div className={styles.issuesTop}>
-        <div>
-          <div className={styles.issuesPct}>{totalIssues}</div>
-          <div className={styles.issuesPctLbl}>
-            Total · {issues.completedPct}% closed
+        <a href="#issues-list" className={styles.heroSupport}>
+          <div className={styles.heroSupportLbl}>Open issues</div>
+          <div className={styles.heroSupportVal}>{openIssues}</div>
+          <div className={styles.heroSupportSub}>observations · click to see rows</div>
+        </a>
+        <a href="#issues-list" className={styles.heroSupport}>
+          <div className={styles.heroSupportLbl}>Open NCRs</div>
+          <div className={`${styles.heroSupportVal} ${openNcrs > 0 ? styles.heroBad : ""}`}>{openNcrs}</div>
+          <div className={styles.heroSupportSub}>critical non-conformance</div>
+        </a>
+        <div className={styles.heroSupport}>
+          <div className={styles.heroSupportLbl}>Avg close TAT</div>
+          <div className={styles.heroSupportVal}>
+            {avgCloseTatDays == null ? "-" : `${avgCloseTatDays}d`}
           </div>
-        </div>
-        <div className={styles.issuesTat}>
-          <div className={styles.issuesTatCell}>
-            <div className={styles.issuesTatVal}>{issues.submissionTATDays == null ? "-" : `${issues.submissionTATDays}d`}</div>
-            <div className={styles.issuesTatLbl}>Avg close TAT</div>
-          </div>
-          <div className={styles.issuesTatCell}>
-            <div className={styles.issuesTatVal}>↓</div>
-            <div className={styles.issuesTatLbl}>Click to see rows</div>
-          </div>
-        </div>
-      </div>
-      <BucketRow label={`OBS (${issues.obs.total})`} bucket={issues.obs} />
-      <BucketRow label={`NCS (${issues.ncs.total})`} bucket={issues.ncs} />
-    </a>
-  );
-}
-
-function BucketRow({ label, bucket }: { label: string; bucket: QaqcBundle["issues"]["obs"] }) {
-  const max = Math.max(1, bucket.new + bucket.inReview + bucket.closed + bucket.rejected);
-  return (
-    <div className={styles.bucketRow}>
-      <div className={styles.bucketLbl}>{label}</div>
-      <div className={styles.bucketBar} title={`${bucket.new} new, ${bucket.inReview} in review, ${bucket.closed} closed, ${bucket.rejected} rejected`}>
-        {bucket.new > 0    && <div className={`${styles.bucketSeg} ${styles.bucketNew}`}    style={{ flex: bucket.new }}>{bucket.new}</div>}
-        {bucket.inReview > 0 && <div className={`${styles.bucketSeg} ${styles.bucketIR}`}   style={{ flex: bucket.inReview }}>{bucket.inReview}</div>}
-        {bucket.closed > 0 && <div className={`${styles.bucketSeg} ${styles.bucketCl}`}    style={{ flex: bucket.closed }}>{bucket.closed}</div>}
-        {bucket.rejected > 0 && <div className={`${styles.bucketSeg} ${styles.bucketRej}`} style={{ flex: bucket.rejected }}>{bucket.rejected}</div>}
-        {max === 1 && <div className={`${styles.bucketSeg} ${styles.bucketEmpty}`} style={{ flex: 1 }}>—</div>}
-      </div>
-      <div className={styles.bucketLegend}>
-        NEW: <b className={styles.bucketNewTxt}>{bucket.new}</b> · IR: <b className={styles.bucketIRTxt}>{bucket.inReview}</b> · CLSD: <b className={styles.bucketClTxt}>{bucket.closed}</b> · REJ: <b className={styles.bucketRejTxt}>{bucket.rejected}</b>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// §3 Material Inspection Request (placeholder)
-// ---------------------------------------------------------------------------
-
-function MaterialCard({ counts }: { counts: QaqcBundle["material"] }) {
-  return (
-    <div className={`${styles.card} ${styles.cardMaterial}`}>
-      <div className={styles.cardHd}>Material Inspection Request</div>
-      <div className={styles.wirBody}>
-        <div className={styles.wirBig}>
-          <div className={`${styles.wirBigNum} ${styles.mutedNum}`}>—</div>
-          <div className={styles.wirBigLbl}>Not yet integrated</div>
-        </div>
-        <div className={styles.wirGrid}>
-          <StatCell label="Total" value={counts.total} tone="muted" />
-          <StatCell label="Passed" value={counts.passed} tone="muted" />
-          <StatCell label="Rejected" value={counts.rejected} tone="muted" />
-          <StatCell label="In review" value={counts.inReview} tone="muted" />
+          <div className={styles.heroSupportSub}>days from open to closed</div>
         </div>
       </div>
     </div>
@@ -154,99 +115,7 @@ function MaterialCard({ counts }: { counts: QaqcBundle["material"] }) {
 }
 
 // ---------------------------------------------------------------------------
-// §4 Defects by Category
-// ---------------------------------------------------------------------------
-
-function DefectsByCategoryCard({ rows }: { rows: QaqcBundle["defectsByCategory"] }) {
-  const max = Math.max(1, ...rows.map((r) => r.count));
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHd}>Defects by Category</div>
-      <div className={styles.dcList}>
-        {rows.length === 0 ? (
-          <div className={styles.empty}>No defects logged yet.</div>
-        ) : (
-          rows.map((r) => (
-            <div key={r.category} className={styles.dcRow}>
-              <div className={styles.dcLbl}>{r.category}</div>
-              <div className={styles.dcBarWrap}>
-                <div className={styles.dcBar} style={{ width: `${(r.count / max) * 100}%` }} />
-              </div>
-              <div className={styles.dcCount}>{r.count}</div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// §5 Latest Day
-// ---------------------------------------------------------------------------
-
-function LatestDayCard({ snapshot }: { snapshot: QaqcBundle["latestDay"] }) {
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHd}>Latest Day Snapshot</div>
-      <div className={styles.latestGrid}>
-        <div className={`${styles.latestTile} ${styles.latestBlue}`}>
-          <div className={styles.latestVal}>{snapshot.workInspections}</div>
-          <div className={styles.latestLbl}>Work Inspections</div>
-        </div>
-        <div className={`${styles.latestTile} ${styles.latestGreen}`}>
-          <div className={styles.latestVal}>{snapshot.materialInspections}</div>
-          <div className={styles.latestLbl}>Material Inspections</div>
-        </div>
-        <div className={`${styles.latestTile} ${styles.latestOrange}`}>
-          <div className={styles.latestVal}>{snapshot.nonConformanceReports}</div>
-          <div className={styles.latestLbl}>Non-Conformance</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// §6 Last 7 days trend
-// ---------------------------------------------------------------------------
-
-function TrendCard({ bundle }: { bundle: QaqcBundle["last7Days"] }) {
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHd}>Last 7 Days · MOR</div>
-      <div className={styles.trendGrid}>
-        <MiniTrend title="Work Inspection" tone="blue" points={bundle.workInspection} />
-        <MiniTrend title="Material Inspection" tone="green" points={bundle.materialInspection} />
-        <MiniTrend title="Non-Conformance" tone="orange" points={bundle.nonConformance} />
-      </div>
-    </div>
-  );
-}
-
-function MiniTrend({ title, tone, points }: { title: string; tone: "blue" | "green" | "orange"; points: { date: string; count: number }[] }) {
-  const max = Math.max(1, ...points.map((p) => p.count));
-  return (
-    <div className={styles.miniTrend}>
-      <div className={styles.miniTitle}>{title}</div>
-      <div className={styles.miniBars}>
-        {points.map((p) => (
-          <div key={p.date} className={styles.miniBarCell} title={`${p.date}: ${p.count}`}>
-            <div className={styles.miniBarValue}>{p.count > 0 ? p.count : ""}</div>
-            <div
-              className={`${styles.miniBar} ${tone === "blue" ? styles.miniBarBlue : tone === "green" ? styles.miniBarGreen : styles.miniBarOrange}`}
-              style={{ height: `${(p.count / max) * 100}%` }}
-            />
-            <div className={styles.miniBarDay}>{p.date.slice(-2)}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// §7 Contractor Performance Master
+// Contractor Performance Master - dissects the top pass-rate by contractor
 // ---------------------------------------------------------------------------
 
 function ContractorPerformanceCard({ rows }: { rows: QaqcBundle["contractors"] }) {
@@ -315,57 +184,7 @@ function ContractorPerformanceCard({ rows }: { rows: QaqcBundle["contractors"] }
 }
 
 // ---------------------------------------------------------------------------
-// §8 TAT trend (my addition)
-// ---------------------------------------------------------------------------
-
-function TatTrendCard({ points }: { points: QaqcBundle["tatTrend"] }) {
-  const values = points.map((p) => p.avgTatDays).filter((v): v is number => v != null);
-  const max = values.length > 0 ? Math.max(1, ...values) : 1;
-
-  const [firstAvg, lastAvg] = useMemo(() => {
-    const first10 = values.slice(0, 10);
-    const last10 = values.slice(-10);
-    const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((n, x) => n + x, 0) / arr.length : null;
-    return [avg(first10), avg(last10)];
-  }, [values]);
-
-  const trend = firstAvg != null && lastAvg != null
-    ? lastAvg < firstAvg ? "improving" : lastAvg > firstAvg ? "worsening" : "flat"
-    : null;
-
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHd}>Inspection TAT · rolling 30 days</div>
-      <div className={styles.cardBd}>
-        <div className={styles.tatSummary}>
-          <span>Avg last 10 days: <b>{lastAvg == null ? "—" : `${lastAvg.toFixed(1)}d`}</b></span>
-          {trend && (
-            <span className={`${styles.tatTrend} ${trend === "improving" ? styles.tatGood : trend === "worsening" ? styles.tatBad : ""}`}>
-              {trend === "improving" ? "↓ improving" : trend === "worsening" ? "↑ worsening" : "= flat"}
-            </span>
-          )}
-        </div>
-        <div className={styles.tatChart}>
-          {points.map((p) => (
-            <div key={p.date} className={styles.tatBarCell} title={`${p.date}: ${p.avgTatDays == null ? "no data" : `${p.avgTatDays}d avg (${p.count})`}`}>
-              <div
-                className={styles.tatBar}
-                style={{
-                  height: p.avgTatDays == null ? "3px" : `${(p.avgTatDays / max) * 100}%`,
-                  background: p.avgTatDays == null ? "var(--qa-ink-4)" : undefined,
-                }}
-              />
-            </div>
-          ))}
-        </div>
-        <div className={styles.tatFoot}>bars: daily avg turnaround, height ∝ days</div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// §9 Photo feed (my addition)
+// Photo wall - the one piece of content that reads well with thin data
 // ---------------------------------------------------------------------------
 
 function RecentPhotoFeedCard({ photos }: { photos: QaqcBundle["recentPhotos"] }) {
@@ -505,21 +324,6 @@ function fmtShortDate(iso: string): string {
 // ---------------------------------------------------------------------------
 // Shared bits
 // ---------------------------------------------------------------------------
-
-function StatCell({ label, value, tone }: { label: string; value: number | string; tone?: "good" | "bad" | "warn" | "muted" }) {
-  const cls =
-    tone === "good"  ? styles.stGood
-  : tone === "bad"   ? styles.stBad
-  : tone === "warn"  ? styles.stWarn
-  : tone === "muted" ? styles.stMuted
-  :                    "";
-  return (
-    <div className={styles.stCell}>
-      <div className={`${styles.stVal} ${cls}`}>{value}</div>
-      <div className={styles.stLbl}>{label}</div>
-    </div>
-  );
-}
 
 function fmtRelative(iso: string): string {
   const then = new Date(iso).getTime();
