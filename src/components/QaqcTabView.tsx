@@ -434,7 +434,7 @@ function IssuesListCard({ rows }: { rows: IssueRow[] }) {
                     <td>{r.severity ?? "-"}</td>
                     <td className={styles.listDesc}>{r.description}</td>
                     <td>{r.wbsName ?? "-"}</td>
-                    <td>{r.contractorName ?? "-"}</td>
+                    <td>{r.contractorName ?? "Not tagged"}</td>
                     <td>{r.createdByName}</td>
                     <td>{r.status}</td>
                   </tr>
@@ -453,22 +453,24 @@ function IssuesListCard({ rows }: { rows: IssueRow[] }) {
 // ---------------------------------------------------------------------------
 
 function InspectionsListCard({ rows }: { rows: InspectionRow[] }) {
+  // rows arrive newest-first from the server; reassert here so a UI
+  // sort change doesn't silently reorder the management view.
+  const sorted = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return (
     <div id="inspections-list" className={styles.card}>
       <div className={styles.cardHd}>
-        Inspection submissions · all rows
-        <span className={styles.cardMeta}>{rows.length} rows · includes Colab-imported inspections</span>
+        QA/QC Inspection submissions · all rows
+        <span className={styles.cardMeta}>{sorted.length} rows · newest first</span>
       </div>
       <div className={styles.cardBd}>
-        {rows.length === 0 ? (
-          <div className={styles.empty}>No inspections submitted on this project yet.</div>
+        {sorted.length === 0 ? (
+          <div className={styles.empty}>No QA/QC inspections submitted on this project yet.</div>
         ) : (
           <div className={styles.listTblWrap}>
             <table className={styles.listTbl}>
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Module</th>
                   <th>Title</th>
                   <th>Where</th>
                   <th>Contractor</th>
@@ -477,13 +479,12 @@ function InspectionsListCard({ rows }: { rows: InspectionRow[] }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {sorted.map((r) => (
                   <tr key={r.id}>
                     <td>{fmtShortDate(r.createdAt)}</td>
-                    <td>{r.module ?? "-"}</td>
                     <td className={styles.listDesc}>{r.title}</td>
                     <td>{r.wbsName ?? "-"}</td>
-                    <td>{r.contractorName ?? "-"}</td>
+                    <td>{r.contractorName ?? "Not tagged"}</td>
                     <td>{r.filledByName}</td>
                     <td>{r.status}</td>
                   </tr>

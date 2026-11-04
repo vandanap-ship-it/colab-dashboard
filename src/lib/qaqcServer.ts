@@ -13,6 +13,7 @@
 //   §9 Recent photo feed       — my addition: last N inspection/issue photos
 
 import { prisma } from "@/lib/prisma";
+import { isQaqcTeamName, isTestUserName } from "@/lib/dashboardExclusions";
 
 // ---------------------------------------------------------------------------
 // Shape types
@@ -162,16 +163,18 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
   const weekAgo = new Date(todayStart.getTime() - 7 * 86400000);
   const monthAgo = new Date(todayStart.getTime() - 30 * 86400000);
 
-  // Vandana 2026-11-04 management-review pass:
-  //   Colab-imported inspections land as module="SAFETY" even though many are
-  //   QA checklists (see memory: weekly_report_1_7_oct.md - "QA/QC
-  //   checklists mislabelled SAFETY"). Filtering to module="QAQC" made the
-  //   WIR tile read 0 while the DB holds 194 Siddhi/Colab inspection
-  //   records. For now the QA/QC tab counts EVERY inspection on the project
-  //   so management sees the real number; the EHS tab shows the same
-  //   records under its own lens. Once a reclassification pass lands we
-  //   can narrow this back.
-  const [inspections, issues, contractors] = await Promise.all([
+  // Vandana 2026-11-04 management-review pass (iteration 2):
+  //   The Colab import landed every inspection as module="SAFETY" even
+  //   though many are QA/QC checklists. Instead of counting every
+  //   inspection on QA/QC (which double-counted with EHS), we now use the
+  //   filler's identity to reclassify: inspections filled by Nagarjuna or
+  //   Thangamani (the QA/QC team on Amanvana per memory:
+  //   roles_by_module.md) count under QA/QC regardless of module tag.
+  //   module="QAQC" rows always count here too.
+  //   Rows filled by the test-user admin account (Vandana) are excluded
+  //   from both counts and the row list so management doesn't see
+  //   development-time noise.
+  const [inspectionsRaw, issues, contractors] = await Promise.all([
     prisma.inspection.findMany({
       where: { projectId, deletedAt: null },
       select: {
@@ -213,6 +216,13 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
       select: { id: true, name: true },
     }),
   ]);
+
+  // Apply the dashboard exclusions: drop test-user rows entirely, then keep
+  // only inspections that are QA/QC in intent - either tagged QAQC or
+  // filled by the QA/QC team.
+  const inspections = inspectionsRaw
+    .filter((i) => !isTestUserName(i.filledBy?.name))
+    .filter((i) => i.module === "QAQC" || isQaqcTeamName(i.filledBy?.name));
 
   // ------------- §1 Work Inspection Request -------------
   const wir: InspectionCounts = (() => {

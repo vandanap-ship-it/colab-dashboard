@@ -51,16 +51,13 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
   const closedPct = stats.dueByToday === 0
     ? 0
     : Math.round((stats.closedByToday / stats.dueByToday) * 100);
-  const openPastDue = stats.openPastDue;
-  const tone = openPastDue === 0 ? "good" : openPastDue > 20 ? "bad" : "warn";
-  const toneCls = tone === "good" ? styles.phGood : tone === "warn" ? styles.phWarn : styles.phBad;
 
   return (
     <section className={`${styles.card} ${styles.hero}`}>
       <div className={styles.cardHd}>
         <h3>Overall picture · today</h3>
         <span className={styles.meta}>
-          how far work is behind baseline across every villa and every stage
+          what the baseline said should be done by now, versus what actually is
         </span>
       </div>
       <div className={styles.heroGrid}>
@@ -76,23 +73,6 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
             <span className={styles.heroUnit}>of {stats.dueByToday}</span>
           </div>
           <div className={styles.heroSub}>{closedPct}% of what was planned</div>
-        </div>
-        <div className={styles.heroTile}>
-          <div className={styles.heroLbl}>Open past due</div>
-          <div className={`${styles.heroVal} ${toneCls}`}>{openPastDue}</div>
-          <div className={styles.heroSub}>planned finish has passed, not closed</div>
-        </div>
-        <div className={styles.heroTile}>
-          <div className={styles.heroLbl}>Mean days behind</div>
-          <div className={`${styles.heroVal} ${toneCls}`}>
-            {stats.meanDaysBehind}
-            <span className={styles.heroUnit}>{stats.meanDaysBehind === 1 ? "day" : "days"}</span>
-          </div>
-          <div className={styles.heroSub}>
-            {stats.maxDaysBehind > 0
-              ? `worst open milestone +${stats.maxDaysBehind} days`
-              : "nothing overdue"}
-          </div>
         </div>
       </div>
     </section>

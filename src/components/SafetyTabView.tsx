@@ -1,10 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
 import styles from "./safety-tab.module.css";
 import type { SafetyBundle } from "@/lib/safetyServer";
-import { SAFETY_CATEGORIES } from "@/lib/safetyCategories";
 
 export type RegisterSummary = {
   code: string;
@@ -23,29 +21,15 @@ export interface SafetyTabViewProps {
 }
 
 export default function SafetyTabView({ projectId, bundle, registers = [] }: SafetyTabViewProps) {
-  const [submissionsWindow, setSubmissionsWindow] = useState<"7d" | "weekly" | "monthly">("7d");
-
-  const submissionsData = useMemo(() => {
-    if (submissionsWindow === "7d") return bundle.submissionsLast7Days;
-    if (submissionsWindow === "weekly") return bundle.submissionsLast4Weeks;
-    return bundle.submissionsLast6Months;
-  }, [submissionsWindow, bundle]);
-
   return (
     <div className={styles.wrap}>
       <OverviewCard overview={bundle.overview} />
-      <IncidentCategoriesCard categories={bundle.categories} />
       <ComplianceMatrixCard rows={bundle.compliance} />
-      <SafetyDetailsCard inductions={bundle.inductions} />
+      <SafetyInductionsCard inductions={bundle.inductions} />
       <PermitsCard permits={bundle.permits} projectId={projectId} />
       {registers.map((r) => (
         <RegisterCard key={r.code} register={r} projectId={projectId} />
       ))}
-      <SubmissionsCard
-        data={submissionsData}
-        window={submissionsWindow}
-        onChange={setSubmissionsWindow}
-      />
       <InductionsListCard rows={bundle.inductionRows} />
       <HseChecklistsListCard rows={bundle.hseChecklistRows} />
       <PermitsListCard rows={bundle.permitRows} />
@@ -59,14 +43,15 @@ export default function SafetyTabView({ projectId, bundle, registers = [] }: Saf
 // ---------------------------------------------------------------------------
 
 function InductionsListCard({ rows }: { rows: SafetyBundle["inductionRows"] }) {
+  const sorted = [...rows].sort((a, b) => b.inductionDate.localeCompare(a.inductionDate));
   return (
     <div id="inductions-list" className={styles.card}>
       <div className={styles.cardHd}>
         Safety Inductions · all rows
-        <span className={styles.cardMetaSmall}>{rows.length} rows · newest first</span>
+        <span className={styles.cardMetaSmall}>{sorted.length} rows · newest first</span>
       </div>
       <div className={styles.cardBd}>
-        {rows.length === 0 ? (
+        {sorted.length === 0 ? (
           <div className={styles.empty}>No inductions submitted yet.</div>
         ) : (
           <div className={styles.listTblWrap}>
@@ -77,13 +62,13 @@ function InductionsListCard({ rows }: { rows: SafetyBundle["inductionRows"] }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {sorted.map((r) => (
                   <tr key={r.id}>
                     <td>{r.displayId}</td>
                     <td>{fmtShortDate(r.inductionDate)}</td>
                     <td>{r.workerName}</td>
                     <td>{r.trade}</td>
-                    <td>{r.contractorName ?? "-"}</td>
+                    <td>{r.contractorName ?? "Not tagged"}</td>
                     <td>{r.status}</td>
                     <td>{fmtShortDate(r.expiryDate)}</td>
                   </tr>
@@ -98,14 +83,15 @@ function InductionsListCard({ rows }: { rows: SafetyBundle["inductionRows"] }) {
 }
 
 function HseChecklistsListCard({ rows }: { rows: SafetyBundle["hseChecklistRows"] }) {
+  const sorted = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return (
     <div id="hse-checklist-list" className={styles.card}>
       <div className={styles.cardHd}>
         HSE Checklists · all rows
-        <span className={styles.cardMetaSmall}>{rows.length} rows · includes Colab-imported checklists</span>
+        <span className={styles.cardMetaSmall}>{sorted.length} rows · newest first · includes Colab-imported checklists</span>
       </div>
       <div className={styles.cardBd}>
-        {rows.length === 0 ? (
+        {sorted.length === 0 ? (
           <div className={styles.empty}>No HSE checklists submitted yet.</div>
         ) : (
           <div className={styles.listTblWrap}>
@@ -116,12 +102,12 @@ function HseChecklistsListCard({ rows }: { rows: SafetyBundle["hseChecklistRows"
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {sorted.map((r) => (
                   <tr key={r.id}>
                     <td>{fmtShortDate(r.createdAt)}</td>
                     <td className={styles.listDesc}>{r.title}</td>
                     <td>{r.wbsName ?? "-"}</td>
-                    <td>{r.contractorName ?? "-"}</td>
+                    <td>{r.contractorName ?? "Not tagged"}</td>
                     <td>{r.filledByName}</td>
                     <td>{r.status}</td>
                   </tr>
@@ -141,29 +127,39 @@ function PermitsListCard({ rows }: { rows: SafetyBundle["permitRows"] }) {
     NIGHT_WORK: "Night Work",
     DESHUTTERING: "De-shuttering",
   };
+  const sorted = [...rows].sort((a, b) => b.workDate.localeCompare(a.workDate));
   return (
     <div id="permits-list" className={styles.card}>
       <div className={styles.cardHd}>
         Safety Permits · all rows
-        <span className={styles.cardMetaSmall}>{rows.length} rows · Hot Work, Night Work, De-shuttering</span>
+        <span className={styles.cardMetaSmall}>{sorted.length} rows · newest first · Hot Work, Night Work, De-shuttering</span>
       </div>
       <div className={styles.cardBd}>
-        {rows.length === 0 ? (
+        {sorted.length === 0 ? (
           <div className={styles.empty}>No safety permits raised yet.</div>
         ) : (
           <div className={styles.listTblWrap}>
             <table className={styles.listTbl}>
               <thead>
                 <tr>
-                  <th>Work date</th><th>Type</th><th>Title</th><th>Status</th>
+                  <th>Work date</th>
+                  <th>Type</th>
+                  <th>Title</th>
+                  <th>Raised by</th>
+                  <th>Approved by</th>
+                  <th>Closed by</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {sorted.map((r) => (
                   <tr key={r.id}>
                     <td>{fmtShortDate(r.workDate)}</td>
                     <td>{TYPE_LABELS[r.type] ?? r.type}</td>
                     <td className={styles.listDesc}>{r.title}</td>
+                    <td>{r.requesterName ?? "-"}</td>
+                    <td>{r.approverName ?? (r.status === "PENDING" ? "(pending)" : "-")}</td>
+                    <td>{r.closerName ?? (r.status === "CLOSED" ? "-" : "")}</td>
                     <td>{r.status}</td>
                   </tr>
                 ))}
@@ -177,14 +173,15 @@ function PermitsListCard({ rows }: { rows: SafetyBundle["permitRows"] }) {
 }
 
 function ObservationsListCard({ rows }: { rows: SafetyBundle["observationRows"] }) {
+  const sorted = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return (
     <div id="observations-list" className={styles.card}>
       <div className={styles.cardHd}>
         Safety Observations · all rows
-        <span className={styles.cardMetaSmall}>{rows.length} rows · newest first</span>
+        <span className={styles.cardMetaSmall}>{sorted.length} rows · newest first</span>
       </div>
       <div className={styles.cardBd}>
-        {rows.length === 0 ? (
+        {sorted.length === 0 ? (
           <div className={styles.empty}>No safety observations recorded.</div>
         ) : (
           <div className={styles.listTblWrap}>
@@ -195,13 +192,13 @@ function ObservationsListCard({ rows }: { rows: SafetyBundle["observationRows"] 
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {sorted.map((r) => (
                   <tr key={r.id}>
                     <td>{fmtShortDate(r.createdAt)}</td>
                     <td>{r.category ?? "-"}</td>
                     <td>{r.severity ?? "-"}</td>
                     <td>{r.status}</td>
-                    <td>{r.contractorName ?? "-"}</td>
+                    <td>{r.contractorName ?? "Not tagged"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -263,56 +260,9 @@ function OverviewCard({ overview }: { overview: SafetyBundle["overview"] }) {
 }
 
 // ---------------------------------------------------------------------------
-// §2 Incident Categories
-// ---------------------------------------------------------------------------
-
-function IncidentCategoriesCard({ categories }: { categories: SafetyBundle["categories"] }) {
-  const total = categories.reduce((n, c) => n + c.count, 0);
-  const nonZero = categories.filter((c) => c.count > 0);
-  const withZeros = categories.filter((c) => c.count === 0);
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHd}>
-        Incident Categories
-        <span className={styles.cardMeta}>{total} incident{total === 1 ? "" : "s"} total · {categories.length} categories</span>
-      </div>
-      <div className={styles.icBody}>
-        {total === 0 ? (
-          <div className={styles.empty}>No incidents recorded in any category. Excellent.</div>
-        ) : (
-          <div className={styles.icGrid}>
-            {nonZero.map((c) => (
-              <IncidentTile key={c.code} row={c} isActive />
-            ))}
-          </div>
-        )}
-        {withZeros.length > 0 && (
-          <>
-            <div className={styles.icSubHd}>Categories with no incidents ({withZeros.length})</div>
-            <div className={styles.icGridSmall}>
-              {withZeros.map((c) => (
-                <IncidentTile key={c.code} row={c} />
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function IncidentTile({ row, isActive }: { row: SafetyBundle["categories"][number]; isActive?: boolean }) {
-  const meta = SAFETY_CATEGORIES.find((c) => c.code === row.code);
-  return (
-    <div className={`${styles.icTile} ${isActive ? styles.icTileActive : styles.icTileMuted}`} title={meta?.description ?? ""}>
-      <div className={styles.icCount}>{row.count}</div>
-      <div className={styles.icLbl}>{row.label}</div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// §3 Contractor Inspection & Compliance Matrix
+// §2 Contractor Inspection & Compliance Matrix
+// (Incident Categories was removed 2026-11-04 management review - the site
+//  team's category tagging isn't mature enough on Amanvana to show.)
 // ---------------------------------------------------------------------------
 
 function ComplianceMatrixCard({ rows }: { rows: SafetyBundle["compliance"] }) {
@@ -372,28 +322,29 @@ function ComplianceMatrixCard({ rows }: { rows: SafetyBundle["compliance"] }) {
 // §4 Safety Details (inductions)
 // ---------------------------------------------------------------------------
 
-function SafetyDetailsCard({ inductions }: { inductions: SafetyBundle["inductions"] }) {
+function SafetyInductionsCard({ inductions }: { inductions: SafetyBundle["inductions"] }) {
   return (
     <div className={styles.card}>
       <div className={styles.cardHd}>
-        Safety Details
-        <span className={styles.cardMeta}>induction status</span>
+        Safety Inductions
+        <span className={styles.cardMeta}>
+          {inductions.totalSubmitted} inductions submitted on site
+        </span>
       </div>
       <div className={styles.sdGrid}>
-        <SdTile label="Total submitted" value={inductions.totalSubmitted} tone="neutral" />
+        <SdTile label="Total inductions" value={inductions.totalSubmitted} tone="neutral" />
         <SdTile label="Approved" value={inductions.approved} tone="good" />
         <SdTile label="Pending" value={inductions.pending} tone="warn" />
         <SdTile label="Rejected" value={inductions.rejected} tone="bad" />
       </div>
       {inductions.totalSubmitted === 0 && (
         <div className={styles.sdNote}>
-          Induction submissions module not yet integrated — this will populate as
-          the labour induction flow ships.
+          No inductions submitted on this project yet.
         </div>
       )}
       {inductions.perContractor.length > 0 && inductions.totalSubmitted > 0 && (
         <>
-          <div className={styles.sdSubHd}>Induction compliance % per contractor</div>
+          <div className={styles.sdSubHd}>Induction completion % per contractor</div>
           <div className={styles.sdContractorList}>
             {inductions.perContractor.map((c) => (
               <div key={c.contractorId} className={styles.sdContractorRow}>
@@ -456,22 +407,29 @@ function PermitsCard({ permits, projectId }: { permits: SafetyBundle["permits"];
         ) : (
           <>
             <div className={styles.permitList}>
-              {permits.permits.slice(0, 5).map((p) => (
-                <div key={p.id} className={`${styles.permitRow} ${styles[`permitStatus_${p.status}` as keyof typeof styles] ?? ""}`}>
-                  <div>
-                    <div className={styles.permitName}>{p.name}</div>
-                    <div className={styles.permitNumber}>{TYPE_LABELS[p.category] ?? p.category}</div>
+              {permits.permits.slice(0, 5).map((p) => {
+                const typeLabel = TYPE_LABELS[p.category] ?? p.category;
+                // Suppress the type subtitle when the permit name already
+                // contains it - otherwise rows read "Hot Work - Villa 14 /
+                // Hot Work", which is the duplication Vandana flagged.
+                const showType = !p.name.toLowerCase().includes(typeLabel.toLowerCase());
+                return (
+                  <div key={p.id} className={`${styles.permitRow} ${styles[`permitStatus_${p.status}` as keyof typeof styles] ?? ""}`}>
+                    <div>
+                      <div className={styles.permitName}>{p.name}</div>
+                      {showType && <div className={styles.permitNumber}>{typeLabel}</div>}
+                    </div>
+                    <div className={styles.permitExpiry}>
+                      {p.expiryDate
+                        ? "work day " + new Date(p.expiryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                        : ""}
+                    </div>
+                    <div className={`${styles.permitStatusPill} ${styles[`permitPill_${p.status}` as keyof typeof styles] ?? ""}`}>
+                      {p.status.replace("_", " ")}
+                    </div>
                   </div>
-                  <div className={styles.permitExpiry}>
-                    {p.expiryDate
-                      ? "work day " + new Date(p.expiryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-                      : ""}
-                  </div>
-                  <div className={`${styles.permitStatusPill} ${styles[`permitPill_${p.status}` as keyof typeof styles] ?? ""}`}>
-                    {p.status.replace("_", " ")}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <Link href={`/projects/${projectId}/work-permits`} className={styles.actionBtnFullWidth}>
               Open Work Permits →
@@ -510,58 +468,8 @@ function RegisterCard({ register: r, projectId }: { register: RegisterSummary; p
   );
 }
 
-// ---------------------------------------------------------------------------
-// §6 Labour Induction Submissions (placeholder trend)
-// ---------------------------------------------------------------------------
-
-function SubmissionsCard({
-  data,
-  window,
-  onChange,
-}: {
-  data: SafetyBundle["submissionsLast7Days"];
-  window: "7d" | "weekly" | "monthly";
-  onChange: (v: "7d" | "weekly" | "monthly") => void;
-}) {
-  const total = data.reduce((n, p) => n + p.count, 0);
-  const max = Math.max(1, ...data.map((p) => p.count));
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHd}>
-        Labour Induction Submissions
-        <div className={styles.subToggle}>
-          <button
-            type="button"
-            className={`${styles.subToggleBtn} ${window === "7d" ? styles.subToggleOn : ""}`}
-            onClick={() => onChange("7d")}
-          >7 days</button>
-          <button
-            type="button"
-            className={`${styles.subToggleBtn} ${window === "weekly" ? styles.subToggleOn : ""}`}
-            onClick={() => onChange("weekly")}
-          >Weekly</button>
-          <button
-            type="button"
-            className={`${styles.subToggleBtn} ${window === "monthly" ? styles.subToggleOn : ""}`}
-            onClick={() => onChange("monthly")}
-          >Monthly</button>
-        </div>
-      </div>
-      <div className={styles.cardBd}>
-        {total === 0 ? (
-          <div className={styles.empty}>
-            No induction submissions in this window. Populates once the labour induction module ships.
-          </div>
-        ) : (
-          <div className={styles.subChart}>
-            {data.map((p) => (
-              <div key={p.date} className={styles.subBarCell} title={`${p.date}: ${p.count}`}>
-                <div className={styles.subBar} style={{ height: `${(p.count / max) * 100}%` }} />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+// (Labour Induction Submissions trend was removed 2026-11-04 management
+// review. Labour Induction and Safety Induction are the same thing in
+// Siddhi - the SafetyInduction model. The Safety Inductions card above
+// now carries the per-contractor completion breakdown, so a separate
+// 7-day / weekly / monthly submission chart isn't needed.)

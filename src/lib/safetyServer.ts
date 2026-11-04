@@ -8,6 +8,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { SAFETY_CATEGORIES } from "@/lib/safetyCategories";
+import { isQaqcTeamName, isTestUserName } from "@/lib/dashboardExclusions";
 
 // ---------------------------------------------------------------------------
 // Shape types
@@ -104,6 +105,9 @@ export interface SafetyPermitRow {
   type: string;
   workDate: string;
   status: string;
+  requesterName: string | null;
+  approverName: string | null;
+  closerName: string | null;
 }
 export interface SafetyObservationRow {
   id: string;
@@ -182,7 +186,14 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
         wbsNode: { select: { contractorId: true, name: true } },
         filledBy: { select: { name: true, contractorId: true } },
       },
-    }),
+    }).then((rows) =>
+      // Exclude test-user noise (Vandana's dev-time submissions) and rows
+      // filled by the QA/QC team (Nagarjuna / Thangamani) - those count on
+      // the QA/QC tab instead. Vandana 2026-11-04 management-review pass.
+      rows.filter(
+        (r) => !isTestUserName(r.filledBy?.name) && !isQaqcTeamName(r.filledBy?.name),
+      ),
+    ),
     prisma.contractor.findMany({
       // showInPickers = the two execution contractors (Abraham + Elegant).
       // Hidden contractors used to appear as empty-row noise on the matrix;
@@ -218,6 +229,14 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
         type: true,
         workDate: true,
         status: true,
+        // Permit people - initiator/requester/approver management wants to
+        // see on each row. The WorkPermit model doesn't split initiator
+        // from requester (the mobile form bundles the two), so the same
+        // user appears in both roles; approver flips to the user who
+        // approved (null while pending); closer is set when CLOSED.
+        requester: { select: { name: true } },
+        approver: { select: { name: true } },
+        closer: { select: { name: true } },
       },
     }),
     prisma.safetyInduction.findMany({
@@ -425,6 +444,9 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
     type: p.type,
     workDate: p.workDate.toISOString(),
     status: p.status,
+    requesterName: p.requester?.name ?? null,
+    approverName: p.approver?.name ?? null,
+    closerName: p.closer?.name ?? null,
   }));
   const observationRows: SafetyObservationRow[] = allSafetyIssues.map((it) => ({
     id: it.id,
