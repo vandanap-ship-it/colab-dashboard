@@ -415,6 +415,20 @@
   white-space: normal;
   overflow-wrap: break-word;
 }
+.viewMoreBtn {
+  margin-top: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--qa-rule-soft);
+  border: 1px solid var(--qa-rule);
+  border-radius: 6px;
+  color: var(--qa-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.viewMoreBtn:hover { background: var(--qa-rule); }
 
 /* Pyramid-hero added 2026-11-04 iteration 4 - one headline metric + a row
  * of smaller supporting tiles beneath. The tiles dissect the headline

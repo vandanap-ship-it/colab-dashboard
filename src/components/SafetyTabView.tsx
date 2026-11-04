@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import styles from "./safety-tab.module.css";
 import type { SafetyBundle } from "@/lib/safetyServer";
 
@@ -21,13 +22,20 @@ export interface SafetyTabViewProps {
 }
 
 export default function SafetyTabView({ projectId, bundle, registers = [] }: SafetyTabViewProps) {
+  // Vandana 2026-11-05: hide any section that has no data. A register
+  // with zero live items / zero overdue / zero due-soon isn't worth a
+  // dashboard card. Compliance matrix is also hidden when every row has
+  // zero activity (handled inside the component).
+  const visibleRegisters = registers.filter(
+    (r) => r.live > 0 || r.overdue > 0 || r.dueSoon > 0 || r.pendingDisplayId,
+  );
   return (
     <div className={styles.wrap}>
       <OverviewCard overview={bundle.overview} />
       <ComplianceMatrixCard rows={bundle.compliance} />
       <SafetyInductionsCard inductions={bundle.inductions} />
       <PermitsCard permits={bundle.permits} projectId={projectId} />
-      {registers.map((r) => (
+      {visibleRegisters.map((r) => (
         <RegisterCard key={r.code} register={r} projectId={projectId} />
       ))}
       <InductionsListCard rows={bundle.inductionRows} />
@@ -43,7 +51,10 @@ export default function SafetyTabView({ projectId, bundle, registers = [] }: Saf
 // ---------------------------------------------------------------------------
 
 function InductionsListCard({ rows }: { rows: SafetyBundle["inductionRows"] }) {
+  if (rows.length === 0) return null;
   const sorted = [...rows].sort((a, b) => b.inductionDate.localeCompare(a.inductionDate));
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? sorted : sorted.slice(0, 10);
   return (
     <div id="inductions-list" className={styles.card}>
       <div className={styles.cardHd}>
@@ -51,31 +62,32 @@ function InductionsListCard({ rows }: { rows: SafetyBundle["inductionRows"] }) {
         <span className={styles.cardMetaSmall}>{sorted.length} rows · newest first</span>
       </div>
       <div className={styles.cardBd}>
-        {sorted.length === 0 ? (
-          <div className={styles.empty}>No inductions submitted yet.</div>
-        ) : (
-          <div className={styles.listTblWrap}>
-            <table className={styles.listTbl}>
-              <thead>
-                <tr>
-                  <th>ID</th><th>Date</th><th>Worker</th><th>Trade</th><th>Contractor</th><th>Status</th><th>Expires</th>
+        <div className={styles.listTblWrap}>
+          <table className={styles.listTbl}>
+            <thead>
+              <tr>
+                <th>ID</th><th>Date</th><th>Worker</th><th>Trade</th><th>Contractor</th><th>Status</th><th>Expires</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.displayId}</td>
+                  <td>{fmtShortDate(r.inductionDate)}</td>
+                  <td>{r.workerName}</td>
+                  <td>{r.trade}</td>
+                  <td>{r.contractorName ?? "Not tagged"}</td>
+                  <td>{r.status}</td>
+                  <td>{fmtShortDate(r.expiryDate)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {sorted.map((r) => (
-                  <tr key={r.id}>
-                    <td>{r.displayId}</td>
-                    <td>{fmtShortDate(r.inductionDate)}</td>
-                    <td>{r.workerName}</td>
-                    <td>{r.trade}</td>
-                    <td>{r.contractorName ?? "Not tagged"}</td>
-                    <td>{r.status}</td>
-                    <td>{fmtShortDate(r.expiryDate)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {sorted.length > 10 && (
+          <button type="button" className={styles.viewMoreBtn} onClick={() => setShowAll((s) => !s)}>
+            {showAll ? "Show less" : `View all ${sorted.length} rows`}
+          </button>
         )}
       </div>
     </div>
@@ -83,7 +95,11 @@ function InductionsListCard({ rows }: { rows: SafetyBundle["inductionRows"] }) {
 }
 
 function HseChecklistsListCard({ rows }: { rows: SafetyBundle["hseChecklistRows"] }) {
+  if (rows.length === 0) return null;
   const sorted = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const hasWhere = sorted.some((r) => !!r.wbsName);
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? sorted : sorted.slice(0, 10);
   return (
     <div id="hse-checklist-list" className={styles.card}>
       <div className={styles.cardHd}>
@@ -91,30 +107,31 @@ function HseChecklistsListCard({ rows }: { rows: SafetyBundle["hseChecklistRows"
         <span className={styles.cardMetaSmall}>{sorted.length} rows · newest first · includes Colab-imported checklists</span>
       </div>
       <div className={styles.cardBd}>
-        {sorted.length === 0 ? (
-          <div className={styles.empty}>No HSE checklists submitted yet.</div>
-        ) : (
-          <div className={styles.listTblWrap}>
-            <table className={styles.listTbl}>
-              <thead>
-                <tr>
-                  <th>Date</th><th>Title</th><th>Where</th><th>Contractor</th><th>Filled by</th><th>Status</th>
+        <div className={styles.listTblWrap}>
+          <table className={styles.listTbl}>
+            <thead>
+              <tr>
+                <th>Date</th><th>Title</th>{hasWhere && <th>Where</th>}<th>Contractor</th><th>Filled by</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtShortDate(r.createdAt)}</td>
+                  <td className={styles.listDesc}>{r.title}</td>
+                  {hasWhere && <td>{r.wbsName ?? "-"}</td>}
+                  <td>{r.contractorName ?? "Not tagged"}</td>
+                  <td>{r.filledByName}</td>
+                  <td>{r.status}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {sorted.map((r) => (
-                  <tr key={r.id}>
-                    <td>{fmtShortDate(r.createdAt)}</td>
-                    <td className={styles.listDesc}>{r.title}</td>
-                    <td>{r.wbsName ?? "-"}</td>
-                    <td>{r.contractorName ?? "Not tagged"}</td>
-                    <td>{r.filledByName}</td>
-                    <td>{r.status}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {sorted.length > 10 && (
+          <button type="button" className={styles.viewMoreBtn} onClick={() => setShowAll((s) => !s)}>
+            {showAll ? "Show less" : `View all ${sorted.length} rows`}
+          </button>
         )}
       </div>
     </div>
@@ -122,12 +139,15 @@ function HseChecklistsListCard({ rows }: { rows: SafetyBundle["hseChecklistRows"
 }
 
 function PermitsListCard({ rows }: { rows: SafetyBundle["permitRows"] }) {
+  if (rows.length === 0) return null;
   const TYPE_LABELS: Record<string, string> = {
     HOT_WORK: "Hot Work",
     NIGHT_WORK: "Night Work",
     DESHUTTERING: "De-shuttering",
   };
   const sorted = [...rows].sort((a, b) => b.workDate.localeCompare(a.workDate));
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? sorted : sorted.slice(0, 10);
   return (
     <div id="permits-list" className={styles.card}>
       <div className={styles.cardHd}>
@@ -135,37 +155,38 @@ function PermitsListCard({ rows }: { rows: SafetyBundle["permitRows"] }) {
         <span className={styles.cardMetaSmall}>{sorted.length} rows · newest first · Hot Work, Night Work, De-shuttering</span>
       </div>
       <div className={styles.cardBd}>
-        {sorted.length === 0 ? (
-          <div className={styles.empty}>No safety permits raised yet.</div>
-        ) : (
-          <div className={styles.listTblWrap}>
-            <table className={styles.listTbl}>
-              <thead>
-                <tr>
-                  <th>Work date</th>
-                  <th>Type</th>
-                  <th>Title</th>
-                  <th>Raised by</th>
-                  <th>Approved by</th>
-                  <th>Closed by</th>
-                  <th>Status</th>
+        <div className={styles.listTblWrap}>
+          <table className={styles.listTbl}>
+            <thead>
+              <tr>
+                <th>Work date</th>
+                <th>Type</th>
+                <th>Title</th>
+                <th>Raised by</th>
+                <th>Approved by</th>
+                <th>Closed by</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtShortDate(r.workDate)}</td>
+                  <td>{TYPE_LABELS[r.type] ?? r.type}</td>
+                  <td className={styles.listDesc}>{r.title}</td>
+                  <td>{r.requesterName ?? "-"}</td>
+                  <td>{r.approverName ?? (r.status === "PENDING" ? "(pending)" : "-")}</td>
+                  <td>{r.closerName ?? (r.status === "CLOSED" ? "-" : "")}</td>
+                  <td>{r.status}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {sorted.map((r) => (
-                  <tr key={r.id}>
-                    <td>{fmtShortDate(r.workDate)}</td>
-                    <td>{TYPE_LABELS[r.type] ?? r.type}</td>
-                    <td className={styles.listDesc}>{r.title}</td>
-                    <td>{r.requesterName ?? "-"}</td>
-                    <td>{r.approverName ?? (r.status === "PENDING" ? "(pending)" : "-")}</td>
-                    <td>{r.closerName ?? (r.status === "CLOSED" ? "-" : "")}</td>
-                    <td>{r.status}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {sorted.length > 10 && (
+          <button type="button" className={styles.viewMoreBtn} onClick={() => setShowAll((s) => !s)}>
+            {showAll ? "Show less" : `View all ${sorted.length} rows`}
+          </button>
         )}
       </div>
     </div>
@@ -173,7 +194,15 @@ function PermitsListCard({ rows }: { rows: SafetyBundle["permitRows"] }) {
 }
 
 function ObservationsListCard({ rows }: { rows: SafetyBundle["observationRows"] }) {
+  // Vandana 2026-11-05: if there are no safety observations at all, don't
+  // show the section. The "no observations in the last 30 days" message
+  // was misleading - we show all-time, so only hide when truly empty.
+  if (rows.length === 0) return null;
   const sorted = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const hasCategory = sorted.some((r) => !!r.category);
+  const hasSeverity = sorted.some((r) => !!r.severity);
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? sorted : sorted.slice(0, 10);
   return (
     <div id="observations-list" className={styles.card}>
       <div className={styles.cardHd}>
@@ -181,29 +210,34 @@ function ObservationsListCard({ rows }: { rows: SafetyBundle["observationRows"] 
         <span className={styles.cardMetaSmall}>{sorted.length} rows · newest first</span>
       </div>
       <div className={styles.cardBd}>
-        {sorted.length === 0 ? (
-          <div className={styles.empty}>No safety observations recorded.</div>
-        ) : (
-          <div className={styles.listTblWrap}>
-            <table className={styles.listTbl}>
-              <thead>
-                <tr>
-                  <th>Date</th><th>Category</th><th>Severity</th><th>Status</th><th>Contractor</th>
+        <div className={styles.listTblWrap}>
+          <table className={styles.listTbl}>
+            <thead>
+              <tr>
+                <th>Date</th>
+                {hasCategory && <th>Category</th>}
+                {hasSeverity && <th>Severity</th>}
+                <th>Status</th>
+                <th>Contractor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtShortDate(r.createdAt)}</td>
+                  {hasCategory && <td>{r.category ?? "-"}</td>}
+                  {hasSeverity && <td>{r.severity ?? "-"}</td>}
+                  <td>{r.status}</td>
+                  <td>{r.contractorName ?? "Not tagged"}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {sorted.map((r) => (
-                  <tr key={r.id}>
-                    <td>{fmtShortDate(r.createdAt)}</td>
-                    <td>{r.category ?? "-"}</td>
-                    <td>{r.severity ?? "-"}</td>
-                    <td>{r.status}</td>
-                    <td>{r.contractorName ?? "Not tagged"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {sorted.length > 10 && (
+          <button type="button" className={styles.viewMoreBtn} onClick={() => setShowAll((s) => !s)}>
+            {showAll ? "Show less" : `View all ${sorted.length} rows`}
+          </button>
         )}
       </div>
     </div>

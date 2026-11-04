@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import styles from "./qaqc-tab.module.css";
 import type { InspectionRow, IssueRow, QaqcBundle } from "@/lib/qaqcServer";
 
@@ -30,20 +31,32 @@ export interface QaqcTabViewProps {
 export default function QaqcTabView({ projectId, bundle }: QaqcTabViewProps) {
   const openIssues = bundle.issues.obs.new + bundle.issues.obs.inReview;
   const openNcrs = bundle.issues.ncs.new + bundle.issues.ncs.inReview;
+  // Hide the hero pass-rate when no inspections were actually submitted -
+  // a "100% pass rate · 0 inspections" tile reads as a trivial boast.
+  // (Vandana 2026-11-05 cleanup.)
+  const showHeroPassRate = bundle.inspectionRows.length > 0;
+  // Hide Contractor Performance Master when every contractor row carries
+  // zero WIR + zero issue activity - "no data" from every row is noise.
+  const anyContractorData = bundle.contractors.some(
+    (c) =>
+      (c.wir.new + c.wir.inReview + c.wir.closed) > 0 ||
+      (c.issues.new + c.issues.inReview + c.issues.closed) > 0,
+  );
   return (
     <div className={styles.wrap}>
-      <QaqcHero
-        passRate={bundle.wir.successRate}
-        totalInspections={bundle.inspectionRows.length}
-        passed={bundle.wir.passed}
-        inReview={bundle.wir.inReview}
-        rejected={bundle.wir.rejected}
-        openIssues={openIssues}
-        openNcrs={openNcrs}
-        avgCloseTatDays={bundle.issues.submissionTATDays}
-      />
+      {showHeroPassRate && (
+        <QaqcHero
+          passRate={bundle.wir.successRate}
+          totalInspections={bundle.inspectionRows.length}
+          passed={bundle.wir.passed}
+          inReview={bundle.wir.inReview}
+          rejected={bundle.wir.rejected}
+          openIssues={openIssues}
+          openNcrs={openNcrs}
+        />
+      )}
       <ObservationsBreakdownCard rows={bundle.issueRows} />
-      <ContractorPerformanceCard rows={bundle.contractors} />
+      {anyContractorData && <ContractorPerformanceCard rows={bundle.contractors} />}
       <RecentPhotoFeedCard photos={bundle.recentPhotos} />
       <IssuesListCard rows={bundle.issueRows} />
       <InspectionsListCard rows={bundle.inspectionRows} />
@@ -65,7 +78,6 @@ function QaqcHero({
   rejected,
   openIssues,
   openNcrs,
-  avgCloseTatDays,
 }: {
   passRate: number | null;
   totalInspections: number;
@@ -74,7 +86,6 @@ function QaqcHero({
   rejected: number;
   openIssues: number;
   openNcrs: number;
-  avgCloseTatDays: number | null;
 }) {
   const passRateTone =
     passRate == null ? "" :
@@ -103,13 +114,6 @@ function QaqcHero({
           <div className={`${styles.heroSupportVal} ${openNcrs > 0 ? styles.heroBad : ""}`}>{openNcrs}</div>
           <div className={styles.heroSupportSub}>critical non-conformance</div>
         </a>
-        <div className={styles.heroSupport}>
-          <div className={styles.heroSupportLbl}>Avg close TAT</div>
-          <div className={styles.heroSupportVal}>
-            {avgCloseTatDays == null ? "-" : `${avgCloseTatDays}d`}
-          </div>
-          <div className={styles.heroSupportSub}>days from open to closed</div>
-        </div>
       </div>
     </div>
   );
@@ -264,29 +268,26 @@ function ContractorPerformanceCard({ rows }: { rows: QaqcBundle["contractors"] }
 // ---------------------------------------------------------------------------
 
 function RecentPhotoFeedCard({ photos }: { photos: QaqcBundle["recentPhotos"] }) {
+  if (photos.length === 0) return null; // Hide when nothing to show.
   return (
     <div className={styles.card}>
-      <div className={styles.cardHd}>Recent Inspection & Issue Photos</div>
+      <div className={styles.cardHd}>Inspection &amp; Issue Photos</div>
       <div className={styles.cardBd}>
-        {photos.length === 0 ? (
-          <div className={styles.empty}>No photos in the last 30 days.</div>
-        ) : (
-          <div className={styles.photoGrid}>
-            {photos.map((p) => (
-              <div key={p.url} className={styles.photoCell}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.url} alt="" className={styles.photoImg} />
-                <div className={`${styles.photoBadge} ${p.source === "issue" ? styles.photoBadgeIssue : styles.photoBadgeInspection}`}>
-                  {p.source === "issue" ? "Issue" : "Inspection"}
-                </div>
-                <div className={styles.photoCaption}>
-                  <div className={styles.photoLabel}>{p.parentLabel}</div>
-                  <div className={styles.photoMeta}>{p.loggedByName} · {fmtRelative(p.loggedAt)}</div>
-                </div>
+        <div className={styles.photoGrid}>
+          {photos.map((p) => (
+            <div key={p.url} className={styles.photoCell}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.url} alt="" className={styles.photoImg} />
+              <div className={`${styles.photoBadge} ${p.source === "issue" ? styles.photoBadgeIssue : styles.photoBadgeInspection}`}>
+                {p.source === "issue" ? "Issue" : "Inspection"}
               </div>
-            ))}
-          </div>
-        )}
+              <div className={styles.photoCaption}>
+                <div className={styles.photoLabel}>{p.parentLabel}</div>
+                <div className={styles.photoMeta}>{p.loggedByName} · {fmtRelative(p.loggedAt)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -297,6 +298,13 @@ function RecentPhotoFeedCard({ photos }: { photos: QaqcBundle["recentPhotos"] })
 // ---------------------------------------------------------------------------
 
 function IssuesListCard({ rows }: { rows: IssueRow[] }) {
+  if (rows.length === 0) return null; // Hide section when empty (Vandana 2026-11-05).
+  // Drop columns that are empty for every row so the table doesn't carry
+  // dead space. Where (wbsName), Category, Severity all behave this way on
+  // the current dataset.
+  const hasWhere = rows.some((r) => !!r.wbsName);
+  const hasCategory = rows.some((r) => !!r.category);
+  const hasSeverity = rows.some((r) => !!r.severity);
   return (
     <div id="issues-list" className={styles.card}>
       <div className={styles.cardHd}>
@@ -304,40 +312,36 @@ function IssuesListCard({ rows }: { rows: IssueRow[] }) {
         <span className={styles.cardMeta}>{rows.length} rows · newest first</span>
       </div>
       <div className={styles.cardBd}>
-        {rows.length === 0 ? (
-          <div className={styles.empty}>No issues raised on this project yet.</div>
-        ) : (
-          <div className={styles.listTblWrap}>
-            <table className={styles.listTbl}>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Category</th>
-                  <th>Severity</th>
-                  <th>Description</th>
-                  <th>Where</th>
-                  <th>Contractor</th>
-                  <th>Raised by</th>
-                  <th>Status</th>
+        <div className={styles.listTblWrap}>
+          <table className={styles.listTbl}>
+            <thead>
+              <tr>
+                <th>Date</th>
+                {hasCategory && <th>Category</th>}
+                {hasSeverity && <th>Severity</th>}
+                <th>Description</th>
+                {hasWhere && <th>Where</th>}
+                <th>Contractor</th>
+                <th>Raised by</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtShortDate(r.createdAt)}</td>
+                  {hasCategory && <td>{r.category ?? "-"}</td>}
+                  {hasSeverity && <td>{r.severity ?? "-"}</td>}
+                  <td className={styles.listDesc}>{r.description}</td>
+                  {hasWhere && <td>{r.wbsName ?? "-"}</td>}
+                  <td>{r.contractorName ?? "Not tagged"}</td>
+                  <td>{r.createdByName}</td>
+                  <td>{r.status}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>{fmtShortDate(r.createdAt)}</td>
-                    <td>{r.category ?? "-"}</td>
-                    <td>{r.severity ?? "-"}</td>
-                    <td className={styles.listDesc}>{r.description}</td>
-                    <td>{r.wbsName ?? "-"}</td>
-                    <td>{r.contractorName ?? "Not tagged"}</td>
-                    <td>{r.createdByName}</td>
-                    <td>{r.status}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -348,9 +352,11 @@ function IssuesListCard({ rows }: { rows: IssueRow[] }) {
 // ---------------------------------------------------------------------------
 
 function InspectionsListCard({ rows }: { rows: InspectionRow[] }) {
-  // rows arrive newest-first from the server; reassert here so a UI
-  // sort change doesn't silently reorder the management view.
+  if (rows.length === 0) return null; // Hide section when empty.
   const sorted = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const hasWhere = sorted.some((r) => !!r.wbsName);
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? sorted : sorted.slice(0, 10);
   return (
     <div id="inspections-list" className={styles.card}>
       <div className={styles.cardHd}>
@@ -358,35 +364,40 @@ function InspectionsListCard({ rows }: { rows: InspectionRow[] }) {
         <span className={styles.cardMeta}>{sorted.length} rows · newest first</span>
       </div>
       <div className={styles.cardBd}>
-        {sorted.length === 0 ? (
-          <div className={styles.empty}>No QA/QC inspections submitted on this project yet.</div>
-        ) : (
-          <div className={styles.listTblWrap}>
-            <table className={styles.listTbl}>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Title</th>
-                  <th>Where</th>
-                  <th>Contractor</th>
-                  <th>Filled by</th>
-                  <th>Status</th>
+        <div className={styles.listTblWrap}>
+          <table className={styles.listTbl}>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Title</th>
+                {hasWhere && <th>Where</th>}
+                <th>Contractor</th>
+                <th>Filled by</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtShortDate(r.createdAt)}</td>
+                  <td className={styles.listDesc}>{r.title}</td>
+                  {hasWhere && <td>{r.wbsName ?? "-"}</td>}
+                  <td>{r.contractorName ?? "Not tagged"}</td>
+                  <td>{r.filledByName}</td>
+                  <td>{r.status}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {sorted.map((r) => (
-                  <tr key={r.id}>
-                    <td>{fmtShortDate(r.createdAt)}</td>
-                    <td className={styles.listDesc}>{r.title}</td>
-                    <td>{r.wbsName ?? "-"}</td>
-                    <td>{r.contractorName ?? "Not tagged"}</td>
-                    <td>{r.filledByName}</td>
-                    <td>{r.status}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {sorted.length > 10 && (
+          <button
+            type="button"
+            className={styles.viewMoreBtn}
+            onClick={() => setShowAll((s) => !s)}
+          >
+            {showAll ? "Show less" : `View all ${sorted.length} rows`}
+          </button>
         )}
       </div>
     </div>

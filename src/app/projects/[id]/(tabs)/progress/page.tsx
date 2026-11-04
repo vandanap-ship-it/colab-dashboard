@@ -62,6 +62,8 @@ export default async function ProgressTabPage({
       meanDaysAhead: 0,
       netDaysVariance: 0,
       evaluatedCount: 0,
+      totalMilestonesWhole: 0,
+      closedMilestonesWhole: 0,
     })),
     getSectionProgress(projectId).catch(() => []),
     getVillaProgressRows(projectId).catch(() => []),

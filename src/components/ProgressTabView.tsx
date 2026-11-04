@@ -54,9 +54,12 @@ export default function ProgressTabView({
 // ---------------------------------------------------------------------------
 
 function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
-  const closedPct = stats.dueByToday === 0
+  // Completion rate = % of the WHOLE PROJECT done, not just "of what was
+  // planned by today". Vandana 2026-11-05: management asks "how far
+  // along are we overall?", not "how much of today's quota did we hit?".
+  const wholeClosedPct = stats.totalMilestonesWhole === 0
     ? 0
-    : Math.round((stats.closedByToday / stats.dueByToday) * 100);
+    : Math.round((stats.closedMilestonesWhole / stats.totalMilestonesWhole) * 100);
   const behindCount = stats.openPastDue + Math.max(0, stats.closedByToday - stats.aheadCount);
   // Visual tone on the net number: bad if net-behind, good if net-ahead.
   const net = stats.netDaysVariance;
@@ -99,10 +102,10 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
           </div>
         </div>
         <div className={styles.heroSupport}>
-          <div className={styles.heroSupportLbl}>Completion rate</div>
-          <div className={styles.heroSupportVal}>{closedPct}%</div>
+          <div className={styles.heroSupportLbl}>Project completion</div>
+          <div className={styles.heroSupportVal}>{wholeClosedPct}%</div>
           <div className={styles.heroSupportSub}>
-            {stats.closedByToday} of {stats.dueByToday} due by today
+            {stats.closedMilestonesWhole} of {stats.totalMilestonesWhole} milestones done across the whole project
           </div>
         </div>
       </div>

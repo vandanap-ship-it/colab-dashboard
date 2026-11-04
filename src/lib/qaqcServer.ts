@@ -402,11 +402,12 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
   })();
 
   // ------------- §9 Recent Photo Feed -------------
+  // Vandana 2026-11-05: drop the 30-day window - show whatever photos
+  // exist, newest first. An empty "no photos in the last 30 days" message
+  // when there ARE older photos is misleading.
   const recentPhotos: RecentPhoto[] = (() => {
     const photoRows: RecentPhoto[] = [];
-    // Inspection photos (last 30 days)
     for (const i of inspections) {
-      if (i.createdAt < monthAgo) continue;
       for (const p of i.photos) {
         photoRows.push({
           url: p.url,
@@ -419,9 +420,7 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
         });
       }
     }
-    // Issue photos (last 30 days)
     for (const it of issues) {
-      if (it.createdAt < monthAgo) continue;
       for (const p of it.photos) {
         const head = it.description.length > 60 ? it.description.slice(0, 60) + "…" : it.description;
         photoRows.push({

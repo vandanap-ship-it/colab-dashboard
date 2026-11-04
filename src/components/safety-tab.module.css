@@ -462,3 +462,17 @@
   white-space: normal;
   overflow-wrap: break-word;
 }
+.viewMoreBtn {
+  margin-top: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--sf-rule-soft);
+  border: 1px solid var(--sf-rule);
+  border-radius: 6px;
+  color: var(--sf-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.viewMoreBtn:hover { background: var(--sf-rule); }

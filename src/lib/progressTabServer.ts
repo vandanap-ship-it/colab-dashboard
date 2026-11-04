@@ -36,13 +36,20 @@ export interface ProgressHeroStats {
   netDaysVariance: number;
   /** Total milestones that fed the net calculation (behind + ahead counts). */
   evaluatedCount: number;
+  /** Total milestones across the whole project (every in-scope villa ×
+   *  every section). Vandana 2026-11-05: Completion rate should express
+   *  the whole-project share, not just "of what was planned today." */
+  totalMilestonesWhole: number;
+  /** Milestones closed anywhere in the project (actualFinish set),
+   *  irrespective of whether baseline was reached. */
+  closedMilestonesWhole: number;
 }
 
 export async function getProgressHeroStats(
   projectId: string,
   asOf: Date = new Date(),
 ): Promise<ProgressHeroStats> {
-  const [dueByToday, closedByToday, overdue, closedRows] = await Promise.all([
+  const [dueByToday, closedByToday, overdue, closedRows, totalMilestonesWhole, closedMilestonesWhole] = await Promise.all([
     prisma.villaMilestone.count({
       where: { villa: { projectId, inScope: true }, baselineFinish: { lte: asOf } },
     }),
@@ -70,6 +77,11 @@ export async function getProgressHeroStats(
       },
       select: { baselineFinish: true, actualFinish: true },
     }),
+    // Whole-project denominators (every milestone across every in-scope
+    // villa + every section) so the hero's completion rate is a true
+    // "% of project done to date", not just "of what was planned today".
+    prisma.villaMilestone.count({ where: { villa: { projectId, inScope: true } } }),
+    prisma.villaMilestone.count({ where: { villa: { projectId, inScope: true }, actualFinish: { not: null } } }),
   ]);
 
   // Behind side: open past-due milestones. Each contributes (today - baseline).
@@ -122,6 +134,8 @@ export async function getProgressHeroStats(
     meanDaysAhead,
     netDaysVariance,
     evaluatedCount,
+    totalMilestonesWhole,
+    closedMilestonesWhole,
   };
 }
 
