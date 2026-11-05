@@ -172,14 +172,14 @@ export default function ExecutiveOverview({
           </div>
           <div
             className={`${styles.kpiSmall} ${h.criticalBlocks > 0 ? styles.bad : styles.neutral}`}
-            title="A block is Critical when its current in-progress stage is more than 15 days past baseline. Zero means no active block has slipped past that threshold today."
+            title="A block is Critical when it has at least one milestone slipped by more than 15 days, counting both open past-due and closed-late milestones."
           >
             <div className={styles.kpiLbl}>Critical Blocks</div>
             <div className={`${styles.kpiSmallVal} ${h.criticalBlocks > 0 ? styles.bad : styles.neutral}`}>
               {h.criticalBlocks}
               <span className={styles.unit}>/ {activeBlocks.length}</span>
             </div>
-            <div className={styles.kpiSub}>Blocks more than 15 days behind on current stage</div>
+            <div className={styles.kpiSub}>Blocks with any milestone more than 15 days late</div>
           </div>
         </div>
 

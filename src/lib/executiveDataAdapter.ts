@@ -104,6 +104,13 @@ export interface ExecutiveExtras {
     actualFinish: string;
     daysAhead: number;
   }>;
+  /** Count of blocks that have at least one milestone with slip > 15 days,
+   *  counting BOTH open-past-due AND closed-late milestones. The headline-
+   *  friendly "Critical Blocks" number. The old rule only looked at the
+   *  currently-active in-flight milestone, which read 0 when the delay
+   *  lived in already-closed milestones that had rolled over. Vandana
+   *  2026-11-05 management review. */
+  criticalBlocksTotal: number;
 }
 
 export async function getExecutiveExtras(projectId: string): Promise<ExecutiveExtras> {
@@ -263,6 +270,24 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     .sort((a, b) => b.daysAhead - a.daysAhead)
     .slice(0, 50);
 
+  // Critical Blocks (2026-11-05): distinct blocks that carry at least one
+  // milestone slipped > 15 days, counting BOTH open past-due AND closed-late
+  // milestones. The old rule only looked at the villa's currently-active
+  // in-flight milestone which read 0 whenever the slippage had already
+  // rolled over into a closed milestone.
+  const criticalBlockCodes = new Set<string>();
+  for (const m of overdueMilestones) {
+    if (!m.baselineFinish || !m.villa?.block?.code) continue;
+    const daysBehind = Math.round((now.getTime() - m.baselineFinish.getTime()) / 86_400_000);
+    if (daysBehind > 15) criticalBlockCodes.add(m.villa.block.code);
+  }
+  for (const m of aheadOfPlan) {
+    if (!m.baselineFinish || !m.actualFinish || !m.villa?.block?.code) continue;
+    const diffDays = Math.round((m.actualFinish.getTime() - m.baselineFinish.getTime()) / 86_400_000);
+    if (diffDays > 15) criticalBlockCodes.add(m.villa.block.code);
+  }
+  const criticalBlocksTotal = criticalBlockCodes.size;
+
   return {
     hindranceCount,
     plannedPct: stats.plannedPercent,
@@ -281,6 +306,7 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     behindCount,
     overdueList,
     aheadList,
+    criticalBlocksTotal,
   };
 }
 
@@ -485,7 +511,10 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
     totalDelayDays,
     reraDelayDays: computeReraDelay(project.reraEndDate, rollup.projectedEnd),
     hindrances: extras?.hindranceCount ?? 0,
-    criticalBlocks: rollup.criticalBlocks,
+    // Prefer the slip-inclusive count from extras (counts closed-late milestones
+    // too). Falls back to rollup.criticalBlocks when the caller didn't pass
+    // extras - that path only looks at currently-in-flight slip.
+    criticalBlocks: extras?.criticalBlocksTotal ?? rollup.criticalBlocks,
     probability: probabilityBand(project.reraEndDate, rollup.projectedEnd),
     // plannedPct/achievedPct come from projectStats when the caller passes
     // extras — that's the same math the Snapshot page's gauge uses, so the
