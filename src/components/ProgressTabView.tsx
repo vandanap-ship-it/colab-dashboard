@@ -62,43 +62,59 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
     : Math.round((stats.closedMilestonesWhole / stats.totalMilestonesWhole) * 100);
   const behindCount = stats.openPastDue + Math.max(0, stats.closedByToday - stats.aheadCount);
 
-  // Headline switched (Vandana 2026-11-05, option C): the worst villa's
-  // slip anchors the honest "at today's pace" handover date. Historical
-  // slippage doesn't average out - projects don't catch up by themselves
-  // and management wants the projected delivery date, not an abstract
-  // mean. The old net-variance number lives on as the sub-line for
-  // anyone drilling in.
+  // Vandana 2026-11-05, option C + project-level request: show BOTH
+  // project handover (critical-path finisher of the whole plan) and
+  // worst villa (risk signal). Project delay answers "when do we hand
+  // over?"; worst villa flags where the pain is concentrated even when
+  // the plan still absorbs it inside the handover window.
+  const projectSlip = stats.projectSlipDays;
+  const projectTone = projectSlip > 60 ? styles.phBad : projectSlip > 15 ? styles.phWarn : styles.phGood;
+  const projectBaselineDate = stats.projectBaselineHandover
+    ? formatShortDate(stats.projectBaselineHandover) : "-";
+  const projectProjectedDate = stats.projectProjectedHandover
+    ? formatShortDate(stats.projectProjectedHandover) : "-";
+
   const worstSlip = stats.worstVillaSlipDays;
-  const headlineTone = worstSlip > 60 ? styles.phBad : worstSlip > 15 ? styles.phWarn : styles.phGood;
-  const baselineDate = stats.worstVillaBaselineHandover
-    ? formatShortDate(stats.worstVillaBaselineHandover)
-    : "-";
-  const projectedDate = stats.worstVillaProjectedHandover
-    ? formatShortDate(stats.worstVillaProjectedHandover)
-    : "-";
-  const net = stats.netDaysVariance;
+  const worstTone = worstSlip > 60 ? styles.phBad : worstSlip > 15 ? styles.phWarn : styles.phGood;
+  const worstBaselineDate = stats.worstVillaBaselineHandover
+    ? formatShortDate(stats.worstVillaBaselineHandover) : "-";
+  const worstProjectedDate = stats.worstVillaProjectedHandover
+    ? formatShortDate(stats.worstVillaProjectedHandover) : "-";
 
   return (
     <section className={`${styles.card} ${styles.hero}`}>
       <div className={styles.cardHd}>
         <h3>At today&apos;s pace</h3>
         <span className={styles.meta}>
-          projected handover delay anchored by the worst villa&apos;s cumulative slip
+          project-level handover + the worst-slipping villa
         </span>
       </div>
       <div className={styles.heroMainRow}>
         <div className={styles.heroMain}>
-          <div className={styles.heroLbl}>Projected handover delay</div>
-          <div className={`${styles.heroMainVal} ${headlineTone}`}>
+          <div className={styles.heroLbl}>Project handover delay</div>
+          <div className={`${styles.heroMainVal} ${projectTone}`}>
+            +{projectSlip}
+            <span className={styles.heroMainUnit}>{projectSlip === 1 ? "day" : "days"}</span>
+          </div>
+          <div className={styles.heroSub}>
+            baseline {projectBaselineDate} → projected {projectProjectedDate}
+            {stats.projectDriverLabel ? ` · critical path: ${stats.projectDriverLabel}` : ""}
+          </div>
+        </div>
+        <div className={styles.heroMain}>
+          <div className={styles.heroLbl}>Worst villa</div>
+          <div className={`${styles.heroMainVal} ${worstTone}`}>
             +{worstSlip}
             <span className={styles.heroMainUnit}>{worstSlip === 1 ? "day" : "days"}</span>
           </div>
           <div className={styles.heroSub}>
             {stats.worstVillaLabel
-              ? `worst villa: ${stats.worstVillaLabel} · baseline ${baselineDate} → projected ${projectedDate}`
-              : `net variance across ${stats.evaluatedCount} milestones: ${net >= 0 ? "+" : "-"}${Math.abs(net)}d`}
+              ? `${stats.worstVillaLabel} · baseline ${worstBaselineDate} → projected ${worstProjectedDate}`
+              : "-"}
           </div>
         </div>
+      </div>
+      <div className={styles.heroMainRow}>
         <div className={styles.heroSupport}>
           <div className={styles.heroSupportLbl}>Behind</div>
           <div className={`${styles.heroSupportVal} ${styles.phBad}`}>+{stats.meanDaysBehind}d</div>

@@ -58,6 +58,20 @@ export interface ProgressHeroStats {
   /** Baseline handover shifted forward by worstVillaSlipDays - the honest
    *  "at today's pace" handover date. ISO string, or empty when unknown. */
   worstVillaProjectedHandover: string;
+  /** Project-level baseline handover = latest baselineFinish across every
+   *  villa's handover milestone. The planned project finish date. */
+  projectBaselineHandover: string;
+  /** Project-level projected handover = max across all villas of
+   *  (that villa's baseline handover + that villa's max observed slip).
+   *  Answers "when will the last villa actually finish?". ISO string. */
+  projectProjectedHandover: string;
+  /** Project-level delay in days: projectProjectedHandover -
+   *  projectBaselineHandover. 0 = the critical-path villa still finishes
+   *  on time even if others slipped inside the window. */
+  projectSlipDays: number;
+  /** Label of the villa currently setting the project handover date (the
+   *  latest projected finisher). Empty if no villa data. */
+  projectDriverLabel: string;
 }
 
 export async function getProgressHeroStats(
@@ -211,6 +225,37 @@ export async function getProgressHeroStats(
     ? new Date(worstBaseline.getTime() + worstVillaSlipDays * 86_400_000).toISOString()
     : "";
 
+  // Project-level handover (Vandana 2026-11-05): the project finishes
+  // when the LAST villa hands over. Compute each villa's projected
+  // handover = that villa's baseline handover + its max slip to date;
+  // project handover = max across all villas. A villa with huge slip
+  // doesn't push the project if its projected date is still inside the
+  // critical-path window.
+  let latestBaselineMs = 0;
+  let latestProjectedMs = 0;
+  let projectDriverId = "";
+  for (const h of handoverBaselines) {
+    const baseline = h._max.baselineFinish;
+    if (!baseline) continue;
+    const villaSlip = villaMaxSlip.get(h.villaId)?.slip ?? 0;
+    const baselineMs = baseline.getTime();
+    const projectedMs = baselineMs + villaSlip * 86_400_000;
+    if (baselineMs > latestBaselineMs) latestBaselineMs = baselineMs;
+    if (projectedMs > latestProjectedMs) {
+      latestProjectedMs = projectedMs;
+      projectDriverId = h.villaId;
+    }
+  }
+  const driverRow = projectDriverId ? villaMaxSlip.get(projectDriverId) : undefined;
+  const projectDriverLabel = driverRow
+    ? `${driverRow.blockCode ? `Block ${driverRow.blockCode} · ` : ""}${driverRow.label ?? (driverRow.number ? `Villa ${driverRow.number}` : "Villa")}`
+    : "";
+  const projectBaselineIso = latestBaselineMs > 0 ? new Date(latestBaselineMs).toISOString() : "";
+  const projectProjectedIso = latestProjectedMs > 0 ? new Date(latestProjectedMs).toISOString() : "";
+  const projectSlipDays = latestBaselineMs > 0 && latestProjectedMs > 0
+    ? Math.max(0, Math.round((latestProjectedMs - latestBaselineMs) / 86_400_000))
+    : 0;
+
   return {
     dueByToday,
     closedByToday,
@@ -227,6 +272,10 @@ export async function getProgressHeroStats(
     worstVillaLabel,
     worstVillaBaselineHandover: worstBaselineIso,
     worstVillaProjectedHandover: worstProjectedIso,
+    projectBaselineHandover: projectBaselineIso,
+    projectProjectedHandover: projectProjectedIso,
+    projectSlipDays,
+    projectDriverLabel,
   };
 }
 
