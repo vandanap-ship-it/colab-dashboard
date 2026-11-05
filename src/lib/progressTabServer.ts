@@ -43,13 +43,28 @@ export interface ProgressHeroStats {
   /** Milestones closed anywhere in the project (actualFinish set),
    *  irrespective of whether baseline was reached. */
   closedMilestonesWhole: number;
+  /** Worst villa's cumulative slip across any single milestone, in days.
+   *  Treated as a critical-path proxy: projects don't "catch up" from
+   *  historical slippage, so the villa with the largest slip anchors the
+   *  earliest honest projected handover date. 0 when no villa has slipped.
+   *  Vandana 2026-11-05 management review. */
+  worstVillaSlipDays: number;
+  /** Human label for the worst villa ("Block 10 · Villa 34"). Empty when
+   *  no villa has slipped. */
+  worstVillaLabel: string;
+  /** The worst villa's baseline handover date (last milestone by
+   *  orderIndex, baselineFinish). ISO string, or empty when unknown. */
+  worstVillaBaselineHandover: string;
+  /** Baseline handover shifted forward by worstVillaSlipDays - the honest
+   *  "at today's pace" handover date. ISO string, or empty when unknown. */
+  worstVillaProjectedHandover: string;
 }
 
 export async function getProgressHeroStats(
   projectId: string,
   asOf: Date = new Date(),
 ): Promise<ProgressHeroStats> {
-  const [dueByToday, closedByToday, overdue, closedRows, totalMilestonesWhole, closedMilestonesWhole] = await Promise.all([
+  const [dueByToday, closedByToday, overdue, closedRows, totalMilestonesWhole, closedMilestonesWhole, slipRows, handoverBaselines] = await Promise.all([
     prisma.villaMilestone.count({
       where: { villa: { projectId, inScope: true }, baselineFinish: { lte: asOf } },
     }),
@@ -82,6 +97,29 @@ export async function getProgressHeroStats(
     // "% of project done to date", not just "of what was planned today".
     prisma.villaMilestone.count({ where: { villa: { projectId, inScope: true } } }),
     prisma.villaMilestone.count({ where: { villa: { projectId, inScope: true }, actualFinish: { not: null } } }),
+    // Every milestone with its villa + baseline/actual - enables the
+    // per-villa worst-slip calc for the "At today's pace" projection.
+    prisma.villaMilestone.findMany({
+      where: { villa: { projectId, inScope: true } },
+      select: {
+        baselineFinish: true,
+        actualFinish: true,
+        villa: {
+          select: {
+            id: true, number: true, label: true,
+            block: { select: { code: true } },
+          },
+        },
+      },
+    }),
+    // Per-villa baseline handover = latest baselineFinish across that
+    // villa's milestones (section with max orderIndex is the handover,
+    // but using max(baselineFinish) is equivalent and simpler).
+    prisma.villaMilestone.groupBy({
+      by: ["villaId"],
+      where: { villa: { projectId, inScope: true } },
+      _max: { baselineFinish: true },
+    }),
   ]);
 
   // Behind side: open past-due milestones. Each contributes (today - baseline).
@@ -124,6 +162,55 @@ export async function getProgressHeroStats(
     ? 0
     : Math.round((totalBehindDays - aheadDaysSum) / evaluatedCount);
 
+  // Worst-villa projection (Vandana 2026-11-05 management review): for
+  // each villa, find the biggest cumulative slip across any single
+  // milestone - open past-due (today - baselineFinish) or closed-late
+  // (actualFinish - baselineFinish). The villa with the largest such
+  // number anchors the honest "at today's pace" handover: baseline
+  // handover date + max slip.
+  type VillaSlipRow = { number: number | null; label: string | null; blockCode: string | null; slip: number };
+  const villaMaxSlip = new Map<string, VillaSlipRow>();
+  for (const m of slipRows) {
+    if (!m.baselineFinish || !m.villa) continue;
+    let slip = 0;
+    if (!m.actualFinish) {
+      slip = Math.max(0, Math.round((asOf.getTime() - m.baselineFinish.getTime()) / 86_400_000));
+    } else {
+      slip = Math.max(0, Math.round((m.actualFinish.getTime() - m.baselineFinish.getTime()) / 86_400_000));
+    }
+    const current = villaMaxSlip.get(m.villa.id);
+    if (!current || slip > current.slip) {
+      villaMaxSlip.set(m.villa.id, {
+        number: m.villa.number ?? null,
+        label: m.villa.label ?? null,
+        blockCode: m.villa.block?.code ?? null,
+        slip,
+      });
+    }
+  }
+
+  let worstVillaId: string = "";
+  let worstVilla: VillaSlipRow | null = null;
+  for (const [id, row] of villaMaxSlip) {
+    if (!worstVilla || row.slip > worstVilla.slip) {
+      worstVilla = row;
+      worstVillaId = id;
+    }
+  }
+
+  const worstVillaSlipDays = worstVilla?.slip ?? 0;
+  const worstVillaLabel = worstVilla
+    ? `${worstVilla.blockCode ? `Block ${worstVilla.blockCode} · ` : ""}${worstVilla.label ?? (worstVilla.number ? `Villa ${worstVilla.number}` : "Villa")}`
+    : "";
+  const worstHandoverRow = worstVillaId
+    ? handoverBaselines.find((r) => r.villaId === worstVillaId)
+    : undefined;
+  const worstBaseline = worstHandoverRow?._max.baselineFinish ?? null;
+  const worstBaselineIso = worstBaseline ? worstBaseline.toISOString() : "";
+  const worstProjectedIso = worstBaseline
+    ? new Date(worstBaseline.getTime() + worstVillaSlipDays * 86_400_000).toISOString()
+    : "";
+
   return {
     dueByToday,
     closedByToday,
@@ -136,6 +223,10 @@ export async function getProgressHeroStats(
     evaluatedCount,
     totalMilestonesWhole,
     closedMilestonesWhole,
+    worstVillaSlipDays,
+    worstVillaLabel,
+    worstVillaBaselineHandover: worstBaselineIso,
+    worstVillaProjectedHandover: worstProjectedIso,
   };
 }
 

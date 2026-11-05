@@ -61,31 +61,43 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
     ? 0
     : Math.round((stats.closedMilestonesWhole / stats.totalMilestonesWhole) * 100);
   const behindCount = stats.openPastDue + Math.max(0, stats.closedByToday - stats.aheadCount);
-  // Visual tone on the net number: bad if net-behind, good if net-ahead.
+
+  // Headline switched (Vandana 2026-11-05, option C): the worst villa's
+  // slip anchors the honest "at today's pace" handover date. Historical
+  // slippage doesn't average out - projects don't catch up by themselves
+  // and management wants the projected delivery date, not an abstract
+  // mean. The old net-variance number lives on as the sub-line for
+  // anyone drilling in.
+  const worstSlip = stats.worstVillaSlipDays;
+  const headlineTone = worstSlip > 60 ? styles.phBad : worstSlip > 15 ? styles.phWarn : styles.phGood;
+  const baselineDate = stats.worstVillaBaselineHandover
+    ? formatShortDate(stats.worstVillaBaselineHandover)
+    : "-";
+  const projectedDate = stats.worstVillaProjectedHandover
+    ? formatShortDate(stats.worstVillaProjectedHandover)
+    : "-";
   const net = stats.netDaysVariance;
-  const netTone = net > 15 ? styles.phBad : net > 0 ? styles.phWarn : styles.phGood;
-  const netLabel = net === 0
-    ? "On schedule"
-    : net > 0
-      ? `${net} days behind`
-      : `${Math.abs(net)} days ahead`;
 
   return (
     <section className={`${styles.card} ${styles.hero}`}>
       <div className={styles.cardHd}>
-        <h3>Overall picture · today</h3>
+        <h3>At today&apos;s pace</h3>
         <span className={styles.meta}>
-          net schedule variance across every milestone that has already hit its baseline
+          projected handover delay anchored by the worst villa&apos;s cumulative slip
         </span>
       </div>
       <div className={styles.heroMainRow}>
         <div className={styles.heroMain}>
-          <div className={styles.heroLbl}>Net schedule variance</div>
-          <div className={`${styles.heroMainVal} ${netTone}`}>
-            {net > 0 ? "+" : net < 0 ? "-" : ""}{Math.abs(net)}
-            <span className={styles.heroMainUnit}>{Math.abs(net) === 1 ? "day" : "days"}</span>
+          <div className={styles.heroLbl}>Projected handover delay</div>
+          <div className={`${styles.heroMainVal} ${headlineTone}`}>
+            +{worstSlip}
+            <span className={styles.heroMainUnit}>{worstSlip === 1 ? "day" : "days"}</span>
           </div>
-          <div className={styles.heroSub}>{netLabel} · {stats.evaluatedCount} milestones evaluated</div>
+          <div className={styles.heroSub}>
+            {stats.worstVillaLabel
+              ? `worst villa: ${stats.worstVillaLabel} · baseline ${baselineDate} → projected ${projectedDate}`
+              : `net variance across ${stats.evaluatedCount} milestones: ${net >= 0 ? "+" : "-"}${Math.abs(net)}d`}
+          </div>
         </div>
         <div className={styles.heroSupport}>
           <div className={styles.heroSupportLbl}>Behind</div>
@@ -111,6 +123,12 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
       </div>
     </section>
   );
+}
+
+function formatShortDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 // ---------------------------------------------------------------------------
