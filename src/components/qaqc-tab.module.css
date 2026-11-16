@@ -289,6 +289,13 @@
 }
 .cpTbl tbody tr:last-child td { border-bottom: 0; }
 .cpName { text-align: left !important; font-weight: 700; color: var(--qa-ink); }
+.cpNoData {
+  text-align: left !important;
+  color: var(--qa-ink-3);
+  font-style: italic;
+  font-size: 12px;
+  background: var(--qa-rule-soft);
+}
 
 /* -------- Bottom row -------- */
 .bottomRow {
@@ -354,3 +361,212 @@
 .photoCaption { padding: 8px 10px; }
 .photoLabel { font-size: 11px; font-weight: 700; color: var(--qa-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .photoMeta { font-size: 10px; color: var(--qa-ink-3); margin-top: 2px; }
+
+/* --------------------------------------------------------------------
+ * Click-through list cards added 2026-11-04 (Vandana management review)
+ * ------------------------------------------------------------------ */
+.cardClickable {
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+.cardClickable:hover {
+  box-shadow: 0 4px 10px rgba(22, 32, 47, 0.08);
+  transform: translateY(-1px);
+}
+.cardMeta {
+  font-size: 11px;
+  color: var(--qa-ink-3);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 12px;
+}
+.listTblWrap { overflow-x: auto; }
+.listTbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  min-width: 920px;
+}
+.listTbl thead th {
+  text-align: left;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--qa-ink-3);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--qa-rule);
+  background: var(--qa-rule-soft);
+  white-space: nowrap;
+}
+.listTbl tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--qa-rule-soft);
+  vertical-align: top;
+}
+.listTbl tbody tr:last-child td { border-bottom: 0; }
+.listDesc {
+  max-width: 420px;
+  min-width: 200px;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.viewMoreBtn {
+  margin-top: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--qa-rule-soft);
+  border: 1px solid var(--qa-rule);
+  border-radius: 6px;
+  color: var(--qa-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.viewMoreBtn:hover { background: var(--qa-rule); }
+
+/* Pyramid-hero added 2026-11-04 iteration 4 - one headline metric + a row
+ * of smaller supporting tiles beneath. The tiles dissect the headline
+ * question "Is what we built good?" into its sub-answers. */
+.heroCard {
+  background: var(--qa-paper);
+  border: 1px solid var(--qa-border);
+  border-radius: 8px;
+  padding: 24px 24px 20px;
+  box-shadow: 0 1px 2px rgba(22, 32, 47, 0.04);
+}
+.heroMainRow {
+  display: grid;
+  grid-template-columns: 1.8fr repeat(3, 1fr);
+  gap: 24px;
+  align-items: stretch;
+}
+@media (max-width: 1000px) {
+  .heroMainRow { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px) {
+  .heroMainRow { grid-template-columns: 1fr; }
+}
+.heroMain {
+  padding-right: 20px;
+  border-right: 1px solid var(--qa-rule);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.heroLbl {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--qa-ink-3);
+  font-weight: 600;
+}
+.heroMainVal {
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  margin-top: 6px;
+  color: var(--qa-ink);
+}
+.heroSub {
+  font-size: 12.5px;
+  color: var(--qa-ink-2);
+  margin-top: 8px;
+}
+.heroSupport {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: inherit;
+  transition: background 150ms ease;
+}
+a.heroSupport:hover { background: var(--qa-rule-soft); }
+.heroSupportLbl {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--qa-ink-3);
+  font-weight: 600;
+}
+.heroSupportVal {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--qa-ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+}
+.heroSupportSub {
+  font-size: 11.5px;
+  color: var(--qa-ink-2);
+}
+.heroGood { color: var(--qa-good); }
+.heroWarn { color: var(--qa-warn); }
+.heroBad  { color: var(--qa-bad); }
+
+/* Observations status breakdown (Vandana 2026-11-04 design) */
+.obsTbl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.obsTblRow {
+  display: grid;
+  grid-template-columns: 110px 1fr 70px 70px;
+  gap: 16px;
+  align-items: center;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--qa-rule-soft);
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.obsTblRow:last-child { border-bottom: 0; }
+a.obsTblRow:hover { background: var(--qa-rule-soft); }
+.obsTblHd {
+  cursor: default;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--qa-rule);
+}
+.obsTblHd > div {
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--qa-ink-3);
+  font-weight: 600;
+}
+.obsLbl { font-size: 14px; font-weight: 500; color: var(--qa-ink); }
+.obsBarWrap {
+  height: 10px;
+  background: var(--qa-rule-soft);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.obsBar {
+  height: 100%;
+  border-radius: 5px;
+  background: var(--qa-ink-4);
+  transition: width 200ms ease;
+}
+.obsBarOpen   { background: linear-gradient(90deg, #D18A3A, var(--qa-bad)); }
+.obsBarReview { background: linear-gradient(90deg, #4C7FB0, #2F5D8A); }
+.obsBarClosed { background: linear-gradient(90deg, #369669, var(--qa-good)); }
+.obsShare, .obsCount {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--qa-ink-2);
+  font-size: 13px;
+}
+.obsCount { font-weight: 700; color: var(--qa-ink); }
+.obsShareHd, .obsCountHd { text-align: right; }

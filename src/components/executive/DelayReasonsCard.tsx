@@ -1,65 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import styles from "./executive.module.css";
-import type { ContractorDelayReasonGroup, DelayReasonCluster } from "@/lib/delayReasons";
+import type { DelayReasonCluster } from "@/lib/delayReasons";
 
 export interface DelayReasonsCardProps {
   overall: DelayReasonCluster[];
-  byContractor: ContractorDelayReasonGroup[];
 }
 
 /**
- * Dashboard "Delay Reason Clusters" card with a segmented control that
- * flips between:
- *   - Overall: all reasons across the project, sorted by count desc
- *   - By contractor: reasons grouped under each contractor so admin can see
- *     which contractor is driving which cause
+ * Dashboard "Delay Reason Clusters" card.
  *
- * The toggle is client-side only — both aggregations arrive from the server
- * component so there's no round-trip when flipping views.
+ * Overall-only view (the By-contractor toggle was removed on 2026-11-04 -
+ * Vandana management review; contractor attribution lives on the
+ * Contractor Scope Health table above).
+ *
+ * The "Other" reason code gets an expander because 111+ entries hiding
+ * under one label isn't useful - clicking it reveals the verbatim sub-
+ * phrases the site team wrote in reasonNote, so management can see what
+ * "Other" actually means on the ground.
  */
-export default function DelayReasonsCard({ overall, byContractor }: DelayReasonsCardProps) {
-  const [view, setView] = useState<"overall" | "byContractor">("overall");
-
+export default function DelayReasonsCard({ overall }: DelayReasonsCardProps) {
   const totalOpen = overall.reduce((n, r) => n + r.count, 0);
 
   return (
     <div className={styles.card}>
       <div className={styles.cardHd}>
         <h3>Delay Reason Clusters</h3>
-        <div className={styles.drToggle}>
-          <span className={styles.meta}>
-            open hindrances · site team tags at log-time
-          </span>
-          <div className={styles.drToggleGroup}>
-            <button
-              type="button"
-              className={`${styles.drToggleBtn} ${view === "overall" ? styles.drToggleOn : ""}`}
-              onClick={() => setView("overall")}
-            >
-              Overall
-            </button>
-            <button
-              type="button"
-              className={`${styles.drToggleBtn} ${view === "byContractor" ? styles.drToggleOn : ""}`}
-              onClick={() => setView("byContractor")}
-            >
-              By contractor
-            </button>
-          </div>
-        </div>
+        <span className={styles.meta}>
+          every delay tagged by the site team · Siddhi + Colab combined · {totalOpen.toLocaleString("en-IN")} total
+        </span>
       </div>
       <div className={styles.cardBd}>
         {totalOpen === 0 ? (
           <div className={styles.drEmpty}>
-            No open hindrances. Site team logs blockers with a reason tag —
-            once any are open, they cluster here by root cause.
+            No delay reasons logged yet. The site team tags each delayed
+            progress entry with a reason (change order, material, labour,
+            weather...); once any are logged, they cluster here by root cause.
           </div>
-        ) : view === "overall" ? (
-          <ReasonList clusters={overall} />
         ) : (
-          <ContractorGroupList groups={byContractor} />
+          <ReasonList clusters={overall} />
         )}
       </div>
     </div>
@@ -77,55 +57,51 @@ function ReasonList({ clusters }: { clusters: DelayReasonCluster[] }) {
   );
 }
 
-function ContractorGroupList({ groups }: { groups: ContractorDelayReasonGroup[] }) {
-  if (groups.length === 0) {
-    return (
-      <div className={styles.drEmpty}>
-        Open hindrances aren&apos;t linked to any contractor yet. Log with a WBS
-        activity attached so this breakdown lights up.
-      </div>
-    );
-  }
-  return (
-    <div className={styles.drContractorList}>
-      {groups.map((g) => {
-        const maxCount = Math.max(...g.reasons.map((r) => r.count), 1);
-        return (
-          <div key={g.contractorId ?? "__project__"} className={styles.drContractorGroup}>
-            <div className={styles.drContractorHd}>
-              <span className={styles.drContractorName}>{g.contractorName}</span>
-              <span className={styles.drContractorMeta}>
-                {g.totalCount} hindrance{g.totalCount === 1 ? "" : "s"}
-                {g.totalDaysImpact > 0 && (
-                  <> · <span className={styles.drImpact}>+{g.totalDaysImpact}d</span></>
-                )}
-              </span>
-            </div>
-            <div className={styles.drList}>
-              {g.reasons.map((c) => (
-                <ReasonRow key={c.code} c={c} maxCount={maxCount} />
-              ))}
-            </div>
-          </div>
-        );
-      })}
+function ReasonRow({ c, maxCount }: { c: DelayReasonCluster; maxCount: number }) {
+  // "Other" rows get an expander that breaks down the underlying
+  // reasonNote text into its most-repeated phrases. Everything else
+  // renders as the compact row with a representative sample note.
+  const isCatchAll = c.code === "OTHER";
+  const hasNotes = c.subPhrases && c.subPhrases.length > 0;
+  const expandable = isCatchAll && hasNotes;
+  const [open, setOpen] = useState(false);
+
+  // Merged-from codes appear as a small badge next to the label so viewers
+  // see which raw reason codes were folded into this group.
+  const mergedFrom = (c.mergedFrom ?? []).filter((raw) => raw !== c.code);
+  const mergedTooltip = mergedFrom.length > 0
+    ? `Includes: ${mergedFrom.join(", ")}`
+    : undefined;
+
+  const bar = (
+    <div className={styles.drBar}>
+      <div className={styles.drBarFill} style={{ width: `${(c.count / maxCount) * 100}%` }} />
     </div>
   );
-}
 
-function ReasonRow({ c, maxCount }: { c: DelayReasonCluster; maxCount: number }) {
   return (
     <div className={styles.drRow}>
       <div className={styles.drHd}>
-        <span className={styles.drLabel}>{c.label}</span>
+        <span className={styles.drLabel}>
+          {c.label}
+          {mergedFrom.length > 0 && (
+            <span className={styles.drMergeBadge} title={mergedTooltip}>
+              {mergedFrom.length === 1 ? "merged · 1 code" : `merged · ${mergedFrom.length + 1} codes`}
+            </span>
+          )}
+          {expandable && (
+            <button
+              type="button"
+              className={styles.drExpandBtn}
+              onClick={() => setOpen((o) => !o)}
+            >
+              {open ? "hide breakdown" : "see breakdown"}
+            </button>
+          )}
+        </span>
         <span className={styles.drCount}>{c.count}</span>
       </div>
-      <div className={styles.drBar}>
-        <div
-          className={styles.drBarFill}
-          style={{ width: `${(c.count / maxCount) * 100}%` }}
-        />
-      </div>
+      {bar}
       <div className={styles.drMeta}>
         {c.daysImpact > 0 && (
           <>
@@ -134,15 +110,40 @@ function ReasonRow({ c, maxCount }: { c: DelayReasonCluster; maxCount: number })
           </>
         )}
         <span className={styles.drSince}>
-          latest {c.latestAt ? fmtDate(new Date(c.latestAt)) : "—"}
+          latest {c.latestAt ? fmtDate(new Date(c.latestAt)) : "-"}
         </span>
-        {c.sampleNote && (
+        {c.sampleNote && !expandable && (
           <>
             <span className={styles.drSep}>·</span>
-            <span className={styles.drNote} title={c.sampleNote}>“{c.sampleNote}”</span>
+            <span className={styles.drNote} title={c.sampleNote}>&ldquo;{c.sampleNote}&rdquo;</span>
           </>
         )}
       </div>
+      {expandable && open && c.subPhrases && (
+        <SubPhraseList phrases={c.subPhrases} />
+      )}
+    </div>
+  );
+}
+
+function SubPhraseList({ phrases }: { phrases: NonNullable<DelayReasonCluster["subPhrases"]> }) {
+  const top = useMemo(
+    () => [...phrases].sort((a, b) => b.count - a.count),
+    [phrases],
+  );
+  const max = Math.max(...top.map((p) => p.count), 1);
+  return (
+    <div className={styles.drSubList}>
+      <div className={styles.drSubHd}>What the site team actually wrote</div>
+      {top.map((p) => (
+        <div key={p.phrase} className={styles.drSubRow}>
+          <div className={styles.drSubBar}>
+            <div className={styles.drSubFill} style={{ width: `${(p.count / max) * 100}%` }} />
+          </div>
+          <div className={styles.drSubLbl}>{p.phrase}</div>
+          <div className={styles.drSubCount}>{p.count}</div>
+        </div>
+      ))}
     </div>
   );
 }

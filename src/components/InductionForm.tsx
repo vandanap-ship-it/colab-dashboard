@@ -381,7 +381,7 @@ export default function InductionForm({
             className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
           />
           <p className="text-[11px] text-ink-3 mt-1">
-            Expires 12 months from this date. The system flips it automatically.
+            Expires 6 months from this date. The system flips it automatically.
           </p>
         </section>
 

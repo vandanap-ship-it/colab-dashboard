@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowUpDown, Trash2, Upload } from "lucide-react";
+import { ArrowUpDown } from "lucide-react";
 import styles from "./progress-tab.module.css";
-import { useToast } from "./Toast";
 import type {
   InteractiveDrawingData,
+  ProgressHeroStats,
   SectionProgressRow,
   VillaProgressRow,
   VillaSectionStatus,
@@ -15,7 +14,7 @@ import type {
 
 export interface ProgressTabViewProps {
   projectId: string;
-  canEditMasterPlan: boolean;
+  hero: ProgressHeroStats;
   sectionProgress: SectionProgressRow[];
   villaRows: VillaProgressRow[];
   drawingData: InteractiveDrawingData;
@@ -23,56 +22,197 @@ export interface ProgressTabViewProps {
 
 export default function ProgressTabView({
   projectId,
-  canEditMasterPlan,
+  hero,
   sectionProgress,
   villaRows,
   drawingData,
 }: ProgressTabViewProps) {
   return (
     <div className={styles.wrap}>
+      <ProgressHero stats={hero} />
       <SectionProgressCard rows={sectionProgress} />
+      {/* Section filter (scannable bucket view) before the detailed villa
+          table - top-down dissection per Vandana 2026-11-04. */}
+      <SectionFilterCard projectId={projectId} data={drawingData} />
       <VillaProgressCard projectId={projectId} rows={villaRows} />
-      <InteractiveDrawingCard
-        projectId={projectId}
-        canEdit={canEditMasterPlan}
-        data={drawingData}
-      />
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// §1 — Planned vs Actual per section
+// §0 - Progress hero (pyramid shape)
+//
+// One headline metric at the top: Net schedule variance in days. Positive
+// = net behind, negative = net ahead. The headline dissects into three
+// smaller supporting tiles so management sees how we got to the net
+// number: behind count × mean days, ahead count × mean days, completion
+// rate of what was planned to close by today.
+//
+// Vandana + boss, 2026-11-04 pyramid pass + net-delay request: a schedule
+// metric that only counts slippage reads unfair - work completed ahead of
+// plan should offset it. This metric nets both sides.
+// ---------------------------------------------------------------------------
+
+function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
+  // Project completion — two numbers, not one. Vandana 2026-11-16 pass:
+  // the previous "% of WHOLE PROJECT done" read 1% for Amanvana (18 of
+  // 1,827 milestones, denominator spans the full 38-month baseline). That
+  // read scary-low on first glance even though most in-flight work isn't
+  // CLOSED, just in progress. Hero now shows "done of what was due" as
+  // the headline (18 / 66 ≈ 27%) and keeps the whole-plan % in the subtitle
+  // so management sees both without ambiguity.
+  const onPlanClosedPct = stats.dueByToday === 0
+    ? 0
+    : Math.round((stats.closedByToday / stats.dueByToday) * 100);
+  const wholeClosedPct = stats.totalMilestonesWhole === 0
+    ? 0
+    : Math.round((stats.closedMilestonesWhole / stats.totalMilestonesWhole) * 100);
+  // "Behind" = open past-due milestones. The previous formula added
+  // (closedByToday - aheadCount) which treated every on-time closure as
+  // late. Vandana 2026-11-16 clarity pass: use the clean set that's also
+  // the denominator for the mean-days-behind number below, so the tile is
+  // internally consistent.
+  const behindCount = stats.openPastDue;
+
+  // Vandana 2026-11-05, option C + project-level request: show BOTH
+  // project handover (critical-path finisher of the whole plan) and
+  // worst villa (risk signal). Project delay answers "when do we hand
+  // over?"; worst villa flags where the pain is concentrated even when
+  // the plan still absorbs it inside the handover window.
+  const projectSlip = stats.projectSlipDays;
+  const projectTone = projectSlip > 60 ? styles.phBad : projectSlip > 15 ? styles.phWarn : styles.phGood;
+  const projectBaselineDate = stats.projectBaselineHandover
+    ? formatShortDate(stats.projectBaselineHandover) : "-";
+  const projectProjectedDate = stats.projectProjectedHandover
+    ? formatShortDate(stats.projectProjectedHandover) : "-";
+
+  const worstSlip = stats.worstVillaSlipDays;
+  const worstTone = worstSlip > 60 ? styles.phBad : worstSlip > 15 ? styles.phWarn : styles.phGood;
+  const worstBaselineDate = stats.worstVillaBaselineHandover
+    ? formatShortDate(stats.worstVillaBaselineHandover) : "-";
+  const worstProjectedDate = stats.worstVillaProjectedHandover
+    ? formatShortDate(stats.worstVillaProjectedHandover) : "-";
+
+  return (
+    <section className={`${styles.card} ${styles.hero}`}>
+      <div className={styles.cardHd}>
+        <h3>At today&apos;s pace</h3>
+        <span className={styles.meta}>
+          project-level handover + the worst-slipping villa
+        </span>
+      </div>
+      <div className={styles.heroMainRow}>
+        <div className={styles.heroMain}>
+          <div className={styles.heroLbl}>Project handover delay</div>
+          <div className={`${styles.heroMainVal} ${projectTone}`}>
+            +{projectSlip}
+            <span className={styles.heroMainUnit}>{projectSlip === 1 ? "day" : "days"}</span>
+          </div>
+          <div className={styles.heroSub}>
+            baseline {projectBaselineDate} → projected {projectProjectedDate}
+            {stats.projectDriverLabel ? ` · critical path: ${stats.projectDriverLabel}` : ""}
+          </div>
+          {projectSlip === 0 && stats.projectDriverLabel ? (
+            <div className={styles.heroFootnote}>
+              The critical-path villa hasn&apos;t started yet, so the plan still absorbs every other villa&apos;s slip inside its window. This number will move the moment {stats.projectDriverLabel} begins.
+            </div>
+          ) : null}
+        </div>
+        <div className={styles.heroMain}>
+          <div className={styles.heroLbl}>Worst villa</div>
+          <div className={`${styles.heroMainVal} ${worstTone}`}>
+            +{worstSlip}
+            <span className={styles.heroMainUnit}>{worstSlip === 1 ? "day" : "days"}</span>
+          </div>
+          <div className={styles.heroSub}>
+            {stats.worstVillaLabel
+              ? `${stats.worstVillaLabel} · baseline ${worstBaselineDate} → projected ${worstProjectedDate}`
+              : "-"}
+          </div>
+        </div>
+      </div>
+      <div className={styles.heroMainRow}>
+        <div className={styles.heroSupport}>
+          <div className={styles.heroSupportLbl}>Behind</div>
+          <div className={`${styles.heroSupportVal} ${styles.phBad}`}>+{stats.meanDaysBehind}d</div>
+          <div className={styles.heroSupportSub}>
+            mean across {behindCount || stats.openPastDue} overdue milestones
+          </div>
+        </div>
+        <div className={styles.heroSupport}>
+          <div className={styles.heroSupportLbl}>Ahead</div>
+          <div className={`${styles.heroSupportVal} ${styles.phGood}`}>-{stats.meanDaysAhead}d</div>
+          <div className={styles.heroSupportSub}>
+            mean across {stats.aheadCount} early-finish milestones
+          </div>
+        </div>
+        <div className={styles.heroSupport}>
+          <div className={styles.heroSupportLbl}>Done of what was due</div>
+          <div className={styles.heroSupportVal}>{onPlanClosedPct}%</div>
+          <div className={styles.heroSupportSub}>
+            {stats.closedByToday} of {stats.dueByToday} milestones due by today ·
+            {" "}{wholeClosedPct}% of whole plan ({stats.closedMilestonesWhole} / {stats.totalMilestonesWhole})
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function formatShortDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+// ---------------------------------------------------------------------------
+// §1 - Planned vs Actual per section
 // ---------------------------------------------------------------------------
 
 function SectionProgressCard({ rows }: { rows: SectionProgressRow[] }) {
   const maxPct = Math.max(100, ...rows.map((r) => Math.max(r.plannedPct, r.actualPct)));
+  const [expanded, setExpanded] = useState<string | null>(null);
   return (
     <section className={styles.card}>
       <div className={styles.cardHd}>
         <h3>Planned vs Actual · per milestone section</h3>
-        <span className={styles.meta}>% of villas that reached each section</span>
+        <span className={styles.meta}>% of villas that reached each section · click a row for the task breakdown</span>
       </div>
       <div className={styles.cardBd}>
         {rows.length === 0 ? (
           <div className={styles.empty}>No milestone sections defined yet.</div>
         ) : (
           <div className={styles.spList}>
-            {rows.map((r) => (
-              <div key={r.code} className={styles.spRow}>
-                <div className={styles.spLbl}>
-                  <div className={styles.spName}>{r.name}</div>
-                  <div className={styles.spMeta}>{r.totalVillas} villas total</div>
+            {rows.map((r) => {
+              const isOpen = expanded === r.code;
+              const toggle = () => setExpanded(isOpen ? null : r.code);
+              return (
+                <div key={r.code} className={styles.spRowWrap}>
+                  <button
+                    type="button"
+                    onClick={toggle}
+                    className={`${styles.spRow} ${styles.spRowBtn} ${isOpen ? styles.spRowOpen : ""}`}
+                    aria-expanded={isOpen}
+                  >
+                    <div className={styles.spLbl}>
+                      <div className={styles.spName}>
+                        <span className={styles.spChev}>{isOpen ? "▾" : "▸"}</span>
+                        {r.name}
+                      </div>
+                      <div className={styles.spMeta}>{r.totalVillas} villas total</div>
+                    </div>
+                    <div className={styles.spBars}>
+                      <BarRow name="Planned" pct={r.plannedPct} maxPct={maxPct} tone="planned" />
+                      <BarRow name="Actual" pct={r.actualPct} maxPct={maxPct} tone="actual" />
+                    </div>
+                    <div className={`${styles.spVariance} ${r.variancePct >= 0 ? styles.spVarGood : styles.spVarBad}`}>
+                      {r.variancePct >= 0 ? "+" : ""}{r.variancePct.toFixed(1)}%
+                    </div>
+                  </button>
+                  {isOpen && <SectionTaskBreakdown tasks={r.tasks} />}
                 </div>
-                <div className={styles.spBars}>
-                  <BarRow name="Planned" pct={r.plannedPct} maxPct={maxPct} tone="planned" />
-                  <BarRow name="Actual" pct={r.actualPct} maxPct={maxPct} tone="actual" />
-                </div>
-                <div className={`${styles.spVariance} ${r.variancePct >= 0 ? styles.spVarGood : styles.spVarBad}`}>
-                  {r.variancePct >= 0 ? "+" : ""}{r.variancePct.toFixed(1)}%
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -88,13 +228,95 @@ function BarRow({ name, pct, maxPct, tone }: { name: string; pct: number; maxPct
       <div className={styles.barTrack}>
         <div className={`${styles.barFill} ${tone === "planned" ? styles.barFillPlanned : styles.barFillActual}`} style={{ width: `${width}%` }} />
       </div>
-      <span className={styles.barVal}>{pct.toFixed(2)}%</span>
+      <span className={styles.barVal}>{Math.round(pct)}%</span>
+    </div>
+  );
+}
+
+function SectionTaskBreakdown({ tasks }: { tasks: SectionProgressRow["tasks"] }) {
+  return (
+    <div className={styles.spBreakdown}>
+      <TaskBucket
+        title="Delayed · still open past baseline"
+        tone="bad"
+        rows={tasks.delayedOpen}
+        valueCol="Days behind"
+        valueFmt={(d) => `+${d}d`}
+      />
+      <TaskBucket
+        title="Closed late · completed after baseline"
+        tone="warn"
+        rows={tasks.closedLate}
+        valueCol="Days late"
+        valueFmt={(d) => `+${d}d`}
+      />
+      <TaskBucket
+        title="Closed early · completed before baseline"
+        tone="good"
+        rows={tasks.closedEarly}
+        valueCol="Days early"
+        valueFmt={(d) => `${d}d`}
+      />
+      <TaskBucket
+        title="Closed off-plan · done before baseline was due"
+        tone="good"
+        rows={tasks.closedOffPlan}
+        valueCol="Days early"
+        valueFmt={(d) => `${d}d`}
+      />
+    </div>
+  );
+}
+
+function TaskBucket({
+  title,
+  tone,
+  rows,
+  valueCol,
+  valueFmt,
+}: {
+  title: string;
+  tone: "bad" | "warn" | "good";
+  rows: SectionProgressRow["tasks"]["delayedOpen"];
+  valueCol: string;
+  valueFmt: (d: number) => string;
+}) {
+  const toneCls = tone === "bad" ? styles.spBkBad : tone === "warn" ? styles.spBkWarn : styles.spBkGood;
+  return (
+    <div className={styles.spBucket}>
+      <div className={`${styles.spBucketHd} ${toneCls}`}>
+        <span>{title}</span>
+        <span className={styles.spBucketCount}>{rows.length}</span>
+      </div>
+      {rows.length === 0 ? (
+        <div className={styles.spBucketEmpty}>Nothing here.</div>
+      ) : (
+        <table className={styles.spTaskTbl}>
+          <thead>
+            <tr>
+              <th>Villa</th>
+              <th>Block</th>
+              <th className={styles.tRight}>{valueCol}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 20).map((r, i) => (
+              <tr key={`${r.villaNumber}-${i}`}>
+                <td className={styles.spTaskVilla}>{r.villaLabel}</td>
+                <td>Block {r.blockCode}</td>
+                <td className={styles.tRight}>{valueFmt(Math.abs(r.daysDiff))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {rows.length > 20 && <div className={styles.spBucketMore}>+ {rows.length - 20} more</div>}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// §2 — Villa-wise physical progress table
+// §2 - Villa-wise physical progress table
 // ---------------------------------------------------------------------------
 
 type VillaSortKey = "villaLabel" | "blockCode" | "currentSection" | "pctComplete" | "slipDays" | "status";
@@ -108,7 +330,7 @@ function VillaProgressCard({ projectId, rows }: { projectId: string; rows: Villa
     const dir = sortDir === "asc" ? 1 : -1;
     const getVal = (r: VillaProgressRow): string | number => {
       switch (sortKey) {
-        case "villaLabel":     return r.villaNumber; // sort by number, not label
+        case "villaLabel":     return r.villaNumber;
         case "blockCode":      return r.blockCode;
         case "currentSection": return r.currentSectionOrder ?? 999;
         case "pctComplete":    return r.pctComplete;
@@ -121,7 +343,6 @@ function VillaProgressCard({ projectId, rows }: { projectId: string; rows: Villa
       const bv = getVal(b);
       if (av < bv) return -1 * dir;
       if (av > bv) return 1 * dir;
-      // Secondary sort by villa number for stability.
       return a.villaNumber - b.villaNumber;
     });
   }, [rows, sortKey, sortDir]);
@@ -149,7 +370,7 @@ function VillaProgressCard({ projectId, rows }: { projectId: string; rows: Villa
                   <SortableTh label="Block"           active={sortKey === "blockCode"}      dir={sortDir} onClick={() => toggleSort("blockCode")} />
                   <SortableTh label="Current section" active={sortKey === "currentSection"} dir={sortDir} onClick={() => toggleSort("currentSection")} />
                   <SortableTh label="% complete"      active={sortKey === "pctComplete"}    dir={sortDir} onClick={() => toggleSort("pctComplete")} align="right" />
-                  <SortableTh label="Slip"            active={sortKey === "slipDays"}       dir={sortDir} onClick={() => toggleSort("slipDays")} align="right" />
+                  <SortableTh label="Slip"            active={sortKey === "slipDays"}       dir={sortDir} onClick={() => toggleSort("slipDays")} align="right" title="Slip = the villa's projected finish minus its baseline finish (based on MSP re-plan). The 'At today's pace' tile above uses a different formula — today's date minus baseline — so the hero and this column can show different numbers for the same villa." />
                   <SortableTh label="Status"          active={sortKey === "status"}         dir={sortDir} onClick={() => toggleSort("status")} align="right" />
                 </tr>
               </thead>
@@ -157,7 +378,7 @@ function VillaProgressCard({ projectId, rows }: { projectId: string; rows: Villa
                 {sorted.map((r) => (
                   <tr key={r.villaId}>
                     <td>
-                      <Link href={`/projects/${projectId}/overview?vn=${r.villaNumber}`} scroll={false} className={styles.vpVillaLink}>
+                      <Link href={`?vn=${r.villaNumber}`} scroll={false} className={styles.vpVillaLink}>
                         {r.villaLabel}
                         {r.villaType && <span className={styles.vpVillaType}>{r.villaType}</span>}
                       </Link>
@@ -212,15 +433,17 @@ function SortableTh({
   dir,
   onClick,
   align,
+  title,
 }: {
   label: string;
   active: boolean;
   dir: SortDir;
   onClick: () => void;
   align?: "right";
+  title?: string;
 }) {
   return (
-    <th className={align === "right" ? styles.thRight : ""}>
+    <th className={align === "right" ? styles.thRight : ""} title={title}>
       <button type="button" onClick={onClick} className={`${styles.thBtn} ${active ? styles.thBtnActive : ""}`}>
         {label}
         <ArrowUpDown size={11} className={active ? styles.thIconActive : styles.thIcon} />
@@ -231,21 +454,23 @@ function SortableTh({
 }
 
 // ---------------------------------------------------------------------------
-// §3 — Interactive Drawing
+// §3 - Filter by Section
+//
+// The old "Interactive Drawing" card bundled a master-plan image upload
+// with a section filter. The drawing itself was never clickable (per the
+// old hint), so on 2026-11-04 Vandana asked to drop the image column and
+// keep only the filter + per-status villa chips. That is this card.
 // ---------------------------------------------------------------------------
 
-function InteractiveDrawingCard({
+function SectionFilterCard({
   projectId,
-  canEdit,
   data,
 }: {
   projectId: string;
-  canEdit: boolean;
   data: InteractiveDrawingData;
 }) {
   const [selectedSectionCode, setSelectedSectionCode] = useState<string | null>(null);
 
-  // Summary counts for the selected section — or overall if none selected.
   const sectionIndex = useMemo(() => {
     if (!selectedSectionCode) return null;
     const i = data.sections.findIndex((s) => s.code === selectedSectionCode);
@@ -258,7 +483,7 @@ function InteractiveDrawingCard({
       completed: [], ongoing: [], delayed: [], "not-started": [],
     };
     if (sectionIndex == null) {
-      // Overall — worst status per villa across sections
+      // Overall: worst status per villa across every section.
       for (const v of data.villas) {
         let worst: VillaSectionStatus = "not-started";
         let worstSlip = 0;
@@ -284,96 +509,68 @@ function InteractiveDrawingCard({
   return (
     <section className={styles.card}>
       <div className={styles.cardHd}>
-        <h3>Interactive Drawing</h3>
+        <h3>Filter by Section</h3>
         <span className={styles.meta}>
           {selectedSectionCode
             ? `filtered by ${data.sections.find((s) => s.code === selectedSectionCode)?.name}`
-            : "overall villa status"}
+            : "overall villa status across every section"}
         </span>
       </div>
       <div className={styles.cardBd}>
-        <div className={styles.idGrid}>
-          {/* Left: the master plan or empty state */}
-          <div className={styles.idImageCol}>
-            {data.masterPlanUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={data.masterPlanUrl} alt="Site master plan" className={styles.idImage} />
-            ) : (
-              <MasterPlanEmpty projectId={projectId} canEdit={canEdit} />
-            )}
-            {data.masterPlanUrl && canEdit && (
-              <div className={styles.idImageActions}>
-                <MasterPlanReplace projectId={projectId} />
+        <div className={styles.idSummary}>
+          <SummaryTile label="Completed"   count={summary.counts.completed}      tone="good" />
+          <SummaryTile label="Ongoing"     count={summary.counts.ongoing}        tone="warn" />
+          <SummaryTile label="Delayed"     count={summary.counts.delayed}        tone="bad" />
+          <SummaryTile label="Not started" count={summary.counts["not-started"]} tone="muted" />
+        </div>
+
+        <div className={styles.idFilterHd}>Section</div>
+        <div className={styles.idChipRow}>
+          <button
+            type="button"
+            className={`${styles.idChip} ${selectedSectionCode === null ? styles.idChipOn : ""}`}
+            onClick={() => setSelectedSectionCode(null)}
+          >
+            Overall
+          </button>
+          {data.sections.map((s) => (
+            <button
+              key={s.code}
+              type="button"
+              className={`${styles.idChip} ${selectedSectionCode === s.code ? styles.idChipOn : ""}`}
+              onClick={() => setSelectedSectionCode(s.code)}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+
+        <div className={styles.idVillaLists}>
+          {(["delayed", "ongoing", "completed", "not-started"] as VillaSectionStatus[]).map((status) => {
+            const list = summary.villasByStatus[status];
+            if (list.length === 0) return null;
+            return (
+              <div key={status} className={styles.idVillaGroup}>
+                <div className={`${styles.idVillaGroupHd} ${styles[`idVg_${status}` as keyof typeof styles] ?? ""}`}>
+                  <span>{statusLabel(status)}</span>
+                  <span className={styles.idVillaGroupCount}>{list.length}</span>
+                </div>
+                <div className={styles.idVillaChips}>
+                  {list.sort((a, b) => b.slipDays - a.slipDays).map((v) => (
+                    <Link
+                      key={v.villaNumber}
+                      href={`?vn=${v.villaNumber}`}
+                      scroll={false}
+                      className={`${styles.idVillaChip} ${styles[`idVc_${status}` as keyof typeof styles] ?? ""}`}
+                    >
+                      V{v.villaNumber}
+                      {v.slipDays > 0 && <span className={styles.idVillaChipSlip}>+{v.slipDays}d</span>}
+                    </Link>
+                  ))}
+                </div>
               </div>
-            )}
-            {data.masterPlanUrl && (
-              <p className={styles.idHint}>
-                Clickable villa zones on the drawing itself require per-villa
-                coordinates — that&apos;s a follow-up. For now use the status
-                lists on the right to see which villas fall into each bucket.
-              </p>
-            )}
-          </div>
-
-          {/* Right: section filter + status summary */}
-          <div className={styles.idSideCol}>
-            <div className={styles.idSummary}>
-              <SummaryTile label="Completed" count={summary.counts.completed} tone="good" />
-              <SummaryTile label="Ongoing" count={summary.counts.ongoing} tone="warn" />
-              <SummaryTile label="Delayed" count={summary.counts.delayed} tone="bad" />
-              <SummaryTile label="Not started" count={summary.counts["not-started"]} tone="muted" />
-            </div>
-
-            <div className={styles.idFilterHd}>Filter by section</div>
-            <div className={styles.idChipRow}>
-              <button
-                type="button"
-                className={`${styles.idChip} ${selectedSectionCode === null ? styles.idChipOn : ""}`}
-                onClick={() => setSelectedSectionCode(null)}
-              >
-                Overall
-              </button>
-              {data.sections.map((s) => (
-                <button
-                  key={s.code}
-                  type="button"
-                  className={`${styles.idChip} ${selectedSectionCode === s.code ? styles.idChipOn : ""}`}
-                  onClick={() => setSelectedSectionCode(s.code)}
-                >
-                  {s.name}
-                </button>
-              ))}
-            </div>
-
-            {/* Per-status villa lists */}
-            <div className={styles.idVillaLists}>
-              {(["delayed", "ongoing", "completed", "not-started"] as VillaSectionStatus[]).map((status) => {
-                const list = summary.villasByStatus[status];
-                if (list.length === 0) return null;
-                return (
-                  <div key={status} className={styles.idVillaGroup}>
-                    <div className={`${styles.idVillaGroupHd} ${styles[`idVg_${status}` as keyof typeof styles] ?? ""}`}>
-                      <span>{statusLabel(status)}</span>
-                      <span className={styles.idVillaGroupCount}>{list.length}</span>
-                    </div>
-                    <div className={styles.idVillaChips}>
-                      {list.sort((a, b) => b.slipDays - a.slipDays).map((v) => (
-                        <Link
-                          key={v.villaNumber}
-                          href={`/projects/${projectId}/overview?vn=${v.villaNumber}`}
-                          scroll={false}
-                          className={`${styles.idVillaChip} ${styles[`idVc_${status}` as keyof typeof styles] ?? ""}`}
-                        >
-                          V{v.villaNumber}
-                          {v.slipDays > 0 && <span className={styles.idVillaChipSlip}>+{v.slipDays}d</span>}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -393,112 +590,6 @@ function SummaryTile({ label, count, tone }: { label: string; count: number; ton
     <div className={`${styles.summaryTile} ${cls}`}>
       <div className={styles.stCount}>{count}</div>
       <div className={styles.stLbl}>{label}</div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Master plan upload helpers
-// ---------------------------------------------------------------------------
-
-function MasterPlanEmpty({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
-  return (
-    <div className={styles.mpEmpty}>
-      <div className={styles.mpEmptyIcon}>🗺️</div>
-      <div className={styles.mpEmptyTitle}>No master plan uploaded yet</div>
-      <p className={styles.mpEmptyText}>
-        {canEdit
-          ? "Upload the site layout image (isometric aerial with villa plots labelled) so the interactive drawing renders."
-          : "Ask an admin, planner, or product-team member to upload the site master plan."}
-      </p>
-      {canEdit && <MasterPlanUpload projectId={projectId} label="Upload master plan" />}
-    </div>
-  );
-}
-
-function MasterPlanUpload({ projectId, label }: { projectId: string; label: string }) {
-  const router = useRouter();
-  const toast = useToast();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [pending, setPending] = useState(false);
-
-  const onFile = useCallback(async (file: File) => {
-    setPending(true);
-    try {
-      const fd = new FormData();
-      fd.set("file", file);
-      const res = await fetch(`/api/projects/${projectId}/master-plan`, { method: "POST", body: fd });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        toast.error(data?.error ?? `Upload failed (${res.status})`);
-      } else {
-        toast.success("Master plan uploaded.");
-        router.refresh();
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setPending(false);
-    }
-  }, [projectId, router, toast]);
-
-  return (
-    <div className={styles.mpUploadWrap}>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        className={styles.mpUploadInput}
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onFile(f);
-          e.target.value = ""; // allow reselecting same file
-        }}
-      />
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => inputRef.current?.click()}
-        className={styles.mpUploadBtn}
-      >
-        <Upload size={14} />
-        {pending ? "Uploading…" : label}
-      </button>
-    </div>
-  );
-}
-
-function MasterPlanReplace({ projectId }: { projectId: string }) {
-  const router = useRouter();
-  const toast = useToast();
-  const [pending, setPending] = useState(false);
-
-  const onRemove = useCallback(async () => {
-    if (!window.confirm("Remove the master plan? You can re-upload later.")) return;
-    setPending(true);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/master-plan`, { method: "DELETE" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        toast.error(data?.error ?? `Delete failed (${res.status})`);
-      } else {
-        toast.success("Master plan removed.");
-        router.refresh();
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Delete failed");
-    } finally {
-      setPending(false);
-    }
-  }, [projectId, router, toast]);
-
-  return (
-    <div className={styles.mpReplaceRow}>
-      <MasterPlanUpload projectId={projectId} label="Replace" />
-      <button type="button" onClick={onRemove} disabled={pending} className={styles.mpRemoveBtn}>
-        <Trash2 size={14} />
-        Remove
-      </button>
     </div>
   );
 }

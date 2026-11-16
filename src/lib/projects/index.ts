@@ -25,6 +25,11 @@ export interface ProjectOverride {
   abrahamScopeOverride: () => { villaCount: number; blockCount: number } | null;
   /** Secondary contractor's contracted villa + block count. */
   elegantScopeOverride: () => { villaCount: number; blockCount: number } | null;
+  /** Split a list of block-like objects into Abraham's and Elegant's sets
+   *  by block code. Used by the dashboard contractor rollup so each
+   *  contractor's active villas / completion % / avg delay comes from
+   *  the blocks they actually own, not a lump sum. */
+  splitBlocksByContractor: <B extends { code: string }>(blocks: readonly B[]) => { abraham: B[]; elegant: B[] };
 }
 
 const registry: ProjectOverride[] = [amanvanaProjectOverride];

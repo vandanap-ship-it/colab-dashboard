@@ -13,6 +13,8 @@
 //   §9 Recent photo feed       — my addition: last N inspection/issue photos
 
 import { prisma } from "@/lib/prisma";
+import { isQaqcTeamName, isTestUserName } from "@/lib/dashboardExclusions";
+import { AMANVANA_ABRAHAM_BLOCK_CODES, AMANVANA_CONTRACTORS } from "@/lib/projects/amanvana";
 
 // ---------------------------------------------------------------------------
 // Shape types
@@ -89,16 +91,51 @@ export interface RecentPhoto {
   contractorName: string | null;
 }
 
+export interface IssueRow {
+  id: string;
+  description: string;
+  status: string;
+  severity: string | null;
+  category: string | null;
+  createdAt: string;
+  createdByName: string;
+  wbsName: string | null;
+  villaLabel: string | null;
+  contractorName: string | null;
+}
+
+export interface InspectionRow {
+  id: string;
+  title: string;
+  status: string;
+  module: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+  filledByName: string;
+  wbsName: string | null;
+  villaLabel: string | null;
+  exactLocation: string | null;
+  contractorName: string | null;
+}
+
 export interface QaqcBundle {
   wir: InspectionCounts;
   issues: IssuesSummary;
-  material: InspectionCounts; // placeholder — always zeros until material inspections modeled
+  material: InspectionCounts; // placeholder - always zeros until material inspections modeled
   defectsByCategory: DefectCategoryRow[];
   latestDay: LatestDaySnapshot;
   last7Days: TrendBundle;
   contractors: ContractorRow[];
   tatTrend: TATPoint[]; // last 30 days
   recentPhotos: RecentPhoto[];
+  /** Flat list of every QA/QC Issue (OBS + NCS, open + closed) so the
+   *  Issues-&-Defects tile can click through to the actual rows below the
+   *  summary. Sorted newest first. */
+  issueRows: IssueRow[];
+  /** Flat list of every Inspection record on the project (regardless of
+   *  module - see the module-filter note in getQaqcBundle). Sorted newest
+   *  first. Powers the "all inspections" expander below the WIR tile. */
+  inspectionRows: InspectionRow[];
 }
 
 // ---------------------------------------------------------------------------
@@ -130,19 +167,39 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
   const weekAgo = new Date(todayStart.getTime() - 7 * 86400000);
   const monthAgo = new Date(todayStart.getTime() - 30 * 86400000);
 
-  const [inspections, issues, contractors] = await Promise.all([
+  // Vandana 2026-11-04 management-review pass (iteration 2):
+  //   The Colab import landed every inspection as module="SAFETY" even
+  //   though many are QA/QC checklists. Instead of counting every
+  //   inspection on QA/QC (which double-counted with EHS), we now use the
+  //   filler's identity to reclassify: inspections filled by Nagarjuna or
+  //   Thangamani (the QA/QC team on Amanvana per memory:
+  //   roles_by_module.md) count under QA/QC regardless of module tag.
+  //   module="QAQC" rows always count here too.
+  //   Rows filled by the test-user admin account (Vandana) are excluded
+  //   from both counts and the row list so management doesn't see
+  //   development-time noise.
+  const [inspectionsRaw, issues, contractors] = await Promise.all([
     prisma.inspection.findMany({
-      where: { projectId, deletedAt: null, module: "QAQC" },
+      where: { projectId, deletedAt: null },
       select: {
         id: true,
         title: true,
         status: true,
+        module: true,
         createdAt: true,
         reviewedAt: true,
-        wbsNode: { select: { contractorId: true } },
-        // Fallback contractor signal for inspections imported without a
-        // WBS attachment (all 111 Colab-imported inspections on Amanvana
-        // hit this path). Set User.contractorId in Admin > Users.
+        contractorId: true,
+        exactLocation: true,
+        wbsNode: {
+          select: {
+            contractorId: true, name: true,
+            villaMilestone: {
+              select: {
+                villa: { select: { number: true, label: true, block: { select: { code: true } } } },
+              },
+            },
+          },
+        },
         filledBy: { select: { name: true, contractorId: true } },
         photos: { select: { url: true }, take: 1 },
       },
@@ -157,17 +214,36 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
         category: true,
         createdAt: true,
         updatedAt: true,
-        wbsNode: { select: { contractorId: true } },
+        wbsNode: {
+          select: {
+            contractorId: true, name: true,
+            villaMilestone: {
+              select: {
+                villa: { select: { number: true, label: true, block: { select: { code: true } } } },
+              },
+            },
+          },
+        },
         createdBy: { select: { name: true, contractorId: true } },
         photos: { select: { url: true }, take: 1 },
       },
     }),
+    // Filter to visible-only contractors - the Contractor Performance table
+    // only needs to show Abraham + Elegant (the two execution contractors
+    // showInPickers). The hidden ones were showing as zero-row noise.
     prisma.contractor.findMany({
-      where: { projectId, active: true },
+      where: { projectId, active: true, showInPickers: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
   ]);
+
+  // Apply the dashboard exclusions: drop test-user rows entirely, then keep
+  // only inspections that are QA/QC in intent - either tagged QAQC or
+  // filled by the QA/QC team.
+  const inspections = inspectionsRaw
+    .filter((i) => !isTestUserName(i.filledBy?.name))
+    .filter((i) => i.module === "QAQC" || isQaqcTeamName(i.filledBy?.name));
 
   // ------------- §1 Work Inspection Request -------------
   const wir: InspectionCounts = (() => {
@@ -347,11 +423,12 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
   })();
 
   // ------------- §9 Recent Photo Feed -------------
+  // Vandana 2026-11-05: drop the 30-day window - show whatever photos
+  // exist, newest first. An empty "no photos in the last 30 days" message
+  // when there ARE older photos is misleading.
   const recentPhotos: RecentPhoto[] = (() => {
     const photoRows: RecentPhoto[] = [];
-    // Inspection photos (last 30 days)
     for (const i of inspections) {
-      if (i.createdAt < monthAgo) continue;
       for (const p of i.photos) {
         photoRows.push({
           url: p.url,
@@ -364,9 +441,7 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
         });
       }
     }
-    // Issue photos (last 30 days)
     for (const it of issues) {
-      if (it.createdAt < monthAgo) continue;
       for (const p of it.photos) {
         const head = it.description.length > 60 ? it.description.slice(0, 60) + "…" : it.description;
         photoRows.push({
@@ -388,6 +463,74 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
   // Suppress unused variable warning
   void weekAgo;
 
+  // Flat row lists for the click-through sections below the summary tiles.
+  const contractorNameById = new Map(contractors.map((c) => [c.id, c.name]));
+  const issueRows: IssueRow[] = issues
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .map((it) => {
+      let cid = it.wbsNode?.contractorId ?? null;
+      let inferred: string | null = null;
+      const villa = it.wbsNode?.villaMilestone?.villa ?? null;
+      if (!cid) {
+        const blockCode = villa?.block?.code;
+        if (blockCode) {
+          inferred = AMANVANA_ABRAHAM_BLOCK_CODES.has(blockCode)
+            ? AMANVANA_CONTRACTORS.abraham
+            : AMANVANA_CONTRACTORS.elegant;
+        } else {
+          cid = it.createdBy?.contractorId ?? null;
+        }
+      }
+      const villaLabel = villa
+        ? (villa.label ?? `Villa ${villa.number}`)
+        : null;
+      return {
+        id: it.id,
+        description: it.description,
+        status: it.status,
+        severity: it.severity ?? null,
+        category: it.category ?? null,
+        createdAt: it.createdAt.toISOString(),
+        createdByName: it.createdBy?.name ?? "Unknown",
+        wbsName: it.wbsNode?.name ?? null,
+        villaLabel,
+        contractorName: inferred ?? (cid ? contractorNameById.get(cid) ?? null : null),
+      };
+    });
+  const inspectionRows: InspectionRow[] = inspections
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .map((i) => {
+      let cid = i.contractorId ?? i.wbsNode?.contractorId ?? null;
+      let inferred: string | null = null;
+      const villa = i.wbsNode?.villaMilestone?.villa ?? null;
+      if (!cid) {
+        const blockCode = villa?.block?.code;
+        if (blockCode) {
+          inferred = AMANVANA_ABRAHAM_BLOCK_CODES.has(blockCode)
+            ? AMANVANA_CONTRACTORS.abraham
+            : AMANVANA_CONTRACTORS.elegant;
+        } else {
+          cid = i.filledBy?.contractorId ?? null;
+        }
+      }
+      const villaLabel = villa
+        ? (villa.label ?? `Villa ${villa.number}`)
+        : null;
+      return {
+        id: i.id,
+        title: i.title,
+        status: i.status,
+        module: i.module ?? null,
+        createdAt: i.createdAt.toISOString(),
+        reviewedAt: i.reviewedAt?.toISOString() ?? null,
+        filledByName: i.filledBy?.name ?? "Unknown",
+        wbsName: i.wbsNode?.name ?? null,
+        villaLabel,
+        exactLocation: i.exactLocation ?? null,
+        contractorName: inferred ?? (cid ? contractorNameById.get(cid) ?? null : null),
+      };
+    });
+
   return {
     wir,
     issues: issuesSummary,
@@ -398,5 +541,7 @@ export async function getQaqcBundle(projectId: string, today: Date = new Date())
     contractors: contractorsOut,
     tatTrend,
     recentPhotos,
+    issueRows,
+    inspectionRows,
   };
 }

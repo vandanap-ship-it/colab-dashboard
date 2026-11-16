@@ -41,25 +41,90 @@ export interface ExecutiveExtras {
   plannedPct: number;
   achievedPct: number;
   /** Sum of Villa.unitCount across every in-scope villa in the project.
-   *  Correct physical-villa count — a "Villa 10 & 11" row contributes 2, not 1.
+   *  Correct physical-villa count - a "Villa 10 & 11" row contributes 2, not 1.
    *  On Amanvana this reads 93 rather than the 90 that `Villa.count()` returns. */
   totalPhysicalVillas: number;
-  /** Number of Villa rows the DB actually holds — same shape as the sum,
+  /** Number of Villa rows the DB actually holds - same shape as the sum,
    *  but without unitCount expansion. Kept for callers that want the row
    *  count (e.g. the "Villa records" metric). */
   totalVillaRecords: number;
-  /** Earliest villa-milestone baselineStart across the whole project — the
+  /** Earliest villa-milestone baselineStart across the whole project - the
    *  actual first day of work on any villa. Used as the "Baseline Window"
    *  start so it spans BOTH contractors' schedules, not just Project.startDate. */
   scheduleStart: Date | null;
-  /** Latest villa-milestone baselineFinish across the whole project — the
+  /** Latest villa-milestone baselineFinish across the whole project - the
    *  actual last day of planned work. Paired with scheduleStart to form the
    *  Baseline Window. */
   scheduleEnd: Date | null;
+  /** The honest headline-delay number for the Total Delay KPI:
+   *  mean days overdue across milestones whose baseline has passed but which
+   *  are not yet closed. Beats `projectedEnd - declaredEnd` as a KPI because
+   *  projectedFinish is stale on most villas, so that math swings hundreds of
+   *  days in the wrong direction. This math reflects what the site team is
+   *  actually behind on today. 0 when nothing is overdue. */
+  meanOpenSlipDays: number;
+  /** Count of milestones whose baseline has passed. */
+  milestonesDueByToday: number;
+  /** Of those, how many are closed (actualFinish not null). */
+  milestonesClosedByToday: number;
+  /** Milestones that closed BEFORE their baseline date - work done ahead
+   *  of plan. The positive counterpart to the Total Delay number. */
+  milestonesAheadOfPlan: number;
+  /** Mean days-ahead across the ahead-of-plan set. 0 when none. */
+  meanAheadDays: number;
+  /** Net schedule variance in days: behind - ahead, averaged across all
+   *  milestones that have hit baseline or closed. Positive = net behind,
+   *  negative = net ahead. The new Total Delay KPI (iteration 4). */
+  netDaysVariance: number;
+  /** Total milestones feeding the net calc (behind + ahead). */
+  evaluatedCount: number;
+  /** Total behind-count feeding the net: open past-due + closed late. */
+  behindCount: number;
+  /** Rows for the "Where is the delay?" drill-down below the Total Delay
+   *  tile. Newest-slipped-first; capped at 50 entries so a single pass
+   *  gives management the shape without scrolling forever. */
+  overdueList: Array<{
+    villaNumber: number;
+    villaLabel: string;
+    blockCode: string;
+    sectionName: string;
+    activityName: string | null;
+    baselineFinish: string;
+    daysBehind: number;
+  }>;
+  /** Parallel list for milestones closed BEFORE their baseline date -
+   *  the good-news side of the net. Lets the Total Delay drill-down show
+   *  BOTH tracks (behind + ahead) in one place. Vandana 2026-11-04. */
+  aheadList: Array<{
+    villaNumber: number;
+    villaLabel: string;
+    blockCode: string;
+    sectionName: string;
+    baselineFinish: string;
+    actualFinish: string;
+    daysAhead: number;
+  }>;
+  /** Count of blocks that have at least one milestone with slip > 15 days,
+   *  counting BOTH open-past-due AND closed-late milestones. The headline-
+   *  friendly "Critical Blocks" number. The old rule only looked at the
+   *  currently-active in-flight milestone, which read 0 when the delay
+   *  lived in already-closed milestones that had rolled over. Vandana
+   *  2026-11-05 management review. */
+  criticalBlocksTotal: number;
+  /** Project-level projected handover using the SAME critical-path math
+   *  as the Progress tab (progressTabServer.getProgressHeroStats). For each
+   *  villa, projected = (that villa's latest baselineFinish) + (that villa's
+   *  max slip across all its milestones). Project handover = the max
+   *  projected date across all villas — because the project finishes when
+   *  the last villa hands over. Replaces baselineEnd + netDaysVariance,
+   *  which averaged slip across milestones and therefore disagreed with
+   *  the Progress tab's number (Vandana 2026-11-16 review-day unify). */
+  projectProjectedHandover: Date | null;
 }
 
 export async function getExecutiveExtras(projectId: string): Promise<ExecutiveExtras> {
-  const [hindranceCount, stats, sumUnits, rowCount, milestoneWindow] = await Promise.all([
+  const now = new Date();
+  const [hindranceCount, stats, sumUnits, rowCount, milestoneWindow, overdueMilestones, dueByToday, closedByToday, aheadOfPlan, slipRows, handoverBaselines] = await Promise.all([
     prisma.hindrance.count({ where: { projectId, status: "OPEN" } }),
     getProjectStats(projectId),
     prisma.villa.aggregate({
@@ -72,7 +137,206 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
       _min: { baselineStart: true },
       _max: { baselineFinish: true },
     }),
+    // Rows past their baseline that aren't closed yet - the mean of
+    // (today - baselineFinish) across these is the honest headline delay.
+    // Pulled WITH enough context to render the "Where is the delay?"
+    // drill-down list below the Total Delay tile.
+    prisma.villaMilestone.findMany({
+      where: {
+        villa: { projectId, inScope: true },
+        baselineFinish: { lte: now },
+        actualFinish: null,
+      },
+      select: {
+        baselineFinish: true,
+        section: { select: { name: true } },
+        villa: {
+          select: {
+            number: true, label: true,
+            block: { select: { code: true } },
+          },
+        },
+        // The first not-yet-closed activity under this milestone - gives the
+        // overdue-list a concrete line-item for each row ("Footing
+        // Reinforcement", "Plinth Beam Shuttering", ...).
+        wbsNodes: {
+          where: { actualFinish: null },
+          orderBy: { orderIndex: "asc" },
+          take: 1,
+          select: { name: true },
+        },
+      },
+    }),
+    prisma.villaMilestone.count({
+      where: { villa: { projectId, inScope: true }, baselineFinish: { lte: now } },
+    }),
+    prisma.villaMilestone.count({
+      where: {
+        villa: { projectId, inScope: true },
+        baselineFinish: { lte: now },
+        actualFinish: { not: null },
+      },
+    }),
+    // Milestones closed before their baseline - work completed ahead of
+    // plan. The positive counterpart to the Total Delay number so
+    // management sees both sides, not only slippage. Now carries villa +
+    // section context so the drill-down under Total Delay can show the
+    // ahead-of-plan list next to the overdue list.
+    prisma.villaMilestone.findMany({
+      where: {
+        villa: { projectId, inScope: true },
+        actualFinish: { not: null },
+      },
+      select: {
+        baselineFinish: true,
+        actualFinish: true,
+        section: { select: { name: true } },
+        villa: {
+          select: {
+            number: true, label: true,
+            block: { select: { code: true } },
+          },
+        },
+      },
+    }),
+    // Every in-scope milestone with villa + baseline + actual — feeds the
+    // villa-max-slip calc (critical-path projected handover). Same shape
+    // the Progress tab fetches; keeps the two calculations aligned.
+    prisma.villaMilestone.findMany({
+      where: { villa: { projectId, inScope: true } },
+      select: {
+        baselineFinish: true,
+        actualFinish: true,
+        villa: { select: { id: true } },
+      },
+    }),
+    prisma.villaMilestone.groupBy({
+      by: ["villaId"],
+      where: { villa: { projectId, inScope: true } },
+      _max: { baselineFinish: true },
+    }),
   ]);
+  // Behind side - two contributors:
+  //   1. Open past-due milestones: (today - baselineFinish) each.
+  //   2. Closed-but-late milestones: (actualFinish - baselineFinish) each.
+  // Both are legitimate slippage and both belong in the net calculation.
+  let behindDaysSum = 0;
+  for (const m of overdueMilestones) {
+    if (!m.baselineFinish) continue;
+    behindDaysSum += Math.max(0, Math.round((now.getTime() - m.baselineFinish.getTime()) / 86_400_000));
+  }
+  let closedLateCount = 0;
+  let closedLateDaysSum = 0;
+  let aheadCount = 0;
+  let aheadDaysSum = 0;
+  for (const m of aheadOfPlan) {
+    if (!m.baselineFinish || !m.actualFinish) continue;
+    const diffDays = Math.round((m.actualFinish.getTime() - m.baselineFinish.getTime()) / 86_400_000);
+    if (diffDays < 0) {
+      aheadCount++;
+      aheadDaysSum += -diffDays;
+    } else if (diffDays > 0) {
+      closedLateCount++;
+      closedLateDaysSum += diffDays;
+    }
+  }
+  const behindCount = overdueMilestones.length + closedLateCount;
+  const behindTotal = behindDaysSum + closedLateDaysSum;
+
+  // Legacy mean-behind on the open-past-due set only, kept for the old
+  // Total Delay fallback and the Progress-tab subtitles.
+  const meanOpenSlipDays = overdueMilestones.length === 0
+    ? 0
+    : Math.round(behindDaysSum / overdueMilestones.length);
+  const meanAheadDays = aheadCount === 0 ? 0 : Math.round(aheadDaysSum / aheadCount);
+
+  // Net schedule variance (Vandana + boss, 2026-11-04 pyramid pass +
+  // net-delay request): one number that captures both slippage AND work
+  // done ahead of plan. Positive = net behind, negative = net ahead.
+  const evaluatedCount = behindCount + aheadCount;
+  const netDaysVariance = evaluatedCount === 0
+    ? 0
+    : Math.round((behindTotal - aheadDaysSum) / evaluatedCount);
+
+  const overdueList = overdueMilestones
+    .map((m) => {
+      const v = m.villa;
+      const daysBehind = Math.max(0, Math.round((now.getTime() - (m.baselineFinish?.getTime() ?? now.getTime())) / 86_400_000));
+      return {
+        villaNumber: v?.number ?? 0,
+        villaLabel: v?.label ?? (v?.number ? `Villa ${v.number}` : "Villa"),
+        blockCode: v?.block?.code ?? "-",
+        sectionName: m.section?.name ?? "-",
+        activityName: m.wbsNodes?.[0]?.name ?? null,
+        baselineFinish: m.baselineFinish?.toISOString() ?? new Date(0).toISOString(),
+        daysBehind,
+      };
+    })
+    .sort((a, b) => b.daysBehind - a.daysBehind)
+    .slice(0, 50);
+
+  const aheadList = aheadOfPlan
+    .map((m) => {
+      if (!m.baselineFinish || !m.actualFinish) return null;
+      const diffDays = Math.round((m.actualFinish.getTime() - m.baselineFinish.getTime()) / 86_400_000);
+      if (diffDays >= 0) return null; // only ahead-of-plan rows
+      const v = m.villa;
+      return {
+        villaNumber: v?.number ?? 0,
+        villaLabel: v?.label ?? (v?.number ? `Villa ${v.number}` : "Villa"),
+        blockCode: v?.block?.code ?? "-",
+        sectionName: m.section?.name ?? "-",
+        baselineFinish: m.baselineFinish.toISOString(),
+        actualFinish: m.actualFinish.toISOString(),
+        daysAhead: -diffDays,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .sort((a, b) => b.daysAhead - a.daysAhead)
+    .slice(0, 50);
+
+  // Critical Blocks (2026-11-05): distinct blocks that carry at least one
+  // milestone slipped > 15 days, counting BOTH open past-due AND closed-late
+  // milestones. The old rule only looked at the villa's currently-active
+  // in-flight milestone which read 0 whenever the slippage had already
+  // rolled over into a closed milestone.
+  const criticalBlockCodes = new Set<string>();
+  for (const m of overdueMilestones) {
+    if (!m.baselineFinish || !m.villa?.block?.code) continue;
+    const daysBehind = Math.round((now.getTime() - m.baselineFinish.getTime()) / 86_400_000);
+    if (daysBehind > 15) criticalBlockCodes.add(m.villa.block.code);
+  }
+  for (const m of aheadOfPlan) {
+    if (!m.baselineFinish || !m.actualFinish || !m.villa?.block?.code) continue;
+    const diffDays = Math.round((m.actualFinish.getTime() - m.baselineFinish.getTime()) / 86_400_000);
+    if (diffDays > 15) criticalBlockCodes.add(m.villa.block.code);
+  }
+  const criticalBlocksTotal = criticalBlockCodes.size;
+
+  // Project-level projected handover using the same critical-path math as
+  // the Progress tab. Per villa: max slip across its milestones; project
+  // handover = max across villas of (baseline + slip). Same code lives in
+  // progressTabServer.getProgressHeroStats; both call sites must move
+  // together if the formula changes.
+  const villaMaxSlip = new Map<string, number>();
+  for (const m of slipRows) {
+    if (!m.baselineFinish || !m.villa) continue;
+    const slip = !m.actualFinish
+      ? Math.max(0, Math.round((now.getTime() - m.baselineFinish.getTime()) / 86_400_000))
+      : Math.max(0, Math.round((m.actualFinish.getTime() - m.baselineFinish.getTime()) / 86_400_000));
+    const current = villaMaxSlip.get(m.villa.id) ?? 0;
+    if (slip > current) villaMaxSlip.set(m.villa.id, slip);
+  }
+  let latestProjectedMs = 0;
+  for (const h of handoverBaselines) {
+    const baseline = h._max.baselineFinish;
+    if (!baseline) continue;
+    const villaSlip = villaMaxSlip.get(h.villaId) ?? 0;
+    const projectedMs = baseline.getTime() + villaSlip * 86_400_000;
+    if (projectedMs > latestProjectedMs) latestProjectedMs = projectedMs;
+  }
+  const projectProjectedHandover = latestProjectedMs > 0 ? new Date(latestProjectedMs) : null;
+
   return {
     hindranceCount,
     plannedPct: stats.plannedPercent,
@@ -81,6 +345,18 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     totalVillaRecords: rowCount,
     scheduleStart: milestoneWindow._min.baselineStart ?? null,
     scheduleEnd:   milestoneWindow._max.baselineFinish ?? null,
+    meanOpenSlipDays,
+    milestonesDueByToday: dueByToday,
+    milestonesClosedByToday: closedByToday,
+    milestonesAheadOfPlan: aheadCount,
+    meanAheadDays,
+    netDaysVariance,
+    evaluatedCount,
+    behindCount,
+    overdueList,
+    aheadList,
+    criticalBlocksTotal,
+    projectProjectedHandover,
   };
 }
 
@@ -162,24 +438,66 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
   const elegantVillaCount = elegantScope?.villaCount ?? 0;
   const elegantBlockCount = elegantScope?.blockCount ?? 0;
 
-  const avgSlip = activeVillas.length === 0
-    ? 0
-    : Math.round(activeVillas.reduce((s, v) => s + v.handoverSlipDays, 0) / activeVillas.length);
+  // Split the rollup's blocks by contractor so each contractor's row on
+  // Contractor Scope Health uses the villas they actually own. Previously
+  // Abraham was given the whole-project rollup and Elegant was hardcoded
+  // to zero / "tbd", which was wrong (Harish is updating Elegant villas
+  // every day). Vandana 2026-11-04: fix this for the Nov-5 review.
+  const { abraham: abrahamBlocks, elegant: elegantBlocks } =
+    projectOverride?.splitBlocksByContractor(rollup.blocks) ?? { abraham: rollup.blocks, elegant: [] };
+
+  const rollupFor = (blks: typeof rollup.blocks) => {
+    const villas = blks.flatMap((b) => b.villas);
+    const active = villas.filter((v) => v.currentSection >= 0);
+    const avgPct = villas.length === 0
+      ? 0
+      : Math.round(villas.reduce((s, v) => s + v.percentComplete, 0) / villas.length);
+    const avgCurrentSlip = active.length === 0
+      ? 0
+      : Math.round(active.reduce((s, v) => s + v.currentSlipDays, 0) / active.length);
+    const criticalBlocks = blks.filter((b) => b.currentSlipDays > 15).length;
+    const criticalVillas = active.filter((v) => v.currentSlipDays > 15).length;
+    const handoverSlip = Math.max(0, ...active.map((v) => v.handoverSlipDays));
+    return { activeCount: active.length, avgPct, avgCurrentSlip, criticalBlocks, criticalVillas, handoverSlip };
+  };
+  const abrahamR = rollupFor(abrahamBlocks);
+  const elegantR = rollupFor(elegantBlocks);
+
+  const healthFor = (r: ReturnType<typeof rollupFor>): ContractorRollup["health"] => {
+    if (r.activeCount === 0) return "tbd";
+    if (r.criticalBlocks > 0) return "critical";
+    if (r.handoverSlip > 14) return "warning";
+    if (r.handoverSlip > 0) return "ok";
+    return "healthy";
+  };
+
   const contractors: ContractorRollup[] = [
     {
       name: AMANVANA_CONTRACTORS.abraham,
-      category: "Civil / Structural — Phase 1 & 2 Lead",
+      category: "Civil / Structural - Phase 1",
       scopeVillas: atVillaCount,
-      activeVillas: activeVillas.length,
-      completePct: Math.round(rollup.percentComplete),
-      avgDelayDays: avgSlip,
-      criticalRisks: rollup.criticalVillas,
-      health: rollup.criticalBlocks > 0 ? "critical"
-        : rollup.handoverSlipDays > 14 ? "warning"
-        : rollup.handoverSlipDays > 0 ? "ok"
-        : "healthy",
+      activeVillas: abrahamR.activeCount,
+      completePct: abrahamR.avgPct,
+      avgDelayDays: abrahamR.avgCurrentSlip,
+      criticalRisks: abrahamR.criticalVillas,
+      health: healthFor(abrahamR),
     },
   ];
+  if (elegantScope && elegantVillaCount > 0) {
+    contractors.push({
+      name: AMANVANA_CONTRACTORS.elegant,
+      category: "Civil / Structural - Phase 2",
+      scopeVillas: elegantVillaCount,
+      activeVillas: elegantR.activeCount,
+      completePct: elegantR.avgPct,
+      avgDelayDays: elegantR.avgCurrentSlip,
+      criticalRisks: elegantR.criticalVillas,
+      health: healthFor(elegantR),
+    });
+  }
+  // Legacy name kept for the KPI cards below (hero slip / rail critical).
+  const avgSlip = abrahamR.avgCurrentSlip;
+  void avgSlip;
 
   // Build the top-of-page ProjectHealthSummary from real project metadata + rollup numbers.
   // Total Delay definition: signed days between the schedule's latest
@@ -200,24 +518,34 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
   // "0 days / on track" and hide the 18-month gap. The audit for the
   // Sept 15 walkthrough surfaced this as the single most confusing
   // number on the dashboard.
-  const projectedEnd = rollup.projectedEnd ?? project.projectedEndDate ?? project.endDate ?? new Date();
   const declaredEnd = project.endDate ?? new Date();
 
-  // Baseline Window — earliest villa-milestone baselineStart across the
+  // Baseline Window - earliest villa-milestone baselineStart across the
   // WHOLE project, and latest baselineFinish across the whole project.
   // Spans both contractors' schedules (previously used project.startDate /
   // .endDate which was Abraham-only). Falls back to project.startDate /
   // .endDate when the DB doesn't have milestone dates yet.
   const baselineStart = extras?.scheduleStart ?? project.startDate ?? new Date();
   const baselineEnd = extras?.scheduleEnd ?? declaredEnd;
-  const totalDelayDays =
-    projectedEnd && declaredEnd
-      ? Math.round((projectedEnd.getTime() - declaredEnd.getTime()) / 86_400_000)
-      : 0;
+
+  // Total Delay (unchanged semantics): mean drag across all evaluated
+  // milestones. A portfolio-level signal that doesn't hide behind a
+  // critical-path villa that hasn't started yet. Positive = net behind.
+  const totalDelayDays = extras?.netDaysVariance ?? 0;
+
+  // Projected handover (2026-11-16 unify): Dashboard and Progress tab
+  // now share the SAME critical-path math — each villa's baseline + its
+  // max slip, then max across villas. Was previously baselineEnd +
+  // netDaysVariance, so the two tabs could disagree whenever slip wasn't
+  // evenly distributed. Falls back to the old shift if extras didn't
+  // compute the per-villa projection (e.g. empty DB).
+  const projectedEnd = extras?.projectProjectedHandover
+    ?? new Date(baselineEnd.getTime() + totalDelayDays * 86_400_000);
 
   const health: ProjectHealthSummary = {
     totalPlots: totalVillas,
     inScope: totalVillas,
+    villaRecordCount: extras?.totalVillaRecords,
     modelVillas: 0,
     phase1Villas: activeVillas.length,
     phase1BlocksActive: activeBlocks.length,
@@ -232,7 +560,10 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
     totalDelayDays,
     reraDelayDays: computeReraDelay(project.reraEndDate, rollup.projectedEnd),
     hindrances: extras?.hindranceCount ?? 0,
-    criticalBlocks: rollup.criticalBlocks,
+    // Prefer the slip-inclusive count from extras (counts closed-late milestones
+    // too). Falls back to rollup.criticalBlocks when the caller didn't pass
+    // extras - that path only looks at currently-in-flight slip.
+    criticalBlocks: extras?.criticalBlocksTotal ?? rollup.criticalBlocks,
     probability: probabilityBand(project.reraEndDate, rollup.projectedEnd),
     // plannedPct/achievedPct come from projectStats when the caller passes
     // extras — that's the same math the Snapshot page's gauge uses, so the
@@ -242,6 +573,12 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
     plannedPct: extras?.plannedPct ?? 0,
     achievedPct: extras?.achievedPct ?? Math.round(rollup.percentComplete * 100) / 100,
     asOf: new Date(),
+    milestonesDueByToday: extras?.milestonesDueByToday,
+    milestonesClosedByToday: extras?.milestonesClosedByToday,
+    milestonesAheadOfPlan: extras?.milestonesAheadOfPlan,
+    meanAheadDays: extras?.meanAheadDays,
+    overdueList: extras?.overdueList,
+    aheadList: extras?.aheadList,
   };
 
   return { health, villas, blocks, contractors, sections };

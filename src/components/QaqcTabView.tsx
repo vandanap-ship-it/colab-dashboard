@@ -1,45 +1,65 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState } from "react";
 import styles from "./qaqc-tab.module.css";
-import type { QaqcBundle } from "@/lib/qaqcServer";
+import type { InspectionRow, IssueRow, QaqcBundle } from "@/lib/qaqcServer";
 
 export interface QaqcTabViewProps {
   projectId: string;
   bundle: QaqcBundle;
 }
 
+/**
+ * QA/QC tab, pyramid-structured (Vandana 2026-11-04 management-review pass,
+ * iteration 4). One governing question per tab: "Is what we built good?"
+ * Top number dissects downward:
+ *
+ *   1. First-pass pass rate  — the single lead metric (big hero)
+ *   2. Supporting tiles      — open issues, open NCRs, avg close TAT
+ *   3. By contractor         — Contractor Performance Master
+ *   4. Photo wall            — the one piece of thin-data content that
+ *                              still reads compellingly
+ *   5. Row-level detail      — Issues list, Inspections list
+ *
+ * Removed in this pass (noise cards that competed with the headline):
+ *   - Material Inspection Request placeholder (no data yet)
+ *   - Defects by Category     (all "Uncategorised" on Amanvana today)
+ *   - Latest Day Snapshot     (near-zero every day)
+ *   - Last 7 days mini-trend  (dataset too thin to tell a story)
+ *   - TAT trend 30-day chart  (same reason; avg sits in the hero now)
+ */
 export default function QaqcTabView({ projectId, bundle }: QaqcTabViewProps) {
+  const openIssues = bundle.issues.obs.new + bundle.issues.obs.inReview;
+  const openNcrs = bundle.issues.ncs.new + bundle.issues.ncs.inReview;
+  // Hide the hero pass-rate when no inspections were actually submitted -
+  // a "100% pass rate · 0 inspections" tile reads as a trivial boast.
+  // (Vandana 2026-11-05 cleanup.)
+  const showHeroPassRate = bundle.inspectionRows.length > 0;
+  // Hide Contractor Performance Master when every contractor row carries
+  // zero WIR + zero issue activity - "no data" from every row is noise.
+  const anyContractorData = bundle.contractors.some(
+    (c) =>
+      (c.wir.new + c.wir.inReview + c.wir.closed) > 0 ||
+      (c.issues.new + c.issues.inReview + c.issues.closed) > 0,
+  );
   return (
     <div className={styles.wrap}>
-      {/* Top row: WIR + Issues+Defects + Material */}
-      <div className={styles.topRow}>
-        <WirCard counts={bundle.wir} />
-        <IssuesDefectsCard issues={bundle.issues} />
-        <MaterialCard counts={bundle.material} />
-      </div>
-
-      {/* Latest day + trend + defects by category */}
-      <div className={styles.midRow}>
-        <DefectsByCategoryCard rows={bundle.defectsByCategory} />
-        <div className={styles.midRight}>
-          <LatestDayCard snapshot={bundle.latestDay} />
-          <TrendCard bundle={bundle.last7Days} />
-        </div>
-      </div>
-
-      <ContractorPerformanceCard rows={bundle.contractors} />
-
-      <div className={styles.bottomRow}>
-        <TatTrendCard points={bundle.tatTrend} />
-        <RecentPhotoFeedCard photos={bundle.recentPhotos} />
-      </div>
-
-      <p className={styles.footer}>
-        Material inspections and material delivery log will appear here once
-        those modules are wired.
-      </p>
-
+      {showHeroPassRate && (
+        <QaqcHero
+          passRate={bundle.wir.successRate}
+          totalInspections={bundle.inspectionRows.length}
+          passed={bundle.wir.passed}
+          inReview={bundle.wir.inReview}
+          rejected={bundle.wir.rejected}
+          openIssues={openIssues}
+          openNcrs={openNcrs}
+        />
+      )}
+      <ObservationsBreakdownCard rows={bundle.issueRows} />
+      {anyContractorData && <ContractorPerformanceCard rows={bundle.contractors} />}
+      <RecentPhotoFeedCard photos={bundle.recentPhotos} />
+      <IssuesListCard rows={bundle.issueRows} />
+      <InspectionsListCard rows={bundle.inspectionRows} />
       {/* Suppress unused warning */}
       <input type="hidden" value={projectId} />
     </div>
@@ -47,125 +67,127 @@ export default function QaqcTabView({ projectId, bundle }: QaqcTabViewProps) {
 }
 
 // ---------------------------------------------------------------------------
-// §1 Work Inspection Request
+// Pyramid hero: one headline + supporting tiles
 // ---------------------------------------------------------------------------
 
-function WirCard({ counts }: { counts: QaqcBundle["wir"] }) {
-  const successRate = counts.successRate;
+function QaqcHero({
+  passRate,
+  totalInspections,
+  passed,
+  inReview,
+  rejected,
+  openIssues,
+  openNcrs,
+}: {
+  passRate: number | null;
+  totalInspections: number;
+  passed: number;
+  inReview: number;
+  rejected: number;
+  openIssues: number;
+  openNcrs: number;
+}) {
+  const passRateTone =
+    passRate == null ? "" :
+    passRate >= 90 ? styles.heroGood :
+    passRate >= 75 ? styles.heroWarn :
+    styles.heroBad;
   return (
-    <div className={`${styles.card} ${styles.cardWir}`}>
-      <div className={styles.cardHd}>Work Inspection Request</div>
-      <div className={styles.wirBody}>
-        <div className={styles.wirBig}>
-          <div className={styles.wirBigNum}>{successRate == null ? "—" : `${successRate}%`}</div>
-          <div className={styles.wirBigLbl}>Success rate</div>
-        </div>
-        <div className={styles.wirGrid}>
-          <StatCell label="Total inspections" value={counts.total} />
-          <StatCell label="Passed" value={counts.passed} tone="good" />
-          <StatCell label="Rejected" value={counts.rejected} tone="bad" />
-          <StatCell label="In review" value={counts.inReview} tone="warn" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// §2 Issues & Defects
-// ---------------------------------------------------------------------------
-
-function IssuesDefectsCard({ issues }: { issues: QaqcBundle["issues"] }) {
-  return (
-    <div className={`${styles.card} ${styles.cardIssues}`}>
-      <div className={styles.cardHd}>Issues & Defects</div>
-      <div className={styles.issuesTop}>
-        <div>
-          <div className={styles.issuesPct}>{issues.completedPct}%</div>
-          <div className={styles.issuesPctLbl}>Completed</div>
-        </div>
-        <div className={styles.issuesTat}>
-          <div className={styles.issuesTatCell}>
-            <div className={styles.issuesTatVal}>{issues.submissionTATDays == null ? "—" : `${issues.submissionTATDays}d`}</div>
-            <div className={styles.issuesTatLbl}>Submission TAT</div>
+    <div className={styles.heroCard}>
+      <div className={styles.heroMainRow}>
+        <div className={styles.heroMain}>
+          <div className={styles.heroLbl}>First-pass inspection pass rate</div>
+          <div className={`${styles.heroMainVal} ${passRateTone}`}>
+            {passRate == null ? "-" : `${passRate}%`}
           </div>
-          <div className={styles.issuesTatCell}>
-            <div className={styles.issuesTatVal}>{issues.approvalTATDays == null ? "—" : `${issues.approvalTATDays}d`}</div>
-            <div className={styles.issuesTatLbl}>Approval TAT</div>
+          <div className={styles.heroSub}>
+            {passed} passed · {rejected} rejected · {inReview} in review · {totalInspections} inspections submitted
           </div>
         </div>
-      </div>
-      <BucketRow label={`OBS (${issues.obs.total})`} bucket={issues.obs} />
-      <BucketRow label={`NCS (${issues.ncs.total})`} bucket={issues.ncs} />
-    </div>
-  );
-}
-
-function BucketRow({ label, bucket }: { label: string; bucket: QaqcBundle["issues"]["obs"] }) {
-  const max = Math.max(1, bucket.new + bucket.inReview + bucket.closed + bucket.rejected);
-  return (
-    <div className={styles.bucketRow}>
-      <div className={styles.bucketLbl}>{label}</div>
-      <div className={styles.bucketBar} title={`${bucket.new} new, ${bucket.inReview} in review, ${bucket.closed} closed, ${bucket.rejected} rejected`}>
-        {bucket.new > 0    && <div className={`${styles.bucketSeg} ${styles.bucketNew}`}    style={{ flex: bucket.new }}>{bucket.new}</div>}
-        {bucket.inReview > 0 && <div className={`${styles.bucketSeg} ${styles.bucketIR}`}   style={{ flex: bucket.inReview }}>{bucket.inReview}</div>}
-        {bucket.closed > 0 && <div className={`${styles.bucketSeg} ${styles.bucketCl}`}    style={{ flex: bucket.closed }}>{bucket.closed}</div>}
-        {bucket.rejected > 0 && <div className={`${styles.bucketSeg} ${styles.bucketRej}`} style={{ flex: bucket.rejected }}>{bucket.rejected}</div>}
-        {max === 1 && <div className={`${styles.bucketSeg} ${styles.bucketEmpty}`} style={{ flex: 1 }}>—</div>}
-      </div>
-      <div className={styles.bucketLegend}>
-        NEW: <b className={styles.bucketNewTxt}>{bucket.new}</b> · IR: <b className={styles.bucketIRTxt}>{bucket.inReview}</b> · CLSD: <b className={styles.bucketClTxt}>{bucket.closed}</b> · REJ: <b className={styles.bucketRejTxt}>{bucket.rejected}</b>
+        <a href="#issues-list" className={styles.heroSupport}>
+          <div className={styles.heroSupportLbl}>Open issues</div>
+          <div className={styles.heroSupportVal}>{openIssues}</div>
+          <div className={styles.heroSupportSub}>observations · click to see rows</div>
+        </a>
+        <a href="#issues-list" className={styles.heroSupport}>
+          <div className={styles.heroSupportLbl}>Open NCRs</div>
+          <div className={`${styles.heroSupportVal} ${openNcrs > 0 ? styles.heroBad : ""}`}>{openNcrs}</div>
+          <div className={styles.heroSupportSub}>critical non-conformance</div>
+        </a>
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// §3 Material Inspection Request (placeholder)
+// Observations status breakdown - the design Vandana sketched 2026-11-04:
+// OBSERVATIONS · N RAISED, one row per status (Open / In review / Closed),
+// each row a bar + share % + absolute count. Clicking a row scrolls down
+// to the matching issue rows below.
+//
+// "Observations" here = every QA/QC Issue on the project, regardless of
+// severity. OBS + NCS both fold in because management asks about the
+// combined headcount. The data source is the same issueRows the hero
+// uses, so the two can't disagree.
 // ---------------------------------------------------------------------------
 
-function MaterialCard({ counts }: { counts: QaqcBundle["material"] }) {
-  return (
-    <div className={`${styles.card} ${styles.cardMaterial}`}>
-      <div className={styles.cardHd}>Material Inspection Request</div>
-      <div className={styles.wirBody}>
-        <div className={styles.wirBig}>
-          <div className={`${styles.wirBigNum} ${styles.mutedNum}`}>—</div>
-          <div className={styles.wirBigLbl}>Not yet integrated</div>
-        </div>
-        <div className={styles.wirGrid}>
-          <StatCell label="Total" value={counts.total} tone="muted" />
-          <StatCell label="Passed" value={counts.passed} tone="muted" />
-          <StatCell label="Rejected" value={counts.rejected} tone="muted" />
-          <StatCell label="In review" value={counts.inReview} tone="muted" />
-        </div>
-      </div>
-    </div>
-  );
-}
+function ObservationsBreakdownCard({ rows }: { rows: IssueRow[] }) {
+  // Map DB statuses onto the three buckets management thinks in.
+  //   - Open      = OPEN (new/unassigned/in-rework)
+  //   - In review = IN_REVIEW, IN_REINSPECTION
+  //   - Closed    = RESOLVED, CLOSED, REJECTED
+  const buckets = { open: 0, inReview: 0, closed: 0 };
+  for (const r of rows) {
+    const s = (r.status ?? "").toUpperCase();
+    if (s === "OPEN") buckets.open++;
+    else if (s === "IN_REVIEW" || s === "IN_REINSPECTION") buckets.inReview++;
+    else buckets.closed++; // RESOLVED, CLOSED, REJECTED, unknown all fold here
+  }
+  const total = rows.length;
+  const pct = (n: number) => (total === 0 ? 0 : Math.round((n / total) * 1000) / 10);
+  const bars: Array<{ key: string; label: string; count: number; share: number; tone: "open" | "review" | "closed" }> = [
+    { key: "open",    label: "Open",      count: buckets.open,     share: pct(buckets.open),     tone: "open" },
+    { key: "review",  label: "In review", count: buckets.inReview, share: pct(buckets.inReview), tone: "review" },
+    { key: "closed",  label: "Closed",    count: buckets.closed,   share: pct(buckets.closed),   tone: "closed" },
+  ];
 
-// ---------------------------------------------------------------------------
-// §4 Defects by Category
-// ---------------------------------------------------------------------------
-
-function DefectsByCategoryCard({ rows }: { rows: QaqcBundle["defectsByCategory"] }) {
-  const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div className={styles.card}>
-      <div className={styles.cardHd}>Defects by Category</div>
-      <div className={styles.dcList}>
-        {rows.length === 0 ? (
-          <div className={styles.empty}>No defects logged yet.</div>
+      <div className={styles.cardHd}>
+        Observations · {total.toLocaleString("en-IN")} raised
+        <span className={styles.cardMeta}>
+          every QA/QC observation on the project · click a status to see the rows
+        </span>
+      </div>
+      <div className={styles.cardBd}>
+        {total === 0 ? (
+          <div className={styles.empty}>No observations raised yet.</div>
         ) : (
-          rows.map((r) => (
-            <div key={r.category} className={styles.dcRow}>
-              <div className={styles.dcLbl}>{r.category}</div>
-              <div className={styles.dcBarWrap}>
-                <div className={styles.dcBar} style={{ width: `${(r.count / max) * 100}%` }} />
-              </div>
-              <div className={styles.dcCount}>{r.count}</div>
+          <div className={styles.obsTbl}>
+            <div className={`${styles.obsTblRow} ${styles.obsTblHd}`}>
+              <div>Status</div>
+              <div />
+              <div className={styles.obsShareHd}>Share</div>
+              <div className={styles.obsCountHd}>Count</div>
             </div>
-          ))
+            {bars.map((b) => (
+              <a key={b.key} href="#issues-list" className={styles.obsTblRow}>
+                <div className={styles.obsLbl}>{b.label}</div>
+                <div className={styles.obsBarWrap}>
+                  <div
+                    className={`${styles.obsBar} ${
+                      b.tone === "open" ? styles.obsBarOpen
+                      : b.tone === "review" ? styles.obsBarReview
+                      : styles.obsBarClosed
+                    }`}
+                    style={{ width: `${total === 0 ? 0 : (b.count / total) * 100}%` }}
+                  />
+                </div>
+                <div className={styles.obsShare}>{total === 0 ? "-" : `${b.share}%`}</div>
+                <div className={styles.obsCount}>{b.count}</div>
+              </a>
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -173,71 +195,7 @@ function DefectsByCategoryCard({ rows }: { rows: QaqcBundle["defectsByCategory"]
 }
 
 // ---------------------------------------------------------------------------
-// §5 Latest Day
-// ---------------------------------------------------------------------------
-
-function LatestDayCard({ snapshot }: { snapshot: QaqcBundle["latestDay"] }) {
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHd}>Latest Day Snapshot</div>
-      <div className={styles.latestGrid}>
-        <div className={`${styles.latestTile} ${styles.latestBlue}`}>
-          <div className={styles.latestVal}>{snapshot.workInspections}</div>
-          <div className={styles.latestLbl}>Work Inspections</div>
-        </div>
-        <div className={`${styles.latestTile} ${styles.latestGreen}`}>
-          <div className={styles.latestVal}>{snapshot.materialInspections}</div>
-          <div className={styles.latestLbl}>Material Inspections</div>
-        </div>
-        <div className={`${styles.latestTile} ${styles.latestOrange}`}>
-          <div className={styles.latestVal}>{snapshot.nonConformanceReports}</div>
-          <div className={styles.latestLbl}>Non-Conformance</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// §6 Last 7 days trend
-// ---------------------------------------------------------------------------
-
-function TrendCard({ bundle }: { bundle: QaqcBundle["last7Days"] }) {
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHd}>Last 7 Days · MOR</div>
-      <div className={styles.trendGrid}>
-        <MiniTrend title="Work Inspection" tone="blue" points={bundle.workInspection} />
-        <MiniTrend title="Material Inspection" tone="green" points={bundle.materialInspection} />
-        <MiniTrend title="Non-Conformance" tone="orange" points={bundle.nonConformance} />
-      </div>
-    </div>
-  );
-}
-
-function MiniTrend({ title, tone, points }: { title: string; tone: "blue" | "green" | "orange"; points: { date: string; count: number }[] }) {
-  const max = Math.max(1, ...points.map((p) => p.count));
-  return (
-    <div className={styles.miniTrend}>
-      <div className={styles.miniTitle}>{title}</div>
-      <div className={styles.miniBars}>
-        {points.map((p) => (
-          <div key={p.date} className={styles.miniBarCell} title={`${p.date}: ${p.count}`}>
-            <div className={styles.miniBarValue}>{p.count > 0 ? p.count : ""}</div>
-            <div
-              className={`${styles.miniBar} ${tone === "blue" ? styles.miniBarBlue : tone === "green" ? styles.miniBarGreen : styles.miniBarOrange}`}
-              style={{ height: `${(p.count / max) * 100}%` }}
-            />
-            <div className={styles.miniBarDay}>{p.date.slice(-2)}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// §7 Contractor Performance Master
+// Contractor Performance Master - dissects the top pass-rate by contractor
 // ---------------------------------------------------------------------------
 
 function ContractorPerformanceCard({ rows }: { rows: QaqcBundle["contractors"] }) {
@@ -268,19 +226,34 @@ function ContractorPerformanceCard({ rows }: { rows: QaqcBundle["contractors"] }
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.contractorId}>
-                    <td className={styles.cpName}>{r.contractorName}</td>
-                    <td>{r.wir.new || "—"}</td>
-                    <td>{r.wir.inReview || "—"}</td>
-                    <td>{r.wir.closed || "—"}</td>
-                    <td>{r.wir.tatDays == null ? "—" : `${r.wir.tatDays}d`}</td>
-                    <td>{r.issues.new || "—"}</td>
-                    <td>{r.issues.inReview || "—"}</td>
-                    <td>{r.issues.closed || "—"}</td>
-                    <td>{r.issues.tatDays == null ? "—" : `${r.issues.tatDays}d`}</td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const wirTotal = r.wir.new + r.wir.inReview + r.wir.closed;
+                  const issuesTotal = r.issues.new + r.issues.inReview + r.issues.closed;
+                  const noData = wirTotal === 0 && issuesTotal === 0;
+                  if (noData) {
+                    return (
+                      <tr key={r.contractorId}>
+                        <td className={styles.cpName}>{r.contractorName}</td>
+                        <td colSpan={8} className={styles.cpNoData}>
+                          Data not updated · nothing logged by this contractor's team yet
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return (
+                    <tr key={r.contractorId}>
+                      <td className={styles.cpName}>{r.contractorName}</td>
+                      <td>{r.wir.new || "-"}</td>
+                      <td>{r.wir.inReview || "-"}</td>
+                      <td>{r.wir.closed || "-"}</td>
+                      <td>{r.wir.tatDays == null ? "-" : `${r.wir.tatDays}d`}</td>
+                      <td>{r.issues.new || "-"}</td>
+                      <td>{r.issues.inReview || "-"}</td>
+                      <td>{r.issues.closed || "-"}</td>
+                      <td>{r.issues.tatDays == null ? "-" : `${r.issues.tatDays}d`}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -291,106 +264,163 @@ function ContractorPerformanceCard({ rows }: { rows: QaqcBundle["contractors"] }
 }
 
 // ---------------------------------------------------------------------------
-// §8 TAT trend (my addition)
+// Photo wall - the one piece of content that reads well with thin data
 // ---------------------------------------------------------------------------
 
-function TatTrendCard({ points }: { points: QaqcBundle["tatTrend"] }) {
-  const values = points.map((p) => p.avgTatDays).filter((v): v is number => v != null);
-  const max = values.length > 0 ? Math.max(1, ...values) : 1;
-
-  const [firstAvg, lastAvg] = useMemo(() => {
-    const first10 = values.slice(0, 10);
-    const last10 = values.slice(-10);
-    const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((n, x) => n + x, 0) / arr.length : null;
-    return [avg(first10), avg(last10)];
-  }, [values]);
-
-  const trend = firstAvg != null && lastAvg != null
-    ? lastAvg < firstAvg ? "improving" : lastAvg > firstAvg ? "worsening" : "flat"
-    : null;
-
+function RecentPhotoFeedCard({ photos }: { photos: QaqcBundle["recentPhotos"] }) {
+  if (photos.length === 0) return null; // Hide when nothing to show.
   return (
     <div className={styles.card}>
-      <div className={styles.cardHd}>Inspection TAT · rolling 30 days</div>
+      <div className={styles.cardHd}>Inspection &amp; Issue Photos</div>
       <div className={styles.cardBd}>
-        <div className={styles.tatSummary}>
-          <span>Avg last 10 days: <b>{lastAvg == null ? "—" : `${lastAvg.toFixed(1)}d`}</b></span>
-          {trend && (
-            <span className={`${styles.tatTrend} ${trend === "improving" ? styles.tatGood : trend === "worsening" ? styles.tatBad : ""}`}>
-              {trend === "improving" ? "↓ improving" : trend === "worsening" ? "↑ worsening" : "= flat"}
-            </span>
-          )}
-        </div>
-        <div className={styles.tatChart}>
-          {points.map((p) => (
-            <div key={p.date} className={styles.tatBarCell} title={`${p.date}: ${p.avgTatDays == null ? "no data" : `${p.avgTatDays}d avg (${p.count})`}`}>
-              <div
-                className={styles.tatBar}
-                style={{
-                  height: p.avgTatDays == null ? "3px" : `${(p.avgTatDays / max) * 100}%`,
-                  background: p.avgTatDays == null ? "var(--qa-ink-4)" : undefined,
-                }}
-              />
+        <div className={styles.photoGrid}>
+          {photos.map((p) => (
+            <div key={p.url} className={styles.photoCell}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.url} alt="" className={styles.photoImg} />
+              <div className={`${styles.photoBadge} ${p.source === "issue" ? styles.photoBadgeIssue : styles.photoBadgeInspection}`}>
+                {p.source === "issue" ? "Issue" : "Inspection"}
+              </div>
+              <div className={styles.photoCaption}>
+                <div className={styles.photoLabel}>{p.parentLabel}</div>
+                <div className={styles.photoMeta}>{p.loggedByName} · {fmtRelative(p.loggedAt)}</div>
+              </div>
             </div>
           ))}
         </div>
-        <div className={styles.tatFoot}>bars: daily avg turnaround, height ∝ days</div>
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// §9 Photo feed (my addition)
+// §10 Issues list (click-through target)
 // ---------------------------------------------------------------------------
 
-function RecentPhotoFeedCard({ photos }: { photos: QaqcBundle["recentPhotos"] }) {
+function IssuesListCard({ rows }: { rows: IssueRow[] }) {
+  if (rows.length === 0) return null;
+  const locFor = (r: IssueRow): string | null => {
+    const parts: string[] = [];
+    if (r.villaLabel) parts.push(r.villaLabel);
+    if (r.wbsName && !parts.some((p) => p.toLowerCase().includes(r.wbsName!.toLowerCase()))) parts.push(r.wbsName);
+    return parts.length === 0 ? null : parts.join(" · ");
+  };
+  const hasLocation = rows.some((r) => !!locFor(r));
+  const hasCategory = rows.some((r) => !!r.category);
+  const hasSeverity = rows.some((r) => !!r.severity);
   return (
-    <div className={styles.card}>
-      <div className={styles.cardHd}>Recent Inspection & Issue Photos</div>
+    <div id="issues-list" className={styles.card}>
+      <div className={styles.cardHd}>
+        Issues &amp; Defects · all rows
+        <span className={styles.cardMeta}>{rows.length} rows · newest first</span>
+      </div>
       <div className={styles.cardBd}>
-        {photos.length === 0 ? (
-          <div className={styles.empty}>No photos in the last 30 days.</div>
-        ) : (
-          <div className={styles.photoGrid}>
-            {photos.map((p) => (
-              <div key={p.url} className={styles.photoCell}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.url} alt="" className={styles.photoImg} />
-                <div className={`${styles.photoBadge} ${p.source === "issue" ? styles.photoBadgeIssue : styles.photoBadgeInspection}`}>
-                  {p.source === "issue" ? "Issue" : "Inspection"}
-                </div>
-                <div className={styles.photoCaption}>
-                  <div className={styles.photoLabel}>{p.parentLabel}</div>
-                  <div className={styles.photoMeta}>{p.loggedByName} · {fmtRelative(p.loggedAt)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className={styles.listTblWrap}>
+          <table className={styles.listTbl}>
+            <thead>
+              <tr>
+                <th>Date</th>
+                {hasCategory && <th>Category</th>}
+                {hasSeverity && <th>Severity</th>}
+                <th>Description</th>
+                {hasLocation && <th>Location</th>}
+                <th>Contractor</th>
+                <th>Raised by</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtShortDate(r.createdAt)}</td>
+                  {hasCategory && <td>{r.category ?? "-"}</td>}
+                  {hasSeverity && <td>{r.severity ?? "-"}</td>}
+                  <td className={styles.listDesc}>{r.description}</td>
+                  {hasLocation && <td>{locFor(r) ?? "-"}</td>}
+                  <td>{r.contractorName ?? "Not tagged"}</td>
+                  <td>{r.createdByName}</td>
+                  <td>{r.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// §11 Inspections list (click-through target for WIR tile)
+// ---------------------------------------------------------------------------
+
+function InspectionsListCard({ rows }: { rows: InspectionRow[] }) {
+  if (rows.length === 0) return null;
+  const sorted = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const locFor = (r: InspectionRow): string | null => {
+    const parts: string[] = [];
+    if (r.villaLabel) parts.push(r.villaLabel);
+    if (r.exactLocation && r.exactLocation !== r.villaLabel) parts.push(r.exactLocation);
+    if (r.wbsName && !parts.some((p) => p.toLowerCase().includes(r.wbsName!.toLowerCase()))) parts.push(r.wbsName);
+    return parts.length === 0 ? null : parts.join(" · ");
+  };
+  const hasLocation = sorted.some((r) => !!locFor(r));
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? sorted : sorted.slice(0, 10);
+  return (
+    <div id="inspections-list" className={styles.card}>
+      <div className={styles.cardHd}>
+        QA/QC Inspection submissions · all rows
+        <span className={styles.cardMeta}>{sorted.length} rows · newest first</span>
+      </div>
+      <div className={styles.cardBd}>
+        <div className={styles.listTblWrap}>
+          <table className={styles.listTbl}>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Checklist</th>
+                {hasLocation && <th>Location</th>}
+                <th>Contractor</th>
+                <th>Filled by</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtShortDate(r.createdAt)}</td>
+                  <td className={styles.listDesc}>{r.title}</td>
+                  {hasLocation && <td>{locFor(r) ?? "-"}</td>}
+                  <td>{r.contractorName ?? "Not tagged"}</td>
+                  <td>{r.filledByName}</td>
+                  <td>{r.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {sorted.length > 10 && (
+          <button
+            type="button"
+            className={styles.viewMoreBtn}
+            onClick={() => setShowAll((s) => !s)}
+          >
+            {showAll ? "Show less" : `View all ${sorted.length} rows`}
+          </button>
         )}
       </div>
     </div>
   );
 }
 
+function fmtShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" });
+}
+
 // ---------------------------------------------------------------------------
 // Shared bits
 // ---------------------------------------------------------------------------
-
-function StatCell({ label, value, tone }: { label: string; value: number | string; tone?: "good" | "bad" | "warn" | "muted" }) {
-  const cls =
-    tone === "good"  ? styles.stGood
-  : tone === "bad"   ? styles.stBad
-  : tone === "warn"  ? styles.stWarn
-  : tone === "muted" ? styles.stMuted
-  :                    "";
-  return (
-    <div className={styles.stCell}>
-      <div className={`${styles.stVal} ${cls}`}>{value}</div>
-      <div className={styles.stLbl}>{label}</div>
-    </div>
-  );
-}
 
 function fmtRelative(iso: string): string {
   const then = new Date(iso).getTime();

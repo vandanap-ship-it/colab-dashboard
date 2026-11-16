@@ -8,18 +8,34 @@
 
 import { prisma } from "@/lib/prisma";
 import { SAFETY_CATEGORIES } from "@/lib/safetyCategories";
+import { isQaqcTeamName, isTestUserName } from "@/lib/dashboardExclusions";
+import { AMANVANA_ABRAHAM_BLOCK_CODES, AMANVANA_CONTRACTORS } from "@/lib/projects/amanvana";
 
 // ---------------------------------------------------------------------------
 // Shape types
 // ---------------------------------------------------------------------------
 
 export interface SafetyOverview {
-  safeManHours: number;         // sum of ManpowerEntry.actualCount * 8 since last LTI (or project start)
-  ltiFreeDays: number;          // days since last LTI incident (or project start if never)
-  daysSinceLastIncident: number; // days since ANY safety issue (my addition)
-  lastIncidentDate: string | null;
-  lastLtiDate: string | null;
-  safeSincePreset: string;      // human label like "since project start" or "since 12 Aug"
+  /** Sum of ManpowerEntry.actualCount * 8 across the project to date. The
+   *  only "overview" metric the dashboard surfaces - the old
+   *  "days since last incident" and "LTI-free days" tiles were removed on
+   *  2026-11-04 (Vandana management-review pass). */
+  safeManHours: number;
+  /** Human label for the window - e.g. "since project start" or "since Aug 12". */
+  safeSincePreset: string;
+  /** Project-wide activity counts the dashboard surfaces as big tiles. */
+  totalInductions: number;
+  inductionsApproved: number;
+  inductionsPending: number;
+  inductionsRejected: number;
+  totalHseChecklists: number;      // Inspection rows tagged SAFETY
+  hseChecklistsPassed: number;
+  hseChecklistsPending: number;    // in draft / review / conditionally approved
+  totalSafetyPermits: number;
+  permitsApproved: number;
+  permitsPending: number;
+  permitsClosedOrRejected: number;
+  totalSafetyObservations: number;
 }
 
 export interface IncidentCategoryRow {
@@ -63,15 +79,61 @@ export interface InductionSubmissionsPoint {
   count: number;
 }
 
+// Row lists for click-through sections (added 2026-11-04 management review).
+export interface SafetyInductionRow {
+  id: string;
+  displayId: string;
+  workerName: string;
+  trade: string;
+  status: string;
+  inductionDate: string;
+  expiryDate: string;
+  contractorName: string | null;
+}
+export interface HseChecklistRow {
+  id: string;
+  title: string;
+  status: string;
+  createdAt: string;
+  reviewedAt: string | null;
+  filledByName: string;
+  wbsName: string | null;
+  villaLabel: string | null;
+  exactLocation: string | null;
+  contractorName: string | null;
+}
+export interface SafetyPermitRow {
+  id: string;
+  title: string;
+  type: string;
+  workDate: string;
+  status: string;
+  requesterName: string | null;
+  approverName: string | null;
+  closerName: string | null;
+}
+export interface SafetyObservationRow {
+  id: string;
+  category: string | null;
+  severity: string | null;
+  status: string;
+  createdAt: string;
+  contractorName: string | null;
+}
+
 export interface SafetyBundle {
   overview: SafetyOverview;
   categories: IncidentCategoryRow[];
   compliance: SafetyComplianceRow[];
-  inductions: SafetyInductionSummary; // placeholder counts — 0 until induction model added
+  inductions: SafetyInductionSummary;
   permits: SafetyPermitSummary;
   submissionsLast7Days: InductionSubmissionsPoint[];  // placeholder
   submissionsLast4Weeks: InductionSubmissionsPoint[]; // placeholder
   submissionsLast6Months: InductionSubmissionsPoint[]; // placeholder
+  inductionRows: SafetyInductionRow[];
+  hseChecklistRows: HseChecklistRow[];
+  permitRows: SafetyPermitRow[];
+  observationRows: SafetyObservationRow[];
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +157,7 @@ function fmtDay(d: Date): string {
 export async function getSafetyBundle(projectId: string, today: Date = new Date()): Promise<SafetyBundle> {
   const todayStart = toDay(today);
 
-  const [project, allSafetyIssues, safetyInspections, contractors, manpower, permits] = await Promise.all([
+  const [project, allSafetyIssues, safetyInspections, contractors, manpower, permits, inductions] = await Promise.all([
     prisma.project.findUnique({
       where: { id: projectId },
       select: { startDate: true, actualStartDate: true },
@@ -110,7 +172,7 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
         createdAt: true,
         updatedAt: true,
         wbsNode: { select: { contractorId: true } },
-        // Fallback contractor signal — see qaqcServer for the same
+        // Fallback contractor signal - see qaqcServer for the same
         // treatment. Colab-imported rows have no WBS attachment.
         createdBy: { select: { contractorId: true } },
       },
@@ -120,15 +182,37 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
       where: { projectId, deletedAt: null, module: "SAFETY" },
       select: {
         id: true,
+        title: true,
         status: true,
         createdAt: true,
         reviewedAt: true,
-        wbsNode: { select: { contractorId: true } },
-        filledBy: { select: { contractorId: true } },
+        contractorId: true,
+        exactLocation: true,
+        wbsNode: {
+          select: {
+            contractorId: true, name: true,
+            villaMilestone: {
+              select: {
+                villa: { select: { number: true, label: true, block: { select: { code: true } } } },
+              },
+            },
+          },
+        },
+        filledBy: { select: { name: true, contractorId: true } },
       },
-    }),
+    }).then((rows) =>
+      // Exclude test-user noise (Vandana's dev-time submissions) and rows
+      // filled by the QA/QC team (Nagarjuna / Thangamani) - those count on
+      // the QA/QC tab instead. Vandana 2026-11-04 management-review pass.
+      rows.filter(
+        (r) => !isTestUserName(r.filledBy?.name) && !isQaqcTeamName(r.filledBy?.name),
+      ),
+    ),
     prisma.contractor.findMany({
-      where: { projectId, active: true },
+      // showInPickers = the two execution contractors (Abraham + Elegant).
+      // Hidden contractors used to appear as empty-row noise on the matrix;
+      // trimmed on 2026-11-04 per Vandana's management-review feedback.
+      where: { projectId, active: true, showInPickers: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
@@ -150,7 +234,12 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
       where: {
         projectId,
         deletedAt: null,
-        type: { in: ["HOT_WORK", "NIGHT_WORK", "DESHUTTERING"] },
+        // HEIGHT work added 2026-11-16 — working at height is one of the
+        // highest-risk categories on a construction site and sits alongside
+        // Hot / Night / De-shuttering as a hazard-controlled permit. The
+        // earlier array left 21 approved HEIGHT permits out of the EHS
+        // dashboard entirely.
+        type: { in: ["HOT_WORK", "NIGHT_WORK", "DESHUTTERING", "HEIGHT"] },
       },
       orderBy: [{ workDate: "desc" }, { createdAt: "desc" }],
       select: {
@@ -159,29 +248,80 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
         type: true,
         workDate: true,
         status: true,
+        // Permit people - initiator/requester/approver management wants to
+        // see on each row. The WorkPermit model doesn't split initiator
+        // from requester (the mobile form bundles the two), so the same
+        // user appears in both roles; approver flips to the user who
+        // approved (null while pending); closer is set when CLOSED.
+        requester: { select: { name: true } },
+        approver: { select: { name: true } },
+        closer: { select: { name: true } },
+      },
+    }),
+    prisma.safetyInduction.findMany({
+      where: { projectId, deletedAt: null },
+      orderBy: { inductionDate: "desc" },
+      select: {
+        id: true,
+        displayId: true,
+        workerName: true,
+        trade: true,
+        contractorId: true,
+        status: true,
+        inductionDate: true,
+        expiryDate: true,
       },
     }),
   ]);
 
   // ------- §1 Safety Overview -------
-  const projectStart = project?.actualStartDate ?? project?.startDate ?? todayStart;
-  const lastIncident = allSafetyIssues[0];
-  const lastLti = allSafetyIssues.find((i) => (i.category ?? "").toUpperCase() === "LTI");
+  // The old tiles "Days since last incident" + "LTI-free days" were removed
+  // on 2026-11-04 (Vandana management-review pass). The overview tile grid
+  // now surfaces the real activity volumes the dashboard needs: inductions
+  // / HSE checklists / safety permits / observations.
+  // Anchor the "Safe man-hours since …" date to the FIRST real manpower
+  // entry on this project, not the project's declared baseline start.
+  // actualStartDate on Amanvana is NULL, so the old fallback used
+  // 26 Jan 2026 even though labour tracking only began later — reading as
+  // if we had been counting hours for ten months of pre-mobilisation.
+  // Vandana 2026-11-16: use the earliest actual entryDate instead; fall
+  // back to project.actualStartDate, then project.startDate, then today.
+  const firstManpowerDate = manpower.reduce<Date | null>((min, m) => {
+    if (!m.entryDate) return min;
+    if (!min || m.entryDate < min) return m.entryDate;
+    return min;
+  }, null);
+  const projectStart = firstManpowerDate ?? project?.actualStartDate ?? project?.startDate ?? todayStart;
+  const manHours = manpower.reduce((sum, m) => sum + m.actualCount * 8, 0);
 
-  const ltiCutoff = lastLti?.createdAt ?? projectStart;
-  const manHours = manpower
-    .filter((m) => m.entryDate >= ltiCutoff)
-    .reduce((sum, m) => sum + m.actualCount * 8, 0);
+  const inductionsApproved = inductions.filter((i) => i.status === "APPROVED").length;
+  const inductionsPending = inductions.filter((i) => i.status === "PENDING").length;
+  const inductionsRejected = inductions.filter((i) => i.status === "REJECTED").length;
+  const hseChecklistsPassed = safetyInspections.filter((i) => i.status === "PASSED").length;
+  const hseChecklistsPending = safetyInspections.filter(
+    (i) => i.status !== "PASSED" && i.status !== "REJECTED",
+  ).length;
+  const permitsApproved = permits.filter((p) => p.status === "APPROVED").length;
+  const permitsPending = permits.filter((p) => p.status === "PENDING").length;
+  const permitsClosedOrRejected = permits.filter(
+    (p) => p.status === "CLOSED" || p.status === "REJECTED",
+  ).length;
 
   const overview: SafetyOverview = {
     safeManHours: manHours,
-    ltiFreeDays: daysBetween(lastLti?.createdAt ?? projectStart, today),
-    daysSinceLastIncident: daysBetween(lastIncident?.createdAt ?? projectStart, today),
-    lastIncidentDate: lastIncident?.createdAt.toISOString() ?? null,
-    lastLtiDate: lastLti?.createdAt.toISOString() ?? null,
-    safeSincePreset: lastLti
-      ? `since ${lastLti.createdAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`
-      : "since project start",
+    safeSincePreset: `since ${projectStart.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`,
+    totalInductions: inductions.length,
+    inductionsApproved,
+    inductionsPending,
+    inductionsRejected,
+    totalHseChecklists: safetyInspections.length,
+    hseChecklistsPassed,
+    hseChecklistsPending,
+    totalSafetyPermits: permits.length,
+    permitsApproved,
+    permitsPending,
+    permitsClosedOrRejected,
+    totalSafetyObservations: allSafetyIssues.length,
   };
 
   // ------- §2 Incident Categories -------
@@ -238,18 +378,25 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
     };
   });
 
-  // ------- §4 Inductions (placeholder — no model yet) -------
-  const inductions: SafetyInductionSummary = {
-    totalSubmitted: 0,
-    approved: 0,
-    pending: 0,
-    rejected: 0,
-    perContractor: contractors.map((c) => ({
-      contractorId: c.id,
-      contractorName: c.name,
-      approvedPct: null,
-    })),
-  };
+  // ------- §4 Inductions (now wired to the SafetyInduction model) -------
+  const inductionsSummary: SafetyInductionSummary = (() => {
+    const totalSubmitted = inductions.length;
+    const approved = inductionsApproved;
+    const pending = inductionsPending;
+    const rejected = inductionsRejected;
+    const perContractor = contractors.map((c) => {
+      const mine = inductions.filter((i) => i.contractorId === c.id);
+      const mineApproved = mine.filter((i) => i.status === "APPROVED").length;
+      const minePending = mine.filter((i) => i.status === "PENDING").length;
+      const denom = mineApproved + minePending;
+      return {
+        contractorId: c.id,
+        contractorName: c.name,
+        approvedPct: denom > 0 ? Math.round((mineApproved / denom) * 100) : null,
+      };
+    });
+    return { totalSubmitted, approved, pending, rejected, perContractor };
+  })();
 
   // ------- §5 Active Permits -------
   // Map WorkPermit statuses onto the SafetyPermitSummary shape. Fields kept
@@ -297,14 +444,94 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
     return points;
   };
 
+  // Row lists for click-through sections.
+  const contractorNameById = new Map(contractors.map((c) => [c.id, c.name]));
+  const inductionRows: SafetyInductionRow[] = inductions.map((i) => ({
+    id: i.id,
+    displayId: i.displayId,
+    workerName: i.workerName,
+    trade: i.trade,
+    status: i.status,
+    inductionDate: i.inductionDate.toISOString(),
+    expiryDate: i.expiryDate.toISOString(),
+    contractorName: i.contractorId ? contractorNameById.get(i.contractorId) ?? null : null,
+  }));
+  const hseChecklistRows: HseChecklistRow[] = safetyInspections.map((i) => {
+    // Contractor resolution order:
+    //   1. Inspection.contractorId (the picker chose one at raise-time)
+    //   2. WBSNode.contractorId (the activity carries one)
+    //   3. Villa → block code mapped to Abraham / Elegant via amanvana.ts
+    //   4. Filler's own User.contractorId
+    // Vandana 2026-11-05: we're never left with "Not tagged" when the
+    // villa location is known, because Abraham owns blocks 2-13 and
+    // Elegant owns the rest. Nagarjuna (QA/QC) inspects on Abraham villas
+    // so his checklists now show "Abraham Thomas" instead of blank.
+    let cid = i.contractorId ?? i.wbsNode?.contractorId ?? null;
+    let inferredContractor: string | null = null;
+    const villa = i.wbsNode?.villaMilestone?.villa ?? null;
+    if (!cid) {
+      const blockCode = villa?.block?.code;
+      if (blockCode) {
+        inferredContractor = AMANVANA_ABRAHAM_BLOCK_CODES.has(blockCode)
+          ? AMANVANA_CONTRACTORS.abraham
+          : AMANVANA_CONTRACTORS.elegant;
+      } else {
+        cid = i.filledBy?.contractorId ?? null;
+      }
+    }
+    const villaLabel = villa
+      ? (villa.label ?? `Villa ${villa.number}`)
+      : null;
+    return {
+      id: i.id,
+      title: i.title,
+      status: i.status,
+      createdAt: i.createdAt.toISOString(),
+      reviewedAt: i.reviewedAt?.toISOString() ?? null,
+      filledByName: i.filledBy?.name ?? "Unknown",
+      wbsName: i.wbsNode?.name ?? null,
+      villaLabel,
+      exactLocation: i.exactLocation ?? null,
+      contractorName:
+        inferredContractor ??
+        (cid ? contractorNameById.get(cid) ?? null : null),
+    };
+  });
+  const permitRows: SafetyPermitRow[] = permits.map((p) => ({
+    id: p.id,
+    title: p.title,
+    type: p.type,
+    workDate: p.workDate.toISOString(),
+    status: p.status,
+    requesterName: p.requester?.name ?? null,
+    approverName: p.approver?.name ?? null,
+    closerName: p.closer?.name ?? null,
+  }));
+  const observationRows: SafetyObservationRow[] = allSafetyIssues.map((it) => ({
+    id: it.id,
+    category: it.category ?? null,
+    severity: it.severity ?? null,
+    status: it.status,
+    createdAt: it.createdAt.toISOString(),
+    contractorName: it.wbsNode?.contractorId
+      ? contractorNameById.get(it.wbsNode.contractorId) ?? null
+      : it.createdBy?.contractorId
+        ? contractorNameById.get(it.createdBy.contractorId) ?? null
+        : null,
+  }));
+
   return {
     overview,
     categories,
     compliance,
-    inductions,
+    inductions: inductionsSummary,
     permits: permitsOut,
     submissionsLast7Days: emptyTrend(7),
     submissionsLast4Weeks: emptyTrend(28),
     submissionsLast6Months: emptyTrend(180),
+    inductionRows,
+    hseChecklistRows,
+    permitRows,
+    observationRows,
   };
 }

@@ -149,7 +149,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
           : `Induction rejected · ${before.workerName}`,
       body:
         status === "APPROVED"
-          ? `${before.displayId} approved by ${reviewer}. Valid 12 months.`
+          ? `${before.displayId} approved by ${reviewer}. Valid 6 months.`
           : `${before.displayId} rejected by ${reviewer}.${rejectionReason?.trim() ? ` Reason: ${rejectionReason.slice(0, 100)}` : ""}`,
       url: `/mobile/${before.projectId}/induction/${before.id}`,
       tag: `induction-${before.id}`,

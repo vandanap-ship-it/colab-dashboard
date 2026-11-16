@@ -51,15 +51,16 @@ export const AMANVANA_VILLA_NUMBER_TO_BLOCK: Record<number, string> = (() => {
  *  authoritative source for the "villas in scope" tile even when the DB has
  *  fewer wbsNodes tagged (transitional state during onboarding). */
 export const AMANVANA_CONTRACTOR_SCOPE: Record<string, number> = {
-  "abraham thomas":     41,
-  "elegant construction": 52,
+  "abraham thomas":       41,
+  "elegant constructions": 52,
 };
 
 /** Contractor canonical names. Use these anywhere the code needs to compare
- *  a contractor string, so a typo in one place doesn't drift from another. */
+ *  a contractor string, so a typo in one place doesn't drift from another.
+ *  "Elegant Constructions" is spelt as the DB row holds it (plural s). */
 export const AMANVANA_CONTRACTORS = {
   abraham: "Abraham Thomas",
-  elegant: "Elegant Construction",
+  elegant: "Elegant Constructions",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -102,10 +103,35 @@ function detectFromBlockShape(blockCodes: string[]): boolean {
   return overlap >= Math.min(3, registered.size);
 }
 
+/** Block codes (as stored in Block.code on the DB) that belong to Abraham
+ *  Thomas's execution scope on Amanvana Phase 1. Everything else in the
+ *  project's block list belongs to Elegant Constructions. Used by the
+ *  dashboard adapter to split the rollup per contractor instead of lumping
+ *  everything under Abraham. Kept as a Set for O(1) lookup. */
+export const AMANVANA_ABRAHAM_BLOCK_CODES: ReadonlySet<string> = new Set([
+  "2", "3A", "3B", "4", "5", "6", "7", "8", "9", "10", "12", "13",
+]);
+
+/** Given a project's observed block codes, split them into Abraham vs
+ *  Elegant for the dashboard contractor rollup. Codes that match Abraham
+ *  by name go to abraham; everything else goes to elegant. */
+export function splitBlocksByContractor<B extends { code: string }>(
+  blocks: readonly B[],
+): { abraham: B[]; elegant: B[] } {
+  const abraham: B[] = [];
+  const elegant: B[] = [];
+  for (const b of blocks) {
+    if (AMANVANA_ABRAHAM_BLOCK_CODES.has(b.code)) abraham.push(b);
+    else elegant.push(b);
+  }
+  return { abraham, elegant };
+}
+
 /** Amanvana's project override, registered from src/lib/projects/index.ts. */
 export const amanvanaProjectOverride = {
   name: "Amanvana" as const,
   detectFromBlockShape,
   abrahamScopeOverride,
   elegantScopeOverride,
+  splitBlocksByContractor,
 };

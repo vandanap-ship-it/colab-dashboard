@@ -36,24 +36,25 @@ export default async function ProjectLayout({
   });
   if (!project) notFound();
 
-  // My Actions badge: matches /api/my-actions semantics — concerns assigned to me +
-  // (for planner-ish roles) inspections IN_REVIEW for this project.
+  // My Actions is an admin-only working surface for the Nov-5 management
+  // view onward. We only compute its badge (and render the tab) when the
+  // signed-in user is an admin — everyone else sees four tabs.
   const userId = session.user.id;
   const role = session.user.role;
-  const canReviewInspections =
-    role === ROLES.PLANNER || role === ROLES.PRODUCT_TEAM || role === ROLES.ADMIN;
-  const [concernsAssigned, issuesAssigned, inspectionsInReview] = await Promise.all([
-    prisma.concern.count({
-      where: { projectId: id, status: { in: ["TASK_ASSIGNED", "PENDING"] }, assignedToId: userId },
-    }),
-    prisma.issue.count({
-      where: { projectId: id, status: "OPEN", assignedToId: userId },
-    }),
-    canReviewInspections
-      ? prisma.inspection.count({ where: { projectId: id, status: "IN_REVIEW" } })
-      : Promise.resolve(0),
-  ]);
-  const myActionsCount = concernsAssigned + issuesAssigned + inspectionsInReview;
+  const showMyActions = role === ROLES.ADMIN;
+  let myActionsCount = 0;
+  if (showMyActions) {
+    const [concernsAssigned, issuesAssigned, inspectionsInReview] = await Promise.all([
+      prisma.concern.count({
+        where: { projectId: id, status: { in: ["TASK_ASSIGNED", "PENDING"] }, assignedToId: userId },
+      }),
+      prisma.issue.count({
+        where: { projectId: id, status: "OPEN", assignedToId: userId },
+      }),
+      prisma.inspection.count({ where: { projectId: id, status: "IN_REVIEW" } }),
+    ]);
+    myActionsCount = concernsAssigned + issuesAssigned + inspectionsInReview;
+  }
 
   return (
     <div className="flex-1 flex flex-col bg-ivory">
@@ -98,7 +99,11 @@ export default async function ProjectLayout({
           </div>
         </div>
 
-        <ProjectTabs projectId={project.id} myActionsCount={myActionsCount} />
+        <ProjectTabs
+          projectId={project.id}
+          myActionsCount={myActionsCount}
+          showMyActions={showMyActions}
+        />
 
         {children}
       </main>

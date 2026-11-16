@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import styles from "./safety-tab.module.css";
 import type { SafetyBundle } from "@/lib/safetyServer";
-import { SAFETY_CATEGORIES } from "@/lib/safetyCategories";
 
 export type RegisterSummary = {
   code: string;
@@ -23,34 +22,244 @@ export interface SafetyTabViewProps {
 }
 
 export default function SafetyTabView({ projectId, bundle, registers = [] }: SafetyTabViewProps) {
-  const [submissionsWindow, setSubmissionsWindow] = useState<"7d" | "weekly" | "monthly">("7d");
-
-  const submissionsData = useMemo(() => {
-    if (submissionsWindow === "7d") return bundle.submissionsLast7Days;
-    if (submissionsWindow === "weekly") return bundle.submissionsLast4Weeks;
-    return bundle.submissionsLast6Months;
-  }, [submissionsWindow, bundle]);
-
+  // Vandana 2026-11-05: hide any section that has no data. A register
+  // with zero live items / zero overdue / zero due-soon isn't worth a
+  // dashboard card. Compliance matrix is also hidden when every row has
+  // zero activity (handled inside the component).
+  const visibleRegisters = registers.filter(
+    (r) => r.live > 0 || r.overdue > 0 || r.dueSoon > 0 || r.pendingDisplayId,
+  );
   return (
     <div className={styles.wrap}>
       <OverviewCard overview={bundle.overview} />
-      <IncidentCategoriesCard categories={bundle.categories} />
       <ComplianceMatrixCard rows={bundle.compliance} />
-      <SafetyDetailsCard inductions={bundle.inductions} />
+      <SafetyInductionsCard inductions={bundle.inductions} />
       <PermitsCard permits={bundle.permits} projectId={projectId} />
-      {registers.map((r) => (
+      {visibleRegisters.map((r) => (
         <RegisterCard key={r.code} register={r} projectId={projectId} />
       ))}
-      <SubmissionsCard
-        data={submissionsData}
-        window={submissionsWindow}
-        onChange={setSubmissionsWindow}
-      />
-      <p className={styles.footer}>
-        Labour induction submissions will populate as the Induction module comes online.
-      </p>
+      <InductionsListCard rows={bundle.inductionRows} />
+      <HseChecklistsListCard rows={bundle.hseChecklistRows} />
+      <PermitsListCard rows={bundle.permitRows} />
+      <ObservationsListCard rows={bundle.observationRows} />
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Click-through row lists (added 2026-11-04 management review)
+// ---------------------------------------------------------------------------
+
+function InductionsListCard({ rows }: { rows: SafetyBundle["inductionRows"] }) {
+  if (rows.length === 0) return null;
+  const sorted = [...rows].sort((a, b) => b.inductionDate.localeCompare(a.inductionDate));
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? sorted : sorted.slice(0, 10);
+  return (
+    <div id="inductions-list" className={styles.card}>
+      <div className={styles.cardHd}>
+        Safety Inductions · all rows
+        <span className={styles.cardMetaSmall}>{sorted.length} rows · newest first</span>
+      </div>
+      <div className={styles.cardBd}>
+        <div className={styles.listTblWrap}>
+          <table className={styles.listTbl}>
+            <thead>
+              <tr>
+                <th>ID</th><th>Date</th><th>Worker</th><th>Trade</th><th>Contractor</th><th>Status</th><th>Expires</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.displayId}</td>
+                  <td>{fmtShortDate(r.inductionDate)}</td>
+                  <td>{r.workerName}</td>
+                  <td>{r.trade}</td>
+                  <td>{r.contractorName ?? "Not tagged"}</td>
+                  <td>{r.status}</td>
+                  <td>{fmtShortDate(r.expiryDate)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {sorted.length > 10 && (
+          <button type="button" className={styles.viewMoreBtn} onClick={() => setShowAll((s) => !s)}>
+            {showAll ? "Show less" : `View all ${sorted.length} rows`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HseChecklistsListCard({ rows }: { rows: SafetyBundle["hseChecklistRows"] }) {
+  if (rows.length === 0) return null;
+  const sorted = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Compose a single "Location" column from villa + exact-location so the
+  // table shows a useful place for each checklist. Empty column if none.
+  const locFor = (r: SafetyBundle["hseChecklistRows"][number]): string | null => {
+    const parts: string[] = [];
+    if (r.villaLabel) parts.push(r.villaLabel);
+    if (r.exactLocation && r.exactLocation !== r.villaLabel) parts.push(r.exactLocation);
+    if (r.wbsName && !parts.some((p) => p.toLowerCase().includes(r.wbsName!.toLowerCase()))) parts.push(r.wbsName);
+    return parts.length === 0 ? null : parts.join(" · ");
+  };
+  const hasLocation = sorted.some((r) => !!locFor(r));
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? sorted : sorted.slice(0, 10);
+  return (
+    <div id="hse-checklist-list" className={styles.card}>
+      <div className={styles.cardHd}>
+        HSE Checklists · all rows
+        <span className={styles.cardMetaSmall}>{sorted.length} rows · newest first · includes Colab-imported checklists</span>
+      </div>
+      <div className={styles.cardBd}>
+        <div className={styles.listTblWrap}>
+          <table className={styles.listTbl}>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Checklist</th>
+                {hasLocation && <th>Location</th>}
+                <th>Contractor</th>
+                <th>Filled by</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtShortDate(r.createdAt)}</td>
+                  <td className={styles.listDesc}>{r.title}</td>
+                  {hasLocation && <td>{locFor(r) ?? "-"}</td>}
+                  <td>{r.contractorName ?? "Not tagged"}</td>
+                  <td>{r.filledByName}</td>
+                  <td>{r.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {sorted.length > 10 && (
+          <button type="button" className={styles.viewMoreBtn} onClick={() => setShowAll((s) => !s)}>
+            {showAll ? "Show less" : `View all ${sorted.length} rows`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PermitsListCard({ rows }: { rows: SafetyBundle["permitRows"] }) {
+  if (rows.length === 0) return null;
+  const TYPE_LABELS: Record<string, string> = {
+    HOT_WORK: "Hot Work",
+    NIGHT_WORK: "Night Work",
+    DESHUTTERING: "De-shuttering",
+  };
+  const sorted = [...rows].sort((a, b) => b.workDate.localeCompare(a.workDate));
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? sorted : sorted.slice(0, 10);
+  return (
+    <div id="permits-list" className={styles.card}>
+      <div className={styles.cardHd}>
+        Safety Permits · all rows
+        <span className={styles.cardMetaSmall}>{sorted.length} rows · newest first · Hot Work, Night Work, De-shuttering</span>
+      </div>
+      <div className={styles.cardBd}>
+        <div className={styles.listTblWrap}>
+          <table className={styles.listTbl}>
+            <thead>
+              <tr>
+                <th>Work date</th>
+                <th>Type</th>
+                <th>Title</th>
+                <th>Raised by</th>
+                <th>Approved by</th>
+                <th>Closed by</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtShortDate(r.workDate)}</td>
+                  <td>{TYPE_LABELS[r.type] ?? r.type}</td>
+                  <td className={styles.listDesc}>{r.title}</td>
+                  <td>{r.requesterName ?? "-"}</td>
+                  <td>{r.approverName ?? (r.status === "PENDING" ? "(pending)" : "-")}</td>
+                  <td>{r.closerName ?? (r.status === "CLOSED" ? "-" : "")}</td>
+                  <td>{r.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {sorted.length > 10 && (
+          <button type="button" className={styles.viewMoreBtn} onClick={() => setShowAll((s) => !s)}>
+            {showAll ? "Show less" : `View all ${sorted.length} rows`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ObservationsListCard({ rows }: { rows: SafetyBundle["observationRows"] }) {
+  // Vandana 2026-11-05: if there are no safety observations at all, don't
+  // show the section. The "no observations in the last 30 days" message
+  // was misleading - we show all-time, so only hide when truly empty.
+  if (rows.length === 0) return null;
+  const sorted = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const hasCategory = sorted.some((r) => !!r.category);
+  const hasSeverity = sorted.some((r) => !!r.severity);
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? sorted : sorted.slice(0, 10);
+  return (
+    <div id="observations-list" className={styles.card}>
+      <div className={styles.cardHd}>
+        Safety Observations · all rows
+        <span className={styles.cardMetaSmall}>{sorted.length} rows · newest first</span>
+      </div>
+      <div className={styles.cardBd}>
+        <div className={styles.listTblWrap}>
+          <table className={styles.listTbl}>
+            <thead>
+              <tr>
+                <th>Date</th>
+                {hasCategory && <th>Category</th>}
+                {hasSeverity && <th>Severity</th>}
+                <th>Status</th>
+                <th>Contractor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtShortDate(r.createdAt)}</td>
+                  {hasCategory && <td>{r.category ?? "-"}</td>}
+                  {hasSeverity && <td>{r.severity ?? "-"}</td>}
+                  <td>{r.status}</td>
+                  <td>{r.contractorName ?? "Not tagged"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {sorted.length > 10 && (
+          <button type="button" className={styles.viewMoreBtn} onClick={() => setShowAll((s) => !s)}>
+            {showAll ? "Show less" : `View all ${sorted.length} rows`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function fmtShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" });
 }
 
 // ---------------------------------------------------------------------------
@@ -58,85 +267,65 @@ export default function SafetyTabView({ projectId, bundle, registers = [] }: Saf
 // ---------------------------------------------------------------------------
 
 function OverviewCard({ overview }: { overview: SafetyBundle["overview"] }) {
+  // Pyramid-shaped. One governing question: "Is the site safe?" The lead
+  // metric is Safe man-hours (hours of work done without an LTI). The
+  // four activity tiles below are the dissection - how we got there.
+  // Vandana + boss, 2026-11-04 pyramid pass.
   return (
     <div className={styles.card}>
       <div className={styles.cardHd}>Safety Overview</div>
-      <div className={styles.ovGrid}>
-        <div className={`${styles.ovTile} ${styles.ovBig}`}>
-          <div className={styles.ovVal}>{overview.daysSinceLastIncident}</div>
-          <div className={styles.ovLbl}>Days since last incident</div>
-          <div className={styles.ovSub}>
-            {overview.lastIncidentDate
-              ? "last: " + new Date(overview.lastIncidentDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-              : "no incidents recorded"}
+      <div className={styles.ovHero}>
+        <div className={styles.ovHeroLbl}>Safe man-hours</div>
+        <div className={styles.ovHeroVal}>{overview.safeManHours.toLocaleString("en-IN")}</div>
+        <div className={styles.ovHeroSub}>
+          {overview.safeSincePreset} · counted at 8 hours per worker per day on site
+        </div>
+      </div>
+      <div className={styles.ovSupportGrid}>
+        <a href="#inductions-list" className={`${styles.ovSupportTile} ${styles.ovLink}`}>
+          <div className={styles.ovSupportLbl}>Safety Inductions</div>
+          <div className={styles.ovSupportVal}>{overview.totalInductions.toLocaleString("en-IN")}</div>
+          <div className={styles.ovSupportSub}>
+            {overview.inductionsApproved} approved ·{" "}
+            <span className={overview.inductionsPending > overview.inductionsApproved ? styles.ovPendingAmber : undefined}>
+              {overview.inductionsPending} pending
+            </span>
+            {" "}· {overview.inductionsRejected} rejected
+            {overview.inductionsPending > overview.inductionsApproved ? (
+              <span className={styles.ovAmberNote}> · Girish to review</span>
+            ) : null}
           </div>
-        </div>
-        <div className={styles.ovTile}>
-          <div className={styles.ovVal}>{overview.ltiFreeDays}</div>
-          <div className={styles.ovLbl}>LTI-free days</div>
-          <div className={styles.ovSub}>{overview.safeSincePreset}</div>
-        </div>
-        <div className={styles.ovTile}>
-          <div className={styles.ovVal}>{overview.safeManHours.toLocaleString()}</div>
-          <div className={styles.ovLbl}>Safe man-hours</div>
-          <div className={styles.ovSub}>{overview.safeSincePreset} · 8h/day baseline</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// §2 Incident Categories
-// ---------------------------------------------------------------------------
-
-function IncidentCategoriesCard({ categories }: { categories: SafetyBundle["categories"] }) {
-  const total = categories.reduce((n, c) => n + c.count, 0);
-  const nonZero = categories.filter((c) => c.count > 0);
-  const withZeros = categories.filter((c) => c.count === 0);
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHd}>
-        Incident Categories
-        <span className={styles.cardMeta}>{total} incident{total === 1 ? "" : "s"} total · {categories.length} categories</span>
-      </div>
-      <div className={styles.icBody}>
-        {total === 0 ? (
-          <div className={styles.empty}>No incidents recorded in any category. Excellent.</div>
-        ) : (
-          <div className={styles.icGrid}>
-            {nonZero.map((c) => (
-              <IncidentTile key={c.code} row={c} isActive />
-            ))}
+        </a>
+        <a href="#hse-checklist-list" className={`${styles.ovSupportTile} ${styles.ovLink}`}>
+          <div className={styles.ovSupportLbl}>HSE Checklists</div>
+          <div className={styles.ovSupportVal}>{overview.totalHseChecklists.toLocaleString("en-IN")}</div>
+          <div className={styles.ovSupportSub}>
+            {overview.hseChecklistsPassed} passed · {overview.hseChecklistsPending} pending review
           </div>
-        )}
-        {withZeros.length > 0 && (
-          <>
-            <div className={styles.icSubHd}>Categories with no incidents ({withZeros.length})</div>
-            <div className={styles.icGridSmall}>
-              {withZeros.map((c) => (
-                <IncidentTile key={c.code} row={c} />
-              ))}
-            </div>
-          </>
-        )}
+        </a>
+        <a href="#permits-list" className={`${styles.ovSupportTile} ${styles.ovLink}`}>
+          <div className={styles.ovSupportLbl}>Safety Permits</div>
+          <div className={styles.ovSupportVal}>{overview.totalSafetyPermits.toLocaleString("en-IN")}</div>
+          <div className={styles.ovSupportSub}>
+            {overview.permitsApproved} approved · {overview.permitsPending} pending · {overview.permitsClosedOrRejected} closed or rejected
+          </div>
+        </a>
+        <a href="#observations-list" className={`${styles.ovSupportTile} ${styles.ovLink}`}>
+          <div className={styles.ovSupportLbl}>Safety-tagged observations</div>
+          <div className={styles.ovSupportVal}>{overview.totalSafetyObservations.toLocaleString("en-IN")}</div>
+          <div className={styles.ovSupportSub}>
+            observations filed with module = safety · quality observations live on the QA/QC tab
+          </div>
+        </a>
       </div>
     </div>
   );
 }
 
-function IncidentTile({ row, isActive }: { row: SafetyBundle["categories"][number]; isActive?: boolean }) {
-  const meta = SAFETY_CATEGORIES.find((c) => c.code === row.code);
-  return (
-    <div className={`${styles.icTile} ${isActive ? styles.icTileActive : styles.icTileMuted}`} title={meta?.description ?? ""}>
-      <div className={styles.icCount}>{row.count}</div>
-      <div className={styles.icLbl}>{row.label}</div>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
-// §3 Contractor Inspection & Compliance Matrix
+// §2 Contractor Inspection & Compliance Matrix
+// (Incident Categories was removed 2026-11-04 management review - the site
+//  team's category tagging isn't mature enough on Amanvana to show.)
 // ---------------------------------------------------------------------------
 
 function ComplianceMatrixCard({ rows }: { rows: SafetyBundle["compliance"] }) {
@@ -160,16 +349,29 @@ function ComplianceMatrixCard({ rows }: { rows: SafetyBundle["compliance"] }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.contractorId}>
-                    <td className={styles.cmName}>{r.contractorName}</td>
-                    <td>{r.inspections.total || "—"}</td>
-                    <td className={styles.cmClosed}>{r.inspections.closed || "—"}</td>
-                    <td className={styles.cmReview}>{r.inspections.inReview || "—"}</td>
-                    <td className={styles.cmObs}>{r.inspections.obs || "—"}</td>
-                    <td>{r.inspections.avgTatDays == null ? "—" : `${r.inspections.avgTatDays}d`}</td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const noData = r.inspections.total === 0 && r.inspections.obs === 0 && r.inspections.ncr === 0;
+                  if (noData) {
+                    return (
+                      <tr key={r.contractorId}>
+                        <td className={styles.cmName}>{r.contractorName}</td>
+                        <td colSpan={5} className={styles.cmNoData}>
+                          Data not updated · nothing logged by this contractor's team yet
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return (
+                    <tr key={r.contractorId}>
+                      <td className={styles.cmName}>{r.contractorName}</td>
+                      <td>{r.inspections.total || "-"}</td>
+                      <td className={styles.cmClosed}>{r.inspections.closed || "-"}</td>
+                      <td className={styles.cmReview}>{r.inspections.inReview || "-"}</td>
+                      <td className={styles.cmObs}>{r.inspections.obs || "-"}</td>
+                      <td>{r.inspections.avgTatDays == null ? "-" : `${r.inspections.avgTatDays}d`}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -183,34 +385,35 @@ function ComplianceMatrixCard({ rows }: { rows: SafetyBundle["compliance"] }) {
 // §4 Safety Details (inductions)
 // ---------------------------------------------------------------------------
 
-function SafetyDetailsCard({ inductions }: { inductions: SafetyBundle["inductions"] }) {
+function SafetyInductionsCard({ inductions }: { inductions: SafetyBundle["inductions"] }) {
   return (
     <div className={styles.card}>
       <div className={styles.cardHd}>
-        Safety Details
-        <span className={styles.cardMeta}>induction status</span>
+        Safety Inductions
+        <span className={styles.cardMeta}>
+          {inductions.totalSubmitted} inductions submitted on site
+        </span>
       </div>
       <div className={styles.sdGrid}>
-        <SdTile label="Total submitted" value={inductions.totalSubmitted} tone="neutral" />
+        <SdTile label="Total inductions" value={inductions.totalSubmitted} tone="neutral" />
         <SdTile label="Approved" value={inductions.approved} tone="good" />
         <SdTile label="Pending" value={inductions.pending} tone="warn" />
         <SdTile label="Rejected" value={inductions.rejected} tone="bad" />
       </div>
       {inductions.totalSubmitted === 0 && (
         <div className={styles.sdNote}>
-          Induction submissions module not yet integrated — this will populate as
-          the labour induction flow ships.
+          No inductions submitted on this project yet.
         </div>
       )}
       {inductions.perContractor.length > 0 && inductions.totalSubmitted > 0 && (
         <>
-          <div className={styles.sdSubHd}>Induction compliance % per contractor</div>
+          <div className={styles.sdSubHd}>Induction completion % per contractor</div>
           <div className={styles.sdContractorList}>
             {inductions.perContractor.map((c) => (
               <div key={c.contractorId} className={styles.sdContractorRow}>
                 <span className={styles.sdContractorName}>{c.contractorName}</span>
                 <span className={styles.sdContractorPct}>
-                  {c.approvedPct == null ? "—" : `${c.approvedPct}%`}
+                  {c.approvedPct == null ? "Data not updated" : `${c.approvedPct}%`}
                 </span>
               </div>
             ))}
@@ -267,22 +470,29 @@ function PermitsCard({ permits, projectId }: { permits: SafetyBundle["permits"];
         ) : (
           <>
             <div className={styles.permitList}>
-              {permits.permits.slice(0, 5).map((p) => (
-                <div key={p.id} className={`${styles.permitRow} ${styles[`permitStatus_${p.status}` as keyof typeof styles] ?? ""}`}>
-                  <div>
-                    <div className={styles.permitName}>{p.name}</div>
-                    <div className={styles.permitNumber}>{TYPE_LABELS[p.category] ?? p.category}</div>
+              {permits.permits.slice(0, 5).map((p) => {
+                const typeLabel = TYPE_LABELS[p.category] ?? p.category;
+                // Suppress the type subtitle when the permit name already
+                // contains it - otherwise rows read "Hot Work - Villa 14 /
+                // Hot Work", which is the duplication Vandana flagged.
+                const showType = !p.name.toLowerCase().includes(typeLabel.toLowerCase());
+                return (
+                  <div key={p.id} className={`${styles.permitRow} ${styles[`permitStatus_${p.status}` as keyof typeof styles] ?? ""}`}>
+                    <div>
+                      <div className={styles.permitName}>{p.name}</div>
+                      {showType && <div className={styles.permitNumber}>{typeLabel}</div>}
+                    </div>
+                    <div className={styles.permitExpiry}>
+                      {p.expiryDate
+                        ? "Work day: " + new Date(p.expiryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                        : ""}
+                    </div>
+                    <div className={`${styles.permitStatusPill} ${styles[`permitPill_${p.status}` as keyof typeof styles] ?? ""}`}>
+                      {p.status.replace("_", " ")}
+                    </div>
                   </div>
-                  <div className={styles.permitExpiry}>
-                    {p.expiryDate
-                      ? "work day " + new Date(p.expiryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-                      : ""}
-                  </div>
-                  <div className={`${styles.permitStatusPill} ${styles[`permitPill_${p.status}` as keyof typeof styles] ?? ""}`}>
-                    {p.status.replace("_", " ")}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <Link href={`/projects/${projectId}/work-permits`} className={styles.actionBtnFullWidth}>
               Open Work Permits →
@@ -321,58 +531,8 @@ function RegisterCard({ register: r, projectId }: { register: RegisterSummary; p
   );
 }
 
-// ---------------------------------------------------------------------------
-// §6 Labour Induction Submissions (placeholder trend)
-// ---------------------------------------------------------------------------
-
-function SubmissionsCard({
-  data,
-  window,
-  onChange,
-}: {
-  data: SafetyBundle["submissionsLast7Days"];
-  window: "7d" | "weekly" | "monthly";
-  onChange: (v: "7d" | "weekly" | "monthly") => void;
-}) {
-  const total = data.reduce((n, p) => n + p.count, 0);
-  const max = Math.max(1, ...data.map((p) => p.count));
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardHd}>
-        Labour Induction Submissions
-        <div className={styles.subToggle}>
-          <button
-            type="button"
-            className={`${styles.subToggleBtn} ${window === "7d" ? styles.subToggleOn : ""}`}
-            onClick={() => onChange("7d")}
-          >7 days</button>
-          <button
-            type="button"
-            className={`${styles.subToggleBtn} ${window === "weekly" ? styles.subToggleOn : ""}`}
-            onClick={() => onChange("weekly")}
-          >Weekly</button>
-          <button
-            type="button"
-            className={`${styles.subToggleBtn} ${window === "monthly" ? styles.subToggleOn : ""}`}
-            onClick={() => onChange("monthly")}
-          >Monthly</button>
-        </div>
-      </div>
-      <div className={styles.cardBd}>
-        {total === 0 ? (
-          <div className={styles.empty}>
-            No induction submissions in this window. Populates once the labour induction module ships.
-          </div>
-        ) : (
-          <div className={styles.subChart}>
-            {data.map((p) => (
-              <div key={p.date} className={styles.subBarCell} title={`${p.date}: ${p.count}`}>
-                <div className={styles.subBar} style={{ height: `${(p.count / max) * 100}%` }} />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+// (Labour Induction Submissions trend was removed 2026-11-04 management
+// review. Labour Induction and Safety Induction are the same thing in
+// Siddhi - the SafetyInduction model. The Safety Inductions card above
+// now carries the per-contractor completion breakdown, so a separate
+// 7-day / weekly / monthly submission chart isn't needed.)

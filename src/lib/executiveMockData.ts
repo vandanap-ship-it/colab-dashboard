@@ -323,6 +323,12 @@ export const CONTRACTORS: ContractorRollup[] = [
 export interface ProjectHealthSummary {
   totalPlots: number;
   inScope: number;
+  /** Count of villa ROWS in the database. Differs from `inScope` on
+   *  projects where some rows represent combined pairs (e.g. "Villa 63 &
+   *  64" is one row but two physical units). The scope strip uses this
+   *  to explain the difference so a reader isn't surprised when the
+   *  villa table shows fewer rows than the headline "villas in scope". */
+  villaRecordCount?: number;
   modelVillas: number;
   phase1Villas: number;
   phase1BlocksActive: number;
@@ -347,6 +353,33 @@ export interface ProjectHealthSummary {
   plannedPct: number;
   achievedPct: number;
   asOf: Date;
+  /** Added 2026-11-04 management-review pass: honest headline-delay
+   *  context that lets the Overview answer "where is the delay?" and
+   *  "what are we ahead on?" in one card instead of making management
+   *  guess at the single Total Delay number. */
+  milestonesDueByToday?: number;
+  milestonesClosedByToday?: number;
+  milestonesAheadOfPlan?: number;
+  meanAheadDays?: number;
+  overdueList?: Array<{
+    villaNumber: number;
+    villaLabel: string;
+    blockCode: string;
+    sectionName: string;
+    activityName: string | null;
+    baselineFinish: string;
+    daysBehind: number;
+  }>;
+  /** Parallel list for the ahead-of-plan drill-down. */
+  aheadList?: Array<{
+    villaNumber: number;
+    villaLabel: string;
+    blockCode: string;
+    sectionName: string;
+    baselineFinish: string;
+    actualFinish: string;
+    daysAhead: number;
+  }>;
 }
 
 export function healthSummary(): ProjectHealthSummary {
