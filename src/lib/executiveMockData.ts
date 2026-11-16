@@ -323,6 +323,12 @@ export const CONTRACTORS: ContractorRollup[] = [
 export interface ProjectHealthSummary {
   totalPlots: number;
   inScope: number;
+  /** Count of villa ROWS in the database. Differs from `inScope` on
+   *  projects where some rows represent combined pairs (e.g. "Villa 63 &
+   *  64" is one row but two physical units). The scope strip uses this
+   *  to explain the difference so a reader isn't surprised when the
+   *  villa table shows fewer rows than the headline "villas in scope". */
+  villaRecordCount?: number;
   modelVillas: number;
   phase1Villas: number;
   phase1BlocksActive: number;

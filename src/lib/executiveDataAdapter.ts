@@ -111,11 +111,20 @@ export interface ExecutiveExtras {
    *  lived in already-closed milestones that had rolled over. Vandana
    *  2026-11-05 management review. */
   criticalBlocksTotal: number;
+  /** Project-level projected handover using the SAME critical-path math
+   *  as the Progress tab (progressTabServer.getProgressHeroStats). For each
+   *  villa, projected = (that villa's latest baselineFinish) + (that villa's
+   *  max slip across all its milestones). Project handover = the max
+   *  projected date across all villas — because the project finishes when
+   *  the last villa hands over. Replaces baselineEnd + netDaysVariance,
+   *  which averaged slip across milestones and therefore disagreed with
+   *  the Progress tab's number (Vandana 2026-11-16 review-day unify). */
+  projectProjectedHandover: Date | null;
 }
 
 export async function getExecutiveExtras(projectId: string): Promise<ExecutiveExtras> {
   const now = new Date();
-  const [hindranceCount, stats, sumUnits, rowCount, milestoneWindow, overdueMilestones, dueByToday, closedByToday, aheadOfPlan] = await Promise.all([
+  const [hindranceCount, stats, sumUnits, rowCount, milestoneWindow, overdueMilestones, dueByToday, closedByToday, aheadOfPlan, slipRows, handoverBaselines] = await Promise.all([
     prisma.hindrance.count({ where: { projectId, status: "OPEN" } }),
     getProjectStats(projectId),
     prisma.villa.aggregate({
@@ -189,6 +198,22 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
           },
         },
       },
+    }),
+    // Every in-scope milestone with villa + baseline + actual — feeds the
+    // villa-max-slip calc (critical-path projected handover). Same shape
+    // the Progress tab fetches; keeps the two calculations aligned.
+    prisma.villaMilestone.findMany({
+      where: { villa: { projectId, inScope: true } },
+      select: {
+        baselineFinish: true,
+        actualFinish: true,
+        villa: { select: { id: true } },
+      },
+    }),
+    prisma.villaMilestone.groupBy({
+      by: ["villaId"],
+      where: { villa: { projectId, inScope: true } },
+      _max: { baselineFinish: true },
     }),
   ]);
   // Behind side - two contributors:
@@ -288,6 +313,30 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
   }
   const criticalBlocksTotal = criticalBlockCodes.size;
 
+  // Project-level projected handover using the same critical-path math as
+  // the Progress tab. Per villa: max slip across its milestones; project
+  // handover = max across villas of (baseline + slip). Same code lives in
+  // progressTabServer.getProgressHeroStats; both call sites must move
+  // together if the formula changes.
+  const villaMaxSlip = new Map<string, number>();
+  for (const m of slipRows) {
+    if (!m.baselineFinish || !m.villa) continue;
+    const slip = !m.actualFinish
+      ? Math.max(0, Math.round((now.getTime() - m.baselineFinish.getTime()) / 86_400_000))
+      : Math.max(0, Math.round((m.actualFinish.getTime() - m.baselineFinish.getTime()) / 86_400_000));
+    const current = villaMaxSlip.get(m.villa.id) ?? 0;
+    if (slip > current) villaMaxSlip.set(m.villa.id, slip);
+  }
+  let latestProjectedMs = 0;
+  for (const h of handoverBaselines) {
+    const baseline = h._max.baselineFinish;
+    if (!baseline) continue;
+    const villaSlip = villaMaxSlip.get(h.villaId) ?? 0;
+    const projectedMs = baseline.getTime() + villaSlip * 86_400_000;
+    if (projectedMs > latestProjectedMs) latestProjectedMs = projectedMs;
+  }
+  const projectProjectedHandover = latestProjectedMs > 0 ? new Date(latestProjectedMs) : null;
+
   return {
     hindranceCount,
     plannedPct: stats.plannedPercent,
@@ -307,6 +356,7 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     overdueList,
     aheadList,
     criticalBlocksTotal,
+    projectProjectedHandover,
   };
 }
 
@@ -478,25 +528,24 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
   const baselineStart = extras?.scheduleStart ?? project.startDate ?? new Date();
   const baselineEnd = extras?.scheduleEnd ?? declaredEnd;
 
-  // Total Delay (2026-11-04 iteration 4, Vandana + boss pyramid pass):
-  // Switched to NET schedule variance - (behind - ahead) / count. This
-  // credits work done ahead of plan, not only the slippage side. Positive
-  // = net behind, negative = net ahead, 0 = on schedule.
-  //
-  // Previously we only counted the open-past-due side (meanOpenSlipDays),
-  // which was honest but incomplete - 13 milestones closed ahead of plan
-  // on Amanvana and that work was invisible on the dashboard.
+  // Total Delay (unchanged semantics): mean drag across all evaluated
+  // milestones. A portfolio-level signal that doesn't hide behind a
+  // critical-path villa that hasn't started yet. Positive = net behind.
   const totalDelayDays = extras?.netDaysVariance ?? 0;
 
-  // Projected handover for the hero card and Projected timeline track:
-  // baselineEnd shifted by the same mean-days-overdue number so the visual
-  // and the headline agree with each other. This is a representational
-  // projection, not a re-plan.
-  const projectedEnd = new Date(baselineEnd.getTime() + totalDelayDays * 86_400_000);
+  // Projected handover (2026-11-16 unify): Dashboard and Progress tab
+  // now share the SAME critical-path math — each villa's baseline + its
+  // max slip, then max across villas. Was previously baselineEnd +
+  // netDaysVariance, so the two tabs could disagree whenever slip wasn't
+  // evenly distributed. Falls back to the old shift if extras didn't
+  // compute the per-villa projection (e.g. empty DB).
+  const projectedEnd = extras?.projectProjectedHandover
+    ?? new Date(baselineEnd.getTime() + totalDelayDays * 86_400_000);
 
   const health: ProjectHealthSummary = {
     totalPlots: totalVillas,
     inScope: totalVillas,
+    villaRecordCount: extras?.totalVillaRecords,
     modelVillas: 0,
     phase1Villas: activeVillas.length,
     phase1BlocksActive: activeBlocks.length,

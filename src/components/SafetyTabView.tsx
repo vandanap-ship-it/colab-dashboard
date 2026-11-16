@@ -286,7 +286,14 @@ function OverviewCard({ overview }: { overview: SafetyBundle["overview"] }) {
           <div className={styles.ovSupportLbl}>Safety Inductions</div>
           <div className={styles.ovSupportVal}>{overview.totalInductions.toLocaleString("en-IN")}</div>
           <div className={styles.ovSupportSub}>
-            {overview.inductionsApproved} approved · {overview.inductionsPending} pending · {overview.inductionsRejected} rejected
+            {overview.inductionsApproved} approved ·{" "}
+            <span className={overview.inductionsPending > overview.inductionsApproved ? styles.ovPendingAmber : undefined}>
+              {overview.inductionsPending} pending
+            </span>
+            {" "}· {overview.inductionsRejected} rejected
+            {overview.inductionsPending > overview.inductionsApproved ? (
+              <span className={styles.ovAmberNote}> · Girish to review</span>
+            ) : null}
           </div>
         </a>
         <a href="#hse-checklist-list" className={`${styles.ovSupportTile} ${styles.ovLink}`}>
@@ -304,9 +311,11 @@ function OverviewCard({ overview }: { overview: SafetyBundle["overview"] }) {
           </div>
         </a>
         <a href="#observations-list" className={`${styles.ovSupportTile} ${styles.ovLink}`}>
-          <div className={styles.ovSupportLbl}>Safety Observations</div>
+          <div className={styles.ovSupportLbl}>Safety-tagged observations</div>
           <div className={styles.ovSupportVal}>{overview.totalSafetyObservations.toLocaleString("en-IN")}</div>
-          <div className={styles.ovSupportSub}>raised on this project</div>
+          <div className={styles.ovSupportSub}>
+            observations filed with module = safety · quality observations live on the QA/QC tab
+          </div>
         </a>
       </div>
     </div>
@@ -475,7 +484,7 @@ function PermitsCard({ permits, projectId }: { permits: SafetyBundle["permits"];
                     </div>
                     <div className={styles.permitExpiry}>
                       {p.expiryDate
-                        ? "work day " + new Date(p.expiryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                        ? "Work day: " + new Date(p.expiryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
                         : ""}
                     </div>
                     <div className={`${styles.permitStatusPill} ${styles[`permitPill_${p.status}` as keyof typeof styles] ?? ""}`}>

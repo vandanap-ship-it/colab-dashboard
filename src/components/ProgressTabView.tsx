@@ -54,13 +54,25 @@ export default function ProgressTabView({
 // ---------------------------------------------------------------------------
 
 function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
-  // Completion rate = % of the WHOLE PROJECT done, not just "of what was
-  // planned by today". Vandana 2026-11-05: management asks "how far
-  // along are we overall?", not "how much of today's quota did we hit?".
+  // Project completion — two numbers, not one. Vandana 2026-11-16 pass:
+  // the previous "% of WHOLE PROJECT done" read 1% for Amanvana (18 of
+  // 1,827 milestones, denominator spans the full 38-month baseline). That
+  // read scary-low on first glance even though most in-flight work isn't
+  // CLOSED, just in progress. Hero now shows "done of what was due" as
+  // the headline (18 / 66 ≈ 27%) and keeps the whole-plan % in the subtitle
+  // so management sees both without ambiguity.
+  const onPlanClosedPct = stats.dueByToday === 0
+    ? 0
+    : Math.round((stats.closedByToday / stats.dueByToday) * 100);
   const wholeClosedPct = stats.totalMilestonesWhole === 0
     ? 0
     : Math.round((stats.closedMilestonesWhole / stats.totalMilestonesWhole) * 100);
-  const behindCount = stats.openPastDue + Math.max(0, stats.closedByToday - stats.aheadCount);
+  // "Behind" = open past-due milestones. The previous formula added
+  // (closedByToday - aheadCount) which treated every on-time closure as
+  // late. Vandana 2026-11-16 clarity pass: use the clean set that's also
+  // the denominator for the mean-days-behind number below, so the tile is
+  // internally consistent.
+  const behindCount = stats.openPastDue;
 
   // Vandana 2026-11-05, option C + project-level request: show BOTH
   // project handover (critical-path finisher of the whole plan) and
@@ -100,6 +112,11 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
             baseline {projectBaselineDate} → projected {projectProjectedDate}
             {stats.projectDriverLabel ? ` · critical path: ${stats.projectDriverLabel}` : ""}
           </div>
+          {projectSlip === 0 && stats.projectDriverLabel ? (
+            <div className={styles.heroFootnote}>
+              The critical-path villa hasn&apos;t started yet, so the plan still absorbs every other villa&apos;s slip inside its window. This number will move the moment {stats.projectDriverLabel} begins.
+            </div>
+          ) : null}
         </div>
         <div className={styles.heroMain}>
           <div className={styles.heroLbl}>Worst villa</div>
@@ -130,10 +147,11 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
           </div>
         </div>
         <div className={styles.heroSupport}>
-          <div className={styles.heroSupportLbl}>Project completion</div>
-          <div className={styles.heroSupportVal}>{wholeClosedPct}%</div>
+          <div className={styles.heroSupportLbl}>Done of what was due</div>
+          <div className={styles.heroSupportVal}>{onPlanClosedPct}%</div>
           <div className={styles.heroSupportSub}>
-            {stats.closedMilestonesWhole} of {stats.totalMilestonesWhole} milestones done across the whole project
+            {stats.closedByToday} of {stats.dueByToday} milestones due by today ·
+            {" "}{wholeClosedPct}% of whole plan ({stats.closedMilestonesWhole} / {stats.totalMilestonesWhole})
           </div>
         </div>
       </div>
@@ -210,7 +228,7 @@ function BarRow({ name, pct, maxPct, tone }: { name: string; pct: number; maxPct
       <div className={styles.barTrack}>
         <div className={`${styles.barFill} ${tone === "planned" ? styles.barFillPlanned : styles.barFillActual}`} style={{ width: `${width}%` }} />
       </div>
-      <span className={styles.barVal}>{pct.toFixed(2)}%</span>
+      <span className={styles.barVal}>{Math.round(pct)}%</span>
     </div>
   );
 }
@@ -352,7 +370,7 @@ function VillaProgressCard({ projectId, rows }: { projectId: string; rows: Villa
                   <SortableTh label="Block"           active={sortKey === "blockCode"}      dir={sortDir} onClick={() => toggleSort("blockCode")} />
                   <SortableTh label="Current section" active={sortKey === "currentSection"} dir={sortDir} onClick={() => toggleSort("currentSection")} />
                   <SortableTh label="% complete"      active={sortKey === "pctComplete"}    dir={sortDir} onClick={() => toggleSort("pctComplete")} align="right" />
-                  <SortableTh label="Slip"            active={sortKey === "slipDays"}       dir={sortDir} onClick={() => toggleSort("slipDays")} align="right" />
+                  <SortableTh label="Slip"            active={sortKey === "slipDays"}       dir={sortDir} onClick={() => toggleSort("slipDays")} align="right" title="Slip = the villa's projected finish minus its baseline finish (based on MSP re-plan). The 'At today's pace' tile above uses a different formula — today's date minus baseline — so the hero and this column can show different numbers for the same villa." />
                   <SortableTh label="Status"          active={sortKey === "status"}         dir={sortDir} onClick={() => toggleSort("status")} align="right" />
                 </tr>
               </thead>
@@ -415,15 +433,17 @@ function SortableTh({
   dir,
   onClick,
   align,
+  title,
 }: {
   label: string;
   active: boolean;
   dir: SortDir;
   onClick: () => void;
   align?: "right";
+  title?: string;
 }) {
   return (
-    <th className={align === "right" ? styles.thRight : ""}>
+    <th className={align === "right" ? styles.thRight : ""} title={title}>
       <button type="button" onClick={onClick} className={`${styles.thBtn} ${active ? styles.thBtnActive : ""}`}>
         {label}
         <ArrowUpDown size={11} className={active ? styles.thIconActive : styles.thIcon} />

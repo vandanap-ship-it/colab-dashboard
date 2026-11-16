@@ -17,8 +17,17 @@
 
 /** Users whose submissions are hidden from the production dashboard tabs
  *  (counts + lists). They can still use the app; their rows just don't
- *  pollute the management view. */
-export const DASHBOARD_TEST_USER_PREFIXES: readonly string[] = ["Vandana"];
+ *  pollute the management view.
+ *
+ *  Widened 2026-11-16 (Vandana management-review pass) to also hide the
+ *  default test / walkthrough accounts. Neither has submissions today,
+ *  but either one producing even a single row would surface on the
+ *  management tiles — prophylactic. */
+export const DASHBOARD_TEST_USER_PREFIXES: readonly string[] = [
+  "Vandana",
+  "test",
+  "Walkthrough",
+];
 
 /** Members of the QA/QC team on Amanvana. Inspections they filled count
  *  under QA/QC even if the row's module tag is SAFETY. */

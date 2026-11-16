@@ -73,9 +73,22 @@ export default function ExecutiveOverview({
   const overshootPct = 100 - plannedPct;
   const activeBlocks = blocks.filter((b) => b.active);
 
-  const probLabel = h.probability === "low" ? "Low" : h.probability === "med" ? "Medium" : "High";
+  // Health pill tone — rebased on real delay signal 2026-11-16. Previous
+  // formula asked `probabilityBand(reraEndDate, projectedEnd)`; Amanvana's
+  // reraEndDate is NULL so that function always fell back to "high" / On
+  // track, regardless of how far behind we actually are. The review on 16
+  // Nov surfaced this as the single biggest misread risk on the dashboard:
+  // 52 open past-due milestones, worst villa 166 days behind, pill read
+  // "On track · High". Now derived straight from totalDelayDays with a
+  // critical-blocks escalator so any live site-level slip shows a cue.
+  const healthTone: "low" | "med" | "high" =
+    h.totalDelayDays > 30 || h.criticalBlocks > 3
+      ? "low"
+      : h.totalDelayDays > 0 || h.criticalBlocks > 0
+        ? "med"
+        : "high";
   const healthLabel =
-    h.probability === "high" ? "On track" : h.probability === "med" ? "Watch" : "At risk";
+    healthTone === "high" ? "On track" : healthTone === "med" ? "Watch" : "At risk";
 
   return (
     <div className={styles.wrap}>
@@ -93,17 +106,20 @@ export default function ExecutiveOverview({
             <span className={styles.sm}>
               villas in scope
               {h.modelVillas > 0 ? ` · ${h.modelVillas} model villas` : ""}
+              {h.villaRecordCount && h.villaRecordCount !== h.inScope
+                ? ` · ${h.villaRecordCount} tracked rows (some are combined pairs)`
+                : ""}
             </span>
           </div>
         </div>
-        <div className={styles.scopeCell} title="Contractor 1, executing Phase 1. Villas and blocks they are responsible for.">
-          <div className={styles.lb}>Contractor 1 · Abraham Thomas</div>
+        <div className={styles.scopeCell} title="Villas and blocks executed by Abraham Thomas.">
+          <div className={styles.lb}>Abraham Thomas</div>
           <div className={styles.vl}>
             {h.atVillas} <span className={styles.sm}>villas · {h.atBlocks} blocks</span>
           </div>
         </div>
-        <div className={styles.scopeCell} title="Contractor 2 on this project. Villas and blocks allocated to them even if they have not yet mobilised.">
-          <div className={styles.lb}>Contractor 2 · Elegant Constructions</div>
+        <div className={styles.scopeCell} title="Villas and blocks allocated to Elegant Constructions, including scope not yet mobilised.">
+          <div className={styles.lb}>Elegant Constructions</div>
           <div className={styles.vl}>
             {h.elegantVillas}
             <span className={styles.sm}>
@@ -196,12 +212,12 @@ export default function ExecutiveOverview({
         <div className={styles.hsHd}>
           <h3>
             <span>Schedule window</span>
-            <span className={`${styles.projectHealthPill} ${styles[h.probability]}`}>
+            <span className={`${styles.projectHealthPill} ${styles[healthTone]}`}>
               {healthLabel}
             </span>
           </h3>
           <span className={styles.meta}>
-            As of {fmtDate(h.asOf)} · Phase 1 · Contractors: Abraham Thomas, Elegant Constructions
+            As of {fmtDate(h.asOf)} · Contractors: Abraham Thomas, Elegant Constructions
           </span>
         </div>
         <div className={styles.hsStrip}>
@@ -215,13 +231,14 @@ export default function ExecutiveOverview({
               {fmtDate(h.projectedEnd)}
             </span>
           </div>
-          <div className={styles.hsStripCell}>
+          <div className={styles.hsStripCell} title="Villas with any slipped milestone, out of the villas that have actually started (baseline start reached). The rest of the villas are not yet on the timeline.">
             <span className={styles.hsStripLb}>Villas delayed</span>
-            <span className={styles.hsStripVl}>{villasDelayed} / {activeVillas.length}</span>
-          </div>
-          <div className={styles.hsStripCell}>
-            <span className={styles.hsStripLb}>Probability of on-time completion</span>
-            <span className={`${styles.probPill} ${styles[h.probability]}`}>{probLabel}</span>
+            <span className={styles.hsStripVl}>
+              {villasDelayed} of {activeVillas.length} started
+              {h.inScope > activeVillas.length ? (
+                <span className={styles.hsStripSub}> · {h.inScope} in scope</span>
+              ) : null}
+            </span>
           </div>
         </div>
         <div className={styles.ptTimelineLean}>
@@ -403,7 +420,7 @@ function ScheduleVarianceDrillCard({
       <div className={styles.cardHd}>
         <h3>Where is the schedule variance?</h3>
         <span className={styles.meta}>
-          both sides of the Net Delay: {totalOverdue} behind baseline, {totalAhead} completed ahead of plan
+          what&apos;s late and what finished early — the two sides of the Total Delay number above: {totalOverdue} behind baseline, {totalAhead} completed ahead of plan
         </span>
       </div>
       <div className={styles.cardBd}>

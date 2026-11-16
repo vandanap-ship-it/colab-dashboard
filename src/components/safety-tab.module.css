@@ -184,6 +184,18 @@
   font-size: 11.5px;
   color: var(--sf-ink-2);
 }
+/* Amber emphasis for a backlog signal that would otherwise sit flat in
+   grey — used on Pending Inductions when pending > approved. The
+   accompanying .ovAmberNote is the small action prompt ("· Girish to
+   review") placed right after the count. */
+.ovPendingAmber {
+  color: var(--sf-warn, #B57200);
+  font-weight: 600;
+}
+.ovAmberNote {
+  color: var(--sf-warn, #B57200);
+  font-weight: 500;
+}
 .ovTile {
   padding: 14px 16px;
   border-radius: 6px;

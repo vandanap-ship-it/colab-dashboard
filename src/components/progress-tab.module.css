@@ -472,6 +472,18 @@
   color: var(--pt-ink-2);
   margin-top: 8px;
 }
+/* Small italic footnote under a hero number when the raw figure needs
+   context — used today under "Project handover +0 days" to explain that
+   the critical-path villa hasn't started yet. Keeps the figure honest
+   without the reader having to ask. */
+.heroFootnote {
+  font-size: 11.5px;
+  font-style: italic;
+  color: var(--pt-ink-3);
+  margin-top: 8px;
+  line-height: 1.5;
+  max-width: 420px;
+}
 .heroSupport {
   display: flex;
   flex-direction: column;

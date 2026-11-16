@@ -234,7 +234,12 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
       where: {
         projectId,
         deletedAt: null,
-        type: { in: ["HOT_WORK", "NIGHT_WORK", "DESHUTTERING"] },
+        // HEIGHT work added 2026-11-16 — working at height is one of the
+        // highest-risk categories on a construction site and sits alongside
+        // Hot / Night / De-shuttering as a hazard-controlled permit. The
+        // earlier array left 21 approved HEIGHT permits out of the EHS
+        // dashboard entirely.
+        type: { in: ["HOT_WORK", "NIGHT_WORK", "DESHUTTERING", "HEIGHT"] },
       },
       orderBy: [{ workDate: "desc" }, { createdAt: "desc" }],
       select: {
@@ -274,7 +279,19 @@ export async function getSafetyBundle(projectId: string, today: Date = new Date(
   // on 2026-11-04 (Vandana management-review pass). The overview tile grid
   // now surfaces the real activity volumes the dashboard needs: inductions
   // / HSE checklists / safety permits / observations.
-  const projectStart = project?.actualStartDate ?? project?.startDate ?? todayStart;
+  // Anchor the "Safe man-hours since …" date to the FIRST real manpower
+  // entry on this project, not the project's declared baseline start.
+  // actualStartDate on Amanvana is NULL, so the old fallback used
+  // 26 Jan 2026 even though labour tracking only began later — reading as
+  // if we had been counting hours for ten months of pre-mobilisation.
+  // Vandana 2026-11-16: use the earliest actual entryDate instead; fall
+  // back to project.actualStartDate, then project.startDate, then today.
+  const firstManpowerDate = manpower.reduce<Date | null>((min, m) => {
+    if (!m.entryDate) return min;
+    if (!min || m.entryDate < min) return m.entryDate;
+    return min;
+  }, null);
+  const projectStart = firstManpowerDate ?? project?.actualStartDate ?? project?.startDate ?? todayStart;
   const manHours = manpower.reduce((sum, m) => sum + m.actualCount * 8, 0);
 
   const inductionsApproved = inductions.filter((i) => i.status === "APPROVED").length;
