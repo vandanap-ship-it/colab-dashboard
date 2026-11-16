@@ -44,6 +44,21 @@ const PII_KEYS = new Set<string>([
 const AADHAAR_RX = /\b\d{4}\s?\d{4}\s?\d{4}\b/g;
 const PHONE_RX = /\b[6-9]\d{9}\b/g; // Indian mobile numbers
 
+// Third-party browser noise. OEM Android browsers (Vivo, Oppo/MIUI,
+// Samsung Internet, UC, etc.) and extensions inject their own scripts into
+// every page for features like reading mode, data-saver, and translation.
+// When those injected scripts throw, our window.onerror handler captures
+// them even though they are not our code — they surface as anonymous inline
+// scripts (<anonymous>:1:1) referencing a symbol that exists nowhere in our
+// bundle. We drop them so the site team isn't paged for a phone browser's
+// own bug. Match on the symbol name in the error message; extend this list
+// as new OEM-injection symbols appear in the Sentry feed.
+//   - onModuleDataArrival: VivoBrowser content/reading-module injection
+//     (first seen 2026-11-16 from a Vivo I2011 on /mobile/.../inspection/new)
+const THIRD_PARTY_INJECTION_SYMBOLS = [
+  "onModuleDataArrival",
+];
+
 function maskString(value: string): string {
   return value
     .replace(AADHAAR_RX, "[redacted-aadhaar]")
@@ -71,6 +86,12 @@ function scrub(value: unknown, key?: string): unknown {
  * benign noise and otherwise return a scrubbed copy.
  */
 export function sentryBeforeSend(event: ErrorEvent, _hint: EventHint): ErrorEvent | null {
+  // Drop third-party browser-injection noise before anything else — these
+  // are not our bugs (see THIRD_PARTY_INJECTION_SYMBOLS above).
+  const firstExceptionValue = event.exception?.values?.[0]?.value ?? "";
+  if (THIRD_PARTY_INJECTION_SYMBOLS.some((sym) => firstExceptionValue.includes(sym))) {
+    return null;
+  }
   // Scrub the request payload — captured on API-route errors.
   if (event.request?.data) {
     event.request.data = scrub(event.request.data) as typeof event.request.data;
