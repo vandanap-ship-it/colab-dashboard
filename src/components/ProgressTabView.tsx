@@ -90,8 +90,6 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
   const worstTone = worstSlip > 60 ? styles.phBad : worstSlip > 15 ? styles.phWarn : styles.phGood;
   const worstBaselineDate = stats.worstVillaBaselineHandover
     ? formatShortDate(stats.worstVillaBaselineHandover) : "-";
-  const worstProjectedDate = stats.worstVillaProjectedHandover
-    ? formatShortDate(stats.worstVillaProjectedHandover) : "-";
 
   return (
     <section className={`${styles.card} ${styles.hero}`}>
@@ -112,9 +110,9 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
             baseline {projectBaselineDate} → projected {projectProjectedDate}
             {stats.projectDriverLabel ? ` · critical path: ${stats.projectDriverLabel}` : ""}
           </div>
-          {projectSlip === 0 && stats.projectDriverLabel ? (
+          {projectSlip === 0 ? (
             <div className={styles.heroFootnote}>
-              The critical-path villa hasn&apos;t started yet, so the plan still absorbs every other villa&apos;s slip inside its window. This number will move the moment {stats.projectDriverLabel} begins.
+              Crediting the work already done, no villa currently projects past the baseline handover — the slipping villas still finish inside the plan&apos;s window. Raw calendar lateness is shown per villa in the table below.
             </div>
           ) : null}
         </div>
@@ -126,8 +124,11 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
           </div>
           <div className={styles.heroSub}>
             {stats.worstVillaLabel
-              ? `${stats.worstVillaLabel} · baseline ${worstBaselineDate} → projected ${worstProjectedDate}`
+              ? `${stats.worstVillaLabel} · ${worstSlip} days past its planned date, ${stats.worstVillaPctComplete}% built${worstBaselineDate !== "-" ? ` · baseline ${worstBaselineDate}` : ""}`
               : "-"}
+          </div>
+          <div className={styles.heroFootnote}>
+            Raw days past the planned date (not credited) — the single most-behind villa, shown with how far along it actually is.
           </div>
         </div>
       </div>
@@ -136,7 +137,7 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
           <div className={styles.heroSupportLbl}>Behind</div>
           <div className={`${styles.heroSupportVal} ${styles.phBad}`}>+{stats.meanDaysBehind}d</div>
           <div className={styles.heroSupportSub}>
-            mean across {behindCount || stats.openPastDue} overdue milestones
+            mean across {behindCount || stats.openPastDue} overdue milestones, crediting work done
           </div>
         </div>
         <div className={styles.heroSupport}>
@@ -370,7 +371,7 @@ function VillaProgressCard({ projectId, rows }: { projectId: string; rows: Villa
                   <SortableTh label="Block"           active={sortKey === "blockCode"}      dir={sortDir} onClick={() => toggleSort("blockCode")} />
                   <SortableTh label="Current section" active={sortKey === "currentSection"} dir={sortDir} onClick={() => toggleSort("currentSection")} />
                   <SortableTh label="% complete"      active={sortKey === "pctComplete"}    dir={sortDir} onClick={() => toggleSort("pctComplete")} align="right" />
-                  <SortableTh label="Slip"            active={sortKey === "slipDays"}       dir={sortDir} onClick={() => toggleSort("slipDays")} align="right" title="Slip = the villa's projected finish minus its baseline finish (based on MSP re-plan). The 'At today's pace' tile above uses a different formula — today's date minus baseline — so the hero and this column can show different numbers for the same villa." />
+                  <SortableTh label="Slip"            active={sortKey === "slipDays"}       dir={sortDir} onClick={() => toggleSort("slipDays")} align="right" title="Slip = the villa's worst days behind baseline, crediting the work already done (days past the planned date × the share of work still remaining). Same model as the headline. The % complete column shows the progress being credited." />
                   <SortableTh label="Status"          active={sortKey === "status"}         dir={sortDir} onClick={() => toggleSort("status")} align="right" />
                 </tr>
               </thead>

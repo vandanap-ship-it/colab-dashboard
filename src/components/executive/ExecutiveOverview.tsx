@@ -160,11 +160,13 @@ export default function ExecutiveOverview({
               <span className={styles.unit}>{Math.abs(h.totalDelayDays) === 1 ? "day" : "days"}</span>
             </div>
             <div className={styles.kpiSub}>
-              {h.milestonesAheadOfPlan && h.milestonesAheadOfPlan > 0
-                ? `Net of behind and ahead work · ${h.milestonesAheadOfPlan} milestones finished early offset the overdue side`
-                : h.totalDelayDays === 0
-                  ? `On schedule - nothing overdue, nothing early`
-                  : `Mean days overdue across open milestones past baseline`}
+              {h.calendarDelayDays != null && h.calendarDelayDays !== h.totalDelayDays
+                ? `Credits work already done · ${h.calendarDelayDays} days on raw calendar, before crediting in-progress work`
+                : h.milestonesAheadOfPlan && h.milestonesAheadOfPlan > 0
+                  ? `Net of behind and ahead work · ${h.milestonesAheadOfPlan} milestones finished early offset the overdue side`
+                  : h.totalDelayDays === 0
+                    ? `On schedule - nothing overdue, nothing early`
+                    : `Mean days behind across open milestones, crediting work done`}
             </div>
           </div>
           <div className={styles.kpiHeroDiv} aria-hidden />

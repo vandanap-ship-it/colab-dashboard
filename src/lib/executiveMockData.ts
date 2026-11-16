@@ -346,6 +346,10 @@ export interface ProjectHealthSummary {
   reraEndDate: Date | null;
   projectedEnd: Date;
   totalDelayDays: number;
+  /** Raw calendar version of totalDelayDays (no progress credit). Shown as
+   *  a small secondary line under the headline so the conservative figure
+   *  stays visible. Optional — falls back to hiding the line. */
+  calendarDelayDays?: number;
   reraDelayDays: number;
   hindrances: number;
   criticalBlocks: number;

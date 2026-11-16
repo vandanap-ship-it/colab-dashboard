@@ -17,6 +17,7 @@ import type { DashboardBag, MatrixRow } from "@/lib/rollupServer";
 import type { BlockRollup as ClientBlock, VillaRollup as ClientVilla, ContractorRollup, MilestoneCell, ProjectHealthSummary } from "@/lib/executiveMockData";
 import { getProjectStats } from "@/lib/projectStats";
 import { getProjectOverride } from "@/lib/projects";
+import { milestoneSlipDays } from "@/lib/scheduleSlip";
 // Kept only for the fallback mock contractor name below — the rest of the
 // project-specific facts flow through getProjectOverride.
 import { AMANVANA_CONTRACTORS } from "@/lib/projects/amanvana";
@@ -74,8 +75,13 @@ export interface ExecutiveExtras {
   meanAheadDays: number;
   /** Net schedule variance in days: behind - ahead, averaged across all
    *  milestones that have hit baseline or closed. Positive = net behind,
-   *  negative = net ahead. The new Total Delay KPI (iteration 4). */
+   *  negative = net ahead. Credits in-flight progress — the Total Delay
+   *  headline. */
   netDaysVariance: number;
+  /** Same net math on RAW calendar slip (no progress credit). Shown as the
+   *  secondary "raw calendar slippage" figure beneath the headline so the
+   *  conservative number stays visible. */
+  calendarDelayDays: number;
   /** Total milestones feeding the net calc (behind + ahead). */
   evaluatedCount: number;
   /** Total behind-count feeding the net: open past-due + closed late. */
@@ -149,6 +155,8 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
       },
       select: {
         baselineFinish: true,
+        actualFinish: true,
+        pctComplete: true,
         section: { select: { name: true } },
         villa: {
           select: {
@@ -190,6 +198,7 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
       select: {
         baselineFinish: true,
         actualFinish: true,
+        pctComplete: true,
         section: { select: { name: true } },
         villa: {
           select: {
@@ -207,6 +216,7 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
       select: {
         baselineFinish: true,
         actualFinish: true,
+        pctComplete: true,
         villa: { select: { id: true } },
       },
     }),
@@ -217,13 +227,16 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     }),
   ]);
   // Behind side - two contributors:
-  //   1. Open past-due milestones: (today - baselineFinish) each.
-  //   2. Closed-but-late milestones: (actualFinish - baselineFinish) each.
-  // Both are legitimate slippage and both belong in the net calculation.
-  let behindDaysSum = 0;
+  //   1. Open past-due milestones: credited slip (days behind × work remaining).
+  //   2. Closed-but-late milestones: actualFinish - baselineFinish (final).
+  // Both are slippage and both belong in the net. We also keep a RAW
+  // (un-credited) behind-sum so the Dashboard can show "X days raw calendar
+  // slippage" beside the credited headline — see scheduleSlip.ts for why.
+  let behindDaysSum = 0;       // credited
+  let behindDaysSumRaw = 0;    // raw calendar
   for (const m of overdueMilestones) {
-    if (!m.baselineFinish) continue;
-    behindDaysSum += Math.max(0, Math.round((now.getTime() - m.baselineFinish.getTime()) / 86_400_000));
+    behindDaysSum += milestoneSlipDays(m, now, true);
+    behindDaysSumRaw += milestoneSlipDays(m, now, false);
   }
   let closedLateCount = 0;
   let closedLateDaysSum = 0;
@@ -241,7 +254,8 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     }
   }
   const behindCount = overdueMilestones.length + closedLateCount;
-  const behindTotal = behindDaysSum + closedLateDaysSum;
+  const behindTotal = behindDaysSum + closedLateDaysSum;         // credited
+  const behindTotalRaw = behindDaysSumRaw + closedLateDaysSum;   // raw
 
   // Legacy mean-behind on the open-past-due set only, kept for the old
   // Total Delay fallback and the Progress-tab subtitles.
@@ -250,13 +264,17 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     : Math.round(behindDaysSum / overdueMilestones.length);
   const meanAheadDays = aheadCount === 0 ? 0 : Math.round(aheadDaysSum / aheadCount);
 
-  // Net schedule variance (Vandana + boss, 2026-11-04 pyramid pass +
-  // net-delay request): one number that captures both slippage AND work
-  // done ahead of plan. Positive = net behind, negative = net ahead.
+  // Net schedule variance: one number that captures slippage AND work done
+  // ahead of plan. Positive = net behind. netDaysVariance credits in-flight
+  // progress (the headline); calendarDelayDays is the same math on raw
+  // calendar slip (the secondary "raw" figure).
   const evaluatedCount = behindCount + aheadCount;
   const netDaysVariance = evaluatedCount === 0
     ? 0
     : Math.round((behindTotal - aheadDaysSum) / evaluatedCount);
+  const calendarDelayDays = evaluatedCount === 0
+    ? 0
+    : Math.round((behindTotalRaw - aheadDaysSum) / evaluatedCount);
 
   const overdueList = overdueMilestones
     .map((m) => {
@@ -300,16 +318,19 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
   // milestones. The old rule only looked at the villa's currently-active
   // in-flight milestone which read 0 whenever the slippage had already
   // rolled over into a closed milestone.
+  // Critical = block with any milestone whose CREDITED slip exceeds 15 days.
+  // Using credited slip keeps this consistent with the headline: a block
+  // that's 95% done and a few weeks past date isn't "critical", but one
+  // genuinely stuck is. On Amanvana today this is unchanged at 10 blocks
+  // either way — the stuck blocks stay flagged.
   const criticalBlockCodes = new Set<string>();
   for (const m of overdueMilestones) {
-    if (!m.baselineFinish || !m.villa?.block?.code) continue;
-    const daysBehind = Math.round((now.getTime() - m.baselineFinish.getTime()) / 86_400_000);
-    if (daysBehind > 15) criticalBlockCodes.add(m.villa.block.code);
+    if (!m.villa?.block?.code) continue;
+    if (milestoneSlipDays(m, now, true) > 15) criticalBlockCodes.add(m.villa.block.code);
   }
   for (const m of aheadOfPlan) {
-    if (!m.baselineFinish || !m.actualFinish || !m.villa?.block?.code) continue;
-    const diffDays = Math.round((m.actualFinish.getTime() - m.baselineFinish.getTime()) / 86_400_000);
-    if (diffDays > 15) criticalBlockCodes.add(m.villa.block.code);
+    if (!m.villa?.block?.code) continue;
+    if (milestoneSlipDays(m, now, true) > 15) criticalBlockCodes.add(m.villa.block.code);
   }
   const criticalBlocksTotal = criticalBlockCodes.size;
 
@@ -320,10 +341,8 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
   // together if the formula changes.
   const villaMaxSlip = new Map<string, number>();
   for (const m of slipRows) {
-    if (!m.baselineFinish || !m.villa) continue;
-    const slip = !m.actualFinish
-      ? Math.max(0, Math.round((now.getTime() - m.baselineFinish.getTime()) / 86_400_000))
-      : Math.max(0, Math.round((m.actualFinish.getTime() - m.baselineFinish.getTime()) / 86_400_000));
+    if (!m.villa) continue;
+    const slip = milestoneSlipDays(m, now, true); // credited
     const current = villaMaxSlip.get(m.villa.id) ?? 0;
     if (slip > current) villaMaxSlip.set(m.villa.id, slip);
   }
@@ -351,6 +370,7 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     milestonesAheadOfPlan: aheadCount,
     meanAheadDays,
     netDaysVariance,
+    calendarDelayDays,
     evaluatedCount,
     behindCount,
     overdueList,
@@ -558,6 +578,7 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
     reraEndDate: project.reraEndDate ?? null,
     projectedEnd,
     totalDelayDays,
+    calendarDelayDays: extras?.calendarDelayDays,
     reraDelayDays: computeReraDelay(project.reraEndDate, rollup.projectedEnd),
     hindrances: extras?.hindranceCount ?? 0,
     // Prefer the slip-inclusive count from extras (counts closed-late milestones

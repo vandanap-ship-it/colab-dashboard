@@ -8,6 +8,7 @@
 // All server-only; UI components take these shapes and stay Prisma-free.
 
 import { prisma } from "@/lib/prisma";
+import { milestoneSlipDays } from "@/lib/scheduleSlip";
 
 // ---------------------------------------------------------------------------
 // §0 - overall honest delay picture
@@ -43,12 +44,12 @@ export interface ProgressHeroStats {
   /** Milestones closed anywhere in the project (actualFinish set),
    *  irrespective of whether baseline was reached. */
   closedMilestonesWhole: number;
-  /** Worst villa's cumulative slip across any single milestone, in days.
-   *  Treated as a critical-path proxy: projects don't "catch up" from
-   *  historical slippage, so the villa with the largest slip anchors the
-   *  earliest honest projected handover date. 0 when no villa has slipped.
-   *  Vandana 2026-11-05 management review. */
+  /** Worst villa's RAW days behind on any single milestone (literal
+   *  lateness, not credited). The pain pointer. 0 when none. */
   worstVillaSlipDays: number;
+  /** % complete of that worst villa's most-behind milestone — the context
+   *  that explains the raw number (e.g. 170 days behind, but 32% built). */
+  worstVillaPctComplete: number;
   /** Human label for the worst villa ("Block 10 · Villa 34"). Empty when
    *  no villa has slipped. */
   worstVillaLabel: string;
@@ -95,7 +96,7 @@ export async function getProgressHeroStats(
         baselineFinish: { lte: asOf },
         actualFinish: null,
       },
-      select: { baselineFinish: true },
+      select: { baselineFinish: true, actualFinish: true, pctComplete: true },
     }),
     // Every closed milestone - need both the baseline and the actualFinish
     // to compute the ahead-or-behind day diff per row.
@@ -118,6 +119,7 @@ export async function getProgressHeroStats(
       select: {
         baselineFinish: true,
         actualFinish: true,
+        pctComplete: true,
         villa: {
           select: {
             id: true, number: true, label: true,
@@ -136,14 +138,16 @@ export async function getProgressHeroStats(
     }),
   ]);
 
-  // Behind side: open past-due milestones. Each contributes (today - baseline).
-  let behindDaysSum = 0;
-  let maxDays = 0;
+  // Behind side: open past-due milestones. Credited slip (days behind ×
+  // work remaining) — same model as the Dashboard. maxDaysRaw keeps the
+  // literal worst single lateness for the worst-villa callout.
+  let behindDaysSum = 0;  // credited
+  let maxDays = 0;        // raw worst single
   for (const m of overdue) {
     if (!m.baselineFinish) continue;
-    const d = Math.max(0, Math.round((asOf.getTime() - m.baselineFinish.getTime()) / 86400000));
-    behindDaysSum += d;
-    if (d > maxDays) maxDays = d;
+    behindDaysSum += milestoneSlipDays(m, asOf, true);
+    const raw = milestoneSlipDays(m, asOf, false);
+    if (raw > maxDays) maxDays = raw;
   }
   const meanDaysBehind = overdue.length === 0 ? 0 : Math.round(behindDaysSum / overdue.length);
 
@@ -176,43 +180,47 @@ export async function getProgressHeroStats(
     ? 0
     : Math.round((totalBehindDays - aheadDaysSum) / evaluatedCount);
 
-  // Worst-villa projection (Vandana 2026-11-05 management review): for
-  // each villa, find the biggest cumulative slip across any single
-  // milestone - open past-due (today - baselineFinish) or closed-late
-  // (actualFinish - baselineFinish). The villa with the largest such
-  // number anchors the honest "at today's pace" handover: baseline
-  // handover date + max slip.
-  type VillaSlipRow = { number: number | null; label: string | null; blockCode: string | null; slip: number };
-  const villaMaxSlip = new Map<string, VillaSlipRow>();
+  // Per-villa slip, two ways:
+  //   rawVillaMax     — worst RAW days-behind per villa, with the % complete
+  //                     of that milestone. Powers the "worst villa" callout,
+  //                     which intentionally shows the literal lateness plus
+  //                     the progress that explains it (e.g. 170 days, 32% done).
+  //   creditedVillaMax — worst CREDITED slip per villa. Powers the project
+  //                     handover projection, same credited model as the
+  //                     Dashboard, so a villa that's 80% done doesn't push
+  //                     the handover date by its full raw lateness.
+  type VillaSlipRow = { number: number | null; label: string | null; blockCode: string | null; slip: number; pct: number };
+  const rawVillaMax = new Map<string, VillaSlipRow>();
+  const creditedVillaMax = new Map<string, number>();
   for (const m of slipRows) {
-    if (!m.baselineFinish || !m.villa) continue;
-    let slip = 0;
-    if (!m.actualFinish) {
-      slip = Math.max(0, Math.round((asOf.getTime() - m.baselineFinish.getTime()) / 86_400_000));
-    } else {
-      slip = Math.max(0, Math.round((m.actualFinish.getTime() - m.baselineFinish.getTime()) / 86_400_000));
-    }
-    const current = villaMaxSlip.get(m.villa.id);
-    if (!current || slip > current.slip) {
-      villaMaxSlip.set(m.villa.id, {
+    if (!m.villa) continue;
+    const raw = milestoneSlipDays(m, asOf, false);
+    const credited = milestoneSlipDays(m, asOf, true);
+    const current = rawVillaMax.get(m.villa.id);
+    if (!current || raw > current.slip) {
+      rawVillaMax.set(m.villa.id, {
         number: m.villa.number ?? null,
         label: m.villa.label ?? null,
         blockCode: m.villa.block?.code ?? null,
-        slip,
+        slip: raw,
+        pct: m.pctComplete,
       });
     }
+    const curC = creditedVillaMax.get(m.villa.id) ?? 0;
+    if (credited > curC) creditedVillaMax.set(m.villa.id, credited);
   }
 
   let worstVillaId: string = "";
   let worstVilla: VillaSlipRow | null = null;
-  for (const [id, row] of villaMaxSlip) {
+  for (const [id, row] of rawVillaMax) {
     if (!worstVilla || row.slip > worstVilla.slip) {
       worstVilla = row;
       worstVillaId = id;
     }
   }
 
-  const worstVillaSlipDays = worstVilla?.slip ?? 0;
+  const worstVillaSlipDays = Math.round(worstVilla?.slip ?? 0);
+  const worstVillaPctComplete = Math.round(worstVilla?.pct ?? 0);
   const worstVillaLabel = worstVilla
     ? `${worstVilla.blockCode ? `Block ${worstVilla.blockCode} · ` : ""}${worstVilla.label ?? (worstVilla.number ? `Villa ${worstVilla.number}` : "Villa")}`
     : "";
@@ -225,19 +233,18 @@ export async function getProgressHeroStats(
     ? new Date(worstBaseline.getTime() + worstVillaSlipDays * 86_400_000).toISOString()
     : "";
 
-  // Project-level handover (Vandana 2026-11-05): the project finishes
-  // when the LAST villa hands over. Compute each villa's projected
-  // handover = that villa's baseline handover + its max slip to date;
-  // project handover = max across all villas. A villa with huge slip
-  // doesn't push the project if its projected date is still inside the
-  // critical-path window.
+  // Project-level handover: the project finishes when the LAST villa hands
+  // over. Each villa's projected handover = its baseline handover + its
+  // CREDITED max slip; project handover = max across all villas. Crediting
+  // progress means a near-done villa that's technically late doesn't push
+  // the project date by its full raw lateness.
   let latestBaselineMs = 0;
   let latestProjectedMs = 0;
   let projectDriverId = "";
   for (const h of handoverBaselines) {
     const baseline = h._max.baselineFinish;
     if (!baseline) continue;
-    const villaSlip = villaMaxSlip.get(h.villaId)?.slip ?? 0;
+    const villaSlip = creditedVillaMax.get(h.villaId) ?? 0;
     const baselineMs = baseline.getTime();
     const projectedMs = baselineMs + villaSlip * 86_400_000;
     if (baselineMs > latestBaselineMs) latestBaselineMs = baselineMs;
@@ -246,7 +253,7 @@ export async function getProgressHeroStats(
       projectDriverId = h.villaId;
     }
   }
-  const driverRow = projectDriverId ? villaMaxSlip.get(projectDriverId) : undefined;
+  const driverRow = projectDriverId ? rawVillaMax.get(projectDriverId) : undefined;
   const projectDriverLabel = driverRow
     ? `${driverRow.blockCode ? `Block ${driverRow.blockCode} · ` : ""}${driverRow.label ?? (driverRow.number ? `Villa ${driverRow.number}` : "Villa")}`
     : "";
@@ -269,6 +276,7 @@ export async function getProgressHeroStats(
     totalMilestonesWhole,
     closedMilestonesWhole,
     worstVillaSlipDays,
+    worstVillaPctComplete,
     worstVillaLabel,
     worstVillaBaselineHandover: worstBaselineIso,
     worstVillaProjectedHandover: worstProjectedIso,
@@ -485,6 +493,7 @@ export async function getVillaProgressRows(
     // Sort milestones by section orderIndex so "current" = earliest not-yet-closed.
     const ordered = [...v.milestones].sort((a, b) => (a.section?.orderIndex ?? 0) - (b.section?.orderIndex ?? 0));
 
+    const now = new Date();
     for (const m of ordered) {
       if (m.actualFinish) {
         closedSections++;
@@ -493,10 +502,13 @@ export async function getVillaProgressRows(
         startedSections++;
         pctSum += m.pctComplete ?? (m.actualFinish ? 100 : 0);
       }
-      if (m.baselineFinish && m.projectedFinish) {
-        const slip = Math.round((m.projectedFinish.getTime() - m.baselineFinish.getTime()) / 86400000);
-        if (slip > maxSlip) maxSlip = slip;
-      }
+      // Slip = credited days behind, same model as the hero and Dashboard.
+      // Previously used projectedFinish - baselineFinish, but those planner
+      // dates are stale on Amanvana (all sit just after baseline and have
+      // themselves passed), so they understated. milestoneSlipDays credits
+      // in-progress work against the raw days-behind.
+      const slip = Math.round(milestoneSlipDays(m, now, true));
+      if (slip > maxSlip) maxSlip = slip;
       // First not-closed section = current
       if (!currentSectionName && !m.actualFinish && m.section) {
         currentSectionName = m.section.name;

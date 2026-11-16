@@ -65,6 +65,7 @@ export default async function ProgressTabPage({
       totalMilestonesWhole: 0,
       closedMilestonesWhole: 0,
       worstVillaSlipDays: 0,
+      worstVillaPctComplete: 0,
       worstVillaLabel: "",
       worstVillaBaselineHandover: "",
       worstVillaProjectedHandover: "",
