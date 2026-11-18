@@ -132,17 +132,17 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
       </div>
       <div className={styles.heroMainRow}>
         <div className={styles.heroSupport}>
-          <div className={styles.heroSupportLbl}>Behind</div>
+          <div className={styles.heroSupportLbl}>Avg days late</div>
           <div className={`${styles.heroSupportVal} ${styles.phBad}`}>+{stats.meanDaysBehind}d</div>
           <div className={styles.heroSupportSub}>
-            mean across {behindCount || stats.openPastDue} overdue milestones, crediting work done
+            average lateness of the {behindCount || stats.openPastDue} overdue milestones (credited) — not the project total, which is Total Delay on the Dashboard
           </div>
         </div>
         <div className={styles.heroSupport}>
-          <div className={styles.heroSupportLbl}>Ahead</div>
+          <div className={styles.heroSupportLbl}>Avg days early</div>
           <div className={`${styles.heroSupportVal} ${styles.phGood}`}>-{stats.meanDaysAhead}d</div>
           <div className={styles.heroSupportSub}>
-            mean across {stats.aheadCount} early-finish milestones
+            average of the {stats.aheadCount} milestones that finished early
           </div>
         </div>
         <div className={styles.heroSupport}>

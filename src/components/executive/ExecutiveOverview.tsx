@@ -161,7 +161,7 @@ export default function ExecutiveOverview({
             </div>
             <div className={styles.kpiSub}>
               {h.calendarDelayDays != null && h.calendarDelayDays !== h.totalDelayDays
-                ? `Credits work already done · ${h.calendarDelayDays} days on raw calendar, before crediting in-progress work`
+                ? `Net across all milestones, crediting work done · ${h.calendarDelayDays} days on raw calendar`
                 : h.milestonesAheadOfPlan && h.milestonesAheadOfPlan > 0
                   ? `Net of behind and ahead work · ${h.milestonesAheadOfPlan} milestones finished early offset the overdue side`
                   : h.totalDelayDays === 0
