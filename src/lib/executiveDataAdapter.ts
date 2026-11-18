@@ -494,11 +494,19 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
     const avgPct = villas.length === 0
       ? 0
       : Math.round(villas.reduce((s, v) => s + v.percentComplete, 0) / villas.length);
+    // Live credited slip — the SAME engine as the Total Delay tile and the
+    // health buckets — so the contractor Avg Delay + risk counts agree with
+    // the rest of the dashboard instead of the stale projectedFinish rollup
+    // (which read a different, higher number). Vandana 2026-11-18.
+    const liveV = (v: { number: number; currentSlipDays: number }) =>
+      extras?.villaSlipByNumber?.[v.number] ?? v.currentSlipDays;
+    const liveB = (b: { code: string; currentSlipDays: number }) =>
+      extras?.blockSlipByCode?.[b.code] ?? b.currentSlipDays;
     const avgCurrentSlip = active.length === 0
       ? 0
-      : Math.round(active.reduce((s, v) => s + v.currentSlipDays, 0) / active.length);
-    const criticalBlocks = blks.filter((b) => b.currentSlipDays > 15).length;
-    const criticalVillas = active.filter((v) => v.currentSlipDays > 15).length;
+      : Math.round(active.reduce((s, v) => s + liveV(v), 0) / active.length);
+    const criticalBlocks = blks.filter((b) => liveB(b) > 15).length;
+    const criticalVillas = active.filter((v) => liveV(v) > 15).length;
     const handoverSlip = Math.max(0, ...active.map((v) => v.handoverSlipDays));
     return { activeCount: active.length, avgPct, avgCurrentSlip, criticalBlocks, criticalVillas, handoverSlip };
   };

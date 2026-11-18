@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import styles from "./qaqc-tab.module.css";
+import { Lightbox, type Photo } from "@/components/PhotoStrip";
 import type { InspectionRow, IssueRow, QaqcBundle } from "@/lib/qaqcServer";
 
 export interface QaqcTabViewProps {
@@ -268,14 +269,45 @@ function ContractorPerformanceCard({ rows }: { rows: QaqcBundle["contractors"] }
 // ---------------------------------------------------------------------------
 
 function RecentPhotoFeedCard({ photos }: { photos: QaqcBundle["recentPhotos"] }) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   if (photos.length === 0) return null; // Hide when nothing to show.
+
+  // Click-to-zoom: open the shared PhotoStrip Lightbox (same viewer as the
+  // Dashboard gallery + scorecard). The caption strip carries the inspection/
+  // issue label + date; arrow keys page through the whole feed. Previously
+  // these were plain <img> tags, so clicking a thumbnail did nothing.
+  const lightboxPhotos: Photo[] = photos.map((p) => ({
+    id: `${p.parentId}:${p.url}`,
+    url: p.url,
+    meta: { kind: p.source, activity: p.parentLabel, date: p.loggedAt },
+  }));
+
   return (
     <div className={styles.card}>
       <div className={styles.cardHd}>Inspection &amp; Issue Photos</div>
       <div className={styles.cardBd}>
         <div className={styles.photoGrid}>
-          {photos.map((p) => (
-            <div key={p.url} className={styles.photoCell}>
+          {photos.map((p, i) => (
+            <button
+              key={`${p.parentId}:${p.url}`}
+              type="button"
+              className={styles.photoCell}
+              onClick={() => setLightboxIndex(i)}
+              aria-label={`Open ${p.source} photo — ${p.parentLabel}`}
+              style={{
+                appearance: "none",
+                border: 0,
+                margin: 0,
+                padding: 0,
+                background: "transparent",
+                font: "inherit",
+                color: "inherit",
+                textAlign: "left",
+                width: "100%",
+                display: "block",
+                cursor: "zoom-in",
+              }}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={p.url} alt="" className={styles.photoImg} />
               <div className={`${styles.photoBadge} ${p.source === "issue" ? styles.photoBadgeIssue : styles.photoBadgeInspection}`}>
@@ -285,10 +317,17 @@ function RecentPhotoFeedCard({ photos }: { photos: QaqcBundle["recentPhotos"] })
                 <div className={styles.photoLabel}>{p.parentLabel}</div>
                 <div className={styles.photoMeta}>{p.loggedByName} · {fmtRelative(p.loggedAt)}</div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
+      {lightboxIndex !== null && (
+        <Lightbox
+          photos={lightboxPhotos}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
     </div>
   );
 }
