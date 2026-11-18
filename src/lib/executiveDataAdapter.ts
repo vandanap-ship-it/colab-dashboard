@@ -97,6 +97,7 @@ export interface ExecutiveExtras {
     activityName: string | null;
     baselineFinish: string;
     daysBehind: number;
+    pctComplete: number;
   }>;
   /** Parallel list for milestones closed BEFORE their baseline date -
    *  the good-news side of the net. Lets the Total Delay drill-down show
@@ -296,6 +297,7 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
         activityName: m.wbsNodes?.[0]?.name ?? null,
         baselineFinish: m.baselineFinish?.toISOString() ?? new Date(0).toISOString(),
         daysBehind,
+        pctComplete: Math.round(m.pctComplete),
       };
     })
     .sort((a, b) => b.daysBehind - a.daysBehind)

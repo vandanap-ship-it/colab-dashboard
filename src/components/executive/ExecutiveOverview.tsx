@@ -432,7 +432,7 @@ function ScheduleVarianceDrillCard({
           showing={overdueRows.length}
           total={totalOverdue}
           empty="Nothing is overdue."
-          headers={["Villa", "Block", "Section", "Activity", "Baseline finish", "Days behind"]}
+          headers={["Villa", "Block", "Section", "Activity", "Baseline finish", "Days behind", "% built"]}
           rows={overdueRows.map((r) => ({
             key: `b-${r.villaNumber}-${r.sectionName}`,
             cells: [
@@ -442,6 +442,7 @@ function ScheduleVarianceDrillCard({
               r.activityName ?? "-",
               fmtDate(new Date(r.baselineFinish)),
               `+${r.daysBehind}d`,
+              `${r.pctComplete}%`,
             ],
           }))}
         />

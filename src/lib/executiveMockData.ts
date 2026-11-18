@@ -373,6 +373,7 @@ export interface ProjectHealthSummary {
     activityName: string | null;
     baselineFinish: string;
     daysBehind: number;
+    pctComplete: number;
   }>;
   /** Parallel list for the ahead-of-plan drill-down. */
   aheadList?: Array<{
