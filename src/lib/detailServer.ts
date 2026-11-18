@@ -10,6 +10,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { milestoneSlipDays } from "@/lib/scheduleSlip";
 
 // ---------------------------------------------------------------------------
 // Villa detail
@@ -44,13 +45,12 @@ export interface VillaDetail {
   milestones: VillaDetailMilestone[];  // ordered by sectionOrder
 }
 
-const MS_PER_DAY = 86_400_000;
-
-function computeSlipDays(baseline: Date | null, actual: Date | null, projected: Date | null): number {
-  if (!baseline) return 0;
-  const finish = actual ?? projected;
-  if (!finish) return 0;
-  return Math.max(0, Math.round((finish.getTime() - baseline.getTime()) / MS_PER_DAY));
+// Live credited slip (today − baseline discounted by work already done; or
+// actual − baseline once closed), rounded. Replaces the old projectedFinish-
+// based slip so the detail drawers agree with the Dashboard tiles + health
+// buckets, which use this same milestoneSlipDays engine (Vandana 2026-11-18).
+function liveSlip(baselineFinish: Date | null, actualFinish: Date | null, pctComplete: number, now: Date): number {
+  return Math.round(milestoneSlipDays({ baselineFinish, actualFinish, pctComplete }, now, true));
 }
 
 function statusForMilestone(m: {
@@ -94,9 +94,10 @@ type VillaRow = {
 };
 
 function shapeVilla(villa: VillaRow): VillaDetail {
+  const now = new Date();
   const milestones: VillaDetailMilestone[] = villa.milestones
     .map((m) => {
-      const slipDays = computeSlipDays(m.baselineFinish, m.actualFinish, m.projectedFinish);
+      const slipDays = liveSlip(m.baselineFinish, m.actualFinish, m.pctComplete, now);
       return {
         sectionCode: m.section.code,
         sectionName: m.section.name,
@@ -201,10 +202,12 @@ export interface BlockDetail {
   villas: BlockDetailVilla[];      // ordered by villa number
 }
 
-/** Bucket a slip into a status label. Mirrors the executive rollup rules. */
+/** Bucket a slip into a status label. Mirrors the executive rollup rules
+ *  (WARNING_MAX_SLIP = 15: > 15 critical, 1–15 warning). Was > 30 here, which
+ *  disagreed with the Dashboard health buckets — aligned 2026-11-18. */
 function statusForSlip(slip: number, started: boolean): BlockDetailVilla["status"] {
   if (!started) return "not-started";
-  if (slip > 30) return "critical";
+  if (slip > 15) return "critical";
   if (slip > 0)  return "warning";
   return "healthy";
 }
@@ -233,14 +236,16 @@ export async function getBlockDetail(projectId: string, blockCode: string): Prom
 
   if (!block) return null;
 
+  const now = new Date();
   const villas: BlockDetailVilla[] = block.villas.map((v) => {
     const ms = [...v.milestones].sort(
       (a, b) => a.section.orderIndex - b.section.orderIndex,
     );
-    // Handover slip = last milestone slip
+    // Handover slip = last milestone slip (live; the far-off handover isn't due
+    // yet, so this is ~0 — kept only for the drawer's handover line).
     const lastMilestone = ms[ms.length - 1];
     const handoverSlipDays = lastMilestone
-      ? computeSlipDays(lastMilestone.baselineFinish, lastMilestone.actualFinish, lastMilestone.projectedFinish)
+      ? liveSlip(lastMilestone.baselineFinish, lastMilestone.actualFinish, lastMilestone.pctComplete, now)
       : 0;
     // Current milestone = first in-flight; else next-after-last-done
     const inFlight = ms.filter((m) => m.actualStart && !m.actualFinish);
@@ -248,8 +253,14 @@ export async function getBlockDetail(projectId: string, blockCode: string): Prom
       ? inFlight.reduce((a, b) => (a.section.orderIndex < b.section.orderIndex ? a : b))
       : null;
     const currentSlipDays = currentMilestone
-      ? computeSlipDays(currentMilestone.baselineFinish, currentMilestone.actualFinish, currentMilestone.projectedFinish)
+      ? liveSlip(currentMilestone.baselineFinish, currentMilestone.actualFinish, currentMilestone.pctComplete, now)
       : 0;
+    // Health reflects the villa's WORST milestone slip — the same "any milestone
+    // > 15 days" rule as the Dashboard bucket — NOT the far-off handover, which
+    // read ~0 and wrongly coloured every villa green (Vandana 2026-11-18).
+    const maxSlipDays = ms.length === 0
+      ? 0
+      : Math.max(0, ...ms.map((m) => liveSlip(m.baselineFinish, m.actualFinish, m.pctComplete, now)));
     const started = ms.some((m) => m.actualStart);
     const overallPctComplete = ms.length === 0
       ? 0
@@ -262,7 +273,7 @@ export async function getBlockDetail(projectId: string, blockCode: string): Prom
       handoverSlipDays,
       currentSlipDays,
       currentSectionName: currentMilestone?.section.name ?? null,
-      status: statusForSlip(handoverSlipDays, started),
+      status: statusForSlip(maxSlipDays, started),
     };
   });
 

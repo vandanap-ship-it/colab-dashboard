@@ -126,6 +126,14 @@ export interface ExecutiveExtras {
    *  which averaged slip across milestones and therefore disagreed with
    *  the Progress tab's number (Vandana 2026-11-16 review-day unify). */
   projectProjectedHandover: Date | null;
+  /** Live max credited milestone slip, keyed by villa.number and by block.code.
+   *  Uses the SAME milestoneSlipDays engine (and the SAME VillaMilestone rows)
+   *  that feed netDaysVariance + criticalBlocksTotal, so the Overview
+   *  Healthy/Warning/Critical buckets bucket on the live number instead of the
+   *  stale projectedFinish rollup (which under-counted: 7 critical in the bucket
+   *  vs 10 in the tile — Vandana 2026-11-18). Rounded days. */
+  villaSlipByNumber: Record<number, number>;
+  blockSlipByCode: Record<string, number>;
 }
 
 export async function getExecutiveExtras(projectId: string): Promise<ExecutiveExtras> {
@@ -217,7 +225,7 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
         baselineFinish: true,
         actualFinish: true,
         pctComplete: true,
-        villa: { select: { id: true } },
+        villa: { select: { id: true, number: true, block: { select: { code: true } } } },
       },
     }),
     prisma.villaMilestone.groupBy({
@@ -340,11 +348,21 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
   // progressTabServer.getProgressHeroStats; both call sites must move
   // together if the formula changes.
   const villaMaxSlip = new Map<string, number>();
+  // Live max credited slip per villa.number and per block.code — the SAME
+  // engine the Total Delay + Critical Blocks tiles use — so the Overview
+  // health buckets stop reading the stale projectedFinish rollup. Rounded for
+  // display; the >15 / >0 thresholds match blockStatus/villaStatus.
+  const villaSlipByNumber: Record<number, number> = {};
+  const blockSlipByCode: Record<string, number> = {};
   for (const m of slipRows) {
     if (!m.villa) continue;
     const slip = milestoneSlipDays(m, now, true); // credited
-    const current = villaMaxSlip.get(m.villa.id) ?? 0;
-    if (slip > current) villaMaxSlip.set(m.villa.id, slip);
+    if (slip > (villaMaxSlip.get(m.villa.id) ?? 0)) villaMaxSlip.set(m.villa.id, slip);
+    const rounded = Math.round(slip);
+    const num = m.villa.number;
+    if (num != null) villaSlipByNumber[num] = Math.max(villaSlipByNumber[num] ?? 0, rounded);
+    const code = m.villa.block?.code;
+    if (code) blockSlipByCode[code] = Math.max(blockSlipByCode[code] ?? 0, rounded);
   }
   let latestProjectedMs = 0;
   for (const h of handoverBaselines) {
@@ -377,6 +395,8 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     aheadList,
     criticalBlocksTotal,
     projectProjectedHandover,
+    villaSlipByNumber,
+    blockSlipByCode,
   };
 }
 
@@ -402,14 +422,15 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
       villas: b.villas.map((v) => v.number),
       villaLabels: b.villas.map((v) => `Villa ${v.number}`),
       active,
-      // Dashboard colour reflects slip on the CURRENT in-progress stage,
-      // not the slip on the far-off Handover milestone. Vandana 2026-10-08:
-      // handoverSlipDays stays 0 for most Amanvana villas (handover is
-      // years out, no projected drift yet), so every block was rendering
-      // GREEN even when the current Plinth / Foundation stage was 55+
-      // days late. currentSlipDays bubbles up to the colour the site
-      // team actually recognises.
-      slipDays: b.currentSlipDays,
+      // Health bucket + colour read the LIVE max credited milestone slip —
+      // the SAME milestoneSlipDays engine (over the same VillaMilestone rows)
+      // that feeds the Total Delay + Critical Blocks tiles — so the bucket
+      // count matches the tile exactly. Previously used b.currentSlipDays off
+      // the rollup, whose slip derives from the STALE projectedFinish field,
+      // so badly-behind blocks showed GREEN and the bucket read 7 critical vs
+      // the tile's 10 (Vandana 2026-11-18). Falls back to the rollup value if
+      // extras weren't fetched.
+      slipDays: extras?.blockSlipByCode?.[b.code] ?? b.currentSlipDays,
       currentSection,
       currentPct: Math.round(b.percentComplete),
       pod: `Block ${b.code}`,      // pod grouping isn't in schema yet; fall back to block name
@@ -425,7 +446,8 @@ export function adaptDashboardBag(bag: DashboardBag, extras?: ExecutiveExtras): 
       .map((v) => ({
         number: v.number,
         blockCode: b.code,
-        slipDays: v.currentSlipDays,
+        // Live max credited slip (same engine as the tiles); see block note above.
+        slipDays: extras?.villaSlipByNumber?.[v.number] ?? v.currentSlipDays,
         pctComplete: Math.round(v.percentComplete),
         currentSection: v.currentSection,
         staleDays: v.staleDays ?? 0,

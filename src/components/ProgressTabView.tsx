@@ -88,8 +88,6 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
 
   const worstSlip = stats.worstVillaSlipDays;
   const worstTone = worstSlip > 60 ? styles.phBad : worstSlip > 15 ? styles.phWarn : styles.phGood;
-  const worstBaselineDate = stats.worstVillaBaselineHandover
-    ? formatShortDate(stats.worstVillaBaselineHandover) : "-";
 
   return (
     <section className={`${styles.card} ${styles.hero}`}>
@@ -124,7 +122,7 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
           </div>
           <div className={styles.heroSub}>
             {stats.worstVillaLabel
-              ? `${stats.worstVillaLabel} · ${worstSlip} days past its planned date, ${stats.worstVillaPctComplete}% built${worstBaselineDate !== "-" ? ` · baseline ${worstBaselineDate}` : ""}`
+              ? `${stats.worstVillaLabel} · ${worstSlip} days past its planned date, ${stats.worstVillaPctComplete}% built`
               : "-"}
           </div>
           <div className={styles.heroFootnote}>
