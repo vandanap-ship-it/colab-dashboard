@@ -22,14 +22,15 @@ export interface ProgressTabViewProps {
 
 export default function ProgressTabView({
   projectId,
-  hero,
   sectionProgress,
   villaRows,
   drawingData,
 }: ProgressTabViewProps) {
   return (
     <div className={styles.wrap}>
-      <ProgressHero stats={hero} />
+      {/* "At today's pace" hero hidden per Vandana 2026-11-19. To restore,
+          re-add `hero` to the props destructure above and render
+          <ProgressHero stats={hero} /> here. */}
       <SectionProgressCard rows={sectionProgress} />
       {/* Section filter (scannable bucket view) before the detailed villa
           table - top-down dissection per Vandana 2026-11-04. */}
