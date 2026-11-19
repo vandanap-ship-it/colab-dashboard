@@ -54,7 +54,7 @@ const GROUPS: Group[] = [
   { code: "MATERIAL",      label: "Material",      members: ["MATERIAL"] },
   { code: "LABOUR",        label: "Manpower / labour", members: ["LABOUR"] },
   { code: "WEATHER",       label: "Weather",       members: ["WEATHER"] },
-  { code: "OTHER",         label: "Other",         members: ["OTHER", "DELAYED_ENTRY", "UNSPECIFIED"] },
+  { code: "OTHER",         label: "Delayed data entry", members: ["OTHER", "DELAYED_ENTRY", "UNSPECIFIED"] },
 ];
 
 const CODE_TO_GROUP = new Map<string, Group>();
@@ -162,7 +162,11 @@ export async function getDelayReasonClusters(projectId: string): Promise<DelayRe
       const notes = progress
         .filter((p) => groupForEntry(p.reasonCode, p.reasonNote).code === "OTHER")
         .map((p) => p.reasonNote);
-      cluster.subPhrases = buildSubPhrases(notes);
+      const sp = buildSubPhrases(notes);
+      // Only show the "what the site team wrote" breakdown when there's more
+      // than one distinct phrase; once it collapses to a single reason the
+      // cluster label already names it.
+      if (sp.length > 1) cluster.subPhrases = sp;
     }
   }
 
@@ -202,7 +206,9 @@ function canonicalReason(head: string): string {
   s = s.replace(/\bman power\b/g, "manpower"); // spacing
   // The big one: every "delay (updated|update|in) … collab tool(s)" note is
   // the same thing — collapse to a single canonical phrase.
-  if (/\bdelay\b.*\bcollab tools?\b/.test(s)) return "delay updated in collab tools";
+  // Both the "delay updated in collab tool(s)" family and "delayed entry" are
+  // the same thing — a logging / data-entry lag, not a real site cause. Merge.
+  if (/\bdelay\b.*\bcollab tools?\b/.test(s) || /\bdelayed?\s+entr/.test(s)) return "delayed data entry";
   // Singularise the nouns the team writes both ways so plurals merge.
   s = s.replace(/\btools\b/g, "tool")
        .replace(/\bissues\b/g, "issue")

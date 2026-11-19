@@ -72,7 +72,6 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
   // late. Vandana 2026-11-16 clarity pass: use the clean set that's also
   // the denominator for the mean-days-behind number below, so the tile is
   // internally consistent.
-  const behindCount = stats.openPastDue;
 
   // Vandana 2026-11-05, option C + project-level request: show BOTH
   // project handover (critical-path finisher of the whole plan) and
@@ -131,20 +130,6 @@ function ProgressHero({ stats }: { stats: ProgressHeroStats }) {
         </div>
       </div>
       <div className={styles.heroMainRow}>
-        <div className={styles.heroSupport}>
-          <div className={styles.heroSupportLbl}>Avg days late</div>
-          <div className={`${styles.heroSupportVal} ${styles.phBad}`}>+{stats.meanDaysBehind}d</div>
-          <div className={styles.heroSupportSub}>
-            average lateness of the {behindCount || stats.openPastDue} overdue milestones (credited) — not the project total, which is Total Delay on the Dashboard
-          </div>
-        </div>
-        <div className={styles.heroSupport}>
-          <div className={styles.heroSupportLbl}>Avg days early</div>
-          <div className={`${styles.heroSupportVal} ${styles.phGood}`}>-{stats.meanDaysAhead}d</div>
-          <div className={styles.heroSupportSub}>
-            average of the {stats.aheadCount} milestones that finished early
-          </div>
-        </div>
         <div className={styles.heroSupport}>
           <div className={styles.heroSupportLbl}>Done of what was due</div>
           <div className={styles.heroSupportVal}>{onPlanClosedPct}%</div>
