@@ -156,14 +156,37 @@ function buildSubPhrases(notes: Array<string | null>): Array<{ phrase: string; c
   for (const raw of notes) {
     const trimmed = (raw ?? "").trim();
     if (!trimmed) continue;
-    const head = trimmed.split(" · ")[0].trim().toLowerCase().replace(/\s+/g, " ");
-    if (!head) continue;
-    counts.set(head, (counts.get(head) ?? 0) + 1);
+    const head = trimmed.split(" · ")[0].trim();
+    const phrase = canonicalReason(head);
+    if (!phrase) continue;
+    counts.set(phrase, (counts.get(phrase) ?? 0) + 1);
   }
   return [...counts.entries()]
     .map(([phrase, count]) => ({ phrase, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 20);
+}
+
+/** Canonicalise a free-text delay note so spelling / plural / phrasing
+ *  variants collapse to ONE row. The site team writes the same note many
+ *  ways ("delay updated in collab tools", "colab tool", "delay update in
+ *  collab tool", …) and each used to show as its own line. Case-insensitive;
+ *  returns a tidy lower-case phrase. */
+function canonicalReason(head: string): string {
+  let s = head.toLowerCase().trim().replace(/\s+/g, " ");
+  if (!s) return "";
+  s = s.replace(/\bcolab\b/g, "collab");      // common misspelling
+  s = s.replace(/\bman power\b/g, "manpower"); // spacing
+  // The big one: every "delay (updated|update|in) … collab tool(s)" note is
+  // the same thing — collapse to a single canonical phrase.
+  if (/\bdelay\b.*\bcollab tools?\b/.test(s)) return "delay updated in collab tools";
+  // Singularise the nouns the team writes both ways so plurals merge.
+  s = s.replace(/\btools\b/g, "tool")
+       .replace(/\bissues\b/g, "issue")
+       .replace(/\bdiversions\b/g, "diversion")
+       .replace(/\bplans\b/g, "plan")
+       .replace(/\bpriorities\b/g, "priority");
+  return s;
 }
 
 /**

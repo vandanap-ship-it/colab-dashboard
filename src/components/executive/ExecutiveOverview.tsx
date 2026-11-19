@@ -72,6 +72,12 @@ export default function ExecutiveOverview({
   const plannedPct = (plannedDays / projectedDays) * 100;
   const overshootPct = 100 - plannedPct;
   const activeBlocks = blocks.filter((b) => b.active);
+  // Finish-date slip = projected handover vs planned handover. This is a
+  // DIFFERENT measure than Total Delay (which averages slip across every
+  // milestone): the finish date moves only when the LAST-finishing villa
+  // slips, so it can read "on plan" while the average delay is positive.
+  const handoverDelta =
+    h.projectedEnd && h.baselineEnd ? daysBetween(h.baselineEnd, h.projectedEnd) : null;
 
   // Health pill tone — rebased on real delay signal 2026-11-16. Previous
   // formula asked `probabilityBand(reraEndDate, projectedEnd)`; Amanvana's
@@ -227,18 +233,27 @@ export default function ExecutiveOverview({
             <span className={styles.hsStripLb}>Planned finish</span>
             <span className={styles.hsStripVl}>{fmtDate(h.baselineEnd)}</span>
           </div>
-          <div className={styles.hsStripCell}>
+          <div className={styles.hsStripCell} title="When the LAST villa hands over — its planned finish plus its own slip. It sits on the planned date because the final-finishing villa isn't slipping. This is a different measure than Total Delay, which averages slip across all milestones, so the two numbers don't match (and shouldn't).">
             <span className={styles.hsStripLb}>Projected finish</span>
-            <span className={`${styles.hsStripVl} ${h.totalDelayDays > 0 ? styles.projected : ""}`}>
+            <span className={`${styles.hsStripVl} ${handoverDelta && handoverDelta > 0 ? styles.projected : ""}`}>
               {fmtDate(h.projectedEnd)}
             </span>
+            {handoverDelta != null && (
+              <span className={styles.hsStripSub}>
+                {handoverDelta === 0
+                  ? "on plan · 0 days late"
+                  : handoverDelta > 0
+                    ? `+${handoverDelta} days late`
+                    : `${Math.abs(handoverDelta)} days early`}
+              </span>
+            )}
           </div>
-          <div className={styles.hsStripCell} title="Villas with any slipped milestone, out of the villas that have actually started (baseline start reached). The rest of the villas are not yet on the timeline.">
+          <div className={styles.hsStripCell} title="Villas with any slipped milestone, out of the villas that have actually started (their baseline start date has been reached). The remaining villas have not started yet — their scheduled start is still in the future — so they cannot be delayed.">
             <span className={styles.hsStripLb}>Villas delayed</span>
             <span className={styles.hsStripVl}>
               {villasDelayed} of {activeVillas.length} started
               {h.inScope > activeVillas.length ? (
-                <span className={styles.hsStripSub}> · {h.inScope} in scope</span>
+                <span className={styles.hsStripSub}> · {h.inScope - activeVillas.length} of {h.inScope} not started yet</span>
               ) : null}
             </span>
           </div>
