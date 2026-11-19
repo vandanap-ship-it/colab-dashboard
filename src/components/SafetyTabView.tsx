@@ -274,13 +274,8 @@ function OverviewCard({ overview }: { overview: SafetyBundle["overview"] }) {
   return (
     <div className={styles.card}>
       <div className={styles.cardHd}>Safety Overview</div>
-      <div className={styles.ovHero}>
-        <div className={styles.ovHeroLbl}>Safe man-hours</div>
-        <div className={styles.ovHeroVal}>{overview.safeManHours.toLocaleString("en-IN")}</div>
-        <div className={styles.ovHeroSub}>
-          {overview.safeSincePreset} · counted at 8 hours per worker per day on site
-        </div>
-      </div>
+      {/* "Safe man-hours" hero hidden per Vandana 2026-11-19. Restore the
+          <div className={styles.ovHero}> block here to bring it back. */}
       <div className={styles.ovSupportGrid}>
         <a href="#inductions-list" className={`${styles.ovSupportTile} ${styles.ovLink}`}>
           <div className={styles.ovSupportLbl}>Safety Inductions</div>
