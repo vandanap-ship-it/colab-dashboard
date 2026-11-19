@@ -1433,7 +1433,7 @@
 /* Layout: [big Hero (2fr)] [Rail: 2 stacked small (1fr)] [Manpower (1fr)] */
 .kpiRowV2 {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-columns: 2fr 1fr;
   gap: 12px;
   margin-bottom: 22px;
   align-items: stretch;

@@ -59,7 +59,6 @@ export default function ExecutiveOverview({
   blocks,
   contractors,
   reasonClusters,
-  manpowerStrip,
   manpowerRange,
   milestoneProgress,
   siteActivity,
@@ -113,7 +112,7 @@ export default function ExecutiveOverview({
               villas in scope
               {h.modelVillas > 0 ? ` · ${h.modelVillas} model villas` : ""}
               {h.villaRecordCount && h.villaRecordCount !== h.inScope
-                ? ` · ${h.villaRecordCount} tracked rows (some are combined pairs)`
+                ? ` · ${h.villaRecordCount} tracked rows (${h.inScope - h.villaRecordCount} combined pairs)`
                 : ""}
             </span>
           </div>
@@ -167,7 +166,7 @@ export default function ExecutiveOverview({
             </div>
             <div className={styles.kpiSub}>
               {h.calendarDelayDays != null && h.calendarDelayDays !== h.totalDelayDays
-                ? `Net across all milestones, crediting work done · ${h.calendarDelayDays} days on raw calendar`
+                ? `Average days a milestone is behind, after crediting the work already done. Without that credit, the raw-calendar figure is ${h.calendarDelayDays} days.`
                 : h.milestonesAheadOfPlan && h.milestonesAheadOfPlan > 0
                   ? `Net of behind and ahead work · ${h.milestonesAheadOfPlan} milestones finished early offset the overdue side`
                   : h.totalDelayDays === 0
@@ -206,8 +205,6 @@ export default function ExecutiveOverview({
             <div className={styles.kpiSub}>Blocks with any milestone more than 15 days late</div>
           </div>
         </div>
-
-        <ManpowerKpiCard strip={manpowerStrip} />
       </div>
 
       {/* Health Snapshot replaced with a lean one-line timeline strip
@@ -271,6 +268,21 @@ export default function ExecutiveOverview({
         </div>
       </div>
 
+      {/* Milestone Progress — shown before the variance drill-down so the
+          reader sees WHAT is due/closed per milestone first, then WHERE the
+          variance sits. (Order per Vandana 2026-11-19 review pass.) */}
+      <div className={styles.card}>
+        <div className={styles.cardHd}>
+          <h3>Milestone Progress</h3>
+          <span className={styles.meta}>
+            line items due by today · closed / pending / status per milestone
+          </span>
+        </div>
+        <div className={styles.cardBd}>
+          <MilestoneProgressTable rows={milestoneProgress} />
+        </div>
+      </div>
+
       {/* Where is the delay? — drill-down beneath the Total Delay KPI.
           Shows BOTH sides: what's overdue AND what was finished ahead
           of plan, so the net math has receipts in one place. */}
@@ -283,19 +295,6 @@ export default function ExecutiveOverview({
 
       {/* Daily manpower — 7d / 30d bar chart */}
       <ManpowerChartCard range={manpowerRange} />
-
-      {/* Milestone Progress */}
-      <div className={styles.card}>
-        <div className={styles.cardHd}>
-          <h3>Milestone Progress</h3>
-          <span className={styles.meta}>
-            line items due by today · closed / pending / status per milestone
-          </span>
-        </div>
-        <div className={styles.cardBd}>
-          <MilestoneProgressTable rows={milestoneProgress} />
-        </div>
-      </div>
 
       {/* Contractor Scope Health */}
       <div className={styles.card}>
