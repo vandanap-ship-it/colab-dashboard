@@ -223,6 +223,8 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     prisma.villaMilestone.findMany({
       where: { villa: { projectId, inScope: true } },
       select: {
+        baselineStart: true,
+        actualStart: true,
         baselineFinish: true,
         actualFinish: true,
         pctComplete: true,
@@ -356,6 +358,10 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
   // display; the >15 / >0 thresholds match blockStatus/villaStatus.
   const villaSlipByNumber: Record<number, number> = {};
   const blockSlipByCode: Record<string, number> = {};
+  // Start-delay inputs for the handover projection below: which villas have
+  // actually started, and each villa's earliest planned (baseline) start.
+  const villaStarted = new Set<string>();
+  const villaEarliestStartMs = new Map<string, number>();
   for (const m of slipRows) {
     if (!m.villa) continue;
     const slip = milestoneSlipDays(m, now, true); // credited
@@ -365,12 +371,31 @@ export async function getExecutiveExtras(projectId: string): Promise<ExecutiveEx
     if (num != null) villaSlipByNumber[num] = Math.max(villaSlipByNumber[num] ?? 0, rounded);
     const code = m.villa.block?.code;
     if (code) blockSlipByCode[code] = Math.max(blockSlipByCode[code] ?? 0, rounded);
+    if (m.actualStart) villaStarted.add(m.villa.id);
+    if (m.baselineStart) {
+      const bs = m.baselineStart.getTime();
+      const cur = villaEarliestStartMs.get(m.villa.id);
+      if (cur == null || bs < cur) villaEarliestStartMs.set(m.villa.id, bs);
+    }
   }
   let latestProjectedMs = 0;
   for (const h of handoverBaselines) {
     const baseline = h._max.baselineFinish;
     if (!baseline) continue;
-    const villaSlip = villaMaxSlip.get(h.villaId) ?? 0;
+    // A villa overdue to START — its earliest planned start has passed but no
+    // milestone has an actual start — is already slipping, even though none of
+    // its FINISH milestones are overdue yet (they're years out). The whole
+    // schedule, handover included, shifts by how late it is to begin, so we
+    // use that start-lateness as a floor on the villa's slip. Without this the
+    // final-phase villas (not started, weeks late to start) read "+0" and the
+    // handover looked on-plan when it isn't. Vandana 2026-11-19.
+    const milestoneSlip = villaMaxSlip.get(h.villaId) ?? 0;
+    const earliestStartMs = villaEarliestStartMs.get(h.villaId);
+    const startDelay =
+      !villaStarted.has(h.villaId) && earliestStartMs != null && earliestStartMs <= now.getTime()
+        ? Math.max(0, Math.round((now.getTime() - earliestStartMs) / 86_400_000))
+        : 0;
+    const villaSlip = Math.max(milestoneSlip, startDelay);
     const projectedMs = baseline.getTime() + villaSlip * 86_400_000;
     if (projectedMs > latestProjectedMs) latestProjectedMs = projectedMs;
   }
