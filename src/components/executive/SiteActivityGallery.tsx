@@ -30,6 +30,35 @@ interface Props {
  */
 export default function SiteActivityGallery({ groups, projectName }: Props) {
   const [lightbox, setLightbox] = useState<{ photos: Photo[]; index: number } | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  // Latest-N preview: groups arrive newest-first, so show only the first
+  // LIMIT photo tiles (keeping whole blocks/dates in order) and reveal the
+  // rest on "Show all". Vandana 2026-11-19 — the wall was too long.
+  const LIMIT = 10;
+  const totalTiles = groups.reduce(
+    (n, g) => n + g.blocks.reduce((m, b) => m + b.items.length, 0),
+    0,
+  );
+  const shownGroups: GalleryDateGroup[] =
+    expanded || totalTiles <= LIMIT
+      ? groups
+      : (() => {
+          const out: GalleryDateGroup[] = [];
+          let budget = LIMIT;
+          for (const g of groups) {
+            if (budget <= 0) break;
+            const blocks: GalleryDateGroup["blocks"] = [];
+            for (const b of g.blocks) {
+              if (budget <= 0) break;
+              const items = b.items.slice(0, budget);
+              budget -= items.length;
+              if (items.length) blocks.push({ ...b, items });
+            }
+            if (blocks.length) out.push({ ...g, blocks });
+          }
+          return out;
+        })();
 
   if (groups.length === 0) {
     return (
@@ -44,7 +73,7 @@ export default function SiteActivityGallery({ groups, projectName }: Props) {
   return (
     <>
       <div className={styles.galleryWrap}>
-        {groups.map((dateGroup) => {
+        {shownGroups.map((dateGroup) => {
           const totalPhotos = dateGroup.blocks.reduce((n, b) => n + b.items.length, 0);
           return (
             <div key={dateGroup.dateISO} className={styles.galleryDateSection}>
@@ -80,6 +109,28 @@ export default function SiteActivityGallery({ groups, projectName }: Props) {
           );
         })}
       </div>
+
+      {totalTiles > LIMIT && (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          style={{
+            display: "block",
+            margin: "14px auto 2px",
+            padding: "7px 20px",
+            border: "1px solid currentColor",
+            borderRadius: 999,
+            background: "transparent",
+            color: "inherit",
+            opacity: 0.72,
+            font: "inherit",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          {expanded ? "Show less" : `Show all ${totalTiles} photos`}
+        </button>
+      )}
 
       {lightbox && (
         <Lightbox

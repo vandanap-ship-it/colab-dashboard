@@ -183,16 +183,18 @@ export default function ExecutiveOverview({
         </div>
 
         <div className={styles.kpiRail}>
-          <div
-            className={`${styles.kpiSmall} ${h.hindrances > 0 ? styles.warn : styles.neutral}`}
-            title="Blockers logged by the site team that are still open."
-          >
-            <div className={styles.kpiLbl}>Active Hindrances</div>
-            <div className={`${styles.kpiSmallVal} ${h.hindrances > 0 ? styles.warn : styles.neutral}`}>
-              {h.hindrances}
+          {h.hindrances > 0 && (
+            <div
+              className={`${styles.kpiSmall} ${styles.warn}`}
+              title="Blockers logged by the site team that are still open."
+            >
+              <div className={styles.kpiLbl}>Active Hindrances</div>
+              <div className={`${styles.kpiSmallVal} ${styles.warn}`}>
+                {h.hindrances}
+              </div>
+              <div className={styles.kpiSub}>Open on site</div>
             </div>
-            <div className={styles.kpiSub}>Open on site</div>
-          </div>
+          )}
           <div
             className={`${styles.kpiSmall} ${h.criticalBlocks > 0 ? styles.bad : styles.neutral}`}
             title="A block is Critical when it has at least one milestone slipped by more than 15 days, counting both open past-due and closed-late milestones."

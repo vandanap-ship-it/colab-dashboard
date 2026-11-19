@@ -65,6 +65,29 @@ function groupFor(code: string | null): Group {
   return CODE_TO_GROUP.get((code ?? "UNSPECIFIED").toUpperCase()) ?? GROUPS[GROUPS.length - 1];
 }
 
+// When the reason CODE is the catch-all OTHER but the free-text NOTE clearly
+// names a real cause, route the entry to that cluster instead of dumping it
+// in Other. Vandana 2026-11-19: "manpower diversion" → Manpower/labour,
+// "material diversion / issue" → Material, "change …" → Design-driven.
+// Genuine non-reasons ("delay updated in collab tools", "delayed entry")
+// have no such keyword and correctly stay in Other.
+function refineOtherByNote(note: string | null): Group | null {
+  const n = (note ?? "").toLowerCase();
+  if (!n) return null;
+  if (/\bman\s*power\b|\blabou?r\b/.test(n)) return CODE_TO_GROUP.get("LABOUR") ?? null;
+  if (/\bmaterial/.test(n)) return CODE_TO_GROUP.get("MATERIAL") ?? null;
+  if (/\bweather\b|\brain\b/.test(n)) return CODE_TO_GROUP.get("WEATHER") ?? null;
+  if (/\bchange\b|\bpriorit|\border\b/.test(n)) return CODE_TO_GROUP.get("CHANGE_ORDER") ?? null;
+  return null;
+}
+
+/** Group for an entry, using the note to rescue mis-coded OTHER rows. An
+ *  explicit (non-OTHER) reason code always wins over the note. */
+function groupForEntry(code: string | null, note: string | null): Group {
+  const g = groupFor(code);
+  return g.code === "OTHER" ? (refineOtherByNote(note) ?? g) : g;
+}
+
 export interface ContractorDelayReasonGroup {
   contractorId: string | null;   // null = entries without a contractor tag
   contractorName: string;
@@ -107,7 +130,7 @@ export async function getDelayReasonClusters(projectId: string): Promise<DelayRe
   // list of raw codes folded in so the UI can show the merge transparently.
   const byGroup = new Map<string, DelayReasonCluster & { mergedCodes: Set<string> }>();
   const addToGroup = (code: string | null, note: string | null, daysImpact: number | null, at: Date) => {
-    const g = groupFor(code);
+    const g = groupForEntry(code, note);
     const existing = byGroup.get(g.code);
     const rawCode = (code ?? "UNSPECIFIED").toUpperCase();
     if (existing) {
@@ -137,7 +160,7 @@ export async function getDelayReasonClusters(projectId: string): Promise<DelayRe
   for (const cluster of byGroup.values()) {
     if (cluster.code === "OTHER") {
       const notes = progress
-        .filter((p) => groupFor(p.reasonCode).code === "OTHER")
+        .filter((p) => groupForEntry(p.reasonCode, p.reasonNote).code === "OTHER")
         .map((p) => p.reasonNote);
       cluster.subPhrases = buildSubPhrases(notes);
     }
